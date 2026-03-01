@@ -1848,7 +1848,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                 <h5 class="mb-0"><i class="bi bi-plus-circle me-2"></i>إنشاء أوردر جديد</h5>
             </div>
             <div class="card-body">
-                <form method="post" action="">
+                <form method="post" action="?page=production_tasks">
                     <input type="hidden" name="action" value="create_production_task">
                     <div class="row g-3">
                         <div class="col-md-4">
@@ -2003,7 +2003,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                 <h5 class="mb-0"><i class="bi bi-pencil-square me-2"></i>تعديل الاوردر</h5>
             </div>
             <div class="card-body">
-                <form method="post" action="" id="editTaskForm">
+                <form method="post" action="?page=production_tasks" id="editTaskForm">
                     <input type="hidden" name="action" value="update_task">
                     <input type="hidden" name="task_id" id="editTaskId">
                     <div class="row g-3">
@@ -2369,7 +2369,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                     <i class="bi bi-x-lg"></i>
                 </button>
             </div>
-            <form method="POST" id="changeStatusCardForm" action="">
+            <form method="POST" id="changeStatusCardForm" action="?page=production_tasks">
                 <input type="hidden" name="action" value="update_task_status">
                 <input type="hidden" name="task_id" id="changeStatusCardTaskId">
                 <div class="card-body">
@@ -2414,7 +2414,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="إغلاق"></button>
             </div>
-            <form method="POST" id="changeStatusForm" action="">
+            <form method="POST" id="changeStatusForm" action="?page=production_tasks">
                 <input type="hidden" name="action" value="update_task_status">
                 <input type="hidden" name="task_id" id="changeStatusTaskId">
                 <div class="modal-body">
@@ -3200,7 +3200,7 @@ window.openChangeStatusModal = function(taskId, currentStatus) {
                             <i class="bi bi-x-lg"></i>
                         </button>
                     </div>
-                    <form method="POST" id="changeStatusCardForm" action="">
+                    <form method="POST" id="changeStatusCardForm" action="?page=production_tasks">
                         <input type="hidden" name="action" value="update_task_status">
                         <input type="hidden" name="task_id" id="changeStatusCardTaskId">
                         <div class="card-body">
