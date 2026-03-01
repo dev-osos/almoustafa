@@ -5313,6 +5313,46 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    // الحصول على الموقع في بطاقة إضافة العميل (موبايل)
+    var addCustomerCardGetLocationBtn = document.getElementById('addCustomerCardGetLocationBtn');
+    var addCustomerCardLatitudeInput = document.getElementById('addCustomerCardLatitude');
+    var addCustomerCardLongitudeInput = document.getElementById('addCustomerCardLongitude');
+    if (addCustomerCardGetLocationBtn && addCustomerCardLatitudeInput && addCustomerCardLongitudeInput) {
+        addCustomerCardGetLocationBtn.addEventListener('click', function() {
+            if (!navigator.geolocation) {
+                showAlert('المتصفح لا يدعم تحديد الموقع الجغرافي.');
+                return;
+            }
+            var button = this;
+            var originalText = button.innerHTML;
+            button.disabled = true;
+            button.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>جاري الحصول على الموقع...';
+            navigator.geolocation.getCurrentPosition(
+                function(position) {
+                    addCustomerCardLatitudeInput.value = position.coords.latitude.toFixed(8);
+                    addCustomerCardLongitudeInput.value = position.coords.longitude.toFixed(8);
+                    button.disabled = false;
+                    button.innerHTML = originalText;
+                    showAlert('تم الحصول على الموقع بنجاح!');
+                },
+                function(error) {
+                    button.disabled = false;
+                    button.innerHTML = originalText;
+                    var errorMessage = 'تعذر الحصول على الموقع.';
+                    if (error.code === 1) {
+                        errorMessage = 'تم رفض طلب الحصول على الموقع. يرجى السماح بالوصول إلى الموقع.';
+                    } else if (error.code === 2) {
+                        errorMessage = 'تعذر تحديد الموقع. يرجى المحاولة مرة أخرى.';
+                    } else if (error.code === 3) {
+                        errorMessage = 'انتهت مهلة طلب الموقع. يرجى المحاولة مرة أخرى.';
+                    }
+                    showAlert(errorMessage);
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
+        });
+    }
+
     // معالج استيراد العملاء من CSV
     var importCustomersForm = document.getElementById('importCustomersForm');
     var importCustomersModal = document.getElementById('importCustomersModal');
@@ -6499,6 +6539,31 @@ if (!$isSalesUser && !$isCompanySection && in_array($currentRole, ['manager', 'd
         });
     }
     
+    // لبطاقة إضافة العميل (موبايل)
+    const addCustomerCardPhoneBtn = document.getElementById('addCustomerCardPhoneBtn');
+    const addCustomerCardPhoneContainer = document.getElementById('addCustomerCardPhoneNumbersContainer');
+    if (addCustomerCardPhoneBtn && addCustomerCardPhoneContainer) {
+        addCustomerCardPhoneBtn.addEventListener('click', function() {
+            const phoneInputGroup = document.createElement('div');
+            phoneInputGroup.className = 'input-group mb-2';
+            phoneInputGroup.innerHTML = `
+                <input type="text" class="form-control phone-input" name="phones[]" placeholder="مثال: 01234567890">
+                <button type="button" class="btn btn-outline-danger remove-phone-btn">
+                    <i class="bi bi-trash"></i>
+                </button>
+            `;
+            addCustomerCardPhoneContainer.appendChild(phoneInputGroup);
+            updateRemoveButtons(addCustomerCardPhoneContainer);
+        });
+        addCustomerCardPhoneContainer.addEventListener('click', function(e) {
+            if (e.target.closest('.remove-phone-btn')) {
+                e.target.closest('.input-group').remove();
+                updateRemoveButtons(addCustomerCardPhoneContainer);
+            }
+        });
+        updateRemoveButtons(addCustomerCardPhoneContainer);
+    }
+
     // للنموذج التعديل
     const addEditPhoneBtn = document.getElementById('addEditPhoneBtn');
     const editPhoneContainer = document.getElementById('editPhoneNumbersContainer');
