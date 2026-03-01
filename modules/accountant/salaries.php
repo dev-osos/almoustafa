@@ -6435,7 +6435,10 @@ document.addEventListener('DOMContentLoaded', function() {
                         alert(data.message || 'فشل الحفظ');
                     }
                 })
-                .catch(function() { alert('خطأ في الاتصال'); });
+                .catch(function() { alert('خطأ في الاتصال'); })
+                .finally(function() {
+                    if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
+                });
         });
     }
     var formCard = document.getElementById('financialNotesAddFormCard');
@@ -6465,7 +6468,10 @@ document.addEventListener('DOMContentLoaded', function() {
                         alert(data.message || 'فشل الحفظ');
                     }
                 })
-                .catch(function() { alert('خطأ في الاتصال'); });
+                .catch(function() { alert('خطأ في الاتصال'); })
+                .finally(function() {
+                    if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
+                });
         });
     }
 });
