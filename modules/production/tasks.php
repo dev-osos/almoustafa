@@ -2794,22 +2794,29 @@ function tasksHtml(string $value): string
                 var tgl = el.querySelector('[data-bs-toggle="dropdown"]');
                 if (!m || !tgl) return;
                 var rect = tgl.getBoundingClientRect();
-                var menuHeight = Math.min(m.scrollHeight, window.innerHeight * 0.7);
-                var spaceBelow = window.innerHeight - rect.bottom;
-                var openAbove = spaceBelow < menuHeight && rect.top > spaceBelow;
                 m.classList.add('task-actions-dropdown-menu-inbody');
                 document.body.appendChild(m);
+                var menuFullHeight = m.scrollHeight || 400;
+                var spaceBelow = window.innerHeight - rect.bottom - 8;
+                var spaceAbove = rect.top - 8;
+                var openAbove = spaceBelow < spaceAbove;
+                var maxH = openAbove
+                    ? Math.min(menuFullHeight, window.innerHeight * 0.7, Math.max(120, spaceAbove))
+                    : Math.min(menuFullHeight, window.innerHeight * 0.7, Math.max(120, spaceBelow));
                 var style = m.style;
                 style.position = 'fixed';
+                style.display = 'block';
+                style.visibility = 'visible';
                 if (document.documentElement.dir === 'rtl') {
                     style.right = (window.innerWidth - rect.right) + 'px';
                     style.left = 'auto';
                 } else {
                     style.left = rect.left + 'px';
                 }
-                style.top = openAbove ? (rect.top - menuHeight) + 'px' : rect.bottom + 'px';
-                style.minWidth = rect.width + 'px';
-                style.maxHeight = '70vh';
+                var topPos = openAbove ? Math.max(8, rect.top - maxH) : rect.bottom + 2;
+                style.top = topPos + 'px';
+                style.minWidth = Math.max(rect.width, 180) + 'px';
+                style.maxHeight = maxH + 'px';
                 style.overflowY = 'auto';
                 style.zIndex = '1060';
             });
