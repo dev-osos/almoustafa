@@ -1734,7 +1734,7 @@ $summaryTotalCustomers = $customerStats['total_count'] ?? $totalCustomers;
         <i class="bi bi-people me-2"></i><?php echo $isSalesUser ? 'عملائي' : 'العملاء'; ?>
     </h2>
     <div class="d-flex gap-2">
-        <?php if (in_array($currentRole, ['manager', 'developer', 'accountant', 'sales'], true)): ?>
+        <?php if (in_array($currentRole, ['manager', 'developer', 'accountant'], true)): ?>
         <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#importCustomersModal">
             <i class="bi bi-file-earmark-spreadsheet me-2"></i>استيراد من CSV
         </button>
