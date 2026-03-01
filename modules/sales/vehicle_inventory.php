@@ -359,34 +359,16 @@ if ($hasNoVehicle && $currentUser['role'] === 'sales'): ?>
                     <div class="table-responsive">
                         <table class="table table-no-hover dashboard-table-details mb-0">
                             <tr>
-                                <th width="40%">رقم السيارة:</th>
-                                <td><?php echo htmlspecialchars($selectedVehicle['vehicle_number']); ?></td>
+                                <th width="40%">رقم السيارة: <?php echo htmlspecialchars($selectedVehicle['vehicle_number']); ?></th>
                             </tr>
                             <tr>
-                                <th>الموديل:</th>
-                                <td><?php echo htmlspecialchars($selectedVehicle['model'] ?? '-'); ?></td>
+                                <th>الموديل: <?php echo htmlspecialchars($selectedVehicle['model'] ?? '-'); ?></th>
                             </tr>
                             <tr>
-                                <th>المندوب:</th>
-                                <td><?php echo htmlspecialchars($selectedVehicle['driver_name'] ?? '-'); ?></td>
+                                <th>المندوب: <?php echo htmlspecialchars($selectedVehicle['driver_name'] ?? '-'); ?></th>
                             </tr>
                             <tr>
-                                <th>الحالة:</th>
-                                <td>
-                                    <span class="badge bg-<?php 
-                                        echo $selectedVehicle['status'] === 'active' ? 'success' : 
-                                            ($selectedVehicle['status'] === 'maintenance' ? 'warning' : 'secondary'); 
-                                    ?>">
-                                        <?php 
-                                        $statuses = [
-                                            'active' => 'نشطة',
-                                            'inactive' => 'غير نشطة',
-                                            'maintenance' => 'صيانة'
-                                        ];
-                                        echo $statuses[$selectedVehicle['status']] ?? $selectedVehicle['status'];
-                                        ?>
-                                    </span>
-                                </td>
+                                    <th>الحالة: <?php echo htmlspecialchars($selectedVehicle['status'] === 'active' ? 'نشطة' : ($selectedVehicle['status'] === 'maintenance' ? 'صيانة' : 'غير نشطة')); ?></th>
                             </tr>
                         </table>
                     </div>
