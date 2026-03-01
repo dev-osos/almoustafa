@@ -1740,7 +1740,7 @@ $summaryTotalCustomers = $customerStats['total_count'] ?? $totalCustomers;
         </button>
         <?php endif; ?>
         <?php if (in_array($currentRole, ['manager', 'developer', 'accountant', 'sales'], true)): ?>
-        <button class="btn btn-info" data-bs-toggle="modal" data-bs-target="#customerExportModal">
+        <button class="btn btn-info" type="button" data-bs-toggle="collapse" data-bs-target="#customerExportCard" aria-expanded="false" aria-controls="customerExportCard">
             <i class="bi bi-download me-2"></i>تصدير عملاء محددين
         </button>
         <?php endif; ?>
@@ -1750,6 +1750,92 @@ $summaryTotalCustomers = $customerStats['total_count'] ?? $totalCustomers;
         </button>
         <?php endif; ?>
     </div>
+    <!-- بطاقة تصدير العملاء (تفتح بالضغط على "تصدير عملاء محددين") -->
+    <?php if (in_array($currentRole, ['manager', 'developer', 'accountant', 'sales'], true)): ?>
+    <div class="collapse mt-3" id="customerExportCard" data-section="<?php echo htmlspecialchars($section); ?>">
+        <div class="card border-info shadow-sm">
+            <div class="card-header bg-info text-white d-flex align-items-center justify-content-between py-2">
+                <h5 class="mb-0">
+                    <i class="bi bi-download me-2"></i>تصدير عملاء محددين إلى Excel
+                </h5>
+                <button type="button" class="btn btn-sm btn-light" data-bs-toggle="collapse" data-bs-target="#customerExportCard" aria-label="إغلاق">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="customer-export-alerts mb-3"></div>
+                
+                <!-- اختيار المندوب (فقط في قسم عملاء المندوبين) -->
+                <?php if (!$isSalesUser && !$isCompanySection && !empty($salesRepsList)): ?>
+                <div class="mb-4">
+                    <label class="form-label fw-semibold">اختر المندوب:</label>
+                    <select class="form-select" id="exportRepSelect" required>
+                        <option value="">-- اختر المندوب --</option>
+                        <?php foreach ($salesRepsList as $rep): ?>
+                            <option value="<?php echo (int)$rep['id']; ?>">
+                                <?php echo htmlspecialchars($rep['full_name'] ?? $rep['username'] ?? ''); ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <?php elseif ($isSalesUser && !$isCompanySection): ?>
+                    <input type="hidden" id="exportRepSelect" value="<?php echo (int)($currentUser['id'] ?? 0); ?>">
+                <?php else: ?>
+                    <input type="hidden" id="exportRepSelect" value="">
+                <?php endif; ?>
+                
+                <div class="mb-3" id="customersSection" style="display: none;">
+                    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-2 gap-2">
+                        <h6 class="mb-0">حدد العملاء المراد تصديرهم:</h6>
+                        <div class="d-flex gap-2 flex-wrap">
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-primary" id="selectAllCustomers">
+                                    <i class="bi bi-check-square me-1"></i>تحديد الكل
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary" id="deselectAllCustomers">
+                                    <i class="bi bi-square me-1"></i>إلغاء التحديد
+                                </button>
+                                <button type="button" class="btn btn-outline-success" id="selectAllCustomersAndGenerate">
+                                    <i class="bi bi-check-all me-1"></i>كل العملاء
+                                </button>
+                            </div>
+                            <button type="button" class="btn btn-outline-danger btn-sm" id="printDebtorCustomersBtn" onclick="printDebtorCustomers()">
+                                <i class="bi bi-people me-1"></i>العملاء المدينين
+                            </button>
+                        </div>
+                    </div>
+                    <div id="exportCustomersList" class="table-responsive">
+                    </div>
+                </div>
+                
+                <div id="selectRepMessage" class="text-center text-muted py-4">
+                    <?php if (!$isSalesUser && !$isCompanySection && !empty($salesRepsList)): ?>
+                        <i class="bi bi-info-circle me-2"></i>يرجى اختيار المندوب أولاً لعرض عملائه
+                    <?php elseif ($isCompanySection): ?>
+                        <span class="spinner-border spinner-border-sm me-2"></span>جاري تحميل قائمة عملاء الشركة...
+                    <?php else: ?>
+                        <span class="spinner-border spinner-border-sm me-2"></span>جاري تحميل قائمة العملاء...
+                    <?php endif; ?>
+                </div>
+                
+                <div id="exportActionButtons" style="display: none;" class="mt-3 p-3 bg-light rounded">
+                    <h6 class="mb-3">تم توليد ملف Excel بنجاح</h6>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <button type="button" class="btn btn-primary btn-sm" id="printExcelBtn">
+                            <i class="bi bi-printer me-2"></i>طباعة
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer d-flex flex-column flex-sm-row gap-2">
+                <button type="button" class="btn btn-secondary w-100 w-sm-auto" data-bs-toggle="collapse" data-bs-target="#customerExportCard">إغلاق</button>
+                <button type="button" class="btn btn-primary w-100 w-sm-auto" id="generateExcelBtn" disabled>
+                    <i class="bi bi-file-earmark-excel me-2"></i>توليد ملف Excel
+                </button>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
 </div>
 
 <?php if (!$isSalesUser): ?>
@@ -4474,7 +4560,6 @@ document.addEventListener('DOMContentLoaded', function () {
     #addCustomerModal,
     #editCustomerModal,
     #importCustomersModal,
-    #customerExportModal,
     #addRegionFromCustomerModal,
     #viewLocationModal,
     #customerHistoryModal,
@@ -6170,130 +6255,36 @@ if (!$isSalesUser && !$isCompanySection && in_array($currentRole, ['manager', 'd
     }
 }
 ?>
-<!-- للكمبيوتر فقط -->
-<div class="modal fade d-none d-md-block" id="customerExportModal" tabindex="-1" aria-hidden="true" data-section="<?php echo htmlspecialchars($section); ?>">
-    <div class="modal-dialog modal-xl modal-dialog-scrollable">
-        <div class="modal-content">
-            <div class="modal-header bg-info text-white">
-                <h5 class="modal-title">
-                    <i class="bi bi-download me-2"></i>تصدير عملاء محددين إلى Excel
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="إغلاق"></button>
-            </div>
-            <div class="modal-body">
-                <div class="customer-export-alerts mb-3"></div>
-                
-                <!-- اختيار المندوب (فقط في قسم عملاء المندوبين) -->
-                <?php if (!$isSalesUser && !$isCompanySection && !empty($salesRepsList)): ?>
-                <div class="mb-4">
-                    <label class="form-label fw-semibold">اختر المندوب:</label>
-                    <select class="form-select" id="exportRepSelect" required>
-                        <option value="">-- اختر المندوب --</option>
-                        <?php foreach ($salesRepsList as $rep): ?>
-                            <option value="<?php echo (int)$rep['id']; ?>">
-                                <?php echo htmlspecialchars($rep['full_name'] ?? $rep['username'] ?? ''); ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                <?php elseif ($isSalesUser && !$isCompanySection): ?>
-                    <input type="hidden" id="exportRepSelect" value="<?php echo (int)($currentUser['id'] ?? 0); ?>">
-                <?php else: ?>
-                    <!-- قسم عملاء الشركة - لا يوجد اختيار مندوب -->
-                    <input type="hidden" id="exportRepSelect" value="">
-                <?php endif; ?>
-                
-                <!-- قائمة العملاء -->
-                <div class="mb-3" id="customersSection" style="display: none;">
-                    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-2 gap-2">
-                        <h6 class="mb-0">حدد العملاء المراد تصديرهم:</h6>
-                        <div class="d-flex gap-2 flex-wrap">
-                            <div class="btn-group btn-group-sm">
-                                <button type="button" class="btn btn-outline-primary" id="selectAllCustomers">
-                                    <i class="bi bi-check-square me-1"></i>تحديد الكل
-                                </button>
-                                <button type="button" class="btn btn-outline-secondary" id="deselectAllCustomers">
-                                    <i class="bi bi-square me-1"></i>إلغاء التحديد
-                                </button>
-                                <button type="button" class="btn btn-outline-success" id="selectAllCustomersAndGenerate">
-                                    <i class="bi bi-check-all me-1"></i>كل العملاء
-                                </button>
-                            </div>
-                            <button type="button" class="btn btn-outline-danger btn-sm" id="printDebtorCustomersBtn" onclick="printDebtorCustomers()">
-                                <i class="bi bi-people me-1"></i>العملاء المدينين
-                            </button>
-                        </div>
-                    </div>
-                    <div id="exportCustomersList" class="table-responsive">
-                        <!-- سيتم ملؤه عبر JavaScript -->
-                    </div>
-                </div>
-                
-                <!-- رسالة اختيار المندوب أو التحميل -->
-                <div id="selectRepMessage" class="text-center text-muted py-4">
-                    <?php if (!$isSalesUser && !$isCompanySection && !empty($salesRepsList)): ?>
-                        <i class="bi bi-info-circle me-2"></i>يرجى اختيار المندوب أولاً لعرض عملائه
-                    <?php elseif ($isCompanySection): ?>
-                        <span class="spinner-border spinner-border-sm me-2"></span>جاري تحميل قائمة عملاء الشركة...
-                    <?php else: ?>
-                        <span class="spinner-border spinner-border-sm me-2"></span>جاري تحميل قائمة العملاء...
-                    <?php endif; ?>
-                </div>
-                
-                <!-- أزرار الإجراءات بعد التوليد -->
-                <div id="exportActionButtons" style="display: none;" class="mt-3 p-3 bg-light rounded">
-                    <h6 class="mb-3">تم توليد ملف Excel بنجاح</h6>
-                    <div class="d-flex gap-2 flex-wrap">
-                        <button type="button" class="btn btn-primary btn-sm" id="printExcelBtn">
-                            <i class="bi bi-printer me-2"></i>طباعة
-                        </button>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer d-flex flex-column flex-sm-row gap-2">
-                <button type="button" class="btn btn-secondary w-100 w-sm-auto" data-bs-dismiss="modal">إغلاق</button>
-                <button type="button" class="btn btn-primary w-100 w-sm-auto" id="generateExcelBtn" disabled>
-                    <i class="bi bi-file-earmark-excel me-2"></i>توليد ملف Excel
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
 
 <style>
-/* تحسينات responsive للمودال */
+/* تحسينات responsive لبطاقة التصدير */
 @media (max-width: 768px) {
-    #customerExportModal .modal-dialog {
-        margin: 0.5rem;
-        max-width: calc(100% - 1rem);
-    }
-    
-    #customerExportModal .table-responsive {
+    #customerExportCard .table-responsive {
         font-size: 0.875rem;
     }
     
-    #customerExportModal .btn-group {
+    #customerExportCard .btn-group {
         width: 100%;
     }
     
-    #customerExportModal .btn-group .btn {
+    #customerExportCard .btn-group .btn {
         flex: 1;
     }
     
-    #customerExportModal .modal-footer {
+    #customerExportCard .card-footer {
         padding: 0.75rem;
     }
     
-    #customerExportModal .modal-footer .btn {
+    #customerExportCard .card-footer .btn {
         font-size: 0.875rem;
     }
     
-    #customerExportModal table {
+    #customerExportCard table {
         font-size: 0.8rem;
     }
     
-    #customerExportModal .table th,
-    #customerExportModal .table td {
+    #customerExportCard .table th,
+    #customerExportCard .table td {
         padding: 0.5rem 0.25rem;
     }
 }
