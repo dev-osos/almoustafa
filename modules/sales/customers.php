@@ -1766,7 +1766,7 @@ $summaryTotalCustomers = $customerStats['total_count'] ?? $totalCustomers;
                 <div class="customer-export-alerts mb-3"></div>
                 
                 <!-- اختيار المندوب (فقط في قسم عملاء المندوبين) -->
-                <?php if (!$isSalesUser && !$isCompanySection && !empty($salesRepsList)): ?>
+                <?php if (!$isSalesUser && !empty($salesRepsList)): ?>
                 <div class="mb-4">
                     <label class="form-label fw-semibold">اختر المندوب:</label>
                     <select class="form-select" id="exportRepSelect" required>
