@@ -1164,6 +1164,7 @@ $herbalStockTypes = [
     'طلع',
     'ميكس جنسنج و طلع',
     'غذاء ملكات صيني',
+    'غذاء ملكات بلدي',
     'قراصيا',
     'تين',
     'مشمشيه',
@@ -4501,21 +4502,7 @@ if (!$isApiMode && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 $herbalType = trim($_POST['herbal_type'] ?? '');
                 $quantity = floatval($_POST['quantity'] ?? 0);
                 $notes = trim($_POST['notes'] ?? '');
-                $allowedTypes = [
-                    'حبة البركه',
-                    'بذر اليقطين',
-                    'جنسنج',
-                    'بروبلس',
-                    'قسط هندي',
-                    'طلع',
-                    'ميكس جنسنج و طلع',
-                    'غذاء ملكات صيني',
-                    'قراصيا',
-                    'تين',
-                    'مشمشيه',
-                    'بلوط',
-                    'حبوب اللقاح'
-                                ];
+                $allowedTypes = $herbalStockTypes;
                 if ($supplierId <= 0) {
                     $error = 'يجب اختيار المورد';
                 } elseif (!in_array($herbalType, $allowedTypes, true)) {
