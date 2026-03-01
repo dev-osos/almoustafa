@@ -2781,21 +2781,25 @@ function tasksHtml(string $value): string
     function initTaskActionsDropdowns() {
         var wrapper = document.querySelector('.dashboard-table-wrapper');
         if (!wrapper) return;
-        var dropdowns = wrapper.querySelectorAll('.dropdown');
+        var dropdowns = wrapper.querySelectorAll('tbody tr .dropdown');
         dropdowns.forEach(function(dropdownEl) {
             if (dropdownEl._taskActionsInit) return;
             dropdownEl._taskActionsInit = true;
             var toggle = dropdownEl.querySelector('[data-bs-toggle="dropdown"]');
             var menu = dropdownEl.querySelector('.dropdown-menu');
             if (!toggle || !menu) return;
-            dropdownEl.addEventListener('show.bs.dropdown', function() {
-                var rect = toggle.getBoundingClientRect();
-                var menuHeight = Math.min(menu.scrollHeight, window.innerHeight * 0.7);
+            dropdownEl.addEventListener('show.bs.dropdown', function(ev) {
+                var el = ev.currentTarget;
+                var m = el.querySelector('.dropdown-menu');
+                var tgl = el.querySelector('[data-bs-toggle="dropdown"]');
+                if (!m || !tgl) return;
+                var rect = tgl.getBoundingClientRect();
+                var menuHeight = Math.min(m.scrollHeight, window.innerHeight * 0.7);
                 var spaceBelow = window.innerHeight - rect.bottom;
                 var openAbove = spaceBelow < menuHeight && rect.top > spaceBelow;
-                menu.classList.add('task-actions-dropdown-menu-inbody');
-                document.body.appendChild(menu);
-                var style = menu.style;
+                m.classList.add('task-actions-dropdown-menu-inbody');
+                document.body.appendChild(m);
+                var style = m.style;
                 style.position = 'fixed';
                 if (document.documentElement.dir === 'rtl') {
                     style.right = (window.innerWidth - rect.right) + 'px';
@@ -2809,10 +2813,17 @@ function tasksHtml(string $value): string
                 style.overflowY = 'auto';
                 style.zIndex = '1060';
             });
-            dropdownEl.addEventListener('hide.bs.dropdown', function() {
-                menu.classList.remove('task-actions-dropdown-menu-inbody');
-                menu.removeAttribute('style');
-                dropdownEl.appendChild(menu);
+            dropdownEl.addEventListener('hide.bs.dropdown', function(ev) {
+                var el = ev.currentTarget;
+                var m = el.querySelector('.dropdown-menu');
+                if (!m) {
+                    m = document.body.querySelector('.task-actions-dropdown-menu-inbody');
+                }
+                if (m) {
+                    m.classList.remove('task-actions-dropdown-menu-inbody');
+                    m.removeAttribute('style');
+                    el.appendChild(m);
+                }
             });
         });
     }
