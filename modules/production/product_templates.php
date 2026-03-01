@@ -1813,7 +1813,7 @@ $baseUrl = getRelativeUrl('dashboard/manager.php?page=product_templates');
             $createdAtLabel = $template['created_at_label'] ?? formatDate($template['created_at']);
             $templateSearchText = $template['product_name'] ?? '';
             ?>
-            <div class="col-4 col-md-6 col-lg-4 template-list-item" data-search="<?php echo htmlspecialchars($templateSearchText, ENT_QUOTES, 'UTF-8'); ?>">
+            <div class="col-6 col-md-6 col-lg-4 template-list-item" data-search="<?php echo htmlspecialchars($templateSearchText, ENT_QUOTES, 'UTF-8'); ?>">
                 <div class="card shadow-sm h-100 template-card" style="border-top: 4px solid <?php echo $cardAccentColor; ?>; transition: transform 0.2s, box-shadow 0.2s;">
                     <span class="badge template-status-badge <?php echo $statusBadgeClass; ?>"><?php echo $statusLabel; ?></span>
                     <div class="card-body template-card-body text-center">
@@ -2204,53 +2204,61 @@ if (file_exists($specificationsModulePath)) {
 
 @media (max-width: 768px) {
     #templateCardsRow {
-        --bs-gutter-x: 0.4rem;
-        --bs-gutter-y: 0.4rem;
-    }
-    #templateCardsRow .template-list-item {
-        padding-left: 0.2rem;
-        padding-right: 0.2rem;
+        --bs-gutter-x: 0.5rem;
+        --bs-gutter-y: 0.5rem;
     }
     .template-card {
         margin-bottom: 0.5rem;
     }
     .template-card-body {
-        padding: 0.5rem 0.35rem 0.6rem;
-        min-height: 140px;
+        padding: 0.5rem 0.5rem 0.5rem;
+        min-height: 0;
     }
     .template-details-snippet {
         font-size: 0.7rem;
+        margin-top: 0.5rem !important;
+    }
+    .template-details-snippet .template-snippet-section {
+        margin-bottom: 0.4rem !important;
     }
     .template-snippet-section {
-        padding: 0.35rem 0.4rem;
+        padding: 0.3rem 0.35rem;
     }
     .template-snippet-header {
         font-size: 0.65rem;
     }
+    .template-snippet-list {
+        max-height: 2.8em;
+        overflow: hidden;
+    }
     .template-snippet-list li {
-        padding: 0.1rem 0;
+        padding: 0.08rem 0;
     }
     .details-list-wrapper {
         min-height: auto;
     }
     .template-icon {
-        width: 36px;
-        height: 36px;
-        font-size: 1.1rem;
+        width: 42px;
+        height: 42px;
+        font-size: 1.25rem;
     }
     .template-product-name {
-        font-size: 0.7rem;
-        line-height: 1.2;
-        margin-bottom: 0.25rem !important;
+        font-size: 0.75rem;
+        line-height: 1.25;
+        margin-bottom: 0.2rem !important;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
     }
     .template-card-footer {
-        padding: 0.35rem 0.5rem;
+        padding: 0.4rem 0.5rem;
         flex-wrap: wrap;
         gap: 0.25rem;
     }
     .template-card-footer .btn {
-        padding: 0.2rem 0.35rem;
-        font-size: 0.65rem;
+        padding: 0.25rem 0.4rem;
+        font-size: 0.7rem;
     }
     .template-card-footer .btn i {
         margin-inline-end: 0;
@@ -2259,8 +2267,8 @@ if (file_exists($specificationsModulePath)) {
         font-size: 0.6rem;
     }
     .template-status-badge {
-        font-size: 0.55rem;
-        padding: 0.15rem 0.35rem;
+        font-size: 0.6rem;
+        padding: 0.2rem 0.4rem;
     }
     .template-toast {
         inset-inline: 16px;
