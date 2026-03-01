@@ -1484,16 +1484,38 @@ function tasksHtml(string $value): string
 }
 ?>
 <style>
+/* عمود الإجراءات: يبقى ظاهراً بالكامل لعمال الإنتاج والسائق على كل الشاشات */
+.task-actions-header,
+.task-actions-cell {
+    min-width: 120px;
+    width: 1%;
+    white-space: nowrap;
+}
+@media (max-width: 768px) {
+    .task-actions-header,
+    .task-actions-cell {
+        min-width: 100px;
+    }
+    .task-actions-cell .btn {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.875rem;
+    }
+}
 /* قائمة إجراءات المهام: قابلة للتمرير ومرئية فوق الجدول على الموبايل */
 .task-actions-dropdown-menu-inbody {
     max-height: 70vh !important;
     overflow-y: auto !important;
     z-index: 1060 !important;
+    min-width: 11rem !important;
+}
+.dashboard-table-wrapper .dropdown-menu {
+    min-width: 11rem;
 }
 @media (max-width: 768px) {
     .dashboard-table-wrapper .dropdown-menu {
         max-height: 70vh;
         overflow-y: auto;
+        min-width: 11rem;
     }
 }
 </style>
@@ -1723,7 +1745,7 @@ function tasksHtml(string $value): string
                                 <th>نوع الاوردر</th>
                                 <th>الحالة</th>
                                 <th>التسليم</th>
-                                <th style="width: 180px;">الإجراءات</th>
+                                <th class="task-actions-header">الإجراءات</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -1825,7 +1847,7 @@ function tasksHtml(string $value): string
                                                 if ($workersCheck && (int)$workersCheck['count'] > 0) $isTaskForProduction = true;
                                             }
                                         }
-                                        $canWithDelegate = ($isManager || $isProduction) && ($task['status'] ?? '') === 'completed';
+                                        $canWithDelegate = ($isManager || $isProduction || $isDriver) && ($task['status'] ?? '') === 'completed';
                                         $canDeliverReturn = ($isManager || $isProduction || $isDriver) && in_array($task['status'] ?? '', ['completed', 'with_delegate'], true);
                                         $canDeliverReturnDriver = in_array($task['status'] ?? '', ['completed', 'with_delegate'], true);
                                         $taskCustomerPhone = isset($task['customer_phone']) ? trim((string) $task['customer_phone']) : '';
