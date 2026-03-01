@@ -656,6 +656,13 @@ switch ($role) {
                 'badge' => null
             ],
             [
+                'title' => 'محفظة المستخدم',
+                'icon' => 'bi-wallet2',
+                'url' => $baseUrl . 'sales.php?page=user_wallet',
+                'active' => ($currentPage === 'sales.php' && $currentPageParam === 'user_wallet'),
+                'badge' => null
+            ],
+            [
                 'title' => 'سجلات المندوب',
                 'icon' => 'bi-journal-text',
                 'url' => $baseUrl . 'sales.php?page=my_records',
@@ -962,6 +969,13 @@ if (empty($menuItems)) {
                 'icon' => 'bi-shop',
                 'url' => $baseUrl . 'sales.php?page=pos',
                 'active' => ($currentPage === 'sales.php' && $currentPageParam === 'pos'),
+                'badge' => null
+            ],
+            [
+                'title' => 'محفظة المستخدم',
+                'icon' => 'bi-wallet2',
+                'url' => $baseUrl . 'sales.php?page=user_wallet',
+                'active' => ($currentPage === 'sales.php' && $currentPageParam === 'user_wallet'),
                 'badge' => null
             ],
         ];
