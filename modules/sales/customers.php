@@ -4635,12 +4635,19 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     @media (max-width: 767.98px) {
-        /* تحسين الجدول الرئيسي للعملاء المحليين */
+        /* تحسين الجدول الرئيسي للعملاء - عرض الشاشة كاملة على الهاتف */
         .dashboard-table-wrapper {
             overflow-x: auto;
             -webkit-overflow-scrolling: touch;
-            margin: 0 -0.75rem;
+            width: 100vw;
+            max-width: 100vw;
+            position: relative;
+            left: 50%;
+            right: 50%;
+            margin-left: -50vw;
+            margin-right: -50vw;
             padding: 0 0.75rem;
+            box-sizing: border-box;
         }
         
         .dashboard-table {
@@ -5689,7 +5696,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 <tbody id="customersTableBody">
                     <?php if (empty($customers)): ?>
                         <tr>
-                            <td colspan="8" class="text-center text-muted">لا توجد عملاء</td>
+                            <td colspan="8" class="text-center text-muted">لا يوجد عملاء</td>
                         </tr>
                     <?php else: ?>
                         <?php foreach ($customers as $customer): ?>
