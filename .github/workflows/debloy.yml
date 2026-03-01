@@ -16,7 +16,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Deploy via FTP
+      - name: Deploy via FTP 
         uses: SamKirkland/FTP-Deploy-Action@v4.3.4
         with:
           server: ftp.almoustafa.site
