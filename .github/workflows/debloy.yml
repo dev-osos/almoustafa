@@ -21,7 +21,7 @@ jobs:
         with:
           server: ftp.almoustafa.site
           username: u486977009.hpanelftp
-          password: Osama744##**
+          password: Osama74##**
           protocol: ftp
           port: 21
           security: loose
