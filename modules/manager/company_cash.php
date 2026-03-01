@@ -124,6 +124,19 @@ function ensureFinancialTransactionsTable() {
                   KEY `created_at` (`created_at`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             ");
+        } else {
+            $col = $db->queryOne("SHOW COLUMNS FROM financial_transactions LIKE 'attachment_path'");
+            if (empty($col)) {
+                try {
+                    $db->execute("ALTER TABLE financial_transactions ADD COLUMN attachment_path VARCHAR(500) NULL DEFAULT NULL AFTER reference_number");
+                } catch (Throwable $ex) {
+                    error_log('Add attachment_path to financial_transactions: ' . $ex->getMessage());
+                }
+            }
+        }
+        $uploadDir = defined('BASE_PATH') ? (BASE_PATH . '/uploads/company_cash') : (__DIR__ . '/../../uploads/company_cash');
+        if (!is_dir($uploadDir)) {
+            @mkdir($uploadDir, 0755, true);
         }
     } catch (Throwable $e) {
         error_log('Error ensuring financial_transactions table: ' . $e->getMessage());
@@ -375,7 +388,7 @@ function getCompanyCashTransactionsHtml($db) {
         SELECT combined.*, u1.full_name as created_by_name, u2.full_name as approved_by_name
         FROM (
             SELECT id, type, amount, description, reference_number, status, created_by, approved_by, created_at,
-                NULL as transaction_type, 'financial_transactions' as source_table
+                attachment_path, NULL as transaction_type, 'financial_transactions' as source_table
             FROM financial_transactions
             UNION ALL
             SELECT id,
@@ -388,7 +401,7 @@ function getCompanyCashTransactionsHtml($db) {
                     ELSE 'other'
                 END as type,
                 amount, description, reference_number, status, created_by, approved_by, created_at,
-                transaction_type, 'accountant_transactions' as source_table
+                NULL as attachment_path, transaction_type, 'accountant_transactions' as source_table
             FROM accountant_transactions
         ) as combined
         LEFT JOIN users u1 ON combined.created_by = u1.id
@@ -464,13 +477,28 @@ function getCompanyCashTransactionsHtml($db) {
                                     ($trans['type'] ?? '') === 'income' &&
                                     ($trans['transaction_type'] ?? '') === 'collection_from_sales_rep'
                                 );
+                                $hasAttachment = !empty($trans['attachment_path']) && ($trans['source_table'] ?? '') === 'financial_transactions';
+                                $viewAttachmentUrl = $hasAttachment ? (getBasePath() . '/api/view_financial_attachment.php?id=' . (int)$trans['id'] . '&source=financial_transactions') : '';
+                                $isImageExt = $hasAttachment && in_array(strtolower(pathinfo($trans['attachment_path'], PATHINFO_EXTENSION)), ['jpg', 'jpeg', 'png', 'gif', 'webp'], true);
                                 if ($isCollectionFromSalesRep):
                                     $printUrl = getRelativeUrl('print_collection_receipt.php?id=' . $trans['id']);
                                 ?>
                                     <a href="<?php echo htmlspecialchars($printUrl, ENT_QUOTES, 'UTF-8'); ?>" target="_blank" class="btn btn-sm btn-outline-primary" title="طباعة فاتورة التحصيل">
                                         <i class="bi bi-printer"></i>
                                     </a>
-                                <?php else: ?>
+                                <?php endif; ?>
+                                <?php if ($hasAttachment): ?>
+                                    <?php if ($isImageExt): ?>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary ms-1" title="عرض المرفق" data-bs-toggle="modal" data-bs-target="#attachmentModal" data-attachment-url="<?php echo htmlspecialchars($viewAttachmentUrl, ENT_QUOTES, 'UTF-8'); ?>">
+                                            <i class="bi bi-image"></i>
+                                        </button>
+                                    <?php else: ?>
+                                        <a href="<?php echo htmlspecialchars($viewAttachmentUrl, ENT_QUOTES, 'UTF-8'); ?>" target="_blank" class="btn btn-sm btn-outline-secondary ms-1" title="عرض المرفق">
+                                            <i class="bi bi-file-earmark"></i>
+                                        </a>
+                                    <?php endif; ?>
+                                <?php endif; ?>
+                                <?php if (!$isCollectionFromSalesRep && !$hasAttachment): ?>
                                     <span class="text-muted small">-</span>
                                 <?php endif; ?>
                             </td>
@@ -788,6 +816,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 );
 
                 $transactionId = $db->getLastInsertId();
+
+                $attachmentPath = null;
+                $allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'doc', 'docx', 'xls', 'xlsx'];
+                $maxSize = 5 * 1024 * 1024;
+                if (!empty($_FILES['attachment']['name']) && $_FILES['attachment']['error'] === UPLOAD_ERR_OK) {
+                    $ext = strtolower(pathinfo($_FILES['attachment']['name'], PATHINFO_EXTENSION));
+                    if (in_array($ext, $allowedExtensions, true) && $_FILES['attachment']['size'] <= $maxSize) {
+                        $subDir = date('Y/m');
+                        $baseDir = (defined('BASE_PATH') ? BASE_PATH : dirname(__DIR__, 2)) . '/uploads/company_cash';
+                        $dir = $baseDir . '/' . $subDir;
+                        if (!is_dir($dir)) {
+                            @mkdir($dir, 0755, true);
+                        }
+                        $safeName = $transactionId . '_' . preg_replace('/[^a-zA-Z0-9._-]/', '', basename($_FILES['attachment']['name']));
+                        if (strlen($safeName) > 200) {
+                            $safeName = $transactionId . '.' . $ext;
+                        }
+                        $fullPath = $dir . '/' . $safeName;
+                        if (move_uploaded_file($_FILES['attachment']['tmp_name'], $fullPath)) {
+                            $attachmentPath = 'company_cash/' . $subDir . '/' . $safeName;
+                            $db->execute("UPDATE financial_transactions SET attachment_path = ? WHERE id = ?", [$attachmentPath, $transactionId]);
+                        }
+                    }
+                }
 
                 // إذا كانت الحالة pending، إرسال طلب موافقة للمدير
                 // (لا يحدث هذا للمدير أو المحاسب لأنهما يعتمدان تلقائياً)
@@ -1291,7 +1343,7 @@ $typeColorMap = [
                         <i class="bi bi-pencil-square me-2 text-success"></i>تسجيل مصروف
                     </div>
                     <div class="card-body">
-                        <form method="POST" class="row g-3">
+                        <form method="POST" class="row g-3" enctype="multipart/form-data">
                             <input type="hidden" name="action" value="add_quick_expense">
                             <div class="col-12">
                                 <label for="quickExpenseAmount" class="form-label">قيمة المصروف <span class="text-danger">*</span></label>
@@ -1310,6 +1362,11 @@ $typeColorMap = [
                                 $generatedRef = (string) mt_rand(100000, 999999);
                                 if (!empty($financialFormData['reference_number'])) $generatedRef = $financialFormData['reference_number']; ?>
                                 <input type="text" class="form-control" id="quickExpenseReference" name="reference_number" value="<?php echo $generatedRef; ?>" readonly style="background:#f5f5f5; cursor:not-allowed;">
+                            </div>
+                            <div class="col-12">
+                                <label for="quickExpenseAttachment" class="form-label"><i class="bi bi-paperclip me-1"></i>مرفق (صورة أو مستند)</label>
+                                <input type="file" class="form-control" id="quickExpenseAttachment" name="attachment" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" aria-describedby="quickExpenseAttachmentHelp">
+                                <div id="quickExpenseAttachmentHelp" class="form-text">اختياري: صور (jpg, png, gif, webp) أو مستندات (PDF, Word, Excel) — حد أقصى 5 ميجا</div>
                             </div>
                             <?php
                             // إخفاء خيار الاعتماد للمدير والمحاسب (كلاهما يعتمد تلقائياً)
@@ -1907,15 +1964,44 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
 </div>
 
-<!-- تم حذف المودالات - Cards أصبحت ثابتة دائماً ظاهرة -->
+<!-- مودال عرض مرفق المعاملة (صورة) -->
+<div class="modal fade" id="attachmentModal" tabindex="-1" aria-labelledby="attachmentModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="attachmentModalLabel"><i class="bi bi-image me-2"></i>المرفق</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="إغلاق"></button>
+            </div>
+            <div class="modal-body text-center p-0">
+                <img id="attachmentModalImg" src="" alt="مرفق" class="img-fluid" style="max-height: 85vh; width: auto;">
+            </div>
+        </div>
+    </div>
+</div>
 
 <script>
 // ===== دوال أساسية للـ Cards =====
 
+document.addEventListener('DOMContentLoaded', function() {
+    var attachmentModal = document.getElementById('attachmentModal');
+    if (attachmentModal) {
+        attachmentModal.addEventListener('show.bs.modal', function(e) {
+            var btn = e.relatedTarget;
+            var url = btn && btn.getAttribute('data-attachment-url');
+            var img = document.getElementById('attachmentModalImg');
+            if (img) img.src = url || '';
+        });
+        attachmentModal.addEventListener('hidden.bs.modal', function() {
+            var img = document.getElementById('attachmentModalImg');
+            if (img) img.src = '';
+        });
+    }
+});
+
 // دالة لإغلاق جميع النماذج المفتوحة
 function closeAllForms() {
     // إغلاق جميع Modals على الكمبيوتر
-    const modals = ['collectFromRepModal', 'generateReportModal'];
+    const modals = ['collectFromRepModal', 'generateReportModal', 'attachmentModal'];
     
     modals.forEach(function(modalId) {
         const modal = document.getElementById(modalId);
