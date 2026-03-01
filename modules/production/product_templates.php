@@ -2204,71 +2204,71 @@ if (file_exists($specificationsModulePath)) {
 
 @media (max-width: 768px) {
     #templateCardsRow {
-        --bs-gutter-x: 0.5rem;
-        --bs-gutter-y: 0.5rem;
+        --bs-gutter-x: 0.4rem;
+        --bs-gutter-y: 0.4rem;
     }
     .template-card {
-        margin-bottom: 0.5rem;
+        margin-bottom: 0.35rem;
     }
     .template-card-body {
-        padding: 0.5rem 0.5rem 0.5rem;
+        padding: 0.35rem 0.4rem 0.35rem;
         min-height: 0;
     }
     .template-details-snippet {
-        font-size: 0.7rem;
-        margin-top: 0.5rem !important;
+        font-size: 0.62rem;
+        margin-top: 0.3rem !important;
     }
     .template-details-snippet .template-snippet-section {
-        margin-bottom: 0.4rem !important;
+        margin-bottom: 0.25rem !important;
     }
     .template-snippet-section {
-        padding: 0.3rem 0.35rem;
+        padding: 0.2rem 0.25rem;
     }
     .template-snippet-header {
-        font-size: 0.65rem;
+        font-size: 0.58rem;
     }
     .template-snippet-list {
-        max-height: 2.8em;
+        max-height: 1.6em;
         overflow: hidden;
     }
     .template-snippet-list li {
-        padding: 0.08rem 0;
+        padding: 0.04rem 0;
     }
     .details-list-wrapper {
         min-height: auto;
     }
     .template-icon {
-        width: 42px;
-        height: 42px;
-        font-size: 1.25rem;
+        width: 32px;
+        height: 32px;
+        font-size: 1rem;
     }
     .template-product-name {
-        font-size: 0.75rem;
-        line-height: 1.25;
-        margin-bottom: 0.2rem !important;
+        font-size: 0.68rem;
+        line-height: 1.2;
+        margin-bottom: 0.15rem !important;
         display: -webkit-box;
-        -webkit-line-clamp: 2;
+        -webkit-line-clamp: 1;
         -webkit-box-orient: vertical;
         overflow: hidden;
     }
     .template-card-footer {
-        padding: 0.4rem 0.5rem;
+        padding: 0.25rem 0.35rem;
         flex-wrap: wrap;
-        gap: 0.25rem;
+        gap: 0.2rem;
     }
     .template-card-footer .btn {
-        padding: 0.25rem 0.4rem;
-        font-size: 0.7rem;
+        padding: 0.15rem 0.3rem;
+        font-size: 0.62rem;
     }
     .template-card-footer .btn i {
         margin-inline-end: 0;
     }
     .template-card-footer .text-muted {
-        font-size: 0.6rem;
+        font-size: 0.55rem;
     }
     .template-status-badge {
-        font-size: 0.6rem;
-        padding: 0.2rem 0.4rem;
+        font-size: 0.52rem;
+        padding: 0.12rem 0.3rem;
     }
     .template-toast {
         inset-inline: 16px;
