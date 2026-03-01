@@ -1330,7 +1330,6 @@ $typeColorMap = [
                             </div>
                             <?php endif; ?>
                             <div class="col-12 d-flex justify-content-end gap-2">
-                                <button type="reset" class="btn btn-outline-secondary">تفريغ الحقول</button>
                                 <button type="submit" class="btn btn-success">
                                     <i class="bi bi-send me-1"></i>حفظ المصروف
                                 </button>
