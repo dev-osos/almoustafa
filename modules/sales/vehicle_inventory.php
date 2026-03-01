@@ -359,7 +359,7 @@ if ($hasNoVehicle && $currentUser['role'] === 'sales'): ?>
                     <div class="table-responsive">
                         <table class="table table-no-hover dashboard-table-details mb-0 fs-5">
                             <tr>
-                                <th class="pe-3 pb-2 w-50">رقم السيارة: <span class="fw-normal"><?php echo htmlspecialchars($selectedVehicle['vehicle_number']); ?></span></th>
+                                <th class="pe-3 pb-2 w-50"> السيارة: <span class="fw-normal"><?php echo htmlspecialchars($selectedVehicle['vehicle_number']); ?></span></th>
                                 <th class="pb-2">الموديل: <span class="fw-normal"><?php echo htmlspecialchars($selectedVehicle['model'] ?? '-'); ?></span></th>
                             </tr>
                             <tr>
