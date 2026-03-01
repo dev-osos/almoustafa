@@ -355,20 +355,7 @@ if ($hasNoVehicle && $currentUser['role'] === 'sales'): ?>
         </div>
         <div class="card-body">
             <div class="row g-3 mb-3">
-                <div class="col-12 col-md-6">
-                    <div class="table-responsive">
-                        <table class="table table-no-hover dashboard-table-details mb-0 fs-5">
-                            <tr>
-                                <th class="pe-3 pb-2 w-50"> السيارة: <span class="fw-normal"><?php echo htmlspecialchars($selectedVehicle['vehicle_number']); ?></span></th>
-                                <th class="pb-2">الموديل: <span class="fw-normal"><?php echo htmlspecialchars($selectedVehicle['model'] ?? '-'); ?></span></th>
-                            </tr>
-                            <tr>
-                                <th class="pe-3">المندوب: <span class="fw-normal"><?php echo htmlspecialchars($selectedVehicle['driver_name'] ?? '-'); ?></span></th>
-                                <th>الحالة: <span class="fw-normal"><?php echo htmlspecialchars($selectedVehicle['status'] === 'active' ? 'نشطة' : ($selectedVehicle['status'] === 'maintenance' ? 'صيانة' : 'غير نشطة')); ?></span></th>
-                            </tr>
-                        </table>
-                    </div>
-                </div>
+               
                 <div class="col-12 col-md-6">
                     <div class="card bg-light h-100">
                         <div class="card-body">
