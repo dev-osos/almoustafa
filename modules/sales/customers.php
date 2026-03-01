@@ -1779,7 +1779,7 @@ $summaryTotalCustomers = $customerStats['total_count'] ?? $totalCustomers;
                     </select>
                 </div>
                 <?php elseif ($isSalesUser && !$isCompanySection): ?>
-                    <input type="hidden" id="exportRepSelect" value="<?php echo (int)($currentUser['id'] ?? 0); ?>">
+                    <input type="hidden" id="exportRepSelect" value="<?php echo (int)((is_array($currentUser) && isset($currentUser['id'])) ? $currentUser['id'] : 0); ?>">
                 <?php else: ?>
                     <input type="hidden" id="exportRepSelect" value="">
                 <?php endif; ?>
