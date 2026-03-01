@@ -507,8 +507,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($error !== '') {
             // تم ضبط رسالة الخطأ أعلاه (مثل التحقق من الكمية)
-        } elseif (empty($assignees)) {
-            $error = 'يجب اختيار عامل واحد على الأقل لاستلام المهمة.';
         } elseif ($dueDate && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dueDate)) {
             $error = 'صيغة تاريخ الاستحقاق غير صحيحة.';
         } else {
@@ -829,7 +827,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 enforceTasksRetentionLimit($db, $tasksRetentionLimit);
 
                 // التوجيه إلى صفحة طباعة إيصال الأوردر مع فتح نافذة الطباعة تلقائياً (معاينة المتصفح)
-                $successMessage = 'تم إرسال المهمة بنجاح إلى ' . count($assignees) . ' من عمال الإنتاج.';
+                $successMessage = count($assignees) > 0
+                    ? 'تم إرسال المهمة بنجاح إلى ' . count($assignees) . ' من عمال الإنتاج.'
+                    : 'تم إرسال المهمة بنجاح.';
                 $userRole = ($currentUser['role'] ?? '') === 'accountant' ? 'accountant' : 'manager';
                 $printReceiptUrl = getRelativeUrl('print_task_receipt.php?id=' . (int) $taskId . '&print=1');
                 preventDuplicateSubmission($successMessage, [], $printReceiptUrl, $userRole);
@@ -1990,7 +1990,8 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             </div>
                         </div>
                     </div>
-                    <div class="d-flex justify-content-end mt-4 gap-2">                        <button type="submit" class="btn btn-primary"><i class="bi bi-send-check me-1"></i>إرسال المهمة</button>
+                    <div class="d-flex justify-content-end mt-4 gap-2">                        
+                        <button type="submit" class="btn btn-primary"><i class="bi bi-send-check me-1"></i>إرسال المهمة</button>
                     </div>
                 </form>
             </div>
