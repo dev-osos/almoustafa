@@ -153,6 +153,15 @@ $lang = isset($translations) ? $translations : [];
 $pageTitle = isset($lang['sales_dashboard']) ? $lang['sales_dashboard'] : 'لوحة المبيعات';
 $pageDescription = 'لوحة تحكم المبيعات - عرض الإحصائيات والمبيعات والعملاء والمخزون - ' . APP_NAME;
 
+// معالجة طلبات AJAX لصفحة محفظة المستخدم
+if ($page === 'user_wallet' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    include __DIR__ . '/../modules/user/user_wallet.php';
+    exit;
+}
+
 // معالجة طلبات AJAX قبل إرسال أي HTML
 if (isset($_GET['ajax'], $_GET['action'])) {
 
@@ -2597,6 +2606,17 @@ if ($isAjaxNavigation) {
                     <div class="empty-state-description">صفحة خزنة المندوب - غير متاحة حالياً</div>
                 </div>
                 <?php } ?>
+                
+            <?php elseif ($page === 'user_wallet'): ?>
+                <!-- صفحة محفظة المستخدم -->
+                <?php
+                $modulePath = __DIR__ . '/../modules/user/user_wallet.php';
+                if (file_exists($modulePath)) {
+                    include $modulePath;
+                } else {
+                    echo '<div class="alert alert-warning">صفحة محفظة المستخدم غير متاحة حالياً</div>';
+                }
+                ?>
                 
             <?php elseif ($page === 'attendance'): ?>
                 <!-- صفحة تسجيل الحضور -->

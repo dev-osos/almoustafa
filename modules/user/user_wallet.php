@@ -37,10 +37,10 @@ if (!$currentUser || !is_array($currentUser) || empty($currentUser['id'])) {
     }
 }
 
-// الصلاحية: سائق أو عامل إنتاج فقط
+// الصلاحية: سائق أو عامل إنتاج أو مندوب مبيعات
 $role = strtolower($currentUser['role'] ?? '');
-if (!in_array($role, ['driver', 'production'], true)) {
-    echo '<div class="alert alert-danger"><i class="bi bi-exclamation-triangle me-2"></i>هذه الصفحة متاحة للسائق وعامل الإنتاج فقط.</div>';
+if (!in_array($role, ['driver', 'production', 'sales'], true)) {
+    echo '<div class="alert alert-danger"><i class="bi bi-exclamation-triangle me-2"></i>هذه الصفحة متاحة للسائق وعامل الإنتاج والمندوب فقط.</div>';
     return;
 }
 
