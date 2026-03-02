@@ -1,4 +1,4 @@
-name: Deploy to Thamara Cloud
+name: Deploy to Hostinger Cloud
 
 on:
   push:
