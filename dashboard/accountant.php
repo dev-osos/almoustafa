@@ -290,7 +290,7 @@ if ($page === 'user_wallets_control' && $_SERVER['REQUEST_METHOD'] === 'POST' &&
 if ($page === 'shipping_orders' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $isAjaxShipping = !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
     $actionShipping = $_POST['action'] ?? '';
-    if ($isAjaxShipping && in_array($actionShipping, ['get_shipping_company_statement', 'deduct_from_shipping_company'], true)) {
+    if ($isAjaxShipping && in_array($actionShipping, ['get_shipping_company_statement', 'collect_from_shipping_company', 'deduct_from_shipping_company'], true)) {
         while (ob_get_level() > 0) ob_end_clean();
         $modulePath = __DIR__ . '/../modules/manager/shipping_orders.php';
         if (file_exists($modulePath)) {
