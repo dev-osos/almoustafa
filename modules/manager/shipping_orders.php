@@ -31,12 +31,19 @@ $db = db();
 
 $sessionErrorKey = 'manager_shipping_orders_error';
 $sessionSuccessKey = 'manager_shipping_orders_success';
+$sessionCollectionResultKey = 'manager_shipping_collection_result';
 $error = '';
 $success = '';
+$shippingCollectionResult = '';
 
 if (!empty($_SESSION[$sessionErrorKey])) {
     $error = $_SESSION[$sessionErrorKey];
     unset($_SESSION[$sessionErrorKey]);
+}
+
+if (!empty($_SESSION[$sessionCollectionResultKey])) {
+    $shippingCollectionResult = $_SESSION[$sessionCollectionResultKey];
+    unset($_SESSION[$sessionCollectionResultKey]);
 }
 
 if (!empty($_SESSION[$sessionSuccessKey])) {
@@ -884,8 +891,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $db->commit();
                 $transactionStarted = false;
                 $referenceNumber = $collectionNumber ?? ('SHIP-CUST-' . $companyId . '-' . date('YmdHis'));
-                $msg = 'تم تحصيل المبلغ بنجاح وإضافته إلى خزنة الشركة. رقم المرجع: ' . $referenceNumber . '.';
-                $_SESSION[$sessionSuccessKey] = $msg;
+                $msg = 'تم تحصيل المبلغ بنجاح وإضافته إلى خزنة الشركة. رقم المرجع: ' . $referenceNumber . '. الرصيد بعد المعاملة: ' . number_format($newBalance, 2) . ' ج.م.';
+                $_SESSION[$sessionCollectionResultKey] = $msg;
                 if ($isAjax) {
                     header('Content-Type: application/json; charset=utf-8');
                     echo json_encode([
@@ -979,8 +986,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ['amount' => $amount, 'previous_balance' => $currentBalance, 'new_balance' => $newBalance]
                 );
 
-                $deductMsg = 'تم خصم المبلغ بنجاح وإضافته إلى خزنة الشركة. الرصيد الجديد: ' . number_format($newBalance, 2) . ' ج.م.';
-                $_SESSION[$sessionSuccessKey] = $deductMsg;
+                $deductMsg = 'تم خصم المبلغ بنجاح وإضافته إلى خزنة الشركة. الرصيد بعد المعاملة: ' . number_format($newBalance, 2) . ' ج.م.';
+                $_SESSION[$sessionCollectionResultKey] = $deductMsg;
                 if ($isAjax) {
                     header('Content-Type: application/json; charset=utf-8');
                     echo json_encode([
@@ -3729,9 +3736,43 @@ $hasShippingCompanies = !empty($shippingCompanies);
             </div>
         <?php endif; ?>
     </div>
+    <?php if (!empty($shippingCollectionResult)): ?>
+    <div class="card-footer border-0 pt-0">
+        <div class="alert alert-success mb-0 d-flex flex-wrap align-items-center gap-2 flex-row-reverse" role="status">
+            <button type="button" class="btn btn-sm btn-outline-success ms-auto" onclick="copyShippingCollectionResult(this)" title="نسخ النص">
+                <i class="bi bi-clipboard"></i> نسخ
+            </button>
+            <div class="flex-grow-1 user-select-all" style="cursor: text; min-height: 1.5em;" id="shippingCollectionResultText"><?php echo htmlspecialchars($shippingCollectionResult); ?></div>
+            <i class="bi bi-check-circle-fill flex-shrink-0"></i>
+        </div>
+    </div>
+    <?php endif; ?>
 </div>
 
 <script>
+function copyShippingCollectionResult(btn) {
+    var el = document.getElementById('shippingCollectionResultText');
+    if (!el) return;
+    var text = el.textContent || el.innerText;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function() {
+            var icon = btn.querySelector('i');
+            if (icon) { icon.className = 'bi bi-check'; }
+            btn.textContent = '';
+            btn.appendChild(icon);
+            btn.insertBefore(document.createTextNode(' تم النسخ '), icon);
+            setTimeout(function() { icon.className = 'bi bi-clipboard'; btn.innerHTML = '<i class=\"bi bi-clipboard\"></i> نسخ'; }, 2000);
+        });
+    } else {
+        var ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); } catch (e) {}
+        document.body.removeChild(ta);
+        var icon = btn.querySelector('i');
+        if (icon) { icon.className = 'bi bi-check'; }
+        btn.innerHTML = '<i class=\"bi bi-check\"></i> تم النسخ';
+        setTimeout(function() { btn.innerHTML = '<i class=\"bi bi-clipboard\"></i> نسخ'; }, 2000);
+    }
+}
 (function() {
     'use strict';
     function initTableActionsDropdowns() {

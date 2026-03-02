@@ -2789,9 +2789,10 @@ $packagingReportGeneratedAt = $packagingReport['generated_at'] ?? date('Y-m-d H:
                                                 <i class="bi bi-pencil"></i>
                                             </button>
                                             <?php if ($usePackagingTable): ?>
-                                                <button class="btn btn-outline-danger btn-sm"
+                                                <button class="btn btn-outline-danger btn-sm btn-delete-packaging"
                                                         type="button"
-                                                        onclick="openDeleteMaterialModal(<?php echo (int)$material['id']; ?>, <?php echo json_encode($material['name'], JSON_UNESCAPED_UNICODE); ?>)"
+                                                        data-material-id="<?php echo (int)$material['id']; ?>"
+                                                        data-material-name="<?php echo htmlspecialchars($material['name'], ENT_QUOTES, 'UTF-8'); ?>"
                                                         title="حذف الأداة"
                                                         style="padding: 0.2rem 0.4rem; font-size: 0.75rem;">
                                                     <i class="bi bi-trash"></i>
@@ -2916,9 +2917,10 @@ $packagingReportGeneratedAt = $packagingReport['generated_at'] ?? date('Y-m-d H:
                                         <i class="bi bi-pencil me-2"></i>تعديل
                                     </button>
                                     <?php if ($usePackagingTable): ?>
-                                        <button class="btn btn-sm btn-outline-danger flex-fill"
+                                        <button class="btn btn-sm btn-outline-danger flex-fill btn-delete-packaging"
                                                 type="button"
-                                                onclick="openDeleteMaterialModal(<?php echo (int)$material['id']; ?>, <?php echo json_encode($material['name'], JSON_UNESCAPED_UNICODE); ?>)">
+                                                data-material-id="<?php echo (int)$material['id']; ?>"
+                                                data-material-name="<?php echo htmlspecialchars($material['name'], ENT_QUOTES, 'UTF-8'); ?>">
                                             <i class="bi bi-trash me-2"></i>حذف
                                         </button>
                                     <?php endif; ?>
@@ -3426,68 +3428,65 @@ $packagingReportGeneratedAt = $packagingReport['generated_at'] ?? date('Y-m-d H:
     </div>
 </div>
 
-<!-- Modal تعديل أداة التعبئة -->
-<div class="modal fade" id="editMaterialModal" tabindex="-1">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable">
-        <div class="modal-content">
-            <form method="POST" id="editMaterialForm">
-                <div class="modal-header bg-warning">
-                    <h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>تعديل بيانات أداة التعبئة</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+<!-- بطاقة تعديل أداة التعبئة -->
+<div class="card shadow-sm mb-4" id="editMaterialCard" style="display: none;">
+    <div class="card-header bg-warning d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="bi bi-pencil-square me-2"></i>تعديل بيانات أداة التعبئة</h5>
+        <button type="button" class="btn-close" onclick="closeEditMaterialCard()" aria-label="إغلاق"></button>
+    </div>
+    <div class="card-body">
+        <form method="POST" id="editMaterialForm">
+            <input type="hidden" name="action" value="update_packaging_material">
+            <input type="hidden" name="material_id" id="edit_material_id">
+
+            <div class="mb-3">
+                <label class="form-label fw-bold">اسم الأداة <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" name="name" id="edit_material_name" required maxlength="255">
+            </div>
+
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label">الفئة / النوع</label>
+                    <input type="text" class="form-control" name="type" id="edit_material_type" maxlength="100">
                 </div>
-                <div class="modal-body">
-                    <input type="hidden" name="action" value="update_packaging_material">
-                    <input type="hidden" name="material_id" id="edit_material_id">
-
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">اسم الأداة <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" name="name" id="edit_material_name" required maxlength="255">
-                    </div>
-
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <label class="form-label">الفئة / النوع</label>
-                            <input type="text" class="form-control" name="type" id="edit_material_type" maxlength="100">
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">الوحدة</label>
-                            <input type="text" class="form-control" name="unit" id="edit_material_unit" maxlength="50">
-                        </div>
-                    </div>
-
-                    <div class="row g-3 mt-0">
-                        <div class="col-md-6">
-                            <label class="form-label">الكود الداخلي</label>
-                            <input type="text" class="form-control" name="material_code" id="edit_material_code" maxlength="100">
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">الحالة</label>
-                            <select class="form-select" name="status" id="edit_material_status">
-                                <option value="active">نشطة</option>
-                                <option value="inactive">غير نشطة</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="mb-3 mt-3">
-                        <label class="form-label">المواصفات / الوصف</label>
-                        <textarea class="form-control" name="specifications" id="edit_material_specifications" rows="3" maxlength="500"></textarea>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label">الكمية الحالية (للقراءة فقط)</label>
-                        <div class="form-control-plaintext fw-semibold" id="edit_material_quantity_display">-</div>
-                        <small class="text-muted">لتعديل الكمية يرجى استخدام أزرار "إضافة كمية" أو "تسجيل تالف".</small>
-                    </div>
+                <div class="col-md-6">
+                    <label class="form-label">الوحدة</label>
+                    <input type="text" class="form-control" name="unit" id="edit_material_unit" maxlength="50">
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
-                    <button type="submit" class="btn btn-warning text-white">
-                        <i class="bi bi-check-circle me-2"></i>تحديث الأداة
-                    </button>
+            </div>
+
+            <div class="row g-3 mt-0">
+                <div class="col-md-6">
+                    <label class="form-label">الكود الداخلي</label>
+                    <input type="text" class="form-control" name="material_code" id="edit_material_code" maxlength="100">
                 </div>
-            </form>
-        </div>
+                <div class="col-md-6">
+                    <label class="form-label">الحالة</label>
+                    <select class="form-select" name="status" id="edit_material_status">
+                        <option value="active">نشطة</option>
+                        <option value="inactive">غير نشطة</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="mb-3 mt-3">
+                <label class="form-label">المواصفات / الوصف</label>
+                <textarea class="form-control" name="specifications" id="edit_material_specifications" rows="3" maxlength="500"></textarea>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">الكمية الحالية (للقراءة فقط)</label>
+                <div class="form-control-plaintext fw-semibold" id="edit_material_quantity_display">-</div>
+                <small class="text-muted">لتعديل الكمية يرجى استخدام أزرار "إضافة كمية" أو "تسجيل تالف".</small>
+            </div>
+
+            <div class="d-flex gap-2 flex-wrap">
+                <button type="submit" class="btn btn-warning text-white">
+                    <i class="bi bi-check-circle me-2"></i>تحديث الأداة
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="closeEditMaterialCard()">إلغاء</button>
+            </div>
+        </form>
     </div>
 </div>
 
@@ -3553,6 +3552,14 @@ document.addEventListener('DOMContentLoaded', function () {
             window.print();
         });
     }
+
+    document.addEventListener('click', function (e) {
+        const btn = e.target.closest('.btn-delete-packaging');
+        if (btn) {
+            e.preventDefault();
+            openDeleteMaterialModal(btn);
+        }
+    });
 
     const reportButton = document.getElementById('generatePackagingReportBtn');
     const reportModalElement = document.getElementById('packagingReportModal');
@@ -3884,11 +3891,21 @@ function scrollToElement(element) {
     }, 200);
 }
 
+function closeEditMaterialCard() {
+    const card = document.getElementById('editMaterialCard');
+    if (card) {
+        card.style.display = 'none';
+        const form = document.getElementById('editMaterialForm');
+        if (form) form.reset();
+    }
+}
+
 function closeAllForms() {
     const cards = [
         'packagingReportCard',
         'addQuantityCard',
-        'recordDamageCard'
+        'recordDamageCard',
+        'editMaterialCard'
     ];
     cards.forEach(function(cardId) {
         const card = document.getElementById(cardId);
@@ -4209,14 +4226,19 @@ function viewMaterialDetails(materialId) {
         });
 }
 
-function openDeleteMaterialModal(materialId, materialName) {
+function openDeleteMaterialModal(btn) {
+    if (!btn || !btn.dataset) return;
+    const materialId = btn.getAttribute('data-material-id');
+    const materialName = btn.getAttribute('data-material-name') || '';
     const modal = document.getElementById('deleteMaterialModal');
     const idInput = document.getElementById('delete_material_id');
     const nameDisplay = document.getElementById('delete_material_name_display');
-    if (modal && idInput && nameDisplay) {
+    if (modal && idInput && nameDisplay && materialId) {
         idInput.value = materialId;
-        nameDisplay.textContent = typeof materialName === 'string' ? materialName : String(materialName || '');
-        const bsModal = window.bootstrap?.Modal?.getOrCreateInstance(modal);
+        nameDisplay.textContent = materialName;
+        const bsModal = typeof bootstrap !== 'undefined' && bootstrap.Modal
+            ? bootstrap.Modal.getOrCreateInstance(modal)
+            : null;
         if (bsModal) bsModal.show();
     }
 }
@@ -4257,10 +4279,14 @@ function editMaterial(materialId) {
 }
 
 function openEditModalFromData(material) {
-    const modalElement = document.getElementById('editMaterialModal');
+    if (typeof closeAllForms === 'function') {
+        closeAllForms();
+    }
+
+    const card = document.getElementById('editMaterialCard');
     const form = document.getElementById('editMaterialForm');
-    if (!modalElement || !form) {
-        console.warn('Edit modal not available.');
+    if (!card || !form) {
+        console.warn('Edit material card not available.');
         return;
     }
 
@@ -4303,12 +4329,14 @@ function openEditModalFromData(material) {
         }
     }
 
-    const modal = new bootstrap.Modal(modalElement);
-    modal.show();
+    card.style.display = 'block';
+    card.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
     setTimeout(() => {
-        nameInput.focus();
-        nameInput.select();
+        if (nameInput) {
+            nameInput.focus();
+            nameInput.select();
+        }
     }, 200);
 }
 </script>
