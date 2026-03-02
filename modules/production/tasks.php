@@ -703,9 +703,7 @@ function tasksHandleAction(string $action, array $input, array $context): array
                     if (!$isProduction) {
                         throw new RuntimeException('غير مصرح لك بتنفيذ هذا الإجراء');
                     }
-                    if (!$isAssignedToProduction) {
-                        throw new RuntimeException('هذه المهمة غير مخصصة لعامل إنتاج');
-                    }
+                    /* يسمح لعامل الإنتاج بإكمال أي مهمة ظاهرة في قائمة المهام */
                 }
 
                 $statusMap = [
@@ -1895,7 +1893,7 @@ function tasksHtml(string $value): string
                                                     <li><a class="dropdown-item" href="<?php echo getRelativeUrl('print_task_receipt.php?id=' . $taskIdInt); ?>" target="_blank"><i class="bi bi-printer me-2"></i>طباعة إيصال</a></li>
                                                     <li><hr class="dropdown-divider"></li>
                                                 <?php endif; ?>
-                                                <?php if ($isProduction && $isTaskForProduction && in_array($task['status'], ['pending', 'received', 'in_progress'])): ?>
+                                                <?php if ($isProduction && in_array($task['status'], ['pending', 'received', 'in_progress'])): ?>
                                                     <li><button type="button" class="dropdown-item" onclick="submitTaskAction('complete_task', <?php echo $taskIdInt; ?>)"><i class="bi bi-check2-circle me-2"></i>إكمال</button></li>
                                                 <?php endif; ?>
                                                 <?php if ($canWithDelegate): ?>

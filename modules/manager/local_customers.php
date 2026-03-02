@@ -650,10 +650,10 @@ $success = '';
 applyPRGPattern($error, $success);
 
 // رسالة التحصيل القابلة للنسخ (بعد كل تحصيل من عميل محلي)
+// لا تُحذف من الجلسة عند العرض؛ تُحذف فقط عند قيام المستخدم بطلب آخر (POST) في الصفحة
 $collectionCopyableText = null;
 if (!empty($_SESSION['local_collection_copyable']['full_text'])) {
     $collectionCopyableText = $_SESSION['local_collection_copyable']['full_text'];
-    unset($_SESSION['local_collection_copyable']);
 }
 
 $customerStats = [
@@ -674,7 +674,11 @@ $localCustomersPageBase = $localCustomersBaseScript . '?page=local_customers';
 // معالجة POST requests
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
-    
+    // عند أي طلب POST آخر (غير التحصيل)، إخفاء رسالة التحصيل السابقة حتى لا تبقى بعد عمل المستخدم
+    if ($action !== 'collect_debt' && isset($_SESSION['local_collection_copyable'])) {
+        unset($_SESSION['local_collection_copyable']);
+    }
+
     if ($action === 'collect_debt') {
         $customerId = isset($_POST['customer_id']) ? (int)$_POST['customer_id'] : 0;
         $amount = isset($_POST['amount']) ? cleanFinancialValue($_POST['amount']) : 0;
@@ -1906,7 +1910,7 @@ var dashboardWrapper = null;
 <?php endif; ?>
 
 <?php if ($success): ?>
-    <div class="alert alert-success alert-dismissible fade show" id="successAlert" data-auto-refresh="true">
+    <div class="alert alert-success alert-dismissible fade show" id="successAlert" data-auto-refresh="<?php echo !empty($collectionCopyableText) ? 'false' : 'true'; ?>">
         <i class="bi bi-check-circle-fill me-2"></i>
         <?php echo htmlspecialchars($success); ?>
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
@@ -5234,21 +5238,23 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 });
 
-// إعادة تحميل الصفحة تلقائياً بعد أي رسالة
+// إعادة تحميل الصفحة تلقائياً بعد أي رسالة (ما لم تكن رسالة تحصيل مع نص للنسخ - تبقى حتى يقوم المستخدم بطلب آخر)
 (function() {
     const successAlert = document.getElementById('successAlert');
     const errorAlert = document.getElementById('errorAlert');
-    
+    const collectionCopyableCard = document.getElementById('localCollectionCopyableCard');
+
     const alertElement = successAlert || errorAlert;
-    
-    if (alertElement && alertElement.dataset.autoRefresh === 'true') {
+    const hasCollectionCopyable = !!collectionCopyableCard;
+
+    if (alertElement && alertElement.dataset.autoRefresh === 'true' && !hasCollectionCopyable) {
         // مسح الكاش قبل إعادة التحميل لجلب البيانات المحدثة
         if (window.LocalStorageCache && typeof window.LocalStorageCache.clearAll === 'function') {
             window.LocalStorageCache.clearAll().catch(function(cacheError) {
                 console.warn('Error clearing cache:', cacheError);
             });
         }
-        
+
         setTimeout(function() {
             const currentUrl = new URL(window.location.href);
             currentUrl.searchParams.delete('success');
