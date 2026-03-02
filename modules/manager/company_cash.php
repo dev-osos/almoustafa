@@ -489,7 +489,7 @@ function getCompanyCashTransactionsHtml($db) {
                                 <?php endif; ?>
                                 <?php if ($hasAttachment): ?>
                                     <?php if ($isImageExt): ?>
-                                        <button type="button" class="btn btn-sm btn-outline-secondary ms-1" title="عرض المرفق" data-bs-toggle="modal" data-bs-target="#attachmentModal" data-attachment-url="<?php echo htmlspecialchars($viewAttachmentUrl, ENT_QUOTES, 'UTF-8'); ?>">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary ms-1 btn-open-attachment-card" title="عرض المرفق" data-attachment-url="<?php echo htmlspecialchars($viewAttachmentUrl, ENT_QUOTES, 'UTF-8'); ?>">
                                             <i class="bi bi-image"></i>
                                         </button>
                                     <?php else: ?>
@@ -1964,18 +1964,18 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
 </div>
 
-<!-- مودال عرض مرفق المعاملة (صورة) -->
-<div class="modal fade" id="attachmentModal" tabindex="-1" aria-labelledby="attachmentModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="attachmentModalLabel"><i class="bi bi-image me-2"></i>المرفق</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="إغلاق"></button>
-            </div>
-            <div class="modal-body text-center p-0">
-                <img id="attachmentModalImg" src="" alt="مرفق" class="img-fluid" style="max-height: 85vh; width: auto;">
-            </div>
-        </div>
+<!-- بطاقة عرض مرفق المعاملة (صورة) - بدل المودال -->
+<div class="card shadow-sm mb-4" id="attachmentCard" style="display: none;">
+    <div class="card-header bg-secondary text-white d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <h5 class="mb-0">
+            <i class="bi bi-image me-2"></i>المرفق
+        </h5>
+        <button type="button" class="btn btn-sm btn-light" onclick="closeAttachmentCard()" aria-label="إغلاق">
+            <i class="bi bi-x-lg"></i>
+        </button>
+    </div>
+    <div class="card-body text-center p-0 overflow-auto" style="max-height: min(85vh, 600px);">
+        <img id="attachmentCardImg" src="" alt="مرفق" class="img-fluid" style="max-height: 85vh; width: auto; max-width: 100%;">
     </div>
 </div>
 
@@ -1983,25 +1983,35 @@ document.addEventListener('DOMContentLoaded', function() {
 // ===== دوال أساسية للـ Cards =====
 
 document.addEventListener('DOMContentLoaded', function() {
-    var attachmentModal = document.getElementById('attachmentModal');
-    if (attachmentModal) {
-        attachmentModal.addEventListener('show.bs.modal', function(e) {
-            var btn = e.relatedTarget;
-            var url = btn && btn.getAttribute('data-attachment-url');
-            var img = document.getElementById('attachmentModalImg');
-            if (img) img.src = url || '';
-        });
-        attachmentModal.addEventListener('hidden.bs.modal', function() {
-            var img = document.getElementById('attachmentModalImg');
-            if (img) img.src = '';
-        });
-    }
+    document.addEventListener('click', function(e) {
+        var btn = e.target && e.target.closest && e.target.closest('.btn-open-attachment-card');
+        if (btn) {
+            var url = btn.getAttribute('data-attachment-url');
+            if (url) openAttachmentCard(url);
+        }
+    });
 });
+function openAttachmentCard(url) {
+    var card = document.getElementById('attachmentCard');
+    var img = document.getElementById('attachmentCardImg');
+    if (card && img) {
+        img.src = url || '';
+        card.style.display = '';
+        card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+}
+function closeAttachmentCard() {
+    var card = document.getElementById('attachmentCard');
+    var img = document.getElementById('attachmentCardImg');
+    if (card) card.style.display = 'none';
+    if (img) img.src = '';
+}
 
 // دالة لإغلاق جميع النماذج المفتوحة
 function closeAllForms() {
-    // إغلاق جميع Modals على الكمبيوتر
-    const modals = ['collectFromRepModal', 'generateReportModal', 'attachmentModal'];
+    // إغلاق جميع Modals على الكمبيوتر + بطاقة المرفق
+    closeAttachmentCard();
+    const modals = ['collectFromRepModal', 'generateReportModal'];
     
     modals.forEach(function(modalId) {
         const modal = document.getElementById(modalId);
