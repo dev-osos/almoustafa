@@ -519,25 +519,23 @@ $roleLabels = ['driver' => 'سائق', 'production' => 'عامل إنتاج'];
                                     <input type="hidden" name="request_id" value="<?php echo (int)$req['id']; ?>">
                                     <button type="submit" class="btn btn-success btn-sm"><i class="bi bi-check-lg me-1"></i>موافقة</button>
                                 </form>
-                                <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#rejectModal<?php echo (int)$req['id']; ?>"><i class="bi bi-x-lg me-1"></i>رفض</button>
-                                <div class="modal fade" id="rejectModal<?php echo (int)$req['id']; ?>" tabindex="-1">
-                                    <div class="modal-dialog modal-dialog-centered">
-                                        <div class="modal-content">
-                                            <div class="modal-header">
-                                                <h5 class="modal-title">رفض طلب التحصيل</h5>
-                                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                            </div>
+                                <button type="button" class="btn btn-outline-danger btn-sm" data-reject-toggle data-reject-card-id="rejectCard<?php echo (int)$req['id']; ?>"><i class="bi bi-x-lg me-1"></i>رفض</button>
+                                <div class="reject-card-wrap d-none mt-2" id="rejectCard<?php echo (int)$req['id']; ?>">
+                                    <div class="card border shadow-none bg-light">
+                                        <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                                            <h6 class="mb-0">رفض طلب التحصيل</h6>
+                                            <button type="button" class="btn-close btn-sm" aria-label="إغلاق" data-reject-card-close></button>
+                                        </div>
+                                        <div class="card-body">
                                             <form method="POST" class="wallets-control-reject-form" data-wallets-control-ajax data-request-id="<?php echo (int)$req['id']; ?>">
-                                                <div class="modal-body">
-                                                    <input type="hidden" name="action" value="reject_local_collection_request">
-                                                    <input type="hidden" name="request_id" value="<?php echo (int)$req['id']; ?>">
-                                                    <p class="mb-2">طلب: <?php echo formatCurrency($req['amount']); ?> من <?php echo htmlspecialchars($req['customer_name']); ?></p>
-                                                    <label class="form-label">سبب الرفض (اختياري)</label>
-                                                    <input type="text" class="form-control" name="rejection_reason" placeholder="سبب الرفض">
-                                                </div>
-                                                <div class="modal-footer">
-                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
-                                                    <button type="submit" class="btn btn-danger">رفض الطلب</button>
+                                                <input type="hidden" name="action" value="reject_local_collection_request">
+                                                <input type="hidden" name="request_id" value="<?php echo (int)$req['id']; ?>">
+                                                <p class="mb-2 small">طلب: <?php echo formatCurrency($req['amount']); ?> من <?php echo htmlspecialchars($req['customer_name']); ?></p>
+                                                <label class="form-label">سبب الرفض (اختياري)</label>
+                                                <input type="text" class="form-control form-control-sm" name="rejection_reason" placeholder="سبب الرفض">
+                                                <div class="mt-2 d-flex gap-1">
+                                                    <button type="button" class="btn btn-secondary btn-sm" data-reject-card-close>إلغاء</button>
+                                                    <button type="submit" class="btn btn-danger btn-sm">رفض الطلب</button>
                                                 </div>
                                             </form>
                                         </div>
@@ -776,8 +774,8 @@ $roleLabels = ['driver' => 'سائق', 'production' => 'عامل إنتاج'];
                 data.pending_requests.forEach(function(r) {
                     ph += '<tr><td>' + (r.created_at || '') + '</td><td>' + (r.user_full_name || '') + '</td><td>' + (r.customer_name || '') + '</td><td class="fw-bold">' + (r.amount_formatted || '') + '</td><td>';
                     ph += '<form method="POST" class="d-inline wallets-control-approve-form" onsubmit="return confirm(\'الموافقة على هذا الطلب ستخصم المبلغ من رصيد العميل وتضيفه لخزنة الشركة ومحفظة المستخدم. متأكد؟\');" data-wallets-control-ajax><input type="hidden" name="action" value="approve_local_collection_request"><input type="hidden" name="request_id" value="' + r.id + '"><button type="submit" class="btn btn-success btn-sm"><i class="bi bi-check-lg me-1"></i>موافقة</button></form> ';
-                    ph += '<button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#rejectModal' + r.id + '"><i class="bi bi-x-lg me-1"></i>رفض</button>';
-                    ph += '<div class="modal fade" id="rejectModal' + r.id + '" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">رفض طلب التحصيل</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><form method="POST" class="wallets-control-reject-form" data-wallets-control-ajax><div class="modal-body"><input type="hidden" name="action" value="reject_local_collection_request"><input type="hidden" name="request_id" value="' + r.id + '"><p class="mb-2">طلب: ' + (r.amount_formatted || '') + ' من ' + (r.customer_name || '') + '</p><label class="form-label">سبب الرفض (اختياري)</label><input type="text" class="form-control" name="rejection_reason" placeholder="سبب الرفض"></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button><button type="submit" class="btn btn-danger">رفض الطلب</button></div></form></div></div></div></td></tr>';
+                    ph += '<button type="button" class="btn btn-outline-danger btn-sm" data-reject-toggle data-reject-card-id="rejectCard' + r.id + '"><i class="bi bi-x-lg me-1"></i>رفض</button>';
+                    ph += '<div class="reject-card-wrap d-none mt-2" id="rejectCard' + r.id + '"><div class="card border shadow-none bg-light"><div class="card-header py-2 d-flex justify-content-between align-items-center"><h6 class="mb-0">رفض طلب التحصيل</h6><button type="button" class="btn-close btn-sm" aria-label="إغلاق" data-reject-card-close></button></div><div class="card-body"><form method="POST" class="wallets-control-reject-form" data-wallets-control-ajax"><input type="hidden" name="action" value="reject_local_collection_request"><input type="hidden" name="request_id" value="' + r.id + '"><p class="mb-2 small">طلب: ' + (r.amount_formatted || '') + ' من ' + (r.customer_name || '') + '</p><label class="form-label">سبب الرفض (اختياري)</label><input type="text" class="form-control form-control-sm" name="rejection_reason" placeholder="سبب الرفض"><div class="mt-2 d-flex gap-1"><button type="button" class="btn btn-secondary btn-sm" data-reject-card-close>إلغاء</button><button type="submit" class="btn btn-danger btn-sm">رفض الطلب</button></div></form></div></div></div></td></tr>';
                 });
                 pendingTbody.innerHTML = ph;
                 bindWalletsControlForms();
@@ -822,6 +820,8 @@ $roleLabels = ['driver' => 'سائق', 'production' => 'عامل إنتاج'];
                 if (d.success) {
                     applyResponse(d);
                     form.reset();
+                    var cardWrap = form.closest('.reject-card-wrap');
+                    if (cardWrap) cardWrap.classList.add('d-none');
                     var modal = form.closest('.modal');
                     if (modal && typeof window.bootstrap !== 'undefined') {
                         var bsModal = bootstrap.Modal.getInstance(modal);
@@ -867,6 +867,23 @@ $roleLabels = ['driver' => 'سائق', 'production' => 'عامل إنتاج'];
             });
         });
     }
+    // فتح/إغلاق بطاقة الرفض (بدون مودال أو باكدروب)
+    document.addEventListener('click', function(e) {
+        var toggleBtn = e.target.closest('[data-reject-toggle]');
+        if (toggleBtn) {
+            var id = toggleBtn.getAttribute('data-reject-card-id');
+            if (id) {
+                var cardWrap = document.getElementById(id);
+                if (cardWrap) cardWrap.classList.toggle('d-none');
+            }
+            return;
+        }
+        var closeBtn = e.target.closest('[data-reject-card-close]');
+        if (closeBtn) {
+            var wrap = closeBtn.closest('.reject-card-wrap');
+            if (wrap) wrap.classList.add('d-none');
+        }
+    });
     bindWalletsControlForms();
 })();
 </script>
