@@ -1,4 +1,4 @@
-name: Deploy to Hostinger Cloud
+name: Deploy to Thamara Cloud
 
 on:
   push:
@@ -19,16 +19,17 @@ jobs:
       - name: Deploy via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.4
         with:
-          server: ftp.almoustafa.site
-          username: u486977009.an
-          password: +LX2RQ7#$8~87Zd|
+          server: 213.239.220.209
+          username: osama74
+          password: ZYpVjzpotai853@*
           protocol: ftp
           port: 21
           security: loose
           timeout: 120000
           log-level: standard
 
-          server-dir: /sys/
+          server-dir: /httpdocs/
+
           # مهم: لا يحذف ملفات السيرفر 
           dangerous-clean-slate: false
 
