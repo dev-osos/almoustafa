@@ -883,10 +883,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $db->commit();
                 $transactionStarted = false;
-                $msg = 'تم تحصيل المبلغ بنجاح.';
-                if (!empty($collectionNumber)) {
-                    $msg .= ' رقم التحصيل: ' . $collectionNumber . '.';
-                }
+                $referenceNumber = $collectionNumber ?? ('SHIP-CUST-' . $companyId . '-' . date('YmdHis'));
+                $msg = 'تم تحصيل المبلغ بنجاح وإضافته إلى خزنة الشركة. رقم المرجع: ' . $referenceNumber . '.';
                 $_SESSION[$sessionSuccessKey] = $msg;
                 if ($isAjax) {
                     header('Content-Type: application/json; charset=utf-8');
@@ -981,12 +979,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ['amount' => $amount, 'previous_balance' => $currentBalance, 'new_balance' => $newBalance]
                 );
 
-                $_SESSION[$sessionSuccessKey] = 'تم خصم المبلغ بنجاح. الرصيد الجديد: ' . number_format($newBalance, 2) . ' ج.م.';
+                $deductMsg = 'تم خصم المبلغ بنجاح وإضافته إلى خزنة الشركة. الرصيد الجديد: ' . number_format($newBalance, 2) . ' ج.م.';
+                $_SESSION[$sessionSuccessKey] = $deductMsg;
                 if ($isAjax) {
                     header('Content-Type: application/json; charset=utf-8');
                     echo json_encode([
                         'success' => true,
-                        'message' => 'تم خصم المبلغ بنجاح.',
+                        'message' => $deductMsg,
                         'new_balance' => (float)$newBalance,
                         'company_id' => $companyId
                     ], JSON_UNESCAPED_UNICODE);
