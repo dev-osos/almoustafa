@@ -3701,7 +3701,7 @@ $hasShippingCompanies = !empty($shippingCompanies);
                             $cnameAttr = htmlspecialchars(json_encode($company['name'], JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
                             $balanceFormattedAttr = htmlspecialchars(json_encode($balanceFormatted, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
                         ?>
-                            <tr>
+                            <tr data-company-id="<?php echo $cid; ?>">
                                 <td><?php echo htmlspecialchars($company['name']); ?></td>
                                 <td><?php echo $company['phone'] ? htmlspecialchars($company['phone']) : '<span class="text-muted">غير متوفر</span>'; ?></td>
                                 <td>
@@ -3736,20 +3736,35 @@ $hasShippingCompanies = !empty($shippingCompanies);
             </div>
         <?php endif; ?>
     </div>
-    <?php if (!empty($shippingCollectionResult)): ?>
-    <div class="card-footer border-0 pt-0">
+    <div class="card-footer border-0 pt-0" id="shippingCollectionResultWrap" style="<?php echo empty($shippingCollectionResult) ? 'display:none;' : ''; ?>">
         <div class="alert alert-success mb-0 d-flex flex-wrap align-items-center gap-2 flex-row-reverse" role="status">
             <button type="button" class="btn btn-sm btn-outline-success ms-auto" onclick="copyShippingCollectionResult(this)" title="نسخ النص">
                 <i class="bi bi-clipboard"></i> نسخ
             </button>
-            <div class="flex-grow-1 user-select-all" style="cursor: text; min-height: 1.5em;" id="shippingCollectionResultText"><?php echo htmlspecialchars($shippingCollectionResult); ?></div>
+            <div class="flex-grow-1 user-select-all" style="cursor: text; min-height: 1.5em;" id="shippingCollectionResultText"><?php echo empty($shippingCollectionResult) ? '' : htmlspecialchars($shippingCollectionResult); ?></div>
             <i class="bi bi-check-circle-fill flex-shrink-0"></i>
         </div>
     </div>
-    <?php endif; ?>
 </div>
 
 <script>
+function showShippingCollectionResultMessage(msg) {
+    var wrap = document.getElementById('shippingCollectionResultWrap');
+    var textEl = document.getElementById('shippingCollectionResultText');
+    if (wrap && textEl && msg) {
+        textEl.textContent = msg;
+        wrap.style.display = '';
+    }
+}
+function updateShippingCompanyBalanceInTable(companyId, newBalance) {
+    var row = document.querySelector('#shippingCompaniesCard tr[data-company-id="' + companyId + '"]');
+    if (!row) return;
+    var cells = row.querySelectorAll('td');
+    if (cells.length < 4) return;
+    var formatted = parseFloat(newBalance).toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+    cells[3].textContent = formatted;
+    cells[3].className = 'fw-semibold text-' + (parseFloat(newBalance) > 0 ? 'danger' : 'muted');
+}
 function copyShippingCollectionResult(btn) {
     var el = document.getElementById('shippingCollectionResultText');
     if (!el) return;
@@ -6544,13 +6559,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
                     if (data.success) {
                         var msg = data.message || 'تم التحصيل بنجاح.';
-                        if (data.amount_collected != null) {
-                            msg += ' المبلغ المحصل: ' + parseFloat(data.amount_collected).toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م.';
-                        }
-                        if (data.new_balance != null) {
-                            msg += ' المبلغ المتبقي (ديون الشركة): ' + parseFloat(data.new_balance).toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م.';
-                        }
                         showShippingToast(msg, 'success');
+                        if (typeof showShippingCollectionResultMessage === 'function') showShippingCollectionResultMessage(msg);
+                        if (data.company_id != null && data.new_balance != null && typeof updateShippingCompanyBalanceInTable === 'function') updateShippingCompanyBalanceInTable(data.company_id, data.new_balance);
                         var debtEl = collectModal.querySelector('.collection-shipping-current-debt');
                         if (debtEl && data.new_balance != null) debtEl.textContent = parseFloat(data.new_balance).toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
                         if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
@@ -6585,13 +6596,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
                     if (data.success) {
                         var msg = data.message || 'تم التحصيل بنجاح.';
-                        if (data.amount_collected != null) {
-                            msg += ' المبلغ المحصل: ' + parseFloat(data.amount_collected).toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م.';
-                        }
-                        if (data.new_balance != null) {
-                            msg += ' المبلغ المتبقي (ديون الشركة): ' + parseFloat(data.new_balance).toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م.';
-                        }
                         showShippingToast(msg, 'success');
+                        if (typeof showShippingCollectionResultMessage === 'function') showShippingCollectionResultMessage(msg);
+                        if (data.company_id != null && data.new_balance != null && typeof updateShippingCompanyBalanceInTable === 'function') updateShippingCompanyBalanceInTable(data.company_id, data.new_balance);
                         var debtEl = document.getElementById('collectCardCurrentDebt');
                         if (debtEl && data.new_balance != null) debtEl.textContent = parseFloat(data.new_balance).toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
                         if (collectCard) { collectCard.style.display = 'none'; if (collectCardForm.reset) collectCardForm.reset(); }
@@ -6621,7 +6628,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = 'تنفيذ الخصم'; }
                     if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
                     if (data.success) {
-                        showShippingToast(data.message || 'تم خصم المبلغ بنجاح.', 'success');
+                        var msg = data.message || 'تم خصم المبلغ بنجاح.';
+                        showShippingToast(msg, 'success');
+                        if (typeof showShippingCollectionResultMessage === 'function') showShippingCollectionResultMessage(msg);
+                        if (data.company_id != null && data.new_balance != null && typeof updateShippingCompanyBalanceInTable === 'function') updateShippingCompanyBalanceInTable(data.company_id, data.new_balance);
                         var deductModal = document.getElementById('deductFromShippingCompanyModal');
                         if (typeof bootstrap !== 'undefined' && bootstrap.Modal && deductModal) {
                             var m = bootstrap.Modal.getInstance(deductModal);
@@ -6631,7 +6641,6 @@ document.addEventListener('DOMContentLoaded', function() {
                             var debtEl = document.getElementById('deductModalCurrentDebt');
                             if (debtEl) debtEl.textContent = parseFloat(data.new_balance).toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
                         }
-                        if (window.location && window.location.reload) window.location.reload();
                     } else {
                         showShippingToast(data.error || 'حدث خطأ.', 'danger');
                     }
@@ -6658,9 +6667,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = 'تنفيذ الخصم'; }
                     if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
                     if (data.success) {
-                        showShippingToast(data.message || 'تم خصم المبلغ بنجاح.', 'success');
+                        var msg = data.message || 'تم خصم المبلغ بنجاح.';
+                        showShippingToast(msg, 'success');
+                        if (typeof showShippingCollectionResultMessage === 'function') showShippingCollectionResultMessage(msg);
+                        if (data.company_id != null && data.new_balance != null && typeof updateShippingCompanyBalanceInTable === 'function') updateShippingCompanyBalanceInTable(data.company_id, data.new_balance);
                         closeDeductFromShippingCard();
-                        if (window.location && window.location.reload) window.location.reload();
                     } else {
                         showShippingToast(data.error || 'حدث خطأ.', 'danger');
                     }

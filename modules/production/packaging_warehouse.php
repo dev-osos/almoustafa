@@ -2662,6 +2662,31 @@ $packagingReportGeneratedAt = $packagingReport['generated_at'] ?? date('Y-m-d H:
 })();
 </script>
 
+<!-- بطاقة حذف أداة التعبئة (تظهر فوق القائمة) -->
+<?php if ($usePackagingTable && in_array($currentUser['role'] ?? '', ['manager', 'developer', 'accountant'], true)): ?>
+<div class="card shadow-sm border-danger d-none mb-3" id="deleteMaterialCard">
+    <div class="card-header bg-danger text-white d-flex flex-wrap gap-2 justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="bi bi-trash me-2"></i>حذف أداة التعبئة</h5>
+        <button type="button" class="btn btn-sm btn-light btn-close-delete-card" aria-label="إغلاق">
+            <i class="bi bi-x-lg"></i>
+        </button>
+    </div>
+    <div class="card-body">
+        <form method="POST" id="deleteMaterialForm">
+            <input type="hidden" name="action" value="delete_packaging_material">
+            <input type="hidden" name="material_id" id="delete_material_id">
+            <p class="mb-3">هل أنت متأكد من حذف أداة التعبئة <strong id="delete_material_name_display"></strong>؟ سيتم إخفاؤها من القائمة (حذف منطقي).</p>
+            <div class="d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-secondary btn-close-delete-card">إلغاء</button>
+                <button type="submit" class="btn btn-danger">
+                    <i class="bi bi-trash me-2"></i>حذف الأداة
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+<?php endif; ?>
+
 <!-- قائمة أدوات التعبئة -->
 <div class="card shadow-sm">
     <div class="card-header bg-primary text-white d-flex flex-wrap gap-2 justify-content-between align-items-center">
@@ -3490,35 +3515,6 @@ $packagingReportGeneratedAt = $packagingReport['generated_at'] ?? date('Y-m-d H:
     </div>
 </div>
 
-<!-- بطاقة حذف أداة التعبئة -->
-<?php if ($usePackagingTable && in_array($currentUser['role'] ?? '', ['manager', 'developer', 'accountant'], true)): ?>
-<div class="modal fade" id="deleteMaterialModal" tabindex="-1" aria-labelledby="deleteMaterialModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 shadow">
-            <div class="modal-header bg-danger text-white">
-                <h5 class="modal-title" id="deleteMaterialModalLabel">
-                    <i class="bi bi-trash me-2"></i>حذف أداة التعبئة
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="إغلاق"></button>
-            </div>
-            <form method="POST" id="deleteMaterialForm">
-                <input type="hidden" name="action" value="delete_packaging_material">
-                <input type="hidden" name="material_id" id="delete_material_id">
-                <div class="modal-body">
-                    <p class="mb-0">هل أنت متأكد من حذف أداة التعبئة <strong id="delete_material_name_display"></strong>؟ سيتم إخفاؤها من القائمة (حذف منطقي).</p>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
-                    <button type="submit" class="btn btn-danger">
-                        <i class="bi bi-trash me-2"></i>حذف الأداة
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-<?php endif; ?>
-
 <!-- Modal لعرض التفاصيل -->
 <div class="modal fade" id="materialDetailsModal" tabindex="-1">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
@@ -3558,6 +3554,11 @@ document.addEventListener('DOMContentLoaded', function () {
         if (btn) {
             e.preventDefault();
             openDeleteMaterialModal(btn);
+        }
+        const closeBtn = e.target.closest('.btn-close-delete-card');
+        if (closeBtn) {
+            e.preventDefault();
+            closeDeleteMaterialCard();
         }
     });
 
@@ -4230,17 +4231,20 @@ function openDeleteMaterialModal(btn) {
     if (!btn || !btn.dataset) return;
     const materialId = btn.getAttribute('data-material-id');
     const materialName = btn.getAttribute('data-material-name') || '';
-    const modal = document.getElementById('deleteMaterialModal');
+    const card = document.getElementById('deleteMaterialCard');
     const idInput = document.getElementById('delete_material_id');
     const nameDisplay = document.getElementById('delete_material_name_display');
-    if (modal && idInput && nameDisplay && materialId) {
+    if (card && idInput && nameDisplay && materialId) {
         idInput.value = materialId;
         nameDisplay.textContent = materialName;
-        const bsModal = typeof bootstrap !== 'undefined' && bootstrap.Modal
-            ? bootstrap.Modal.getOrCreateInstance(modal)
-            : null;
-        if (bsModal) bsModal.show();
+        card.classList.remove('d-none');
+        card.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
+}
+
+function closeDeleteMaterialCard() {
+    const card = document.getElementById('deleteMaterialCard');
+    if (card) card.classList.add('d-none');
 }
 
 function editMaterial(materialId) {
