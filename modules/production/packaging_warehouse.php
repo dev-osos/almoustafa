@@ -1667,6 +1667,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         }
+    } elseif ($action === 'delete_packaging_material') {
+        if (!in_array($currentUser['role'] ?? '', ['manager', 'developer', 'accountant'], true)) {
+            $error = 'غير مصرح لك بحذف أدوات التعبئة.';
+        } elseif (!$usePackagingTable) {
+            $error = 'حذف الأدوات متاح فقط عند استخدام جدول أدوات التعبئة.';
+        } else {
+            $materialId = intval($_POST['material_id'] ?? 0);
+            if ($materialId <= 0) {
+                $error = 'معرف الأداة غير صالح.';
+            } else {
+                try {
+                    $row = $db->queryOne("SELECT id, name FROM packaging_materials WHERE id = ? AND status = 'active'", [$materialId]);
+                    if (!$row) {
+                        $error = 'لم يتم العثور على أداة التعبئة أو أنها غير نشطة.';
+                    } else {
+                        $db->execute(
+                            "UPDATE packaging_materials SET status = 'inactive', updated_at = NOW() WHERE id = ?",
+                            [$materialId]
+                        );
+                        logAudit(
+                            (int)($currentUser['id'] ?? 0),
+                            'delete_packaging_material',
+                            'packaging_materials',
+                            $materialId,
+                            $row,
+                            ['status' => 'inactive']
+                        );
+                        $successMessage = 'تم حذف أداة التعبئة بنجاح.';
+                        $redirectParams = ['page' => 'packaging_warehouse'];
+                        preventDuplicateSubmission($successMessage, $redirectParams, null, $currentUser['role']);
+                    }
+                } catch (Exception $e) {
+                    $error = 'حدث خطأ أثناء حذف الأداة: ' . $e->getMessage();
+                }
+            }
+        }
     }
 }
 
@@ -2752,6 +2788,15 @@ $packagingReportGeneratedAt = $packagingReport['generated_at'] ?? date('Y-m-d H:
                                                     style="padding: 0.2rem 0.4rem; font-size: 0.75rem;">
                                                 <i class="bi bi-pencil"></i>
                                             </button>
+                                            <?php if ($usePackagingTable): ?>
+                                                <button class="btn btn-outline-danger btn-sm"
+                                                        type="button"
+                                                        onclick="openDeleteMaterialModal(<?php echo (int)$material['id']; ?>, <?php echo json_encode($material['name'], JSON_UNESCAPED_UNICODE); ?>)"
+                                                        title="حذف الأداة"
+                                                        style="padding: 0.2rem 0.4rem; font-size: 0.75rem;">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            <?php endif; ?>
                                         <?php endif; ?>
                                     </div>
                                 </td>
@@ -2866,10 +2911,17 @@ $packagingReportGeneratedAt = $packagingReport['generated_at'] ?? date('Y-m-d H:
                                         onclick="openRecordDamageModal(this)">
                                     <i class="bi bi-exclamation-octagon me-2"></i>تسجيل تالف
                                 </button>
-                                <?php if ($currentUser['role'] === 'manager'): ?>
+                                <?php if (in_array($currentUser['role'] ?? '', ['manager', 'developer', 'accountant'], true)): ?>
                                     <button class="btn btn-sm btn-warning flex-fill" onclick="editMaterial(<?php echo $material['id']; ?>)">
                                         <i class="bi bi-pencil me-2"></i>تعديل
                                     </button>
+                                    <?php if ($usePackagingTable): ?>
+                                        <button class="btn btn-sm btn-outline-danger flex-fill"
+                                                type="button"
+                                                onclick="openDeleteMaterialModal(<?php echo (int)$material['id']; ?>, <?php echo json_encode($material['name'], JSON_UNESCAPED_UNICODE); ?>)">
+                                            <i class="bi bi-trash me-2"></i>حذف
+                                        </button>
+                                    <?php endif; ?>
                                 <?php endif; ?>
                             </div>
                         </div>
@@ -3438,6 +3490,35 @@ $packagingReportGeneratedAt = $packagingReport['generated_at'] ?? date('Y-m-d H:
         </div>
     </div>
 </div>
+
+<!-- بطاقة حذف أداة التعبئة -->
+<?php if ($usePackagingTable && in_array($currentUser['role'] ?? '', ['manager', 'developer', 'accountant'], true)): ?>
+<div class="modal fade" id="deleteMaterialModal" tabindex="-1" aria-labelledby="deleteMaterialModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="deleteMaterialModalLabel">
+                    <i class="bi bi-trash me-2"></i>حذف أداة التعبئة
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="إغلاق"></button>
+            </div>
+            <form method="POST" id="deleteMaterialForm">
+                <input type="hidden" name="action" value="delete_packaging_material">
+                <input type="hidden" name="material_id" id="delete_material_id">
+                <div class="modal-body">
+                    <p class="mb-0">هل أنت متأكد من حذف أداة التعبئة <strong id="delete_material_name_display"></strong>؟ سيتم إخفاؤها من القائمة (حذف منطقي).</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-trash me-2"></i>حذف الأداة
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 
 <!-- Modal لعرض التفاصيل -->
 <div class="modal fade" id="materialDetailsModal" tabindex="-1">
@@ -4126,6 +4207,18 @@ function viewMaterialDetails(materialId) {
             });
             content.innerHTML = '<div class="alert alert-danger"><i class="bi bi-exclamation-triangle me-2"></i>حدث خطأ في تحميل البيانات. يرجى المحاولة مرة أخرى.<br><small>' + (error.message || '') + '</small></div>';
         });
+}
+
+function openDeleteMaterialModal(materialId, materialName) {
+    const modal = document.getElementById('deleteMaterialModal');
+    const idInput = document.getElementById('delete_material_id');
+    const nameDisplay = document.getElementById('delete_material_name_display');
+    if (modal && idInput && nameDisplay) {
+        idInput.value = materialId;
+        nameDisplay.textContent = typeof materialName === 'string' ? materialName : String(materialName || '');
+        const bsModal = window.bootstrap?.Modal?.getOrCreateInstance(modal);
+        if (bsModal) bsModal.show();
+    }
 }
 
 function editMaterial(materialId) {
