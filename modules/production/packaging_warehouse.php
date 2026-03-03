@@ -2740,17 +2740,6 @@ document.addEventListener('DOMContentLoaded', function() {
                                     <?php endif; ?>
                                     <?php if ($usePackagingTable): ?>
                                         <form class="alias-inline-form mt-2" data-material-id="<?php echo $material['id']; ?>">
-                                            <div class="input-group input-group-sm alias-input-group">
-                                                <input type="text"
-                                                       name="alias"
-                                                       class="form-control form-control-sm"
-                                                       placeholder="اكتب الاسم المستعار"
-                                                       value="<?php echo htmlspecialchars($aliasValue, ENT_QUOTES, 'UTF-8'); ?>"
-                                                       maxlength="255">
-                                                <button class="btn btn-outline-secondary" type="submit">
-                                                    حفظ
-                                                </button>
-                                            </div>
                                             <div class="alias-status small text-muted mt-1" role="status"></div>
                                         </form>
                                     <?php endif; ?>
@@ -2791,7 +2780,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                             style="padding: 0.2rem 0.4rem; font-size: 0.75rem;"
                                             <?php echo $useButtonDisabled ? ' disabled' : ''; ?>
                                             aria-label="استخدام الأداة">
-                                            <span class="visually-hidden">استخدام</span>
+                                            <span class="visually-hidden"></span>
                                             <i class="bi bi-check2-circle" aria-hidden="true"></i>
                                         </button>
                                         <button class="btn btn-success btn-sm"
