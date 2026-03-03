@@ -2901,13 +2901,6 @@ document.addEventListener('DOMContentLoaded', function() {
                                 </div>
                             </div>
                             
-                            <div class="row g-2 mb-2">
-                                <div class="col-12">
-                                    <small class="text-muted d-block">المستخدم:</small>
-                                    <strong class="text-warning"><?php echo number_format($material['usage']['total_used'] ?? 0, 2); ?></strong>
-                                </div>
-                            </div>
-                            
                             <div class="d-grid gap-2 d-flex mt-3">
                                 <button
                                     class="btn btn-sm btn-outline-primary flex-fill"
