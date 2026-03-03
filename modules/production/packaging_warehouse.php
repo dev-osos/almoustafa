@@ -2789,7 +2789,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                                 data-unit="<?php echo htmlspecialchars(!empty($material['unit']) ? $material['unit'] : 'وحدة', ENT_QUOTES, 'UTF-8'); ?>"
                                                 data-quantity="<?php echo number_format($materialQuantity, 4, '.', ''); ?>"
                                                 onclick="openAddQuantityModal(this)"
-                                                title="إضافة كمية"
+                                                title=""
                                                 style="padding: 0.2rem 0.4rem; font-size: 0.75rem;">
                                             <i class="bi bi-plus-circle"></i>
                                         </button>
@@ -2799,14 +2799,14 @@ document.addEventListener('DOMContentLoaded', function() {
                                                 data-unit="<?php echo htmlspecialchars(!empty($material['unit']) ? $material['unit'] : 'وحدة', ENT_QUOTES, 'UTF-8'); ?>"
                                                 data-quantity="<?php echo number_format($materialQuantity, 4, '.', ''); ?>"
                                                 onclick="openRecordDamageModal(this)"
-                                                title="تسجيل تالف"
+                                                title=""
                                                 style="padding: 0.2rem 0.4rem; font-size: 0.75rem;">
                                             <i class="bi bi-exclamation-octagon"></i>
                                         </button>
                                         <?php if (in_array($currentUser['role'] ?? '', ['manager', 'developer', 'accountant'], true)): ?>
                                             <button class="btn btn-warning btn-sm" 
                                                     onclick="editMaterial(<?php echo $material['id']; ?>)"
-                                                    title="تعديل"
+                                                    title=""
                                                     style="padding: 0.2rem 0.4rem; font-size: 0.75rem;">
                                                 <i class="bi bi-pencil"></i>
                                             </button>
@@ -2815,7 +2815,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                                         type="button"
                                                         data-material-id="<?php echo (int)$material['id']; ?>"
                                                         data-material-name="<?php echo htmlspecialchars($material['name'], ENT_QUOTES, 'UTF-8'); ?>"
-                                                        title="حذف الأداة"
+                                                        title=""
                                                         style="padding: 0.2rem 0.4rem; font-size: 0.75rem;">
                                                     <i class="bi bi-trash"></i>
                                                 </button>
