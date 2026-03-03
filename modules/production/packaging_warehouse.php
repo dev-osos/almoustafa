@@ -2439,9 +2439,6 @@ $packagingReportGeneratedAt = $packagingReport['generated_at'] ?? date('Y-m-d H:
 <?php endif; ?>
 
 <!-- فلترة حسب الفئة -->
-<?php
-$categoryFilterOptions = array_slice($filterTypeOptions, 0, 3);
-?>
 <div class="row g-2 g-md-3 mb-3 row-cols-2 row-cols-md-4" id="packaging-category-filters">
     <div class="col">
         <div class="card shadow-sm packaging-category-filter cursor-pointer h-100 border border-primary" data-filter-value="" role="button" tabindex="0">
@@ -2450,7 +2447,7 @@ $categoryFilterOptions = array_slice($filterTypeOptions, 0, 3);
             </div>
         </div>
     </div>
-    <?php foreach ($categoryFilterOptions as $catOpt): ?>
+    <?php foreach ($filterTypeOptions as $catOpt): ?>
     <div class="col">
         <div class="card shadow-sm packaging-category-filter cursor-pointer h-100 border" data-filter-value="<?php echo htmlspecialchars($catOpt, ENT_QUOTES, 'UTF-8'); ?>" role="button" tabindex="0">
             <div class="card-body py-2 px-3 text-center">
@@ -2636,7 +2633,7 @@ $categoryFilterOptions = array_slice($filterTypeOptions, 0, 3);
 })();
 </script>
 <script>
-(function() {
+document.addEventListener('DOMContentLoaded', function() {
     var filterCards = document.querySelectorAll('.packaging-category-filter');
     var tableRows = document.querySelectorAll('.packaging-table tbody tr[data-category]');
     var mobileCards = document.querySelectorAll('.packaging-mobile-card');
@@ -2651,7 +2648,9 @@ $categoryFilterOptions = array_slice($filterTypeOptions, 0, 3);
             card.style.display = (showAll || cat === value) ? '' : 'none';
         });
         filterCards.forEach(function(card) {
-            var cardVal = (card.getAttribute('data-filter-value') || '').trim();
+            var cardVal = (card.getAttribute('data-filter-value') ?? '');
+            if (typeof cardVal !== 'string') cardVal = '';
+            cardVal = cardVal.trim();
             if (cardVal === value) {
                 card.classList.add('border-primary');
                 card.classList.remove('border');
@@ -2663,18 +2662,18 @@ $categoryFilterOptions = array_slice($filterTypeOptions, 0, 3);
     }
     filterCards.forEach(function(card) {
         card.addEventListener('click', function() {
-            var value = (card.getAttribute('data-filter-value') || '').trim();
+            var value = (card.getAttribute('data-filter-value') ?? '').trim();
             applyCategoryFilter(value);
         });
         card.addEventListener('keydown', function(e) {
             if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
-                var value = (card.getAttribute('data-filter-value') || '').trim();
+                var value = (card.getAttribute('data-filter-value') ?? '').trim();
                 applyCategoryFilter(value);
             }
         });
     });
-})();
+});
 </script>
 
 <!-- بطاقة حذف أداة التعبئة (تظهر فوق القائمة) -->
