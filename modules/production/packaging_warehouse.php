@@ -2842,17 +2842,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                     <?php $aliasValue = trim((string)($material['alias'] ?? '')); ?>
                                     <?php if ($usePackagingTable): ?>
                                         <form class="alias-inline-form alias-mobile-form mt-2" data-material-id="<?php echo $material['id']; ?>">
-                                            <div class="input-group input-group-sm alias-input-group mb-1">
-                                                <input type="text"
-                                                       name="alias"
-                                                       class="form-control form-control-sm"
-                                                       placeholder="اسم مستعار"
-                                                       value="<?php echo htmlspecialchars($aliasValue, ENT_QUOTES, 'UTF-8'); ?>"
-                                                       maxlength="255">
-                                                <button class="btn btn-outline-secondary" type="submit">
-                                                    حفظ
-                                                </button>
-                                            </div>
+                                            
                                             <div class="alias-status small text-muted mb-2" role="status"></div>
                                         </form>
                                     <?php endif; ?>
@@ -2903,7 +2893,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                     onclick="usePackagingMaterial(this)"
                                     <?php echo $useButtonDisabled ? ' disabled' : ''; ?>>
                                     <i class="bi bi-check2-circle me-2" aria-hidden="true"></i>
-                                    <span>استخدام</span>
+                                    <span></span>
                                 </button>
                                 <button class="btn btn-sm btn-success flex-fill"
                                         data-id="<?php echo $material['id']; ?>"
@@ -2911,7 +2901,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                         data-unit="<?php echo htmlspecialchars(!empty($material['unit']) ? $material['unit'] : 'وحدة', ENT_QUOTES, 'UTF-8'); ?>"
                                         data-quantity="<?php echo number_format($materialQuantity, 4, '.', ''); ?>"
                                         onclick="openAddQuantityModal(this)">
-                                    <i class="bi bi-plus-circle me-2"></i>إضافة كمية
+                                    <i class="bi bi-plus-circle me-2"></i>
                                 </button>
                                 <button class="btn btn-sm btn-danger flex-fill"
                                         data-id="<?php echo $material['id']; ?>"
@@ -2919,18 +2909,18 @@ document.addEventListener('DOMContentLoaded', function() {
                                         data-unit="<?php echo htmlspecialchars(!empty($material['unit']) ? $material['unit'] : 'وحدة', ENT_QUOTES, 'UTF-8'); ?>"
                                         data-quantity="<?php echo number_format($materialQuantity, 4, '.', ''); ?>"
                                         onclick="openRecordDamageModal(this)">
-                                    <i class="bi bi-exclamation-octagon me-2"></i>تسجيل تالف
+                                    <i class="bi bi-exclamation-octagon me-2"></i>
                                 </button>
                                 <?php if (in_array($currentUser['role'] ?? '', ['manager', 'developer', 'accountant'], true)): ?>
                                     <button class="btn btn-sm btn-warning flex-fill" onclick="editMaterial(<?php echo $material['id']; ?>)">
-                                        <i class="bi bi-pencil me-2"></i>تعديل
+                                        <i class="bi bi-pencil me-2"></i>
                                     </button>
                                     <?php if ($usePackagingTable): ?>
                                         <button class="btn btn-sm btn-outline-danger flex-fill btn-delete-packaging"
                                                 type="button"
                                                 data-material-id="<?php echo (int)$material['id']; ?>"
                                                 data-material-name="<?php echo htmlspecialchars($material['name'], ENT_QUOTES, 'UTF-8'); ?>">
-                                            <i class="bi bi-trash me-2"></i>حذف
+                                            <i class="bi bi-trash me-2"></i>
                                         </button>
                                     <?php endif; ?>
                                 <?php endif; ?>
