@@ -2465,18 +2465,6 @@ $packagingReportGeneratedAt = $packagingReport['generated_at'] ?? date('Y-m-d H:
             <input type="hidden" name="page" value="packaging_warehouse">
             <input type="hidden" name="material_id" id="filter-material-id" value="<?php echo (int)$filters['material_id']; ?>">
             <div class="col-md-4">
-                <label class="form-label">فلتر بالنوع</label>
-                <select class="form-select" name="filter_type" id="filter-type-select">
-                    <option value="">جميع الأنواع</option>
-                    <?php foreach ($filterTypeOptions as $typeOpt): ?>
-                        <option value="<?php echo htmlspecialchars($typeOpt, ENT_QUOTES, 'UTF-8'); ?>"
-                                <?php echo $filters['filter_type'] === $typeOpt ? 'selected' : ''; ?>>
-                            <?php echo htmlspecialchars($typeOpt, ENT_QUOTES, 'UTF-8'); ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="col-md-4">
                 <label class="form-label">أداة محددة</label>
                 <div class="position-relative" id="material-search-wrap">
                     <input type="text"
