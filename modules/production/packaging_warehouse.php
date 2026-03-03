@@ -2731,15 +2731,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <td style="padding: 0.4rem 0.25rem;"><?php echo $offset + $index + 1; ?></td>
                                 <td style="padding: 0.4rem 0.25rem; line-height: 1.3;">
                                     <div style="font-weight: 600; font-size: 0.875rem;"><?php echo htmlspecialchars($material['name']); ?></div>
-                                    <?php 
-                                        $aliasValue = trim((string)($material['alias'] ?? ''));
-                                        $aliasDisplayText = $aliasValue !== '' ? $aliasValue : 'لا يوجد اسم مستعار';
-                                        $aliasDisplayClass = $aliasValue !== '' ? 'text-info' : 'text-muted';
-                                    ?>
-                                    <div class="alias-display <?php echo $aliasDisplayClass; ?>" data-empty-text="لا يوجد اسم مستعار" style="font-size: 0.75rem; margin-top: 2px;">
-                                        <span class="fw-semibold text-secondary">الاسم المستعار:</span>
-                                        <span class="alias-text"><?php echo htmlspecialchars($aliasDisplayText); ?></span>
-                                    </div>
+                                    <?php $aliasValue = trim((string)($material['alias'] ?? '')); ?>
                                     <?php if (!empty($material['specifications'])): ?>
                                         <div style="font-size: 0.75rem; color: #6c757d; margin-top: 2px;"><?php echo htmlspecialchars($material['specifications']); ?></div>
                                     <?php endif; ?>
@@ -2858,15 +2850,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             <div class="d-flex justify-content-between align-items-start mb-2">
                                 <div class="flex-grow-1">
                                     <h6 class="mb-1"><?php echo htmlspecialchars($material['name']); ?></h6>
-                                    <?php 
-                                        $aliasValue = trim((string)($material['alias'] ?? ''));
-                                        $aliasDisplayText = $aliasValue !== '' ? $aliasValue : 'لا يوجد اسم مستعار';
-                                        $aliasDisplayClass = $aliasValue !== '' ? 'text-info' : 'text-muted';
-                                    ?>
-                                    <div class="alias-display <?php echo $aliasDisplayClass; ?> small mb-1" data-empty-text="لا يوجد اسم مستعار">
-                                        <span class="fw-semibold text-secondary">الاسم المستعار:</span>
-                                        <span class="alias-text"><?php echo htmlspecialchars($aliasDisplayText); ?></span>
-                                    </div>
+                                    <?php $aliasValue = trim((string)($material['alias'] ?? '')); ?>
                                     <?php if ($usePackagingTable): ?>
                                         <form class="alias-inline-form alias-mobile-form mt-2" data-material-id="<?php echo $material['id']; ?>">
                                             <div class="input-group input-group-sm alias-input-group mb-1">
