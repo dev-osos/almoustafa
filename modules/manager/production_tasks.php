@@ -2022,9 +2022,7 @@ setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
                         <div class="col-md-4">
                             <label class="form-label">الأولوية</label>
                             <select class="form-select" name="priority" id="editPriority">
-                                <option value="low">منخفضة</option>
                                 <option value="normal" selected>عادية</option>
-                                <option value="high">مرتفعة</option>
                                 <option value="urgent">عاجلة</option>
                             </select>
                         </div>

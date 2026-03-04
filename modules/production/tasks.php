@@ -2143,7 +2143,7 @@ function tasksHtml(string $value): string
                 </div>
                 <div class="mb-3">
                     <label class="form-label">الكمية <span class="text-danger">*</span></label>
-                    <input type="number" step="0.01" min="0.01" class="form-control" name="quantity" id="quantity_card" placeholder="0.00">
+                    <input type="number" step="1" min="1" class="form-control" name="quantity" id="quantity_card" placeholder="0.00">
                 </div>
                 <div class="mb-3">
                     <label class="form-label">الوحدة</label>
