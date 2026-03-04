@@ -2997,6 +2997,8 @@ function tasksHtml(string $value): string
     // ملاحظة: تم إزالة هذه الـ meta tags لأنها تمنع bfcache
     // يمكن استخدام Cache-Control: private في headers بدلاً منها
 })();
+// ريفريش تلقائي كل ٥ دقائق
+setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
 </script>
 
 <!-- آلية التحديث التلقائي للمهام (Auto-refresh/Polling) -->
