@@ -1750,6 +1750,8 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
         }
     });
 })();
+// ريفريش تلقائي كل ٥ دقائق
+setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
 </script>
 
 <div class="container-fluid">
