@@ -2750,6 +2750,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                     <th>رقم الفاتورة</th>
                                     <th>السعر الإجمالي</th>
                                     <th>تاريخ الشراء</th>
+                                    <th>الرصيد بعد المعاملة</th>
                                     <th style="width: 140px;">إجراءات</th>
                                 </tr>
                             </thead>
@@ -2848,6 +2849,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             <th>رقم الفاتورة</th>
                             <th>السعر الإجمالي</th>
                             <th>تاريخ الشراء</th>
+                            <th>الرصيد بعد المعاملة</th>
                             <th style="width: 140px;">إجراءات</th>
                         </tr>
                     </thead>
@@ -6081,7 +6083,7 @@ function loadLocalCustomerPurchaseHistory() {
             console.log('Purchase history data:', localPurchaseHistoryData.length, 'items; paper invoices:', localPaperInvoicesData.length, 'paper returns:', localPaperInvoiceReturnsData.length);
             
             // عرض البيانات حتى لو كانت فارغة (ستعرض رسالة "لا توجد مشتريات")
-            displayLocalPurchaseHistory(localPurchaseHistoryData, localPaperInvoicesData, localPaperInvoiceReturnsData);
+            displayLocalPurchaseHistory(localPurchaseHistoryData, localPaperInvoicesData, localPaperInvoiceReturnsData, (data.customer && data.customer.balance !== undefined) ? data.customer.balance : 0);
             var cardTable = document.getElementById('localPurchaseHistoryCardTable');
             var modalTable = document.getElementById('localPurchaseHistoryTable');
             if (cardTable) { cardTable.classList.remove('d-none'); cardTable.style.display = 'block'; cardTable.style.visibility = 'visible'; }
@@ -6230,11 +6232,12 @@ function localOpenReturnForInvoiceFromDetails() {
     loadLocalReturnInvoiceByNumber();
 }
 
-// دالة عرض سجل المشتريات (سطر واحد لكل فاتورة) + الفواتير الورقية + مرتجعات الفواتير الورقية
+// دالة عرض سجل المشتريات (سطر واحد لكل فاتورة) + الفواتير الورقية + مرتجعات الفواتير الورقية + الرصيد بعد كل معاملة
 // نملأ جدولي الكارد (موبايل) والمودال (كمبيوتر) معاً لضمان ظهور الفواتير على الهاتف
-function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns) {
+function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns, currentBalance) {
     paperInvoices = paperInvoices || [];
     paperInvoiceReturns = paperInvoiceReturns || [];
+    currentBalance = parseFloat(currentBalance) || 0;
     const tableBodyCard = document.getElementById('localPurchaseHistoryCardTableBody');
     const tableBodyModal = document.getElementById('localPurchaseHistoryTableBody');
     
@@ -6258,39 +6261,53 @@ function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns
         var s = String(d).trim().substring(0, 10);
         return s || '0000-00-00';
     }
+    function formatBalance(bal) {
+        var n = parseFloat(bal) || 0;
+        return n.toFixed(2) + ' ج.م';
+    }
     invoices.forEach(function(inv) {
         const safeNum = (inv.invoice_number || '-').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const dateStr = (inv.invoice_date || '-').toString().substring(0, 10);
-        const row = '<td>' + safeNum + '</td><td>' + parseFloat(inv.total_amount || 0).toFixed(2) + ' ج.م</td><td>' + dateStr + '</td><td><button type="button" class="btn btn-sm btn-outline-primary" onclick="showLocalInvoiceDetailsModal(\'' + String(inv.invoice_number || '').replace(/'/g, "\\'") + '\')" title="عرض الفاتورة"><i class="bi bi-eye me-1"></i>عرض الفاتورة</button></td>';
-        allEntries.push({ sortDate: normDate(inv.invoice_date), row: row });
+        const amount = parseFloat(inv.total_amount || 0);
+        const actionsCell = '<td><button type="button" class="btn btn-sm btn-outline-primary" onclick="showLocalInvoiceDetailsModal(\'' + String(inv.invoice_number || '').replace(/'/g, "\\'") + '\')" title="عرض الفاتورة"><i class="bi bi-eye me-1"></i>عرض الفاتورة</button></td>';
+        allEntries.push({ sortDate: normDate(inv.invoice_date), effect: amount, cells: ['<td>' + safeNum + '</td>', '<td>' + amount.toFixed(2) + ' ج.م</td>', '<td>' + dateStr + '</td>', actionsCell] });
     });
     paperInvoices.forEach(function(pi) {
         const safeNum = (pi.invoice_number || 'ورقية-' + pi.id).replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const dateStr = (pi.invoice_date || pi.created_at || '-').toString().substring(0, 10);
+        const amount = parseFloat(pi.total_amount || 0);
         const viewBtn = pi.image_path
             ? '<button type="button" class="btn btn-sm btn-outline-primary" onclick="showPaperInvoiceImage(' + parseInt(pi.id, 10) + ')" title="عرض صورة الفاتورة الورقية"><i class="bi bi-image me-1"></i>عرض الفاتورة</button>'
             : '<span class="text-muted small">لا توجد صورة</span>';
-        const row = '<td>' + safeNum + '</td><td>' + parseFloat(pi.total_amount || 0).toFixed(2) + ' ج.م</td><td>' + dateStr + '</td><td>' + viewBtn + '</td>';
-        allEntries.push({ sortDate: normDate(pi.invoice_date || pi.created_at), row: row });
+        allEntries.push({ sortDate: normDate(pi.invoice_date || pi.created_at), effect: -amount, cells: ['<td>' + safeNum + '</td>', '<td>' + amount.toFixed(2) + ' ج.م</td>', '<td>' + dateStr + '</td>', '<td>' + viewBtn + '</td>'] });
     });
     paperInvoiceReturns.forEach(function(pr) {
         const safeNum = ('مرتجع ورقية - ' + (pr.invoice_number || pr.id)).replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const dateStr = (pr.return_date || pr.created_at || '-').toString().substring(0, 10);
+        const returnAmt = parseFloat(pr.return_amount || 0);
         const viewBtn = pr.image_path
             ? '<button type="button" class="btn btn-sm btn-outline-warning" onclick="showPaperInvoiceReturnImage(' + parseInt(pr.id, 10) + ')" title="عرض صورة المرتجع"><i class="bi bi-image me-1"></i>عرض المرتجع</button>'
             : '<span class="text-muted small">لا توجد صورة</span>';
-        const row = '<td>' + safeNum + '</td><td class="text-warning">-' + parseFloat(pr.return_amount || 0).toFixed(2) + ' ج.م</td><td>' + dateStr + '</td><td>' + viewBtn + '</td>';
-        allEntries.push({ sortDate: normDate(pr.return_date || pr.created_at), row: row });
+        allEntries.push({ sortDate: normDate(pr.return_date || pr.created_at), effect: -returnAmt, cells: ['<td>' + safeNum + '</td>', '<td class="text-warning">-' + returnAmt.toFixed(2) + ' ج.م</td>', '<td>' + dateStr + '</td>', '<td>' + viewBtn + '</td>'] });
     });
     allEntries.sort(function(a, b) {
-        return b.sortDate.localeCompare(a.sortDate);
+        return a.sortDate.localeCompare(b.sortDate);
     });
-    const rows = allEntries.map(function(e) { return e.row; });
+    var totalEffect = 0;
+    for (var i = 0; i < allEntries.length; i++) totalEffect += allEntries[i].effect;
+    var balanceAfter = currentBalance - totalEffect;
+    var rows = [];
+    for (var j = 0; j < allEntries.length; j++) {
+        balanceAfter += allEntries[j].effect;
+        var e = allEntries[j];
+        var balanceCell = '<td>' + formatBalance(balanceAfter) + '</td>';
+        rows.push(e.cells[0] + e.cells[1] + e.cells[2] + balanceCell + e.cells[3]);
+    }
     
     const hasInvoices = rows.length > 0;
     
     if (!hasInvoices) {
-        var emptyRow = '<tr><td colspan="4" class="text-center text-muted py-4"><i class="bi bi-info-circle me-2"></i>لا توجد مشتريات مسجلة لهذا العميل</td></tr>';
+        var emptyRow = '<tr><td colspan="5" class="text-center text-muted py-4"><i class="bi bi-info-circle me-2"></i>لا توجد مشتريات مسجلة لهذا العميل</td></tr>';
         if (tableBodyCard) tableBodyCard.innerHTML = emptyRow;
         if (tableBodyModal) tableBodyModal.innerHTML = emptyRow;
         document.getElementById('localPurchaseHistoryPaginationWrap').style.display = 'none';
