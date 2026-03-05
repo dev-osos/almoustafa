@@ -2731,8 +2731,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     </div>
                 </div>
 
-                <!-- Loading -->
-                <div class="text-center py-4" id="localPurchaseHistoryLoading">
+                <!-- Loading (مخفي افتراضياً؛ يُعرض أثناء التحميل فقط) -->
+                <div class="text-center py-4 d-none" id="localPurchaseHistoryLoading">
                     <div class="spinner-border text-primary" role="status">
                         <span class="visually-hidden">جاري التحميل...</span>
                     </div>
@@ -2741,8 +2741,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 <!-- Error -->
                 <div class="alert alert-danger d-none" id="localPurchaseHistoryError"></div>
 
-                <!-- Purchase History Table - سطر لكل فاتورة -->
-                <div id="localPurchaseHistoryTable" class="d-none">
+                <!-- Purchase History Table - سطر لكل فاتورة (يُعرض بعد انتهاء التحميل) -->
+                <div id="localPurchaseHistoryTable" class="d-none" style="display: none !important;">
                     <div class="table-responsive">
                         <table class="table table-hover table-bordered">
                             <thead class="table-light">
@@ -6084,8 +6084,8 @@ function loadLocalCustomerPurchaseHistory() {
         console.log('API Response received:', data);
         var loadingModal = document.getElementById('localPurchaseHistoryLoading');
         var loadingCard = document.getElementById('localPurchaseHistoryCardLoading');
-        if (loadingModal) { loadingModal.classList.add('d-none'); loadingModal.style.display = 'none'; }
-        if (loadingCard) { loadingCard.classList.add('d-none'); loadingCard.style.display = 'none'; }
+        if (loadingModal) { loadingModal.classList.add('d-none'); loadingModal.style.setProperty('display', 'none', 'important'); }
+        if (loadingCard) { loadingCard.classList.add('d-none'); loadingCard.style.setProperty('display', 'none', 'important'); }
         
         if (data.success) {
             localPurchaseHistoryData = data.purchase_history || [];
@@ -6103,8 +6103,8 @@ function loadLocalCustomerPurchaseHistory() {
             }
             var cardTable = document.getElementById('localPurchaseHistoryCardTable');
             var modalTable = document.getElementById('localPurchaseHistoryTable');
-            if (cardTable) { cardTable.classList.remove('d-none'); cardTable.style.display = 'block'; cardTable.style.visibility = 'visible'; }
-            if (modalTable) { modalTable.classList.remove('d-none'); modalTable.style.display = 'block'; modalTable.style.visibility = 'visible'; }
+            if (cardTable) { cardTable.classList.remove('d-none'); cardTable.style.setProperty('display', 'block', 'important'); cardTable.style.setProperty('visibility', 'visible', 'important'); }
+            if (modalTable) { modalTable.classList.remove('d-none'); modalTable.style.setProperty('display', 'block', 'important'); modalTable.style.setProperty('visibility', 'visible', 'important'); }
             
             // إظهار زر الطباعة حتى لو لم تكن هناك بيانات
             const printBtn = isMobileDevice
