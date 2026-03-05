@@ -3015,6 +3015,24 @@ setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
     let lastUpdateTimestamp = null;
     let isRefreshing = false;
     
+    // طلب إذن إشعارات المتصفح فور تحميل الصفحة
+    if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission().catch(function() {});
+    }
+    
+    function showNewOrderNotification(task) {
+        if (!('Notification' in window) || Notification.permission !== 'granted') return;
+        var sender = (task.created_by_name && task.created_by_name.trim()) ? task.created_by_name.trim() : 'غير معروف';
+        var customer = (task.customer_name && task.customer_name.trim()) ? task.customer_name.trim() : '—';
+        var title = 'أوردر جديد #' + (task.id || '');
+        var body = 'مرسل الأوردر: ' + sender + ' | العميل: ' + customer;
+        try {
+            var n = new Notification(title, { body: body, dir: 'rtl', lang: 'ar' });
+            n.onclick = function() { window.focus(); n.close(); };
+            setTimeout(function() { n.close(); }, 8000);
+        } catch (e) {}
+    }
+    
     // دالة جلب المهام من API
     async function fetchTasks() {
         if (isRefreshing) {
@@ -3061,12 +3079,27 @@ setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
                     let hasNewTasks = false;
                     let hasChanges = false;
                     
-                    // التحقق من المهام الجديدة
-                    for (const task of newTasks) {
-                        const taskId = String(task.id);
+                    // التحقق من المهام الجديدة وإظهار إشعار متصفح فوري لكل أوردر جديد
+                    var newTaskObjects = [];
+                    for (var i = 0; i < newTasks.length; i++) {
+                        var task = newTasks[i];
+                        var taskId = String(task.id);
                         if (!currentTasksIds.has(taskId)) {
                             hasNewTasks = true;
-                            break;
+                            newTaskObjects.push(task);
+                        }
+                    }
+                    
+                    // إشعار متصفح فوري لكل أوردر جديد: مرسل الأوردر + اسم العميل
+                    if (newTaskObjects.length > 0) {
+                        if ('Notification' in window && Notification.permission === 'default') {
+                            Notification.requestPermission().then(function(p) {
+                                if (p === 'granted') {
+                                    newTaskObjects.forEach(showNewOrderNotification);
+                                }
+                            }).catch(function() {});
+                        } else if (Notification.permission === 'granted') {
+                            newTaskObjects.forEach(showNewOrderNotification);
                         }
                     }
                     
@@ -3080,13 +3113,8 @@ setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
                         hasChanges = true;
                     }
                     
-                    // إذا كانت هناك مهام جديدة أو تغييرات، تحديث الصفحة بدون إعادة تحميل كاملة
-                    // تم تعطيل إعادة التوجيه التلقائية لمنع إعادة التوجيه غير المرغوب
-                    // يمكن للمستخدم تحديث الصفحة يدوياً عند الحاجة
                     if (hasNewTasks || hasChanges) {
-                        // إظهار إشعار للمستخدم بدلاً من إعادة التوجيه التلقائية
                         console.log('New tasks or changes detected. Please refresh the page manually if needed.');
-                        // يمكن إضافة إشعار بصري هنا بدلاً من إعادة التوجيه
                     }
                 }
                 
