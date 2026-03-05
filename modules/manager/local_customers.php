@@ -6083,7 +6083,7 @@ function loadLocalCustomerPurchaseHistory() {
             console.log('Purchase history data:', localPurchaseHistoryData.length, 'items; paper invoices:', localPaperInvoicesData.length, 'paper returns:', localPaperInvoiceReturnsData.length);
             
             // عرض البيانات حتى لو كانت فارغة (ستعرض رسالة "لا توجد مشتريات")
-            displayLocalPurchaseHistory(localPurchaseHistoryData, localPaperInvoicesData, localPaperInvoiceReturnsData, (data.customer && data.customer.balance !== undefined) ? data.customer.balance : 0);
+            displayLocalPurchaseHistory(localPurchaseHistoryData, localPaperInvoicesData, localPaperInvoiceReturnsData, (data.customer && data.customer.balance !== undefined) ? data.customer.balance : 0, data.collections || []);
             var cardTable = document.getElementById('localPurchaseHistoryCardTable');
             var modalTable = document.getElementById('localPurchaseHistoryTable');
             if (cardTable) { cardTable.classList.remove('d-none'); cardTable.style.display = 'block'; cardTable.style.visibility = 'visible'; }
@@ -6232,11 +6232,12 @@ function localOpenReturnForInvoiceFromDetails() {
     loadLocalReturnInvoiceByNumber();
 }
 
-// دالة عرض سجل المشتريات (سطر واحد لكل فاتورة) + الفواتير الورقية + مرتجعات الفواتير الورقية + الرصيد بعد كل معاملة
+// دالة عرض سجل المشتريات (سطر واحد لكل فاتورة) + الفواتير الورقية + مرتجعات الفواتير الورقية + التحصيلات + الرصيد بعد كل معاملة
 // نملأ جدولي الكارد (موبايل) والمودال (كمبيوتر) معاً لضمان ظهور الفواتير على الهاتف
-function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns, currentBalance) {
+function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns, currentBalance, collections) {
     paperInvoices = paperInvoices || [];
     paperInvoiceReturns = paperInvoiceReturns || [];
+    collections = collections || [];
     currentBalance = parseFloat(currentBalance) || 0;
     const tableBodyCard = document.getElementById('localPurchaseHistoryCardTableBody');
     const tableBodyModal = document.getElementById('localPurchaseHistoryTableBody');
@@ -6289,6 +6290,12 @@ function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns
             ? '<button type="button" class="btn btn-sm btn-outline-warning" onclick="showPaperInvoiceReturnImage(' + parseInt(pr.id, 10) + ')" title="عرض صورة المرتجع"><i class="bi bi-image me-1"></i>عرض المرتجع</button>'
             : '<span class="text-muted small">لا توجد صورة</span>';
         allEntries.push({ sortDate: normDate(pr.return_date || pr.created_at), effect: -returnAmt, cells: ['<td>' + safeNum + '</td>', '<td class="text-warning">-' + returnAmt.toFixed(2) + ' ج.م</td>', '<td>' + dateStr + '</td>', '<td>' + viewBtn + '</td>'] });
+    });
+    collections.forEach(function(col) {
+        const safeNum = ('تحصيل - ' + (col.collection_number || col.id)).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const dateStr = (col.date || col.created_at || '-').toString().substring(0, 10);
+        const amount = parseFloat(col.amount || 0);
+        allEntries.push({ sortDate: normDate(col.date || col.created_at), effect: -amount, cells: ['<td>' + safeNum + '</td>', '<td class="text-success">' + amount.toFixed(2) + ' ج.م (تحصيل)</td>', '<td>' + dateStr + '</td>', '<td><span class="text-muted small">تحصيل</span></td>'] });
     });
     allEntries.sort(function(a, b) {
         return a.sortDate.localeCompare(b.sortDate);
