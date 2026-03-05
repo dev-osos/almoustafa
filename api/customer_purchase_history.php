@@ -467,7 +467,7 @@ function getLocalCustomerPaperInvoiceReturns($db, $customerId): array
 }
 
 /**
- * Get local customer collections (تحصيلات - معتمدة فقط لأنها التي تؤثر على الرصيد)
+ * Get local customer collections (تحصيلات - جميع الحالات للعرض في كشف الحساب)
  */
 function getLocalCustomerCollections($db, $customerId): array
 {
@@ -476,14 +476,8 @@ function getLocalCustomerCollections($db, $customerId): array
         if (empty($tableExists)) {
             return [];
         }
-        $hasStatus = $db->queryOne("SHOW COLUMNS FROM local_collections LIKE 'status'");
-        $sql = "SELECT id, customer_id, collection_number, amount, date, payment_method, notes, created_at FROM local_collections WHERE customer_id = ?";
-        $params = [$customerId];
-        if (!empty($hasStatus)) {
-            $sql .= " AND status = 'approved'";
-        }
-        $sql .= " ORDER BY date ASC, id ASC";
-        $rows = $db->query($sql, $params);
+        $sql = "SELECT id, customer_id, collection_number, amount, date, payment_method, notes, created_at FROM local_collections WHERE customer_id = ? ORDER BY date ASC, id ASC";
+        $rows = $db->query($sql, [$customerId]);
         if (!$rows) {
             return [];
         }
