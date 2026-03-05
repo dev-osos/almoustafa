@@ -1,8 +1,11 @@
+# النشر عبر FTP إلى الاستضافة
+# يشترط: 1) الدفع إلى فرع main (أو master)  2) إضافة Secret اسمه FTP_PASSWORD في الإعدادات
+# إذا لم تُرفع التعديلات: احذف الملف .ftp-deploy-sync-state.json من مجلد /httpdocs/ على السيرفر ثم أعد تشغيل الـ workflow
 name: Deploy to Thamara Cloud
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "master"]
   workflow_dispatch:
 
 jobs:
@@ -21,16 +24,16 @@ jobs:
         with:
           server: 213.239.220.209
           username: osama74
-          password: ZYpVjzpotai853@*
+          password: ${{ secrets.FTP_PASSWORD }}
           protocol: ftp
           port: 21
           security: loose
           timeout: 120000
-          log-level: standard
+          log-level: verbose
 
           server-dir: /httpdocs/
 
-          # مهم: لا يحذف ملفات السيرفر 
+          # مهم: لا يحذف ملفات السيرفر
           dangerous-clean-slate: false
 
           exclude: |
