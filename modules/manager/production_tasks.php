@@ -1956,7 +1956,10 @@ setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
                                     <div class="row g-2">
                                         <div class="col-md-3">
                                             <label class="form-label small">اسم المنتج</label>
-                                            <input type="text" class="form-control product-name-input" name="products[0][name]" placeholder="أدخل اسم المنتج أو القالب" list="templateSuggestions" autocomplete="off" required>
+                                            <div class="product-name-wrap position-relative">
+                                                <input type="text" class="form-control product-name-input" name="products[0][name]" placeholder="أدخل اسم المنتج أو القالب أو اختر من القائمة" autocomplete="off" required>
+                                                <div class="product-template-dropdown d-none"></div>
+                                            </div>
                                         </div>
                                         <div class="col-md-2">
                                             <label class="form-label small">الكمية</label>
@@ -2564,6 +2567,11 @@ setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
 .search-dropdown-task .search-dropdown-item-task { padding: 0.5rem 0.75rem; cursor: pointer; border-bottom: 1px solid #f0f0f0; }
 .search-dropdown-task .search-dropdown-item-task:hover { background: #f8f9fa; }
 .search-dropdown-task .search-dropdown-item-task:last-child { border-bottom: none; }
+.product-name-wrap.position-relative { position: relative; }
+.product-template-dropdown { position: absolute; left: 0; right: 0; top: 100%; z-index: 1050; max-height: 220px; overflow-y: auto; background: #fff; border: 1px solid #dee2e6; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin-top: 2px; }
+.product-template-dropdown .product-template-item { padding: 0.5rem 0.75rem; cursor: pointer; border-bottom: 1px solid #f0f0f0; }
+.product-template-dropdown .product-template-item:hover { background: #f8f9fa; }
+.product-template-dropdown .product-template-item:last-child { border-bottom: none; }
 /* إخفاء خانة العميل اليدوي إن وُجدت (كاش قديم) */
 #customer_manual_block_task { display: none !important; }
 input[name="customer_type_radio_task"][value="manual"] { display: none !important; }
@@ -3015,20 +3023,84 @@ document.addEventListener('DOMContentLoaded', function () {
             })
             .then(data => {
                 if (data.success && Array.isArray(data.templates)) {
-                    // مسح القائمة الحالية
-                    templateSuggestions.innerHTML = '';
-                    
-                    // إضافة الخيارات
-                    data.templates.forEach(templateName => {
-                        const option = document.createElement('option');
-                        option.value = templateName;
-                        templateSuggestions.appendChild(option);
-                    });
+                    window.__productTemplatesList = data.templates;
+                    if (templateSuggestions) {
+                        templateSuggestions.innerHTML = '';
+                        data.templates.forEach(templateName => {
+                            const option = document.createElement('option');
+                            option.value = templateName;
+                            templateSuggestions.appendChild(option);
+                        });
+                    }
+                    initAllProductNameDropdowns();
                 }
             })
             .catch(error => {
                 console.error('Error loading template suggestions:', error);
             });
+    }
+
+    // دروب داون اسم المنتج: يفلتر حسب المدخلات ويسمح بالإدخال اليدوي أو الاختيار من القائمة
+    function initProductNameDropdown(inputEl) {
+        if (!inputEl || inputEl.dataset.productDropdownInited === '1') return;
+        var templates = (typeof window.__productTemplatesList !== 'undefined' && Array.isArray(window.__productTemplatesList)) ? window.__productTemplatesList : [];
+        var wrap = inputEl.closest('.product-name-wrap');
+        if (!wrap) {
+            wrap = document.createElement('div');
+            wrap.className = 'product-name-wrap position-relative';
+            inputEl.parentNode.insertBefore(wrap, inputEl);
+            wrap.appendChild(inputEl);
+        }
+        var dropEl = wrap.querySelector('.product-template-dropdown');
+        if (!dropEl) {
+            dropEl = document.createElement('div');
+            dropEl.className = 'product-template-dropdown d-none';
+            wrap.appendChild(dropEl);
+        }
+        function matchTemplate(name, q) {
+            if (!q || !name) return true;
+            return (name + '').toLowerCase().indexOf((q + '').trim().toLowerCase()) !== -1;
+        }
+        function showDropdown() {
+            var q = (inputEl.value || '').trim();
+            var filtered = q ? templates.filter(function(t) { return matchTemplate(t, q); }) : templates.slice(0, 50);
+            dropEl.innerHTML = '';
+            if (filtered.length === 0) {
+                dropEl.classList.add('d-none');
+                return;
+            }
+            filtered.forEach(function(name) {
+                var div = document.createElement('div');
+                div.className = 'product-template-item';
+                div.textContent = name;
+                div.addEventListener('click', function() {
+                    inputEl.value = name;
+                    dropEl.classList.add('d-none');
+                    inputEl.focus();
+                });
+                dropEl.appendChild(div);
+            });
+            dropEl.classList.remove('d-none');
+        }
+        function hideDropdown() {
+            dropEl.classList.add('d-none');
+        }
+        inputEl.addEventListener('input', showDropdown);
+        inputEl.addEventListener('focus', showDropdown);
+        inputEl.addEventListener('blur', function() {
+            setTimeout(hideDropdown, 200);
+        });
+        inputEl.dataset.productDropdownInited = '1';
+    }
+    (function closeProductDropdownsOnOutsideClick() {
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.product-name-wrap')) {
+                document.querySelectorAll('.product-template-dropdown').forEach(function(d) { d.classList.add('d-none'); });
+            }
+        });
+    })();
+    function initAllProductNameDropdowns() {
+        document.querySelectorAll('.product-name-input').forEach(initProductNameDropdown);
     }
 
     // تحميل الاقتراحات عند تحميل الصفحة
@@ -3059,7 +3131,10 @@ document.addEventListener('DOMContentLoaded', function () {
             <div class="row g-2">
                 <div class="col-md-3">
                     <label class="form-label small">اسم المنتج</label>
-                    <input type="text" class="form-control product-name-input" name="products[${productIndex}][name]" placeholder="أدخل اسم المنتج أو القالب" list="templateSuggestions" autocomplete="off">
+                    <div class="product-name-wrap position-relative">
+                        <input type="text" class="form-control product-name-input" name="products[${productIndex}][name]" placeholder="أدخل اسم المنتج أو القالب أو اختر من القائمة" autocomplete="off">
+                        <div class="product-template-dropdown d-none"></div>
+                    </div>
                 </div>
                 <div class="col-md-2">
                     <label class="form-label small">الكمية</label>
@@ -3097,6 +3172,8 @@ document.addEventListener('DOMContentLoaded', function () {
         productsContainer.appendChild(newRow);
         productIndex++;
         updateRemoveButtons();
+        var newNameInput = newRow.querySelector('.product-name-input');
+        if (newNameInput) initProductNameDropdown(newNameInput);
         
         // إضافة مستمع الحدث لزر الحذف
         newRow.querySelector('.remove-product-btn').addEventListener('click', function() {
