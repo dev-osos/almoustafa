@@ -1,20 +1,29 @@
+# النشر عبر FTP إلى الاستضافة
+# يشترط: 1) الدفع إلى فرع main (أو master)  2) إضافة Secret اسمه FTP_PASSWORD في الإعدادات
+# إذا لم تُرفع التعديلات: احذف الملف .ftp-deploy-sync-state.json من مجلد /httpdocs/ على السيرفر ثم أعد تشغيل الـ workflow
 name: Deploy to Thamara Cloud
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "master"]
   workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # مطلوب لبعض المستودعات حتى يعمل الـ checkout ويُشغّل الـ workflow
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: List files to deploy
+        run: ls -la
 
       - name: Deploy via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.4
@@ -26,11 +35,13 @@ jobs:
           port: 21
           security: loose
           timeout: 120000
-          log-level: standard
+          log-level: verbose
 
           server-dir: /httpdocs/
+          # غيّر هذا الاسم مؤقتاً (مثلاً state-2) لفرض رفع كامل إذا ظنّ الإكشن أن كل شيء محدّث
+          state-name: .ftp-deploy-sync-state.json
 
-          # مهم: لا يحذف ملفات السيرفر 
+          # مهم: لا يحذف ملفات السيرفر
           dangerous-clean-slate: false
 
           exclude: |
