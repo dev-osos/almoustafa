@@ -41,6 +41,7 @@ $type = trim($inputData['type'] ?? '');
 $kmReading = isset($inputData['km_reading']) ? (int) $inputData['km_reading'] : 0;
 $photoBase64 = $inputData['photo'] ?? $inputData['photo_base64'] ?? '';
 $notes = trim($inputData['notes'] ?? '');
+$fuelAmount = isset($inputData['fuel_amount']) ? $inputData['fuel_amount'] : null;
 
 if (!in_array($type, ['oil_change', 'fuel_refill'], true)) {
     echo json_encode(['success' => false, 'message' => 'نوع الصيانة غير صحيح'], JSON_UNESCAPED_UNICODE);
@@ -49,6 +50,14 @@ if (!in_array($type, ['oil_change', 'fuel_refill'], true)) {
 if ($kmReading <= 0) {
     echo json_encode(['success' => false, 'message' => 'يجب إدخال عدد الكيلومترات'], JSON_UNESCAPED_UNICODE);
     exit;
+}
+if ($type === 'fuel_refill') {
+    $fuelAmountNum = is_numeric($fuelAmount) ? (float) $fuelAmount : null;
+    if ($fuelAmountNum === null || $fuelAmountNum <= 0) {
+        echo json_encode(['success' => false, 'message' => 'يجب إدخال مبلغ التفويل (أكبر من صفر)'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    $fuelAmount = $fuelAmountNum;
 }
 if (empty($photoBase64)) {
     echo json_encode(['success' => false, 'message' => 'يجب التقاط صورة بالكاميرا'], JSON_UNESCAPED_UNICODE);
@@ -74,7 +83,8 @@ $result = saveVehicleMaintenance(
     $kmReading,
     $relativePath,
     $notes ?: null,
-    $absPath
+    $absPath,
+    $type === 'fuel_refill' ? $fuelAmount : null
 );
 
 echo json_encode([

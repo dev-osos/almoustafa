@@ -31,6 +31,7 @@ function ensureVehicleMaintenanceTable() {
                   maintenance_date date NOT NULL,
                   km_reading int(11) NOT NULL,
                   km_diff int(11) DEFAULT NULL,
+                  fuel_amount decimal(10,2) DEFAULT NULL,
                   photo_path varchar(500) NOT NULL,
                   notes text DEFAULT NULL,
                   created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -41,6 +42,11 @@ function ensureVehicleMaintenanceTable() {
                   KEY maintenance_date (maintenance_date)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             ");
+        } else {
+            $hasFuelAmount = $db->queryOne("SHOW COLUMNS FROM vehicle_maintenance LIKE 'fuel_amount'");
+            if (empty($hasFuelAmount)) {
+                $db->execute("ALTER TABLE vehicle_maintenance ADD COLUMN fuel_amount decimal(10,2) DEFAULT NULL AFTER km_diff");
+            }
         }
         $ensured = true;
     } catch (Throwable $e) {
@@ -142,9 +148,10 @@ function getDriverVehicle($driverId) {
 /**
  * حفظ سجل صيانة جديد
  * @param string|null $photoAbsolutePath مسار الملف المطلق (إن وُجد) لاستخدامه في إرسال تليجرام
+ * @param float|null $fuelAmount مبلغ التفويل (لتفويل البنزين فقط)
  * @return array ['success' => bool, 'message' => string, 'id' => int|null]
  */
-function saveVehicleMaintenance($vehicleId, $driverId, $type, $kmReading, $photoPath, $notes = null, $photoAbsolutePath = null) {
+function saveVehicleMaintenance($vehicleId, $driverId, $type, $kmReading, $photoPath, $notes = null, $photoAbsolutePath = null, $fuelAmount = null) {
     ensureVehicleMaintenanceTable();
     $db = db();
 
@@ -166,10 +173,11 @@ function saveVehicleMaintenance($vehicleId, $driverId, $type, $kmReading, $photo
         }
     }
 
+    $fuelAmountValue = ($type === 'fuel_refill' && $fuelAmount !== null && $fuelAmount !== '') ? (float) $fuelAmount : null;
     $db->execute(
-        "INSERT INTO vehicle_maintenance (vehicle_id, driver_id, type, maintenance_date, km_reading, km_diff, photo_path, notes)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        [$vehicleId, $driverId, $type, $maintenanceDate, (int) $kmReading, $kmDiff, $photoPath, $notes]
+        "INSERT INTO vehicle_maintenance (vehicle_id, driver_id, type, maintenance_date, km_reading, km_diff, fuel_amount, photo_path, notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [$vehicleId, $driverId, $type, $maintenanceDate, (int) $kmReading, $kmDiff, $fuelAmountValue, $photoPath, $notes]
     );
     $id = $db->getLastInsertId();
 
