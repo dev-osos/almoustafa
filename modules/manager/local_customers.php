@@ -2736,10 +2736,14 @@ document.addEventListener('DOMContentLoaded', function() {
                                     <option value="desc">تنازلي (الأحدث أولاً)</option>
                                 </select>
                             </div>
-                            <div class="col-6 col-md-6 col-lg-2 d-flex align-items-end">
-                                <button type="button" class="btn btn-primary btn-sm w-100" 
+                            <div class="col-6 col-md-6 col-lg-2 d-flex align-items-end gap-1 flex-wrap">
+                                <button type="button" class="btn btn-primary btn-sm flex-grow-1" 
                                         onclick="applyLocalPurchaseHistoryFilters()">
                                     <i class="bi bi-search me-1"></i>بحث
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm flex-grow-1" 
+                                        onclick="clearLocalPurchaseHistoryFilters()" title="إزالة الفلتر والبحث">
+                                    <i class="bi bi-x-circle me-1"></i>إزالة الفلتر
                                 </button>
                             </div>
                         </div>
@@ -2852,10 +2856,16 @@ document.addEventListener('DOMContentLoaded', function() {
                     </div>
                     <div class="col-6">
                         <label class="form-label small text-muted mb-0 d-block">&nbsp;</label>
-                        <button type="button" class="btn btn-primary btn-sm w-100" 
-                                onclick="applyLocalPurchaseHistoryFilters()">
-                            <i class="bi bi-search me-1"></i>بحث
-                        </button>
+                        <div class="d-flex gap-1">
+                            <button type="button" class="btn btn-primary btn-sm flex-grow-1" 
+                                    onclick="applyLocalPurchaseHistoryFilters()">
+                                <i class="bi bi-search me-1"></i>بحث
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm flex-grow-1" 
+                                    onclick="clearLocalPurchaseHistoryFilters()" title="إزالة الفلتر والبحث">
+                                <i class="bi bi-x-circle me-1"></i>إزالة الفلتر
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -6234,6 +6244,35 @@ function applyLocalPurchaseHistoryFilters() {
 }
 window.applyLocalPurchaseHistoryFilters = applyLocalPurchaseHistoryFilters;
 
+// إزالة الفلتر والبحث وإظهار جميع المعاملات
+function clearLocalPurchaseHistoryFilters() {
+    var searchEl = document.getElementById('localPurchaseHistorySearchInvoiceOrAmount');
+    var searchCard = document.getElementById('localPurchaseHistoryCardSearchInvoiceOrAmount');
+    var dateFromEl = document.getElementById('localPurchaseHistoryDateFrom');
+    var dateFromCard = document.getElementById('localPurchaseHistoryCardDateFrom');
+    var dateToEl = document.getElementById('localPurchaseHistoryDateTo');
+    var dateToCard = document.getElementById('localPurchaseHistoryCardDateTo');
+    var sortEl = document.getElementById('localPurchaseHistorySortOrder');
+    var sortCard = document.getElementById('localPurchaseHistoryCardSortOrder');
+    if (searchEl) searchEl.value = '';
+    if (searchCard) searchCard.value = '';
+    if (dateFromEl) dateFromEl.value = '';
+    if (dateFromCard) dateFromCard.value = '';
+    if (dateToEl) dateToEl.value = '';
+    if (dateToCard) dateToCard.value = '';
+    if (sortEl) sortEl.value = 'asc';
+    if (sortCard) sortCard.value = 'asc';
+    displayLocalPurchaseHistory(
+        localPurchaseHistoryData || [],
+        localPaperInvoicesData || [],
+        localPaperInvoiceReturnsData || [],
+        localPurchaseHistoryCurrentBalance,
+        localCollectionsData || [],
+        {}
+    );
+}
+window.clearLocalPurchaseHistoryFilters = clearLocalPurchaseHistoryFilters;
+
 // تجميع سجل المشتريات حسب الفاتورة (سطر واحد لكل فاتورة)
 function groupLocalPurchaseHistoryByInvoice(history) {
     if (!history || !history.length) return [];
@@ -6426,12 +6465,18 @@ function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns
         const amount = parseFloat(col.amount || 0);
         allEntries.push({ sortDate: normDate(col.date || col.created_at), effect: -amount, labelText: 'تحصيل - ' + (col.collection_number || col.id), amountNum: amount, cells: ['<td>' + safeNum + '</td>', '<td class="text-success">' + amount.toFixed(2) + ' ج.م (تحصيل)</td>', '<td>' + dateStr + '</td>', '<td><span class="text-muted small">تحصيل</span></td>'] });
     });
-    // فلترة حسب البحث (رقم الفاتورة أو السعر الإجمالي) والفترة الزمنية
-    if (searchText || dateFrom || dateTo) {
+    // فلترة الفترة الزمنية: إظهار جميع المعاملات (فاتورة عادية، فاتورة ورقية، مرتجع ورقية، تحصيل) المسجلة ضمن من-إلى
+    if (dateFrom || dateTo) {
         allEntries = allEntries.filter(function(e) {
-            if (dateFrom && e.sortDate < dateFrom) return false;
-            if (dateTo && e.sortDate > dateTo) return false;
-            if (!searchText) return true;
+            var d = e.sortDate || '0000-00-00';
+            if (dateFrom && d < dateFrom) return false;
+            if (dateTo && d > dateTo) return false;
+            return true;
+        });
+    }
+    // فلترة حسب البحث (رقم الفاتورة أو السعر الإجمالي) إن وُجد
+    if (searchText) {
+        allEntries = allEntries.filter(function(e) {
             var labelMatch = (e.labelText || '').toLowerCase().indexOf(searchText) >= 0;
             var amountMatch = !isNaN(parseFloat(searchText)) && (Math.abs(e.amountNum - parseFloat(searchText)) < 0.01 || String(e.amountNum).indexOf(searchText) >= 0);
             return labelMatch || amountMatch;
