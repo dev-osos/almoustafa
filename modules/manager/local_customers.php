@@ -6089,6 +6089,10 @@ function loadLocalCustomerPurchaseHistory() {
             if (loadingCard) { loadingCard.classList.add('d-none'); loadingCard.style.cssText = 'display:none !important'; }
         }
         hideAllLoaders();
+        var errEl = document.getElementById('localPurchaseHistoryError');
+        if (errEl) { errEl.classList.add('d-none'); errEl.innerHTML = ''; }
+        var errCard = document.getElementById('localPurchaseHistoryCardError');
+        if (errCard) { errCard.classList.add('d-none'); errCard.innerHTML = ''; }
         
         if (data.success) {
             localPurchaseHistoryData = data.purchase_history || [];
@@ -6112,13 +6116,15 @@ function loadLocalCustomerPurchaseHistory() {
                     if (modalLoading) { modalLoading.classList.add('d-none'); modalLoading.style.cssText = 'display:none !important'; }
                     if (modalTable) {
                         modalTable.classList.remove('d-none');
-                        modalTable.style.cssText = 'display:block !important; visibility:visible !important;';
+                        modalTable.style.cssText = 'display:block !important; visibility:visible !important; min-height:120px;';
+                        modalTable.offsetHeight;
+                        if (modalTable.scrollIntoView) modalTable.scrollIntoView({ behavior: 'auto', block: 'nearest' });
                     }
                 }
                 var cardTable = document.getElementById('localPurchaseHistoryCardTable');
                 if (cardTable) {
                     cardTable.classList.remove('d-none');
-                    cardTable.style.cssText = 'display:block !important; visibility:visible !important;';
+                    cardTable.style.cssText = 'display:block !important; visibility:visible !important; min-height:120px;';
                 }
             }
             showTables();
