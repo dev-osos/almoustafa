@@ -403,13 +403,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 $productQuantity = null;
                 $productUnit = trim($productData['unit'] ?? 'قطعة');
-                $allowedUnits = ['قطعة', 'كرتونة', 'عبوة', 'شرينك', 'جرام', 'كيلو'];
+                $allowedUnits = ['قطعة', 'كرتونة', 'عبوة', 'شرينك', 'دسته', 'جرام', 'كيلو'];
                 if (!in_array($productUnit, $allowedUnits, true)) {
                     $productUnit = 'قطعة'; // القيمة الافتراضية
                 }
                 
                 // الوحدات التي يجب أن تكون أرقام صحيحة فقط
-                $integerUnits = ['كيلو', 'قطعة', 'جرام'];
+                $integerUnits = ['كيلو', 'قطعة', 'جرام', 'دسته'];
                 $mustBeInteger = in_array($productUnit, $integerUnits, true);
                 
                 if ($productQuantityInput !== '') {
@@ -777,7 +777,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $placeholders[] = '?';
                 } elseif (!empty($_POST['unit'])) {
                     $unit = trim($_POST['unit'] ?? 'قطعة');
-                    $allowedUnits = ['قطعة', 'كرتونة', 'عبوة', 'شرينك', 'جرام', 'كيلو'];
+                    $allowedUnits = ['قطعة', 'كرتونة', 'عبوة', 'شرينك', 'دسته', 'جرام', 'كيلو'];
                     if (!in_array($unit, $allowedUnits, true)) {
                         $unit = 'قطعة';
                     }
@@ -1033,7 +1033,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $name = trim($p['name'] ?? '');
                             if ($name === '') continue;
                             $qty = isset($p['quantity']) && $p['quantity'] !== '' ? (float)str_replace(',', '.', $p['quantity']) : null;
-                            $unit = in_array(trim($p['unit'] ?? 'قطعة'), ['قطعة','كرتونة','عبوة','شرينك','جرام','كيلو'], true) ? trim($p['unit']) : 'قطعة';
+                            $unit = in_array(trim($p['unit'] ?? 'قطعة'), ['قطعة','كرتونة','عبوة','شرينك','دسته','جرام','كيلو'], true) ? trim($p['unit']) : 'قطعة';
                             $price = isset($p['price']) && $p['price'] !== '' ? (float)str_replace(',', '.', $p['price']) : null;
                             $lineTotal = isset($p['line_total']) && $p['line_total'] !== '' ? (float)str_replace(',', '.', $p['line_total']) : null;
                             $products[] = ['name' => $name, 'quantity' => $qty, 'unit' => $unit, 'price' => $price, 'line_total' => $lineTotal];
@@ -1973,6 +1973,7 @@ setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
                                                 <option value="كيلو">كيلو</option>
                                                 <option value="جرام">جرام</option>
                                                 <option value="شرينك">شرينك</option>
+                                                <option value="دسته">دسته</option>
                                                 <option value="قطعة" selected>قطعة</option>
                                             </select>
                                         </div>
@@ -2242,7 +2243,8 @@ setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
                             <th>من</th>
                             <th>نوع الاوردر</th>
                             <th>الحاله</th>
-                            <th>تاريخ التسليم</th>
+                            <th>التسليم</th>
+                            
                             <th>إجراءات</th>
                         </tr>
                     </thead>
@@ -2585,7 +2587,7 @@ var editProductIndex = 0;
 function buildEditProductRow(idx, product) {
     var p = product || { name: '', quantity: '', unit: 'قطعة', price: '', line_total: '' };
     var unitVal = String(p.unit || 'قطعة').trim();
-    var opts = ['كرتونة','عبوة','كيلو','جرام','شرينك','قطعة'].map(function(u) {
+    var opts = ['كرتونة','عبوة','كيلو','جرام','شرينك','دسته','قطعة'].map(function(u) {
         return '<option value="' + u + '"' + (u === unitVal ? ' selected' : '') + '>' + u + '</option>';
     }).join('');
     var qtyVal = (p.quantity !== null && p.quantity !== undefined && p.quantity !== '') ? String(p.quantity) : '';
@@ -3148,6 +3150,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         <option value="كيلو">كيلو</option>
                         <option value="جرام">جرام</option>
                         <option value="شرينك">شرينك</option>
+                        <option value="دسته">دسته</option>
                         <option value="قطعة" selected>قطعة</option>
                     </select>
                 </div>
@@ -3296,7 +3299,7 @@ function updateQuantityStep(index) {
     
     const selectedUnit = unitSelect.value;
     // الوحدات التي يجب أن تكون أرقام صحيحة فقط
-    const integerUnits = ['كيلو', 'قطعة', 'جرام'];
+    const integerUnits = ['كيلو', 'قطعة', 'جرام', 'دسته'];
     const mustBeInteger = integerUnits.includes(selectedUnit);
     
     if (mustBeInteger) {
