@@ -5992,7 +5992,10 @@ function loadLocalCustomerPurchaseHistory() {
     
     // دالة مساعدة لعرض الخطأ
     function showError(message, details) {
-        if (loadingElement) loadingElement.classList.add('d-none');
+        var loadingModal = document.getElementById('localPurchaseHistoryLoading');
+        var loadingCard = document.getElementById('localPurchaseHistoryCardLoading');
+        if (loadingModal) loadingModal.classList.add('d-none');
+        if (loadingCard) loadingCard.classList.add('d-none');
         if (contentElement) contentElement.classList.add('d-none');
         if (errorElement) {
             let errorHtml = '<div class="alert alert-danger mb-0">';
@@ -6074,7 +6077,10 @@ function loadLocalCustomerPurchaseHistory() {
     })
     .then(data => {
         console.log('API Response received:', data);
-        if (loadingElement) loadingElement.classList.add('d-none');
+        var loadingModal = document.getElementById('localPurchaseHistoryLoading');
+        var loadingCard = document.getElementById('localPurchaseHistoryCardLoading');
+        if (loadingModal) loadingModal.classList.add('d-none');
+        if (loadingCard) loadingCard.classList.add('d-none');
         
         if (data.success) {
             localPurchaseHistoryData = data.purchase_history || [];
