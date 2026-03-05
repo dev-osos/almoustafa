@@ -136,6 +136,7 @@ foreach ($taskIds as $taskId) {
         $displayNotes = preg_replace('/\[ASSIGNED_WORKERS_IDS\]:\s*[0-9,]+/', '', $notes);
         $displayNotes = preg_replace('/\[PRODUCTS_JSON\]:[^\n]*/', '', $displayNotes);
         $displayNotes = preg_replace('/\[SHIPPING_FEES\]:\s*[0-9.]+/', '', $displayNotes);
+        $displayNotes = preg_replace('/\[DISCOUNT\]:\s*[0-9.]+/', '', $displayNotes);
         $displayNotes = preg_replace('/المنتج:\s*[^\n]+/', '', $displayNotes);
         $displayNotes = preg_replace('/الكمية:\s*[0-9.]+/', '', $displayNotes);
         $displayNotes = preg_replace('/^[^\n]*العامل المخصص[^\n]*\n?/m', '', $displayNotes);
@@ -146,6 +147,10 @@ foreach ($taskIds as $taskId) {
     $shippingFees = 0;
     if (!empty($notes) && preg_match('/\[SHIPPING_FEES\]:\s*([0-9.]+)/', $notes, $m)) {
         $shippingFees = (float) $m[1];
+    }
+    $discount = 0;
+    if (!empty($notes) && preg_match('/\[DISCOUNT\]:\s*([0-9.]+)/', $notes, $m)) {
+        $discount = (float) $m[1];
     }
 
     $receipts[] = [
@@ -158,6 +163,7 @@ foreach ($taskIds as $taskId) {
         'unit' => $unit,
         'displayNotes' => $displayNotes,
         'shippingFees' => $shippingFees,
+        'discount' => $discount,
     ];
 }
 
@@ -624,11 +630,18 @@ $singleReceipt = count($receipts) === 1;
                 </tr>
                 <?php 
                 $receiptShippingFees = isset($r['shippingFees']) ? (float)$r['shippingFees'] : 0;
-                $finalTotal = $grandTotal + $receiptShippingFees;
-                if ($receiptShippingFees > -1): ?>
+                $receiptDiscount = isset($r['discount']) ? (float)$r['discount'] : 0;
+                $finalTotal = $grandTotal + $receiptShippingFees - $receiptDiscount;
+                if ($receiptShippingFees > 0): ?>
                 <tr style="font-weight: 700; background-color: #f8f8f8;">
                     <td colspan="3" style="text-align: left; padding: 6px 5px;">رسوم الشحن</td>
                     <td style="text-align: center; padding: 6px 5px;"><?php echo number_format($receiptShippingFees, 2); ?> ج.م</td>
+                </tr>
+                <?php endif; ?>
+                <?php if ($receiptDiscount > 0): ?>
+                <tr style="font-weight: 700; background-color: #fff3e0;">
+                    <td colspan="3" style="text-align: left; padding: 6px 5px;">الخصم</td>
+                    <td style="text-align: center; padding: 6px 5px;">- <?php echo number_format($receiptDiscount, 2); ?> ج.م</td>
                 </tr>
                 <?php endif; ?>
                 <tr style="font-weight: 700; background-color: #e8f5e9;">
@@ -645,14 +658,24 @@ $singleReceipt = count($receipts) === 1;
             </tr>
             <?php 
             $receiptShippingFeesEmpty = isset($r['shippingFees']) ? (float)$r['shippingFees'] : 0;
-            if ($receiptShippingFeesEmpty > -1): ?>
+            $receiptDiscountEmpty = isset($r['discount']) ? (float)$r['discount'] : 0;
+            $finalEmpty = $receiptShippingFeesEmpty - $receiptDiscountEmpty;
+            if ($receiptShippingFeesEmpty > 0 || $receiptDiscountEmpty > 0): ?>
+            <?php if ($receiptShippingFeesEmpty > 0): ?>
             <tr style="font-weight: 700;">
                 <td>رسوم الشحن</td>
                 <td><?php echo number_format($receiptShippingFeesEmpty, 2); ?> ج.م</td>
             </tr>
+            <?php endif; ?>
+            <?php if ($receiptDiscountEmpty > 0): ?>
+            <tr style="font-weight: 700;">
+                <td>الخصم</td>
+                <td>- <?php echo number_format($receiptDiscountEmpty, 2); ?> ج.م</td>
+            </tr>
+            <?php endif; ?>
             <tr style="font-weight: 700; background-color: #e8f5e9;">
                 <td>الإجمالي النهائي</td>
-                <td><?php echo number_format($receiptShippingFeesEmpty, 2); ?> ج.م</td>
+                <td><?php echo number_format(max(0, $finalEmpty), 2); ?> ج.م</td>
             </tr>
             <?php endif; ?>
         </table>

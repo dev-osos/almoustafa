@@ -383,7 +383,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $shippingFees = (float) str_replace(',', '.', (string) $_POST['shipping_fees']);
             if ($shippingFees < 0) $shippingFees = 0;
         }
-        
+        $discount = 0;
+        if (isset($_POST['discount']) && $_POST['discount'] !== '') {
+            $discount = (float) str_replace(',', '.', (string) $_POST['discount']);
+            if ($discount < 0) $discount = 0;
+        }
+
         // الحصول على المنتجات المتعددة
         $products = [];
         if (isset($_POST['products']) && is_array($_POST['products'])) {
@@ -690,11 +695,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $notesParts[] = $assigneesInfo;
                 }
                 
-                // حفظ رسوم الشحن في notes لعرضها في الإيصال
+                // حفظ رسوم الشحن والخصم في notes لعرضها في الإيصال
                 if ($shippingFees > 0) {
                     $notesParts[] = '[SHIPPING_FEES]:' . $shippingFees;
                 }
-                
+                if ($discount > 0) {
+                    $notesParts[] = '[DISCOUNT]:' . $discount;
+                }
+
                 $notesValue = !empty($notesParts) ? implode("\n\n", $notesParts) : null;
                 if ($notesValue) {
                     $columns[] = 'notes';
@@ -1009,6 +1017,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $shippingFees = (float) str_replace(',', '.', (string) $_POST['shipping_fees']);
                         if ($shippingFees < 0) $shippingFees = 0;
                     }
+                    $discount = 0;
+                    if (isset($_POST['discount']) && $_POST['discount'] !== '') {
+                        $discount = (float) str_replace(',', '.', (string) $_POST['discount']);
+                        if ($discount < 0) $discount = 0;
+                    }
                     $products = [];
                     if (isset($_POST['products']) && is_array($_POST['products'])) {
                         foreach ($_POST['products'] as $p) {
@@ -1043,6 +1056,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                     if ($shippingFees > 0) {
                         $notesParts[] = '[SHIPPING_FEES]:' . $shippingFees;
+                    }
+                    if ($discount > 0) {
+                        $notesParts[] = '[DISCOUNT]:' . $discount;
                     }
                     $notesValue = !empty($notesParts) ? implode("\n\n", $notesParts) : null;
                     $firstProduct = !empty($products) ? $products[0] : null;
@@ -1151,6 +1167,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
             if (preg_match('/\[SHIPPING_FEES\]\s*:\s*([0-9.]+)/', $notes, $m)) {
                 $shippingFees = (float)$m[1];
             }
+            $discount = 0;
+            if (preg_match('/\[DISCOUNT\]\s*:\s*([0-9.]+)/', $notes, $m)) {
+                $discount = (float)$m[1];
+            }
             // استخراج العمال المخصصين
             if (preg_match('/\[ASSIGNED_WORKERS_IDS\]\s*:\s*([0-9,\s]+)/', $notes, $m)) {
                 $assignees = array_filter(array_map('intval', preg_split('/[\s,]+/', trim($m[1]), -1, PREG_SPLIT_NO_EMPTY)));
@@ -1164,6 +1184,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
                 $details = preg_replace('/العمال المخصصون:[^\n]*/', '', $details);
                 $details = preg_replace('/العامل المخصص:[^\n]*/', '', $details);
                 $details = preg_replace('/المنتج:\s*[^\n]+/m', '', $details);
+                $details = preg_replace('/\[SHIPPING_FEES\]\s*:\s*[0-9.]+/', '', $details);
+                $details = preg_replace('/\[DISCOUNT\]\s*:\s*[0-9.]+/', '', $details);
                 $details = preg_replace('/\n\s*\n\s*\n+/', "\n\n", trim($details));
             }
             // تنسيق تاريخ الاستحقاق لـ input type="date" (YYYY-MM-DD)
@@ -1189,7 +1211,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
                     'details' => $details,
                     'products' => $products,
                     'assignees' => array_values($assignees),
-                    'shipping_fees' => $shippingFees
+                    'shipping_fees' => $shippingFees,
+                    'discount' => $discount
                 ]
             ], JSON_UNESCAPED_UNICODE);
             exit;
@@ -1970,20 +1993,31 @@ setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
                                 <span class="input-group-text">ج.م</span>
                             </div>
                         </div>
+                        <div class="col-12 col-md-6 col-lg-4 mt-2">
+                            <label class="form-label" for="createTaskDiscount">الخصم (ج.م)</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" name="discount" id="createTaskDiscount" step="0.01" min="0" placeholder="0.00" value="0">
+                                <span class="input-group-text">ج.م</span>
+                            </div>
+                        </div>
                         <div class="col-12 mt-3">
                             <div class="card bg-light border-primary border-opacity-25" id="createTaskTotalSummaryCard">
                                 <div class="card-body py-3">
                                     <h6 class="card-title mb-2"><i class="bi bi-calculator me-2"></i>ملخص الإجمالي النهائي</h6>
                                     <div class="row g-2 small">
-                                        <div class="col-6 col-md-4">
+                                        <div class="col-6 col-md-3">
                                             <span class="text-muted">إجمالي المنتجات:</span>
                                             <strong class="d-block" id="createTaskSubtotalDisplay">0.00 ج.م</strong>
                                         </div>
-                                        <div class="col-6 col-md-4">
+                                        <div class="col-6 col-md-3">
                                             <span class="text-muted">رسوم الشحن:</span>
                                             <strong class="d-block" id="createTaskShippingDisplay">0.00 ج.م</strong>
                                         </div>
-                                        <div class="col-12 col-md-4">
+                                        <div class="col-6 col-md-3">
+                                            <span class="text-muted">الخصم:</span>
+                                            <strong class="d-block" id="createTaskDiscountDisplay">0.00 ج.م</strong>
+                                        </div>
+                                        <div class="col-6 col-md-3">
                                             <span class="text-muted">الإجمالي النهائي:</span>
                                             <strong class="d-block fs-5 text-success" id="createTaskFinalTotalDisplay">0.00 ج.م</strong>
                                         </div>
@@ -2058,20 +2092,31 @@ setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
                                 <span class="input-group-text">ج.م</span>
                             </div>
                         </div>
+                        <div class="col-12 col-md-6 col-lg-4">
+                            <label class="form-label" for="editTaskDiscount">الخصم (ج.م)</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" name="discount" id="editTaskDiscount" step="0.01" min="0" placeholder="0.00" value="0">
+                                <span class="input-group-text">ج.م</span>
+                            </div>
+                        </div>
                         <div class="col-12 mt-3">
                             <div class="card bg-light border-secondary border-opacity-25" id="editTaskTotalSummaryCard">
                                 <div class="card-body py-3">
                                     <h6 class="card-title mb-2"><i class="bi bi-calculator me-2"></i>ملخص الإجمالي النهائي</h6>
                                     <div class="row g-2 small">
-                                        <div class="col-6 col-md-4">
+                                        <div class="col-6 col-md-3">
                                             <span class="text-muted">إجمالي المنتجات:</span>
                                             <strong class="d-block" id="editTaskSubtotalDisplay">0.00 ج.م</strong>
                                         </div>
-                                        <div class="col-6 col-md-4">
+                                        <div class="col-6 col-md-3">
                                             <span class="text-muted">رسوم الشحن:</span>
                                             <strong class="d-block" id="editTaskShippingDisplay">0.00 ج.م</strong>
                                         </div>
-                                        <div class="col-12 col-md-4">
+                                        <div class="col-6 col-md-3">
+                                            <span class="text-muted">الخصم:</span>
+                                            <strong class="d-block" id="editTaskDiscountDisplay">0.00 ج.م</strong>
+                                        </div>
+                                        <div class="col-6 col-md-3">
                                             <span class="text-muted">الإجمالي النهائي:</span>
                                             <strong class="d-block fs-5 text-success" id="editTaskFinalTotalDisplay">0.00 ج.م</strong>
                                         </div>
@@ -2536,8 +2581,10 @@ function updateEditTaskSummary() {
     var container = document.getElementById('editProductsContainer');
     var subEl = document.getElementById('editTaskSubtotalDisplay');
     var shipEl = document.getElementById('editTaskShippingDisplay');
+    var discountEl = document.getElementById('editTaskDiscountDisplay');
     var finalEl = document.getElementById('editTaskFinalTotalDisplay');
     var shipInput = document.getElementById('editTaskShippingFees');
+    var discountInput = document.getElementById('editTaskDiscount');
     if (!container || !subEl || !shipEl || !finalEl) return;
     var subtotal = 0;
     container.querySelectorAll('.edit-product-line-total').forEach(function(input) {
@@ -2545,9 +2592,11 @@ function updateEditTaskSummary() {
         if (!isNaN(v) && v >= 0) subtotal += v;
     });
     var shipping = (shipInput && !isNaN(parseFloat(shipInput.value))) ? Math.max(0, parseFloat(shipInput.value)) : 0;
-    var finalTotal = subtotal + shipping;
+    var discount = (discountInput && !isNaN(parseFloat(discountInput.value))) ? Math.max(0, parseFloat(discountInput.value)) : 0;
+    var finalTotal = Math.max(0, subtotal + shipping - discount);
     subEl.textContent = subtotal.toFixed(2) + ' ج.م';
     shipEl.textContent = shipping.toFixed(2) + ' ج.م';
+    if (discountEl) discountEl.textContent = discount.toFixed(2) + ' ج.م';
     finalEl.textContent = finalTotal.toFixed(2) + ' ج.م';
 }
 function delegateEditSummaryInputs() {
@@ -2555,11 +2604,11 @@ function delegateEditSummaryInputs() {
     if (!form || form._editSummaryDelegated) return;
     form._editSummaryDelegated = true;
     form.addEventListener('input', function(e) {
-        if (e.target.matches('.edit-product-line-total, .edit-product-price, .edit-product-qty') || e.target.id === 'editTaskShippingFees')
+        if (e.target.matches('.edit-product-line-total, .edit-product-price, .edit-product-qty') || e.target.id === 'editTaskShippingFees' || e.target.id === 'editTaskDiscount')
             updateEditTaskSummary();
     });
     form.addEventListener('change', function(e) {
-        if (e.target.matches('.edit-product-line-total, .edit-product-price, .edit-product-qty') || e.target.id === 'editTaskShippingFees')
+        if (e.target.matches('.edit-product-line-total, .edit-product-price, .edit-product-qty') || e.target.id === 'editTaskShippingFees' || e.target.id === 'editTaskDiscount')
             updateEditTaskSummary();
     });
 }
@@ -2614,6 +2663,8 @@ window.openEditTaskModal = function(taskId) {
                 var shippingEl = document.getElementById('editTaskShippingFees');
                 if (shippingEl && typeof t.shipping_fees === 'number') shippingEl.value = t.shipping_fees;
                 if (shippingEl && (typeof t.shipping_fees === 'string' && t.shipping_fees !== '')) shippingEl.value = t.shipping_fees;
+                var discountEl = document.getElementById('editTaskDiscount');
+                if (discountEl && (typeof t.discount === 'number' || (typeof t.discount === 'string' && t.discount !== ''))) discountEl.value = t.discount;
                 var products = Array.isArray(t.products) ? t.products : [];
                 if (products.length === 0) products = [{}];
                 products.forEach(function(p) {
@@ -3084,12 +3135,14 @@ document.addEventListener('DOMContentLoaded', function () {
     // تحديث الإجمالي للصفوف الموجودة عند التحميل
     productsContainer.querySelectorAll('.product-row').forEach(updateProductLineTotal);
     
-    // ملخص الإجمالي النهائي (إجمالي المنتجات + رسوم الشحن)
+    // ملخص الإجمالي النهائي (إجمالي المنتجات + رسوم الشحن - الخصم)
     function updateCreateTaskSummary() {
         var subtotalEl = document.getElementById('createTaskSubtotalDisplay');
         var shippingEl = document.getElementById('createTaskShippingDisplay');
+        var discountEl = document.getElementById('createTaskDiscountDisplay');
         var finalEl = document.getElementById('createTaskFinalTotalDisplay');
         var shippingInput = document.getElementById('createTaskShippingFees');
+        var discountInput = document.getElementById('createTaskDiscount');
         if (!subtotalEl || !shippingEl || !finalEl) return;
         var subtotal = 0;
         productsContainer.querySelectorAll('.product-line-total-input').forEach(function(inp) {
@@ -3101,14 +3154,24 @@ document.addEventListener('DOMContentLoaded', function () {
             var v = parseFloat(shippingInput.value || '0');
             if (!isNaN(v) && v >= 0) shipping = v;
         }
-        var finalTotal = subtotal + shipping;
+        var discount = 0;
+        if (discountInput) {
+            var v = parseFloat(discountInput.value || '0');
+            if (!isNaN(v) && v >= 0) discount = v;
+        }
+        var finalTotal = Math.max(0, subtotal + shipping - discount);
         subtotalEl.textContent = subtotal.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
         shippingEl.textContent = shipping.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+        if (discountEl) discountEl.textContent = discount.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
         finalEl.textContent = finalTotal.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
     }
     if (document.getElementById('createTaskShippingFees')) {
         document.getElementById('createTaskShippingFees').addEventListener('input', updateCreateTaskSummary);
         document.getElementById('createTaskShippingFees').addEventListener('change', updateCreateTaskSummary);
+    }
+    if (document.getElementById('createTaskDiscount')) {
+        document.getElementById('createTaskDiscount').addEventListener('input', updateCreateTaskSummary);
+        document.getElementById('createTaskDiscount').addEventListener('change', updateCreateTaskSummary);
     }
     updateCreateTaskSummary();
 });
