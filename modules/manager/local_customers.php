@@ -6270,7 +6270,7 @@ function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns
         const safeNum = (inv.invoice_number || '-').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const dateStr = (inv.invoice_date || '-').toString().substring(0, 10);
         const amount = parseFloat(inv.total_amount || 0);
-        const actionsCell = '<td><button type="button" class="btn btn-sm btn-outline-primary" onclick="showLocalInvoiceDetailsModal(\'' + String(inv.invoice_number || '').replace(/'/g, "\\'") + '\')" title="عرض الفاتورة"><i class="bi bi-eye me-1"></i>عرض الفاتورة</button></td>';
+        const actionsCell = '<td><button type="button" class="btn btn-sm btn-outline-primary" onclick="showLocalInvoiceDetailsModal(\'' + String(inv.invoice_number || '').replace(/'/g, "\\'") + '\')" title="عرض الفاتورة"><i class="bi bi-eye me-1"></i></button></td>';
         allEntries.push({ sortDate: normDate(inv.invoice_date), effect: amount, cells: ['<td>' + safeNum + '</td>', '<td>' + amount.toFixed(2) + ' ج.م</td>', '<td>' + dateStr + '</td>', actionsCell] });
     });
     paperInvoices.forEach(function(pi) {
@@ -6278,7 +6278,7 @@ function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns
         const dateStr = (pi.invoice_date || pi.created_at || '-').toString().substring(0, 10);
         const amount = parseFloat(pi.total_amount || 0);
         const viewBtn = pi.image_path
-            ? '<button type="button" class="btn btn-sm btn-outline-primary" onclick="showPaperInvoiceImage(' + parseInt(pi.id, 10) + ')" title="عرض صورة الفاتورة الورقية"><i class="bi bi-image me-1"></i>عرض الفاتورة</button>'
+            ? '<button type="button" class="btn btn-sm btn-outline-primary" onclick="showPaperInvoiceImage(' + parseInt(pi.id, 10) + ')" title="عرض صورة الفاتورة الورقية"><i class="bi bi-image me-1"></i></button>'
             : '<span class="text-muted small">لا توجد صورة</span>';
         allEntries.push({ sortDate: normDate(pi.invoice_date || pi.created_at), effect: -amount, cells: ['<td>' + safeNum + '</td>', '<td>' + amount.toFixed(2) + ' ج.م</td>', '<td>' + dateStr + '</td>', '<td>' + viewBtn + '</td>'] });
     });
