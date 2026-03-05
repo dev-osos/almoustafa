@@ -2765,7 +2765,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-primary" id="printLocalCustomerStatementBtn" onclick="printLocalCustomerStatement()" style="display: none;">
+                <button type="button" class="btn btn-primary" id="printLocalCustomerStatementBtn" onclick="printLocalCustomerStatement()">
                     <i class="bi bi-printer me-1"></i>طباعة كشف الحساب
                 </button>
                 <button type="button" class="btn btn-success" id="localCustomerReturnBtn" onclick="openLocalCustomerReturnModal()" style="display: inline-block;">
@@ -6026,21 +6026,19 @@ function loadLocalCustomerPurchaseHistory() {
         contentElement.style.visibility = 'visible';
     }
     
-    // التحقق من معرف العميل
-    if (!currentLocalCustomerId) {
+    // التحقق من معرف العميل (استخدام customerIdToUse لضمان استخدام القيمة من window إن لزم)
+    if (!customerIdToUse) {
         showError('معرف العميل غير محدد', 'لم يتم تحديد معرف العميل');
         return;
     }
-    
-    // التأكد من أن currentLocalCustomerId رقم صحيح
-    if (isNaN(currentLocalCustomerId) || currentLocalCustomerId <= 0) {
-        showError('معرف العميل غير صالح', 'معرف العميل: ' + currentLocalCustomerId);
+    if (isNaN(customerIdToUse) || customerIdToUse <= 0) {
+        showError('معرف العميل غير صالح', 'معرف العميل: ' + customerIdToUse);
         return;
     }
     
     // جلب البيانات من API (سنستخدم نفس API مع تحديد نوع العميل)
-    const apiUrl = basePath + '/api/customer_purchase_history.php?action=get_history&customer_id=' + encodeURIComponent(currentLocalCustomerId) + '&type=local';
-    console.log('Loading purchase history for customer ID:', currentLocalCustomerId, 'URL:', apiUrl);
+    const apiUrl = basePath + '/api/customer_purchase_history.php?action=get_history&customer_id=' + encodeURIComponent(customerIdToUse) + '&type=local';
+    console.log('Loading purchase history for customer ID:', customerIdToUse, 'URL:', apiUrl);
     
     var abortController = new AbortController();
     var timeoutId = setTimeout(function() {
@@ -6278,6 +6276,7 @@ function localOpenReturnForInvoiceFromDetails() {
 // دالة عرض سجل المشتريات (سطر واحد لكل فاتورة) + الفواتير الورقية + مرتجعات الفواتير الورقية + التحصيلات + الرصيد بعد كل معاملة
 // نملأ جدولي الكارد (موبايل) والمودال (كمبيوتر) معاً لضمان ظهور الفواتير على الهاتف
 function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns, currentBalance, collections) {
+    history = Array.isArray(history) ? history : (history ? [history] : []);
     paperInvoices = paperInvoices || [];
     paperInvoiceReturns = paperInvoiceReturns || [];
     collections = collections || [];
@@ -6304,7 +6303,7 @@ function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns
     if (tableBodyCard) tableBodyCard.innerHTML = '';
     if (tableBodyModal) tableBodyModal.innerHTML = '';
     
-    const invoices = (history && history.length) ? groupLocalPurchaseHistoryByInvoice(history) : [];
+    const invoices = history.length ? groupLocalPurchaseHistoryByInvoice(history) : [];
     const allEntries = [];
     function normDate(d) {
         if (!d) return '0000-00-00';
@@ -6316,10 +6315,12 @@ function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns
         return n.toFixed(2) + ' ج.م';
     }
     invoices.forEach(function(inv) {
-        const safeNum = (inv.invoice_number || '-').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const invNum = String(inv.invoice_number || '-');
+        const safeNum = invNum.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         const dateStr = (inv.invoice_date || '-').toString().substring(0, 10);
         const amount = parseFloat(inv.total_amount || 0);
-        const actionsCell = '<td><button type="button" class="btn btn-sm btn-outline-primary" onclick="showLocalInvoiceDetailsModal(\'' + String(inv.invoice_number || '').replace(/'/g, "\\'") + '\')" title="عرض الفاتورة"><i class="bi bi-eye me-1"></i></button></td>';
+        const safeInvNumAttr = invNum.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        const actionsCell = '<td><button type="button" class="btn btn-sm btn-outline-primary" onclick="showLocalInvoiceDetailsModal(\'' + safeInvNumAttr + '\')" title="عرض الفاتورة"><i class="bi bi-eye me-1"></i></button></td>';
         allEntries.push({ sortDate: normDate(inv.invoice_date), effect: amount, cells: ['<td>' + safeNum + '</td>', '<td>' + amount.toFixed(2) + ' ج.م</td>', '<td>' + dateStr + '</td>', actionsCell] });
     });
     paperInvoices.forEach(function(pi) {
