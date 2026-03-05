@@ -2238,7 +2238,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                                 </button>
                                             </li>
                                             <li>
-                                                <button type="button" class="dropdown-item local-customer-purchase-history-btn" onclick="showLocalCustomerPurchaseHistoryModal(this)" data-customer-id="<?php echo $custId; ?>" data-customer-name="<?php echo $custName; ?>" data-customer-phone="<?php echo $custPhone; ?>" data-customer-address="<?php echo $custAddress; ?>">
+                                                <button type="button" class="dropdown-item local-customer-purchase-history-btn" onclick="showLocalCustomerPurchaseHistoryModal(this)" data-customer-id="<?php echo $custId; ?>" data-customer-name="<?php echo $custName; ?>" data-customer-phone="<?php echo $custPhone; ?>" data-customer-address="<?php echo $custAddress; ?>" data-customer-balance="<?php echo $rawBalance; ?>" data-customer-balance-formatted="<?php echo htmlspecialchars($formattedBalance); ?>">
                                                     <i class="bi bi-receipt me-2"></i>سجل المشتريات
                                                 </button>
                                             </li>
@@ -2691,17 +2691,21 @@ document.addEventListener('DOMContentLoaded', function() {
                 <div class="card mb-3">
                     <div class="card-body">
                         <div class="row">
-                            <div class="col-md-4">
+                            <div class="col-6 col-md-3">
                                 <div class="text-muted small">العميل</div>
                                 <div class="fs-5 fw-bold" id="localPurchaseHistoryCustomerName">-</div>
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-6 col-md-3">
                                 <div class="text-muted small">الهاتف</div>
                                 <div id="localPurchaseHistoryCustomerPhone">-</div>
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-6 col-md-3">
                                 <div class="text-muted small">العنوان</div>
                                 <div id="localPurchaseHistoryCustomerAddress">-</div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="text-muted small">رصيد العميل</div>
+                                <div id="localPurchaseHistoryCustomerBalance" class="fw-semibold">-</div>
                             </div>
                         </div>
                     </div>
@@ -2711,19 +2715,30 @@ document.addEventListener('DOMContentLoaded', function() {
                 <div class="card mb-3">
                     <div class="card-body">
                         <div class="row g-2">
-                            <div class="col-md-4">
+                            <div class="col-12 col-md-6 col-lg-3">
+                                <label class="form-label small text-muted mb-0">رقم الفاتورة أو السعر الإجمالي</label>
                                 <input type="text" class="form-control form-control-sm" 
-                                       id="localPurchaseHistorySearchProduct" 
-                                       placeholder="البحث باسم المنتج">
+                                       id="localPurchaseHistorySearchInvoiceOrAmount" 
+                                       placeholder="رقم الفاتورة أو المبلغ">
                             </div>
-                            <div class="col-md-4">
-                                <input type="text" class="form-control form-control-sm" 
-                                       id="localPurchaseHistorySearchBatch" 
-                                       placeholder="البحث برقم التشغيلة">
+                            <div class="col-6 col-md-6 col-lg-2">
+                                <label class="form-label small text-muted mb-0">من تاريخ</label>
+                                <input type="date" class="form-control form-control-sm" id="localPurchaseHistoryDateFrom">
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-6 col-md-6 col-lg-2">
+                                <label class="form-label small text-muted mb-0">إلى تاريخ</label>
+                                <input type="date" class="form-control form-control-sm" id="localPurchaseHistoryDateTo">
+                            </div>
+                            <div class="col-6 col-md-6 col-lg-2">
+                                <label class="form-label small text-muted mb-0">الترتيب</label>
+                                <select class="form-select form-select-sm" id="localPurchaseHistorySortOrder">
+                                    <option value="asc">تصاعدي (الأقدم أولاً)</option>
+                                    <option value="desc">تنازلي (الأحدث أولاً)</option>
+                                </select>
+                            </div>
+                            <div class="col-6 col-md-6 col-lg-2 d-flex align-items-end">
                                 <button type="button" class="btn btn-primary btn-sm w-100" 
-                                        onclick="loadLocalCustomerPurchaseHistory()">
+                                        onclick="applyLocalPurchaseHistoryFilters()">
                                     <i class="bi bi-search me-1"></i>بحث
                                 </button>
                             </div>
@@ -2802,6 +2817,10 @@ document.addEventListener('DOMContentLoaded', function() {
                         <div class="text-muted small">العنوان</div>
                         <div id="localPurchaseHistoryCardCustomerAddress">-</div>
                     </div>
+                    <div class="col-6 mb-2">
+                        <div class="text-muted small">رصيد العميل</div>
+                        <div id="localPurchaseHistoryCardCustomerBalance" class="fw-semibold">-</div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -2811,18 +2830,30 @@ document.addEventListener('DOMContentLoaded', function() {
             <div class="card-body">
                 <div class="row g-2">
                     <div class="col-12">
+                        <label class="form-label small text-muted mb-0">رقم الفاتورة أو السعر الإجمالي</label>
                         <input type="text" class="form-control form-control-sm" 
-                               id="localPurchaseHistoryCardSearchProduct" 
-                               placeholder="البحث باسم المنتج">
+                               id="localPurchaseHistoryCardSearchInvoiceOrAmount" 
+                               placeholder="رقم الفاتورة أو المبلغ">
                     </div>
-                    <div class="col-12">
-                        <input type="text" class="form-control form-control-sm" 
-                               id="localPurchaseHistoryCardSearchBatch" 
-                               placeholder="البحث برقم التشغيلة">
+                    <div class="col-6">
+                        <label class="form-label small text-muted mb-0">من تاريخ</label>
+                        <input type="date" class="form-control form-control-sm" id="localPurchaseHistoryCardDateFrom">
                     </div>
-                    <div class="col-12">
+                    <div class="col-6">
+                        <label class="form-label small text-muted mb-0">إلى تاريخ</label>
+                        <input type="date" class="form-control form-control-sm" id="localPurchaseHistoryCardDateTo">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small text-muted mb-0">الترتيب</label>
+                        <select class="form-select form-select-sm" id="localPurchaseHistoryCardSortOrder">
+                            <option value="asc">تصاعدي (الأقدم أولاً)</option>
+                            <option value="desc">تنازلي (الأحدث أولاً)</option>
+                        </select>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small text-muted mb-0 d-block">&nbsp;</label>
                         <button type="button" class="btn btn-primary btn-sm w-100" 
-                                onclick="loadLocalCustomerPurchaseHistory()">
+                                onclick="applyLocalPurchaseHistoryFilters()">
                             <i class="bi bi-search me-1"></i>بحث
                         </button>
                     </div>
@@ -4361,6 +4392,7 @@ window.showLocalCustomerPurchaseHistoryModal = function(button) {
     const customerName = button.getAttribute('data-customer-name');
     const customerPhone = button.getAttribute('data-customer-phone') || '-';
     const customerAddress = button.getAttribute('data-customer-address') || '-';
+    const customerBalanceFormatted = button.getAttribute('data-customer-balance-formatted') || '-';
     
     if (!customerId) return;
     
@@ -4396,9 +4428,11 @@ window.showLocalCustomerPurchaseHistoryModal = function(button) {
         const errorElement = card.querySelector('#localPurchaseHistoryCardError');
         
         // تحديث معلومات العميل (اختياري إن وُجد العنصر)
+        const balanceElementCard = card.querySelector('#localPurchaseHistoryCardCustomerBalance');
         if (nameElement) nameElement.textContent = customerName || '-';
         if (phoneElement) phoneElement.textContent = customerPhone || '-';
         if (addressElement) addressElement.textContent = customerAddress || '-';
+        if (balanceElementCard) balanceElementCard.textContent = customerBalanceFormatted || '-';
         
         if (loadingElement) {
             loadingElement.classList.remove('d-none');
@@ -4470,6 +4504,7 @@ window.showLocalCustomerPurchaseHistoryModal = function(button) {
             const nameElement = document.getElementById('localPurchaseHistoryCustomerName');
             const phoneElement = document.getElementById('localPurchaseHistoryCustomerPhone');
             const addressElement = document.getElementById('localPurchaseHistoryCustomerAddress');
+            const balanceElement = document.getElementById('localPurchaseHistoryCustomerBalance');
             const loadingElement = document.getElementById('localPurchaseHistoryLoading');
             const contentElement = document.getElementById('localPurchaseHistoryTable');
             let errorElement = document.getElementById('localPurchaseHistoryError');
@@ -4508,6 +4543,7 @@ window.showLocalCustomerPurchaseHistoryModal = function(button) {
             nameElement.textContent = customerName || '-';
             phoneElement.textContent = customerPhone || '-';
             addressElement.textContent = customerAddress || '-';
+            if (balanceElement) balanceElement.textContent = customerBalanceFormatted || '-';
             
             // إظهار loading (الجدول يبقى ظاهراً بجسمه الفارغ)
             loadingElement.classList.remove('d-none');
@@ -5272,6 +5308,10 @@ document.addEventListener('DOMContentLoaded', function () {
 var currentLocalCustomerId = null;
 var currentLocalCustomerName = null;
 var localPurchaseHistoryData = [];
+var localPaperInvoicesData = [];
+var localPaperInvoiceReturnsData = [];
+var localCollectionsData = [];
+var localPurchaseHistoryCurrentBalance = 0;
 var localSelectedItemsForReturn = [];
 var localReturnLoadedData = null; // { invoice: {}, items: [] } بعد تحميل الفاتورة برقمها
 
@@ -6089,14 +6129,26 @@ function loadLocalCustomerPurchaseHistory() {
         var errCard = document.getElementById('localPurchaseHistoryCardError');
         if (errCard) { errCard.classList.add('d-none'); errCard.innerHTML = ''; }
         
+        // تحديث رصيد العميل في المودال والبطاقة من الاستجابة
+        var balanceFromApi = (data.customer && data.customer.balance !== undefined) ? parseFloat(data.customer.balance) : null;
+        if (balanceFromApi !== null && !isNaN(balanceFromApi)) {
+            var balanceStr = balanceFromApi.toFixed(2) + ' ج.م';
+            var balanceElModal = document.getElementById('localPurchaseHistoryCustomerBalance');
+            var balanceElCard = document.getElementById('localPurchaseHistoryCardCustomerBalance');
+            if (balanceElModal) balanceElModal.textContent = balanceStr;
+            if (balanceElCard) balanceElCard.textContent = balanceStr;
+        }
+        
         if (data.success) {
             localPurchaseHistoryData = data.purchase_history || [];
-            var localPaperInvoicesData = data.paper_invoices || [];
-            var localPaperInvoiceReturnsData = data.paper_invoice_returns || [];
+            localPaperInvoicesData = data.paper_invoices || [];
+            localPaperInvoiceReturnsData = data.paper_invoice_returns || [];
+            localCollectionsData = data.collections || [];
+            localPurchaseHistoryCurrentBalance = (data.customer && data.customer.balance !== undefined) ? parseFloat(data.customer.balance) : 0;
             console.log('Purchase history data:', localPurchaseHistoryData.length, 'items; paper invoices:', localPaperInvoicesData.length, 'paper returns:', localPaperInvoiceReturnsData.length);
             
             try {
-                displayLocalPurchaseHistory(localPurchaseHistoryData, localPaperInvoicesData, localPaperInvoiceReturnsData, (data.customer && data.customer.balance !== undefined) ? data.customer.balance : 0, data.collections || []);
+                displayLocalPurchaseHistory(localPurchaseHistoryData, localPaperInvoicesData, localPaperInvoiceReturnsData, localPurchaseHistoryCurrentBalance, localCollectionsData);
             } catch (displayErr) {
                 console.error('displayLocalPurchaseHistory error:', displayErr);
                 if (typeof showError === 'function') showError('خطأ في عرض البيانات', displayErr.message || String(displayErr));
@@ -6159,6 +6211,28 @@ function loadLocalCustomerPurchaseHistory() {
 
 // تعيين الدالة على window لضمان إمكانية استدعائها من أي مكان
 window.loadLocalCustomerPurchaseHistory = loadLocalCustomerPurchaseHistory;
+
+// تطبيق فلتر سجل المشتريات (بحث + فترة زمنية + ترتيب) وإعادة عرض الجدول
+function applyLocalPurchaseHistoryFilters() {
+    var searchEl = document.getElementById('localPurchaseHistorySearchInvoiceOrAmount') || document.getElementById('localPurchaseHistoryCardSearchInvoiceOrAmount');
+    var dateFromEl = document.getElementById('localPurchaseHistoryDateFrom') || document.getElementById('localPurchaseHistoryCardDateFrom');
+    var dateToEl = document.getElementById('localPurchaseHistoryDateTo') || document.getElementById('localPurchaseHistoryCardDateTo');
+    var sortEl = document.getElementById('localPurchaseHistorySortOrder') || document.getElementById('localPurchaseHistoryCardSortOrder');
+    var searchText = searchEl ? searchEl.value.trim() : '';
+    var dateFrom = dateFromEl ? dateFromEl.value.trim() : '';
+    var dateTo = dateToEl ? dateToEl.value.trim() : '';
+    var sortOrder = sortEl ? sortEl.value : 'asc';
+    var opts = { searchText: searchText, dateFrom: dateFrom, dateTo: dateTo, sortOrder: sortOrder };
+    displayLocalPurchaseHistory(
+        localPurchaseHistoryData || [],
+        localPaperInvoicesData || [],
+        localPaperInvoiceReturnsData || [],
+        localPurchaseHistoryCurrentBalance,
+        localCollectionsData || [],
+        opts
+    );
+}
+window.applyLocalPurchaseHistoryFilters = applyLocalPurchaseHistoryFilters;
 
 // تجميع سجل المشتريات حسب الفاتورة (سطر واحد لكل فاتورة)
 function groupLocalPurchaseHistoryByInvoice(history) {
@@ -6274,13 +6348,18 @@ function localOpenReturnForInvoiceFromDetails() {
 }
 
 // دالة عرض سجل المشتريات (سطر واحد لكل فاتورة) + الفواتير الورقية + مرتجعات الفواتير الورقية + التحصيلات + الرصيد بعد كل معاملة
-// نملأ جدولي الكارد (موبايل) والمودال (كمبيوتر) معاً لضمان ظهور الفواتير على الهاتف
-function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns, currentBalance, collections) {
+// خيارات الفلتر (معامل سادس اختياري): { searchText, dateFrom, dateTo, sortOrder: 'asc'|'desc' }
+function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns, currentBalance, collections, filterOptions) {
     history = Array.isArray(history) ? history : (history ? [history] : []);
     paperInvoices = paperInvoices || [];
     paperInvoiceReturns = paperInvoiceReturns || [];
     collections = collections || [];
     currentBalance = parseFloat(currentBalance) || 0;
+    var opts = filterOptions || {};
+    var searchText = String(opts.searchText || '').trim().toLowerCase();
+    var dateFrom = String(opts.dateFrom || '').trim();
+    var dateTo = String(opts.dateTo || '').trim();
+    var sortOrder = (opts.sortOrder === 'desc') ? 'desc' : 'asc';
     let tableBodyCard = document.getElementById('localPurchaseHistoryCardTableBody');
     let tableBodyModal = document.getElementById('localPurchaseHistoryTableBody');
     
@@ -6321,7 +6400,7 @@ function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns
         const amount = parseFloat(inv.total_amount || 0);
         const safeInvNumAttr = invNum.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
         const actionsCell = '<td><button type="button" class="btn btn-sm btn-outline-primary" onclick="showLocalInvoiceDetailsModal(\'' + safeInvNumAttr + '\')" title="عرض الفاتورة"><i class="bi bi-eye me-1"></i></button></td>';
-        allEntries.push({ sortDate: normDate(inv.invoice_date), effect: amount, cells: ['<td>' + safeNum + '</td>', '<td>' + amount.toFixed(2) + ' ج.م</td>', '<td>' + dateStr + '</td>', actionsCell] });
+        allEntries.push({ sortDate: normDate(inv.invoice_date), effect: amount, labelText: invNum, amountNum: amount, cells: ['<td>' + safeNum + '</td>', '<td>' + amount.toFixed(2) + ' ج.م</td>', '<td>' + dateStr + '</td>', actionsCell] });
     });
     paperInvoices.forEach(function(pi) {
         const safeNum = (pi.invoice_number || 'ورقية-' + pi.id).replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -6330,7 +6409,7 @@ function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns
         const viewBtn = pi.image_path
             ? '<button type="button" class="btn btn-sm btn-outline-primary" onclick="showPaperInvoiceImage(' + parseInt(pi.id, 10) + ')" title="عرض صورة الفاتورة الورقية"><i class="bi bi-image me-1"></i></button>'
             : '<span class="text-muted small">لا توجد صورة</span>';
-        allEntries.push({ sortDate: normDate(pi.invoice_date || pi.created_at), effect: -amount, cells: ['<td>' + safeNum + '</td>', '<td>' + amount.toFixed(2) + ' ج.م</td>', '<td>' + dateStr + '</td>', '<td>' + viewBtn + '</td>'] });
+        allEntries.push({ sortDate: normDate(pi.invoice_date || pi.created_at), effect: -amount, labelText: (pi.invoice_number || 'ورقية-' + pi.id), amountNum: amount, cells: ['<td>' + safeNum + '</td>', '<td>' + amount.toFixed(2) + ' ج.م</td>', '<td>' + dateStr + '</td>', '<td>' + viewBtn + '</td>'] });
     });
     paperInvoiceReturns.forEach(function(pr) {
         const safeNum = ('مرتجع ورقية - ' + (pr.invoice_number || pr.id)).replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -6339,16 +6418,29 @@ function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns
         const viewBtn = pr.image_path
             ? '<button type="button" class="btn btn-sm btn-outline-danger" onclick="showPaperInvoiceReturnImage(' + parseInt(pr.id, 10) + ')" title="عرض صورة المرتجع"><i class="bi bi-image me-1"></i></button>'
             : '<span class="text-muted small">لا توجد صورة</span>';
-        allEntries.push({ sortDate: normDate(pr.return_date || pr.created_at), effect: -returnAmt, cells: ['<td class="text-danger">' + safeNum + '</td>', '<td class="text-danger">-' + returnAmt.toFixed(2) + ' ج.م</td>', '<td>' + dateStr + '</td>', '<td>' + viewBtn + '</td>'] });
+        allEntries.push({ sortDate: normDate(pr.return_date || pr.created_at), effect: -returnAmt, labelText: 'مرتجع ورقية - ' + (pr.invoice_number || pr.id), amountNum: returnAmt, cells: ['<td class="text-danger">' + safeNum + '</td>', '<td class="text-danger">-' + returnAmt.toFixed(2) + ' ج.م</td>', '<td>' + dateStr + '</td>', '<td>' + viewBtn + '</td>'] });
     });
     collections.forEach(function(col) {
         const safeNum = ('تحصيل - ' + (col.collection_number || col.id)).replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const dateStr = (col.date || col.created_at || '-').toString().substring(0, 10);
         const amount = parseFloat(col.amount || 0);
-        allEntries.push({ sortDate: normDate(col.date || col.created_at), effect: -amount, cells: ['<td>' + safeNum + '</td>', '<td class="text-success">' + amount.toFixed(2) + ' ج.م (تحصيل)</td>', '<td>' + dateStr + '</td>', '<td><span class="text-muted small">تحصيل</span></td>'] });
+        allEntries.push({ sortDate: normDate(col.date || col.created_at), effect: -amount, labelText: 'تحصيل - ' + (col.collection_number || col.id), amountNum: amount, cells: ['<td>' + safeNum + '</td>', '<td class="text-success">' + amount.toFixed(2) + ' ج.م (تحصيل)</td>', '<td>' + dateStr + '</td>', '<td><span class="text-muted small">تحصيل</span></td>'] });
     });
+    // فلترة حسب البحث (رقم الفاتورة أو السعر الإجمالي) والفترة الزمنية
+    if (searchText || dateFrom || dateTo) {
+        allEntries = allEntries.filter(function(e) {
+            if (dateFrom && e.sortDate < dateFrom) return false;
+            if (dateTo && e.sortDate > dateTo) return false;
+            if (!searchText) return true;
+            var labelMatch = (e.labelText || '').toLowerCase().indexOf(searchText) >= 0;
+            var amountMatch = !isNaN(parseFloat(searchText)) && (Math.abs(e.amountNum - parseFloat(searchText)) < 0.01 || String(e.amountNum).indexOf(searchText) >= 0);
+            return labelMatch || amountMatch;
+        });
+    }
+    // ترتيب حسب التاريخ (تصاعدي أو تنازلي)
     allEntries.sort(function(a, b) {
-        return a.sortDate.localeCompare(b.sortDate);
+        var cmp = a.sortDate.localeCompare(b.sortDate);
+        return sortOrder === 'desc' ? -cmp : cmp;
     });
     var totalEffect = 0;
     for (var i = 0; i < allEntries.length; i++) totalEffect += allEntries[i].effect;
