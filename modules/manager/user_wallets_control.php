@@ -359,8 +359,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 }
                 $accountantTableExists = $db->queryOne("SHOW TABLES LIKE 'accountant_transactions'");
                 if (!empty($accountantTableExists)) {
-                    $desc = 'تحصيل من عميل محلي (محفظة مستخدم): ' . $customerName;
-                    $ref = 'WALLET-LOC-' . $requestId . '-' . date('YmdHis');
+                    $walletUser = $db->queryOne("SELECT full_name, username FROM users WHERE id = ?", [$userId]);
+                    $walletUserName = trim($walletUser['full_name'] ?? '') ?: trim($walletUser['username'] ?? '') ?: 'مستخدم';
+                    $desc = 'تحصيل من عميل محلي (محفظة ' . $walletUserName . '): ' . $customerName;
+                    $ref = (string) random_int(100000, 999999);
                     $db->execute(
                         "INSERT INTO accountant_transactions (transaction_type, amount, description, reference_number, payment_method, status, created_by, approved_by, approved_at) VALUES ('income', ?, ?, ?, 'cash', 'approved', ?, ?, NOW())",
                         [$amount, $desc, $ref, $currentUser['id'], $currentUser['id']]
