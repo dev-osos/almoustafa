@@ -2741,8 +2741,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 <!-- Error -->
                 <div class="alert alert-danger d-none" id="localPurchaseHistoryError"></div>
 
-                <!-- Purchase History Table - سطر لكل فاتورة (يُعرض بعد انتهاء التحميل) -->
-                <div id="localPurchaseHistoryTable" class="d-none" style="min-height: 120px;">
+                <!-- Purchase History Table - سطر لكل فاتورة (يُعرض دائماً مع المحتوى) -->
+                <div id="localPurchaseHistoryTable" style="min-height: 120px;">
                     <div class="table-responsive">
                         <table class="table table-hover table-bordered">
                             <thead class="table-light">
@@ -4509,9 +4509,9 @@ window.showLocalCustomerPurchaseHistoryModal = function(button) {
             phoneElement.textContent = customerPhone || '-';
             addressElement.textContent = customerAddress || '-';
             
-            // إظهار loading وإخفاء المحتوى
+            // إظهار loading (الجدول يبقى ظاهراً بجسمه الفارغ)
             loadingElement.classList.remove('d-none');
-            contentElement.classList.add('d-none');
+            if (contentElement) contentElement.classList.remove('d-none');
             if (errorElement) {
                 errorElement.classList.add('d-none');
                 errorElement.innerHTML = '';
@@ -6019,14 +6019,11 @@ function loadLocalCustomerPurchaseHistory() {
     }
     
     loadingElement.classList.remove('d-none');
-    errorElement.classList.add('d-none');
-    errorElement.innerHTML = '';
-    if (isMobileDevice && contentElement) {
+    if (errorElement) { errorElement.classList.add('d-none'); errorElement.innerHTML = ''; }
+    if (contentElement) {
         contentElement.classList.remove('d-none');
         contentElement.style.display = 'block';
         contentElement.style.visibility = 'visible';
-    } else if (contentElement) {
-        contentElement.classList.add('d-none');
     }
     
     // التحقق من معرف العميل
