@@ -32,6 +32,7 @@ $db = db();
 $sessionErrorKey = 'manager_shipping_orders_error';
 $sessionSuccessKey = 'manager_shipping_orders_success';
 $sessionCollectionResultKey = 'manager_shipping_collection_result';
+$sessionCollectionCopyableKey = 'manager_shipping_collection_copyable';
 $error = '';
 $success = '';
 $shippingCollectionResult = '';
@@ -41,9 +42,9 @@ if (!empty($_SESSION[$sessionErrorKey])) {
     unset($_SESSION[$sessionErrorKey]);
 }
 
-if (!empty($_SESSION[$sessionCollectionResultKey])) {
-    $shippingCollectionResult = $_SESSION[$sessionCollectionResultKey];
-    unset($_SESSION[$sessionCollectionResultKey]);
+// رسالة التحصيل/الخصم القابلة للنسخ — لا تُحذف عند العرض؛ تُحذف فقط عند طلب POST آخر
+if (!empty($_SESSION[$sessionCollectionCopyableKey]['full_text'])) {
+    $shippingCollectionResult = $_SESSION[$sessionCollectionCopyableKey]['full_text'];
 }
 
 if (!empty($_SESSION[$sessionSuccessKey])) {
@@ -394,6 +395,10 @@ if (!$mainWarehouse) {
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
+    // عند أي طلب POST آخر (غير التحصيل والخصم)، إخفاء رسالة التحصيل/الخصم السابقة
+    if ($action !== 'collect_from_shipping_company' && $action !== 'deduct_from_shipping_company' && isset($_SESSION[$sessionCollectionCopyableKey])) {
+        unset($_SESSION[$sessionCollectionCopyableKey]);
+    }
     $isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
 
     if ($action === 'get_shipping_company_statement' && $isAjax) {
@@ -796,18 +801,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $hasNotesColumn = !empty($db->queryOne("SHOW COLUMNS FROM shipping_company_collections LIKE 'notes'"));
 
                     if ($hasCollectionNumberColumn) {
-                        $year = date('Y');
-                        $month = date('m');
-                        $lastCollection = $db->queryOne(
-                            "SELECT collection_number FROM shipping_company_collections WHERE collection_number LIKE ? ORDER BY collection_number DESC LIMIT 1 FOR UPDATE",
-                            ["SHIP-COL-{$year}{$month}-%"]
-                        );
-                        $serial = 1;
-                        if (!empty($lastCollection['collection_number'])) {
-                            $parts = explode('-', $lastCollection['collection_number']);
-                            $serial = (int)($parts[3] ?? 0) + 1;
-                        }
-                        $collectionNumber = sprintf("SHIP-COL-%s%s-%04d", $year, $month, $serial);
+                        $collectionNumber = (string) random_int(100000, 999999);
                     }
 
                     $collectionDate = date('Y-m-d');
@@ -891,8 +885,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $db->commit();
                 $transactionStarted = false;
                 $referenceNumber = $collectionNumber ?? ('SHIP-CUST-' . $companyId . '-' . date('YmdHis'));
-                $msg = 'تم تحصيل المبلغ بنجاح وإضافته إلى خزنة الشركة. رقم المرجع: ' . $referenceNumber . '. الرصيد بعد المعاملة: ' . number_format($newBalance, 2) . ' ج.م.';
-                $_SESSION[$sessionCollectionResultKey] = $msg;
+                $msg = "تم تحصيل المبلغ بنجاح من ديون الشركة.\nرقم المرجع: " . $referenceNumber . ".\nالرصيد بعد المعاملة: " . number_format($newBalance, 2) . " ج.م.";
+                $_SESSION[$sessionCollectionCopyableKey] = ['full_text' => $msg];
                 if ($isAjax) {
                     header('Content-Type: application/json; charset=utf-8');
                     echo json_encode([
@@ -986,8 +980,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ['amount' => $amount, 'previous_balance' => $currentBalance, 'new_balance' => $newBalance]
                 );
 
-                $deductMsg = 'تم خصم المبلغ بنجاح وإضافته إلى خزنة الشركة. الرصيد بعد المعاملة: ' . number_format($newBalance, 2) . ' ج.م.';
-                $_SESSION[$sessionCollectionResultKey] = $deductMsg;
+                $deductMsg = "تم خصم المبلغ بنجاح من ديون الشركة.\nالرصيد بعد المعاملة: " . number_format($newBalance, 2) . " ج.م.";
+                if ($notes !== '') {
+                    $deductMsg .= "\nالملاحظات / سبب الخصم: " . $notes;
+                }
+                $_SESSION[$sessionCollectionCopyableKey] = ['full_text' => $deductMsg];
                 if ($isAjax) {
                     header('Content-Type: application/json; charset=utf-8');
                     echo json_encode([
@@ -3492,11 +3489,70 @@ $hasShippingCompanies = !empty($shippingCompanies);
 <?php endif; ?>
 
 <?php if ($success): ?>
-    <div class="alert alert-success alert-dismissible fade show" id="successAlert" data-auto-refresh="true">
+    <div class="alert alert-success alert-dismissible fade show" id="successAlert" data-auto-refresh="<?php echo !empty($shippingCollectionResult) ? 'false' : 'true'; ?>">
         <i class="bi bi-check-circle-fill me-2"></i>
         <?php echo htmlspecialchars($success); ?>
         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
     </div>
+<?php endif; ?>
+
+<?php if (!empty($shippingCollectionResult)): ?>
+    <div class="alert alert-success alert-dismissible fade show" id="shippingCollectionSuccessAlert" data-auto-refresh="false">
+        <i class="bi bi-check-circle-fill me-2"></i>
+        تمت العملية بنجاح.
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    <div class="card border-success shadow-sm mb-4" id="shippingCollectionCopyableCard">
+        <div class="card-body py-3">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                <span class="text-muted small"><i class="bi bi-clipboard me-1"></i>نسخ الرسالة</span>
+                <button type="button" class="btn btn-outline-success btn-sm" id="shippingCollectionCopyBtn" title="نسخ">
+                    <i class="bi bi-clipboard-plus me-1"></i>نسخ
+                </button>
+            </div>
+            <pre id="shippingCollectionCopyableText" class="mb-0 p-3 bg-light rounded border user-select-all" style="white-space: pre-wrap; word-break: break-word; font-family: inherit; font-size: 0.95rem;"><?php echo htmlspecialchars($shippingCollectionResult); ?></pre>
+        </div>
+    </div>
+    <script>
+    (function() {
+        var btn = document.getElementById('shippingCollectionCopyBtn');
+        var pre = document.getElementById('shippingCollectionCopyableText');
+        if (btn && pre) {
+            btn.addEventListener('click', function() {
+                var text = pre.textContent;
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(text).then(function() {
+                        btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>تم النسخ';
+                        btn.classList.remove('btn-outline-success');
+                        btn.classList.add('btn-success');
+                        setTimeout(function() {
+                            btn.innerHTML = '<i class="bi bi-clipboard-plus me-1"></i>نسخ';
+                            btn.classList.remove('btn-success');
+                            btn.classList.add('btn-outline-success');
+                        }, 2000);
+                    });
+                } else {
+                    var ta = document.createElement('textarea');
+                    ta.value = text;
+                    ta.style.position = 'fixed';
+                    ta.style.opacity = '0';
+                    document.body.appendChild(ta);
+                    ta.select();
+                    try { document.execCommand('copy'); } catch (e) {}
+                    document.body.removeChild(ta);
+                    btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>تم النسخ';
+                    btn.classList.remove('btn-outline-success');
+                    btn.classList.add('btn-success');
+                    setTimeout(function() {
+                        btn.innerHTML = '<i class="bi bi-clipboard-plus me-1"></i>نسخ';
+                        btn.classList.remove('btn-success');
+                        btn.classList.add('btn-outline-success');
+                    }, 2000);
+                }
+            });
+        }
+    })();
+    </script>
 <?php endif; ?>
 
 <div class="card shadow-sm mb-4">
