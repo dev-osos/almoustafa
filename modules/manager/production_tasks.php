@@ -1927,14 +1927,14 @@ setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
                             <input type="hidden" name="customer_name" id="submit_customer_name" value="">
                             <div id="customer_select_local_task" class="customer-select-block mb-2">
                                 <div class="search-wrap position-relative">
-                                    <input type="text" id="local_customer_search_task" class="form-control form-control-sm" placeholder="اكتب للبحث أو أدخل اسم عميل جديد..." autocomplete="off" required>
+                                    <input type="text" id="local_customer_search_task" class="form-control form-control-sm" placeholder="اكتب للبحث أو أدخل اسم عميل جديد..." autocomplete="off">
                                     <input type="hidden" id="local_customer_id_task" value="">
                                     <div id="local_customer_dropdown_task" class="search-dropdown-task d-none"></div>
                                 </div>
                             </div>
                             <div id="customer_select_rep_task" class="customer-select-block mb-2 d-none">
                                 <div class="search-wrap position-relative">
-                                    <input type="text" id="rep_customer_search_task" class="form-control form-control-sm" placeholder="اكتب للبحث أو أدخل اسم عميل جديد..." autocomplete="off" required>
+                                    <input type="text" id="rep_customer_search_task" class="form-control form-control-sm" placeholder="اكتب للبحث أو أدخل اسم عميل جديد..." autocomplete="off">
                                     <input type="hidden" id="rep_customer_id_task" value="">
                                     <div id="rep_customer_dropdown_task" class="search-dropdown-task d-none"></div>
                                 </div>
@@ -2939,12 +2939,20 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
 
-        // عند الإرسال: أخذ اسم العميل من حقل البحث النشط (محلي أو مندوب) — إن لم يُختر من القائمة يُرسل النص المُدخل ويُحفظ كعميل جديد في الخادم إن لم يكن مسجلاً
+        // عند الإرسال: التحقق من اسم العميل (الحقل الظاهر فقط) ثم أخذ القيمة من حقل البحث النشط
         var form = submitName && submitName.closest('form');
         if (form) {
-            form.addEventListener('submit', function() {
+            form.addEventListener('submit', function(e) {
                 var v = document.querySelector('input[name="customer_type_radio_task"]:checked');
                 var val = v ? v.value : 'local';
+                var activeSearch = (val === 'local') ? localSearch : repSearch;
+                var activeLabel = (val === 'local') ? 'اسم العميل (عميل محلي)' : 'اسم العميل (عميل مندوب)';
+                if (activeSearch && !activeSearch.value.trim()) {
+                    e.preventDefault();
+                    alert('يرجى إدخال ' + activeLabel + ' قبل الإرسال.');
+                    activeSearch.focus();
+                    return;
+                }
                 if (val === 'local' && localSearch) {
                     submitName.value = localSearch.value.trim();
                 } else if (val === 'rep' && repSearch) {
