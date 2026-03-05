@@ -6281,8 +6281,8 @@ function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns
     paperInvoiceReturns = paperInvoiceReturns || [];
     collections = collections || [];
     currentBalance = parseFloat(currentBalance) || 0;
-    const tableBodyCard = document.getElementById('localPurchaseHistoryCardTableBody');
-    const tableBodyModal = document.getElementById('localPurchaseHistoryTableBody');
+    let tableBodyCard = document.getElementById('localPurchaseHistoryCardTableBody');
+    let tableBodyModal = document.getElementById('localPurchaseHistoryTableBody');
     
     // التأكد من الحصول على tbody المودال من داخل المودال نفسه (لضمان تحديث الجدول الظاهر)
     var modal = document.getElementById('localCustomerPurchaseHistoryModal');
@@ -6374,8 +6374,6 @@ function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns
     }
     
     window._localPurchaseHistoryRows = rows;
-    var tableBodyCard = document.getElementById('localPurchaseHistoryCardTableBody');
-    var tableBodyModal = document.getElementById('localPurchaseHistoryTableBody');
     if (modal && modal.querySelector('#localPurchaseHistoryTableBody')) {
         tableBodyModal = modal.querySelector('#localPurchaseHistoryTableBody');
     }
