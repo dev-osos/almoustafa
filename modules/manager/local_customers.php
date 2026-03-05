@@ -6287,7 +6287,7 @@ function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns
         const dateStr = (pr.return_date || pr.created_at || '-').toString().substring(0, 10);
         const returnAmt = parseFloat(pr.return_amount || 0);
         const viewBtn = pr.image_path
-            ? '<button type="button" class="btn btn-sm btn-outline-warning" onclick="showPaperInvoiceReturnImage(' + parseInt(pr.id, 10) + ')" title="عرض صورة المرتجع"><i class="bi bi-image me-1"></i>عرض المرتجع</button>'
+            ? '<button type="button" class="btn btn-sm btn-outline-warning" onclick="showPaperInvoiceReturnImage(' + parseInt(pr.id, 10) + ')" title="عرض صورة المرتجع"><i class="bi bi-image me-1"></i></button>'
             : '<span class="text-muted small">لا توجد صورة</span>';
         allEntries.push({ sortDate: normDate(pr.return_date || pr.created_at), effect: -returnAmt, cells: ['<td>' + safeNum + '</td>', '<td class="text-warning">-' + returnAmt.toFixed(2) + ' ج.م</td>', '<td>' + dateStr + '</td>', '<td>' + viewBtn + '</td>'] });
     });
@@ -6324,26 +6324,12 @@ function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns
     }
     
     window._localPurchaseHistoryRows = rows;
-    window._localPurchaseHistoryPage = 1;
-    window._localPurchaseHistoryPerPage = 15;
-    goToLocalPurchaseHistoryPage(1);
-}
-
-function goToLocalPurchaseHistoryPage(page) {
-    var rows = window._localPurchaseHistoryRows;
-    if (!rows || !rows.length) return;
-    var perPage = window._localPurchaseHistoryPerPage || 15;
-    var totalPages = Math.ceil(rows.length / perPage);
-    page = Math.max(1, Math.min(page, totalPages));
-    window._localPurchaseHistoryPage = page;
-    var start = (page - 1) * perPage;
-    var slice = rows.slice(start, start + perPage);
     var tableBodyCard = document.getElementById('localPurchaseHistoryCardTableBody');
     var tableBodyModal = document.getElementById('localPurchaseHistoryTableBody');
     function fillBody(tbody) {
         if (!tbody) return;
         tbody.innerHTML = '';
-        slice.forEach(function(rowHtml) {
+        rows.forEach(function(rowHtml) {
             var tr = document.createElement('tr');
             tr.innerHTML = rowHtml;
             tbody.appendChild(tr);
@@ -6351,63 +6337,10 @@ function goToLocalPurchaseHistoryPage(page) {
     }
     fillBody(tableBodyCard);
     fillBody(tableBodyModal);
-    var from = start + 1;
-    var to = Math.min(start + perPage, rows.length);
-    var infoText = 'عرض ' + from + '-' + to + ' من ' + rows.length;
     var wrapModal = document.getElementById('localPurchaseHistoryPaginationWrap');
     var wrapCard = document.getElementById('localPurchaseHistoryCardPaginationWrap');
-    if (totalPages <= 1) {
-        if (wrapModal) wrapModal.style.display = 'none';
-        if (wrapCard) wrapCard.style.display = 'none';
-        return;
-    }
-    if (wrapModal) {
-        wrapModal.style.display = 'flex';
-        document.getElementById('localPurchaseHistoryPaginationInfo').textContent = infoText;
-        var ul = document.getElementById('localPurchaseHistoryPagination');
-        ul.innerHTML = '';
-        var prevLi = document.createElement('li');
-        prevLi.className = 'page-item' + (page <= 1 ? ' disabled' : '');
-        prevLi.innerHTML = '<a class="page-link" href="#" onclick="goToLocalPurchaseHistoryPage(' + (page - 1) + '); return false;" aria-label="السابق"><i class="bi bi-chevron-right"></i></a>';
-        ul.appendChild(prevLi);
-        var maxVisible = 5;
-        var fromPage = Math.max(1, page - Math.floor(maxVisible / 2));
-        var toPage = Math.min(totalPages, fromPage + maxVisible - 1);
-        if (toPage - fromPage < maxVisible - 1) fromPage = Math.max(1, toPage - maxVisible + 1);
-        for (var p = fromPage; p <= toPage; p++) {
-            var li = document.createElement('li');
-            li.className = 'page-item' + (p === page ? ' active' : '');
-            li.innerHTML = '<a class="page-link" href="#" onclick="goToLocalPurchaseHistoryPage(' + p + '); return false;">' + p + '</a>';
-            ul.appendChild(li);
-        }
-        var nextLi = document.createElement('li');
-        nextLi.className = 'page-item' + (page >= totalPages ? ' disabled' : '');
-        nextLi.innerHTML = '<a class="page-link" href="#" onclick="goToLocalPurchaseHistoryPage(' + (page + 1) + '); return false;" aria-label="التالي"><i class="bi bi-chevron-left"></i></a>';
-        ul.appendChild(nextLi);
-    }
-    if (wrapCard) {
-        wrapCard.style.display = 'flex';
-        document.getElementById('localPurchaseHistoryCardPaginationInfo').textContent = infoText;
-        var ulCard = document.getElementById('localPurchaseHistoryCardPagination');
-        ulCard.innerHTML = '';
-        var prevLiC = document.createElement('li');
-        prevLiC.className = 'page-item' + (page <= 1 ? ' disabled' : '');
-        prevLiC.innerHTML = '<a class="page-link" href="#" onclick="goToLocalPurchaseHistoryPage(' + (page - 1) + '); return false;" aria-label="السابق"><i class="bi bi-chevron-right"></i></a>';
-        ulCard.appendChild(prevLiC);
-        var fromPageC = Math.max(1, page - Math.floor(5 / 2));
-        var toPageC = Math.min(totalPages, fromPageC + 5 - 1);
-        if (toPageC - fromPageC < 4) fromPageC = Math.max(1, toPageC - 4);
-        for (var p = fromPageC; p <= toPageC; p++) {
-            var liC = document.createElement('li');
-            liC.className = 'page-item' + (p === page ? ' active' : '');
-            liC.innerHTML = '<a class="page-link" href="#" onclick="goToLocalPurchaseHistoryPage(' + p + '); return false;">' + p + '</a>';
-            ulCard.appendChild(liC);
-        }
-        var nextLiC = document.createElement('li');
-        nextLiC.className = 'page-item' + (page >= totalPages ? ' disabled' : '');
-        nextLiC.innerHTML = '<a class="page-link" href="#" onclick="goToLocalPurchaseHistoryPage(' + (page + 1) + '); return false;" aria-label="التالي"><i class="bi bi-chevron-left"></i></a>';
-        ulCard.appendChild(nextLiC);
-    }
+    if (wrapModal) wrapModal.style.display = 'none';
+    if (wrapCard) wrapCard.style.display = 'none';
 }
 
 // دوال مساعدة (محفوظة للتوافق - الإرجاع يتم من خلال modal إدخال رقم الفاتورة أو من تفاصيل الفاتورة)
