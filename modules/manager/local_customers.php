@@ -2716,10 +2716,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     <div class="card-body">
                         <div class="row g-2">
                             <div class="col-12 col-md-6 col-lg-3">
-                                <label class="form-label small text-muted mb-0">رقم الفاتورة أو السعر الإجمالي</label>
+                                <label class="form-label small text-muted mb-0">بحث متقدم</label>
                                 <input type="text" class="form-control form-control-sm" 
                                        id="localPurchaseHistorySearchInvoiceOrAmount" 
-                                       placeholder="رقم الفاتورة أو المبلغ">
+                                       placeholder="رقم الفاتورة، المبلغ، التاريخ... أي مطابقة">
                             </div>
                             <div class="col-6 col-md-6 col-lg-2">
                                 <label class="form-label small text-muted mb-0">من تاريخ</label>
@@ -2834,10 +2834,10 @@ document.addEventListener('DOMContentLoaded', function() {
             <div class="card-body">
                 <div class="row g-2">
                     <div class="col-12">
-                        <label class="form-label small text-muted mb-0">رقم الفاتورة أو السعر الإجمالي</label>
+                        <label class="form-label small text-muted mb-0">بحث متقدم</label>
                         <input type="text" class="form-control form-control-sm" 
                                id="localPurchaseHistoryCardSearchInvoiceOrAmount" 
-                               placeholder="رقم الفاتورة أو المبلغ">
+                               placeholder="رقم الفاتورة، المبلغ، التاريخ... أي مطابقة">
                     </div>
                     <div class="col-6">
                         <label class="form-label small text-muted mb-0">من تاريخ</label>
@@ -6432,6 +6432,22 @@ function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns
         var n = parseFloat(bal) || 0;
         return n.toFixed(2) + ' ج.م';
     }
+    // تحويل الأرقام العربية/الفارسية إلى إنجليزية للبحث الموحد
+    function normalizeDigitsForSearch(str) {
+        if (str == null || str === '') return '';
+        var s = String(str);
+        var arabic = '\u0660\u0661\u0662\u0663\u0664\u0665\u0666\u0667\u0668\u0669';
+        var persian = '\u06f0\u06f1\u06f2\u06f3\u06f4\u06f5\u06f6\u06f7\u06f8\u06f9';
+        for (var i = 0; i <= 9; i++) {
+            s = s.replace(new RegExp(arabic[i], 'g'), i);
+            s = s.replace(new RegExp(persian[i], 'g'), i);
+        }
+        return s;
+    }
+    function buildSearchableText(labelText, amountNum, dateStr) {
+        var parts = [labelText || '', String(amountNum != null ? amountNum : ''), dateStr || ''];
+        return normalizeDigitsForSearch(parts.join(' ')).toLowerCase();
+    }
     invoices.forEach(function(inv) {
         const invNum = String(inv.invoice_number || '-');
         const safeNum = invNum.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -6439,7 +6455,9 @@ function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns
         const amount = parseFloat(inv.total_amount || 0);
         const safeInvNumAttr = invNum.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
         const actionsCell = '<td><button type="button" class="btn btn-sm btn-outline-primary" onclick="showLocalInvoiceDetailsModal(\'' + safeInvNumAttr + '\')" title="عرض الفاتورة"><i class="bi bi-eye me-1"></i></button></td>';
-        allEntries.push({ sortDate: normDate(inv.invoice_date), effect: amount, labelText: invNum, amountNum: amount, cells: ['<td>' + safeNum + '</td>', '<td>' + amount.toFixed(2) + ' ج.م</td>', '<td>' + dateStr + '</td>', actionsCell] });
+        var entry = { sortDate: normDate(inv.invoice_date), effect: amount, labelText: invNum, amountNum: amount, cells: ['<td>' + safeNum + '</td>', '<td>' + amount.toFixed(2) + ' ج.م</td>', '<td>' + dateStr + '</td>', actionsCell] };
+        entry.searchableText = buildSearchableText(invNum, amount, dateStr);
+        allEntries.push(entry);
     });
     paperInvoices.forEach(function(pi) {
         const safeNum = (pi.invoice_number || 'ورقية-' + pi.id).replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -6448,7 +6466,10 @@ function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns
         const viewBtn = pi.image_path
             ? '<button type="button" class="btn btn-sm btn-outline-primary" onclick="showPaperInvoiceImage(' + parseInt(pi.id, 10) + ')" title="عرض صورة الفاتورة الورقية"><i class="bi bi-image me-1"></i></button>'
             : '<span class="text-muted small">لا توجد صورة</span>';
-        allEntries.push({ sortDate: normDate(pi.invoice_date || pi.created_at), effect: -amount, labelText: (pi.invoice_number || 'ورقية-' + pi.id), amountNum: amount, cells: ['<td>' + safeNum + '</td>', '<td>' + amount.toFixed(2) + ' ج.م</td>', '<td>' + dateStr + '</td>', '<td>' + viewBtn + '</td>'] });
+        var labelText = (pi.invoice_number || 'ورقية-' + pi.id);
+        var entry = { sortDate: normDate(pi.invoice_date || pi.created_at), effect: -amount, labelText: labelText, amountNum: amount, cells: ['<td>' + safeNum + '</td>', '<td>' + amount.toFixed(2) + ' ج.م</td>', '<td>' + dateStr + '</td>', '<td>' + viewBtn + '</td>'] };
+        entry.searchableText = buildSearchableText(labelText, amount, dateStr);
+        allEntries.push(entry);
     });
     paperInvoiceReturns.forEach(function(pr) {
         const safeNum = ('مرتجع ورقية - ' + (pr.invoice_number || pr.id)).replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -6457,13 +6478,19 @@ function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns
         const viewBtn = pr.image_path
             ? '<button type="button" class="btn btn-sm btn-outline-danger" onclick="showPaperInvoiceReturnImage(' + parseInt(pr.id, 10) + ')" title="عرض صورة المرتجع"><i class="bi bi-image me-1"></i></button>'
             : '<span class="text-muted small">لا توجد صورة</span>';
-        allEntries.push({ sortDate: normDate(pr.return_date || pr.created_at), effect: -returnAmt, labelText: 'مرتجع ورقية - ' + (pr.invoice_number || pr.id), amountNum: returnAmt, cells: ['<td class="text-danger">' + safeNum + '</td>', '<td class="text-danger">-' + returnAmt.toFixed(2) + ' ج.م</td>', '<td>' + dateStr + '</td>', '<td>' + viewBtn + '</td>'] });
+        var labelText = 'مرتجع ورقية - ' + (pr.invoice_number || pr.id);
+        var entry = { sortDate: normDate(pr.return_date || pr.created_at), effect: -returnAmt, labelText: labelText, amountNum: returnAmt, cells: ['<td class="text-danger">' + safeNum + '</td>', '<td class="text-danger">-' + returnAmt.toFixed(2) + ' ج.م</td>', '<td>' + dateStr + '</td>', '<td>' + viewBtn + '</td>'] };
+        entry.searchableText = buildSearchableText(labelText, returnAmt, dateStr);
+        allEntries.push(entry);
     });
     collections.forEach(function(col) {
         const safeNum = ('تحصيل - ' + (col.collection_number || col.id)).replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const dateStr = (col.date || col.created_at || '-').toString().substring(0, 10);
         const amount = parseFloat(col.amount || 0);
-        allEntries.push({ sortDate: normDate(col.date || col.created_at), effect: -amount, labelText: 'تحصيل - ' + (col.collection_number || col.id), amountNum: amount, cells: ['<td>' + safeNum + '</td>', '<td class="text-success">' + amount.toFixed(2) + ' ج.م (تحصيل)</td>', '<td>' + dateStr + '</td>', '<td><span class="text-muted small">تحصيل</span></td>'] });
+        var labelText = 'تحصيل - ' + (col.collection_number || col.id);
+        var entry = { sortDate: normDate(col.date || col.created_at), effect: -amount, labelText: labelText, amountNum: amount, cells: ['<td>' + safeNum + '</td>', '<td class="text-success">' + amount.toFixed(2) + ' ج.م (تحصيل)</td>', '<td>' + dateStr + '</td>', '<td><span class="text-muted small">تحصيل</span></td>'] };
+        entry.searchableText = buildSearchableText(labelText, amount, dateStr);
+        allEntries.push(entry);
     });
     // فلترة الفترة الزمنية: إظهار جميع المعاملات (فاتورة عادية، فاتورة ورقية، مرتجع ورقية، تحصيل) المسجلة ضمن من-إلى
     if (dateFrom || dateTo) {
@@ -6474,12 +6501,11 @@ function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns
             return true;
         });
     }
-    // فلترة حسب البحث (رقم الفاتورة أو السعر الإجمالي) إن وُجد
+    // بحث متقدم: إظهار أي سجل مطابق لمدخلات البحث (رقم الفاتورة، المبلغ، التاريخ، أو أي جزء من البيان)
     if (searchText) {
+        var normalizedSearch = normalizeDigitsForSearch(searchText).toLowerCase().trim();
         allEntries = allEntries.filter(function(e) {
-            var labelMatch = (e.labelText || '').toLowerCase().indexOf(searchText) >= 0;
-            var amountMatch = !isNaN(parseFloat(searchText)) && (Math.abs(e.amountNum - parseFloat(searchText)) < 0.01 || String(e.amountNum).indexOf(searchText) >= 0);
-            return labelMatch || amountMatch;
+            return (e.searchableText || '').indexOf(normalizedSearch) >= 0;
         });
     }
     // ترتيب حسب التاريخ (تصاعدي أو تنازلي)
