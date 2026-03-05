@@ -6252,30 +6252,40 @@ function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns
     if (tableBodyModal) tableBodyModal.innerHTML = '';
     
     const invoices = (history && history.length) ? groupLocalPurchaseHistoryByInvoice(history) : [];
-    const rows = [];
-    
-    if (invoices.length > 0 || paperInvoices.length > 0 || paperInvoiceReturns.length > 0) {
-        invoices.forEach(function(inv) {
-            const safeNum = (inv.invoice_number || '-').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            rows.push('<td>' + safeNum + '</td><td>' + parseFloat(inv.total_amount || 0).toFixed(2) + ' ج.م</td><td>' + (inv.invoice_date || '-') + '</td><td><button type="button" class="btn btn-sm btn-outline-primary" onclick="showLocalInvoiceDetailsModal(\'' + String(inv.invoice_number || '').replace(/'/g, "\\'") + '\')" title="عرض الفاتورة"><i class="bi bi-eye me-1"></i>عرض الفاتورة</button></td>');
-        });
-        paperInvoices.forEach(function(pi) {
-            const safeNum = (pi.invoice_number || 'ورقية-' + pi.id).replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            const dateStr = (pi.invoice_date || pi.created_at || '-').toString().substring(0, 10);
-            const viewBtn = pi.image_path
-                ? '<button type="button" class="btn btn-sm btn-outline-primary" onclick="showPaperInvoiceImage(' + parseInt(pi.id, 10) + ')" title="عرض صورة الفاتورة الورقية"><i class="bi bi-image me-1"></i>عرض الفاتورة</button>'
-                : '<span class="text-muted small">لا توجد صورة</span>';
-            rows.push('<td>' + safeNum + '</td><td>' + parseFloat(pi.total_amount || 0).toFixed(2) + ' ج.م</td><td>' + dateStr + '</td><td>' + viewBtn + '</td>');
-        });
-        paperInvoiceReturns.forEach(function(pr) {
-            const safeNum = ('مرتجع ورقية - ' + (pr.invoice_number || pr.id)).replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            const dateStr = (pr.return_date || pr.created_at || '-').toString().substring(0, 10);
-            const viewBtn = pr.image_path
-                ? '<button type="button" class="btn btn-sm btn-outline-warning" onclick="showPaperInvoiceReturnImage(' + parseInt(pr.id, 10) + ')" title="عرض صورة المرتجع"><i class="bi bi-image me-1"></i>عرض المرتجع</button>'
-                : '<span class="text-muted small">لا توجد صورة</span>';
-            rows.push('<td>' + safeNum + '</td><td class="text-warning">-' + parseFloat(pr.return_amount || 0).toFixed(2) + ' ج.م</td><td>' + dateStr + '</td><td>' + viewBtn + '</td>');
-        });
+    const allEntries = [];
+    function normDate(d) {
+        if (!d) return '0000-00-00';
+        var s = String(d).trim().substring(0, 10);
+        return s || '0000-00-00';
     }
+    invoices.forEach(function(inv) {
+        const safeNum = (inv.invoice_number || '-').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const dateStr = (inv.invoice_date || '-').toString().substring(0, 10);
+        const row = '<td>' + safeNum + '</td><td>' + parseFloat(inv.total_amount || 0).toFixed(2) + ' ج.م</td><td>' + dateStr + '</td><td><button type="button" class="btn btn-sm btn-outline-primary" onclick="showLocalInvoiceDetailsModal(\'' + String(inv.invoice_number || '').replace(/'/g, "\\'") + '\')" title="عرض الفاتورة"><i class="bi bi-eye me-1"></i>عرض الفاتورة</button></td>';
+        allEntries.push({ sortDate: normDate(inv.invoice_date), row: row });
+    });
+    paperInvoices.forEach(function(pi) {
+        const safeNum = (pi.invoice_number || 'ورقية-' + pi.id).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const dateStr = (pi.invoice_date || pi.created_at || '-').toString().substring(0, 10);
+        const viewBtn = pi.image_path
+            ? '<button type="button" class="btn btn-sm btn-outline-primary" onclick="showPaperInvoiceImage(' + parseInt(pi.id, 10) + ')" title="عرض صورة الفاتورة الورقية"><i class="bi bi-image me-1"></i>عرض الفاتورة</button>'
+            : '<span class="text-muted small">لا توجد صورة</span>';
+        const row = '<td>' + safeNum + '</td><td>' + parseFloat(pi.total_amount || 0).toFixed(2) + ' ج.م</td><td>' + dateStr + '</td><td>' + viewBtn + '</td>';
+        allEntries.push({ sortDate: normDate(pi.invoice_date || pi.created_at), row: row });
+    });
+    paperInvoiceReturns.forEach(function(pr) {
+        const safeNum = ('مرتجع ورقية - ' + (pr.invoice_number || pr.id)).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const dateStr = (pr.return_date || pr.created_at || '-').toString().substring(0, 10);
+        const viewBtn = pr.image_path
+            ? '<button type="button" class="btn btn-sm btn-outline-warning" onclick="showPaperInvoiceReturnImage(' + parseInt(pr.id, 10) + ')" title="عرض صورة المرتجع"><i class="bi bi-image me-1"></i>عرض المرتجع</button>'
+            : '<span class="text-muted small">لا توجد صورة</span>';
+        const row = '<td>' + safeNum + '</td><td class="text-warning">-' + parseFloat(pr.return_amount || 0).toFixed(2) + ' ج.م</td><td>' + dateStr + '</td><td>' + viewBtn + '</td>';
+        allEntries.push({ sortDate: normDate(pr.return_date || pr.created_at), row: row });
+    });
+    allEntries.sort(function(a, b) {
+        return b.sortDate.localeCompare(a.sortDate);
+    });
+    const rows = allEntries.map(function(e) { return e.row; });
     
     const hasInvoices = rows.length > 0;
     
