@@ -5994,8 +5994,8 @@ function loadLocalCustomerPurchaseHistory() {
     function showError(message, details) {
         var loadingModal = document.getElementById('localPurchaseHistoryLoading');
         var loadingCard = document.getElementById('localPurchaseHistoryCardLoading');
-        if (loadingModal) loadingModal.classList.add('d-none');
-        if (loadingCard) loadingCard.classList.add('d-none');
+        if (loadingModal) { loadingModal.classList.add('d-none'); loadingModal.style.display = 'none'; }
+        if (loadingCard) { loadingCard.classList.add('d-none'); loadingCard.style.display = 'none'; }
         if (contentElement) contentElement.classList.add('d-none');
         if (errorElement) {
             let errorHtml = '<div class="alert alert-danger mb-0">';
@@ -6045,11 +6045,15 @@ function loadLocalCustomerPurchaseHistory() {
     const apiUrl = basePath + '/api/customer_purchase_history.php?action=get_history&customer_id=' + encodeURIComponent(currentLocalCustomerId) + '&type=local';
     console.log('Loading purchase history for customer ID:', currentLocalCustomerId, 'URL:', apiUrl);
     
+    var abortController = new AbortController();
+    var timeoutId = setTimeout(function() {
+        abortController.abort();
+    }, 20000);
+    
     fetch(apiUrl, {
         credentials: 'same-origin',
-        headers: {
-            'Accept': 'application/json'
-        }
+        headers: { 'Accept': 'application/json' },
+        signal: abortController.signal
     })
     .then(response => {
         console.log('Response status:', response.status, 'Content-Type:', response.headers.get('content-type'));
@@ -6075,12 +6079,13 @@ function loadLocalCustomerPurchaseHistory() {
         }
         return response.json();
     })
-    .then(data => {
+    .then(function(data) {
+        clearTimeout(timeoutId);
         console.log('API Response received:', data);
         var loadingModal = document.getElementById('localPurchaseHistoryLoading');
         var loadingCard = document.getElementById('localPurchaseHistoryCardLoading');
-        if (loadingModal) loadingModal.classList.add('d-none');
-        if (loadingCard) loadingCard.classList.add('d-none');
+        if (loadingModal) { loadingModal.classList.add('d-none'); loadingModal.style.display = 'none'; }
+        if (loadingCard) { loadingCard.classList.add('d-none'); loadingCard.style.display = 'none'; }
         
         if (data.success) {
             localPurchaseHistoryData = data.purchase_history || [];
@@ -6089,11 +6094,17 @@ function loadLocalCustomerPurchaseHistory() {
             console.log('Purchase history data:', localPurchaseHistoryData.length, 'items; paper invoices:', localPaperInvoicesData.length, 'paper returns:', localPaperInvoiceReturnsData.length);
             
             // عرض البيانات حتى لو كانت فارغة (ستعرض رسالة "لا توجد مشتريات")
-            displayLocalPurchaseHistory(localPurchaseHistoryData, localPaperInvoicesData, localPaperInvoiceReturnsData, (data.customer && data.customer.balance !== undefined) ? data.customer.balance : 0, data.collections || []);
+            try {
+                displayLocalPurchaseHistory(localPurchaseHistoryData, localPaperInvoicesData, localPaperInvoiceReturnsData, (data.customer && data.customer.balance !== undefined) ? data.customer.balance : 0, data.collections || []);
+            } catch (displayErr) {
+                console.error('displayLocalPurchaseHistory error:', displayErr);
+                if (typeof showError === 'function') showError('خطأ في عرض البيانات', displayErr.message || String(displayErr));
+                return;
+            }
             var cardTable = document.getElementById('localPurchaseHistoryCardTable');
             var modalTable = document.getElementById('localPurchaseHistoryTable');
             if (cardTable) { cardTable.classList.remove('d-none'); cardTable.style.display = 'block'; cardTable.style.visibility = 'visible'; }
-            if (modalTable) modalTable.classList.remove('d-none');
+            if (modalTable) { modalTable.classList.remove('d-none'); modalTable.style.display = 'block'; modalTable.style.visibility = 'visible'; }
             
             // إظهار زر الطباعة حتى لو لم تكن هناك بيانات
             const printBtn = isMobileDevice
@@ -6114,9 +6125,14 @@ function loadLocalCustomerPurchaseHistory() {
             showError(errorMsg, errorDetails);
         }
     })
-    .catch(error => {
-        const errorMessage = error.message || 'حدث خطأ في الاتصال بالخادم';
-        const errorDetails = error.stack ? error.stack.substring(0, 300) : 'لا توجد تفاصيل إضافية';
+    .catch(function(error) {
+        clearTimeout(timeoutId);
+        var loadingModal = document.getElementById('localPurchaseHistoryLoading');
+        var loadingCard = document.getElementById('localPurchaseHistoryCardLoading');
+        if (loadingModal) { loadingModal.classList.add('d-none'); loadingModal.style.display = 'none'; }
+        if (loadingCard) { loadingCard.classList.add('d-none'); loadingCard.style.display = 'none'; }
+        var errorMessage = error.name === 'AbortError' ? 'انتهت مهلة الطلب. تحقق من الاتصال أو حاول مرة أخرى.' : (error.message || 'حدث خطأ في الاتصال بالخادم');
+        var errorDetails = error.stack ? error.stack.substring(0, 300) : 'لا توجد تفاصيل إضافية';
         showError(errorMessage, errorDetails);
         console.error('Error loading purchase history:', error);
     });
