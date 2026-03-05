@@ -137,6 +137,7 @@ foreach ($taskIds as $taskId) {
         $displayNotes = preg_replace('/\[PRODUCTS_JSON\]:[^\n]*/', '', $displayNotes);
         $displayNotes = preg_replace('/\[SHIPPING_FEES\]:\s*[0-9.]+/', '', $displayNotes);
         $displayNotes = preg_replace('/\[DISCOUNT\]:\s*[0-9.]+/', '', $displayNotes);
+        $displayNotes = preg_replace('/\[ORDER_TITLE\]:\s*[^\n]+/', '', $displayNotes);
         $displayNotes = preg_replace('/المنتج:\s*[^\n]+/', '', $displayNotes);
         $displayNotes = preg_replace('/الكمية:\s*[0-9.]+/', '', $displayNotes);
         $displayNotes = preg_replace('/^[^\n]*العامل المخصص[^\n]*\n?/m', '', $displayNotes);
@@ -152,6 +153,10 @@ foreach ($taskIds as $taskId) {
     if (!empty($notes) && preg_match('/\[DISCOUNT\]:\s*([0-9.]+)/', $notes, $m)) {
         $discount = (float) $m[1];
     }
+    $orderTitle = '';
+    if (!empty($notes) && preg_match('/\[ORDER_TITLE\]:\s*([^\n]+)/', $notes, $m)) {
+        $orderTitle = trim($m[1]);
+    }
 
     $receipts[] = [
         'task' => $task,
@@ -164,6 +169,7 @@ foreach ($taskIds as $taskId) {
         'displayNotes' => $displayNotes,
         'shippingFees' => $shippingFees,
         'discount' => $discount,
+        'orderTitle' => $orderTitle,
     ];
 }
 
@@ -182,7 +188,11 @@ $singleReceipt = count($receipts) === 1;
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo $singleReceipt ? 'إيصال مهمة - ' . (int)$receipts[0]['taskNumber'] : 'طباعة إيصالات (' . count($receipts) . ')'; ?></title>
     <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <?php
+    $iconsPath = file_exists(__DIR__ . '/assets/bootstrap-icons/bootstrap-icons.css') ? 'assets/bootstrap-icons/bootstrap-icons.css' : 'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css';
+    $iconsHref = (strpos($iconsPath, 'http') === 0) ? $iconsPath : (function_exists('getRelativeUrl') ? getRelativeUrl($iconsPath) : $iconsPath);
+    ?>
+    <link rel="stylesheet" href="<?php echo htmlspecialchars($iconsHref); ?>">
     <style>
         * {
             margin: 0;
@@ -683,9 +693,16 @@ $singleReceipt = count($receipts) === 1;
         <div class="section-title">ملاحظات</div>
         <div class="task-details">
             <div style="font-size: 14px; line-height: 1.8; padding: 4px 0; font-weight: 500; color: #000;">
+                <?php
+                $receiptOrderTitle = isset($r['orderTitle']) ? trim($r['orderTitle']) : '';
+                if ($receiptOrderTitle !== ''): ?>
+                    <div style="margin-bottom: 8px; padding: 6px 8px; background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); border-radius: 6px; border-right: 4px solid #1976d2;">
+                        <i class="bi bi-geo-alt-fill" style="color: #1976d2; margin-left: 6px; font-size: 1.1em;"></i><strong>العنوان:</strong> <?php echo htmlspecialchars($receiptOrderTitle); ?>
+                    </div>
+                <?php endif; ?>
                 <?php if ($displayNotes !== ''): ?>
                     <?php echo nl2br(htmlspecialchars($displayNotes)); ?>
-                <?php else: ?>
+                <?php elseif ($receiptOrderTitle === ''): ?>
                     <span style="color: #666; font-weight: 500;">لا توجد ملاحظات</span>
                 <?php endif; ?>
                 <?php if (!empty($task['customer_phone'])): ?>

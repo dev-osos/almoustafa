@@ -372,6 +372,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $title = trim($_POST['title'] ?? '');
         $details = trim($_POST['details'] ?? '');
+        $orderTitle = trim($_POST['order_title'] ?? '');
         $priority = $_POST['priority'] ?? 'normal';
         $priority = in_array($priority, $allowedPriorities, true) ? $priority : 'normal';
         $dueDate = $_POST['due_date'] ?? '';
@@ -580,6 +581,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 // حفظ المنتجات في notes بصيغة JSON
                 $notesParts = [];
+                if ($orderTitle !== '') {
+                    $notesParts[] = '[ORDER_TITLE]:' . $orderTitle;
+                }
                 if ($details) {
                     $notesParts[] = $details;
                 }
@@ -1009,6 +1013,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $customerName = trim($_POST['customer_name'] ?? '') ?: null;
                     $customerPhone = trim($_POST['customer_phone'] ?? '') ?: null;
                     $details = trim($_POST['details'] ?? '') ?: null;
+                    $orderTitle = trim($_POST['order_title'] ?? '');
                     $assignees = isset($_POST['assigned_to']) && is_array($_POST['assigned_to'])
                         ? array_filter(array_map('intval', $_POST['assigned_to']))
                         : [];
@@ -1035,6 +1040,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
                     }
                     $notesParts = [];
+                    if ($orderTitle !== '') {
+                        $notesParts[] = '[ORDER_TITLE]:' . $orderTitle;
+                    }
                     if ($details) $notesParts[] = $details;
                     if (!empty($products)) {
                         $notesParts[] = '[PRODUCTS_JSON]:' . json_encode($products, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -1171,6 +1179,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
             if (preg_match('/\[DISCOUNT\]\s*:\s*([0-9.]+)/', $notes, $m)) {
                 $discount = (float)$m[1];
             }
+            $orderTitle = '';
+            if (preg_match('/\[ORDER_TITLE\]\s*:\s*([^\n]+)/', $notes, $m)) {
+                $orderTitle = trim($m[1]);
+            }
             // استخراج العمال المخصصين
             if (preg_match('/\[ASSIGNED_WORKERS_IDS\]\s*:\s*([0-9,\s]+)/', $notes, $m)) {
                 $assignees = array_filter(array_map('intval', preg_split('/[\s,]+/', trim($m[1]), -1, PREG_SPLIT_NO_EMPTY)));
@@ -1186,6 +1198,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
                 $details = preg_replace('/المنتج:\s*[^\n]+/m', '', $details);
                 $details = preg_replace('/\[SHIPPING_FEES\]\s*:\s*[0-9.]+/', '', $details);
                 $details = preg_replace('/\[DISCOUNT\]\s*:\s*[0-9.]+/', '', $details);
+                $details = preg_replace('/\[ORDER_TITLE\]\s*:\s*[^\n]+/', '', $details);
                 $details = preg_replace('/\n\s*\n\s*\n+/', "\n\n", trim($details));
             }
             // تنسيق تاريخ الاستحقاق لـ input type="date" (YYYY-MM-DD)
@@ -1212,7 +1225,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
                     'products' => $products,
                     'assignees' => array_values($assignees),
                     'shipping_fees' => $shippingFees,
-                    'discount' => $discount
+                    'discount' => $discount,
+                    'order_title' => $orderTitle
                 ]
             ], JSON_UNESCAPED_UNICODE);
             exit;
@@ -1913,14 +1927,14 @@ setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
                             <input type="hidden" name="customer_name" id="submit_customer_name" value="">
                             <div id="customer_select_local_task" class="customer-select-block mb-2">
                                 <div class="search-wrap position-relative">
-                                    <input type="text" id="local_customer_search_task" class="form-control form-control-sm" placeholder="اكتب للبحث أو أدخل اسم عميل جديد..." autocomplete="off">
+                                    <input type="text" id="local_customer_search_task" class="form-control form-control-sm" placeholder="اكتب للبحث أو أدخل اسم عميل جديد..." autocomplete="off" required>
                                     <input type="hidden" id="local_customer_id_task" value="">
                                     <div id="local_customer_dropdown_task" class="search-dropdown-task d-none"></div>
                                 </div>
                             </div>
                             <div id="customer_select_rep_task" class="customer-select-block mb-2 d-none">
                                 <div class="search-wrap position-relative">
-                                    <input type="text" id="rep_customer_search_task" class="form-control form-control-sm" placeholder="اكتب للبحث أو أدخل اسم عميل جديد..." autocomplete="off">
+                                    <input type="text" id="rep_customer_search_task" class="form-control form-control-sm" placeholder="اكتب للبحث أو أدخل اسم عميل جديد..." autocomplete="off" required>
                                     <input type="hidden" id="rep_customer_id_task" value="">
                                     <div id="rep_customer_dropdown_task" class="search-dropdown-task d-none"></div>
                                 </div>
@@ -1932,8 +1946,8 @@ setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
                             <small class="form-text text-muted d-block">اختر عميلاً مسجلاً أو اكتب اسماً جديداً—يُحفظ تلقائياً كعميل جديد إن لم يكن مسجلاً</small>
                         </div>
                         <div class="col-md-5">
-                            <label class="form-label">وصف وتفاصيل و ملاحظات الاوردر</label>
-                            <textarea class="form-control" name="details" rows="3" placeholder="أدخل التفاصيل والتعليمات اللازمة للعمال."></textarea>
+                            <label class="form-label">العنوان</label>
+                            <input type="text" class="form-control" name="order_title" id="createOrderTitle" placeholder="عنوان التوصيل أو عنوان مميز يظهر في الإيصال">
                         </div>
                         <div class="col-12" id="productsSection">
                             <label class="form-label fw-bold">المنتجات والكميات</label>
@@ -1942,11 +1956,11 @@ setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
                                     <div class="row g-2">
                                         <div class="col-md-3">
                                             <label class="form-label small">اسم المنتج</label>
-                                            <input type="text" class="form-control product-name-input" name="products[0][name]" placeholder="أدخل اسم المنتج أو القالب" list="templateSuggestions" autocomplete="off">
+                                            <input type="text" class="form-control product-name-input" name="products[0][name]" placeholder="أدخل اسم المنتج أو القالب" list="templateSuggestions" autocomplete="off" required>
                                         </div>
                                         <div class="col-md-2">
                                             <label class="form-label small">الكمية</label>
-                                            <input type="number" class="form-control product-quantity-input" name="products[0][quantity]" step="1" min="0" placeholder="مثال: 120" id="product-quantity-0">
+                                            <input type="number" class="form-control product-quantity-input" name="products[0][quantity]" step="1" min="0" placeholder="مثال: 120" id="product-quantity-0" required>
                                         </div>
                                         <div class="col-md-2">
                                             <label class="form-label small">الوحدة</label>
@@ -1961,7 +1975,7 @@ setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
                                         </div>
                                         <div class="col-md-2">
                                             <label class="form-label small">السعر</label>
-                                            <input type="number" class="form-control product-price-input" name="products[0][price]" step="0.01" min="0" placeholder="0.00" id="product-price-0">
+                                            <input type="number" class="form-control product-price-input" name="products[0][price]" step="0.01" min="0" placeholder="0.00" id="product-price-0" required>
                                         </div>
                                         <div class="col-md-2">
                                             <label class="form-label small">الإجمالي</label>
@@ -1985,6 +1999,10 @@ setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
                             <div class="form-text mt-2">
                                 <small class="text-muted">يمكنك إضافة أكثر من منتج وكمية في نفس المهمة.</small>
                             </div>
+                        </div>
+                        <div class="col-12 mt-2">
+                            <label class="form-label">وصف وتفاصيل وملاحظات الاوردر</label>
+                            <textarea class="form-control" name="details" rows="3" placeholder="أدخل التفاصيل والتعليمات اللازمة للعمال."></textarea>
                         </div>
                         <div class="col-12 col-md-6 col-lg-4 mt-2">
                             <label class="form-label" for="createTaskShippingFees">رسوم الشحن (ج.م)</label>
@@ -2075,8 +2093,8 @@ setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
                             <input type="text" class="form-control" name="customer_phone" id="editCustomerPhone" placeholder="أدخل رقم العميل" dir="ltr">
                         </div>
                         <div class="col-md-5">
-                            <label class="form-label">وصف وتفاصيل و ملاحظات الاوردر</label>
-                            <textarea class="form-control" name="details" id="editDetails" rows="3" placeholder="أدخل التفاصيل والتعليمات اللازمة للعمال."></textarea>
+                            <label class="form-label">العنوان</label>
+                            <input type="text" class="form-control" name="order_title" id="editOrderTitle" placeholder="عنوان التوصيل أو عنوان مميز يظهر في الإيصال">
                         </div>
                         <div class="col-12" id="editProductsSection">
                             <label class="form-label fw-bold">المنتجات والكميات</label>
@@ -2084,6 +2102,10 @@ setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
                             <button type="button" class="btn btn-outline-primary btn-sm mt-2" id="editAddProductBtn">
                                 <i class="bi bi-plus-circle me-1"></i>إضافة منتج آخر
                             </button>
+                        </div>
+                        <div class="col-12 mt-2">
+                            <label class="form-label">وصف وتفاصيل وملاحظات الاوردر</label>
+                            <textarea class="form-control" name="details" id="editDetails" rows="3" placeholder="أدخل التفاصيل والتعليمات اللازمة للعمال."></textarea>
                         </div>
                         <div class="col-12 col-md-6 col-lg-4">
                             <label class="form-label" for="editTaskShippingFees">رسوم الشحن (ج.م)</label>
@@ -2660,6 +2682,8 @@ window.openEditTaskModal = function(taskId) {
                 document.getElementById('editCustomerName').value = t.customer_name || '';
                 document.getElementById('editCustomerPhone').value = t.customer_phone || '';
                 document.getElementById('editDetails').value = t.details || '';
+                var orderTitleEl = document.getElementById('editOrderTitle');
+                if (orderTitleEl && t.order_title !== undefined) orderTitleEl.value = t.order_title || '';
                 var shippingEl = document.getElementById('editTaskShippingFees');
                 if (shippingEl && typeof t.shipping_fees === 'number') shippingEl.value = t.shipping_fees;
                 if (shippingEl && (typeof t.shipping_fees === 'string' && t.shipping_fees !== '')) shippingEl.value = t.shipping_fees;
