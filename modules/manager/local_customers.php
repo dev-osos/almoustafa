@@ -3081,7 +3081,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <!-- بطاقة مرتجع من فاتورة ورقية - للموبايل فقط -->
 <div class="card shadow-sm mb-4 d-md-none" id="paperInvoiceReturnCard" style="display: none;">
-    <div class="card-header bg-warning text-dark d-flex align-items-center justify-content-between">
+    <div class="card-header bg-danger text-white d-flex align-items-center justify-content-between">
         <h5 class="mb-0"><i class="bi bi-arrow-return-left me-2"></i>مرتجع من فاتورة ورقية - <span id="paperInvoiceReturnCardCustomerName">-</span></h5>
         <button type="button" class="btn btn-sm btn-light" onclick="closePaperInvoiceReturnCard()" aria-label="إغلاق"><i class="bi bi-x-lg"></i></button>
     </div>
@@ -3109,7 +3109,7 @@ document.addEventListener('DOMContentLoaded', function() {
         <div id="paperInvoiceReturnCardMessage" class="alert d-none mb-0"></div>
         <div class="d-flex gap-2 mt-3">
             <button type="button" class="btn btn-secondary flex-fill" onclick="closePaperInvoiceReturnCard()">إلغاء</button>
-            <button type="button" class="btn btn-warning flex-fill" id="paperInvoiceReturnCardSubmitBtn" onclick="submitPaperInvoiceReturn()"><i class="bi bi-check-lg me-1"></i>حفظ وخصم من الرصيد</button>
+            <button type="button" class="btn btn-danger flex-fill" id="paperInvoiceReturnCardSubmitBtn" onclick="submitPaperInvoiceReturn()"><i class="bi bi-check-lg me-1"></i>حفظ وخصم من الرصيد</button>
         </div>
     </div>
 </div>
@@ -3118,7 +3118,7 @@ document.addEventListener('DOMContentLoaded', function() {
 <div class="modal fade d-none d-md-block" id="paperInvoiceReturnModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
-            <div class="modal-header bg-warning text-dark">
+            <div class="modal-header bg-danger text-white">
                 <h5 class="modal-title"><i class="bi bi-arrow-return-left me-2"></i>مرتجع من فاتورة ورقية - <span id="paperInvoiceReturnCustomerName">-</span></h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="إغلاق"></button>
             </div>
@@ -3147,7 +3147,7 @@ document.addEventListener('DOMContentLoaded', function() {
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
-                <button type="button" class="btn btn-warning" id="paperInvoiceReturnSubmitBtn" onclick="submitPaperInvoiceReturn()"><i class="bi bi-check-lg me-1"></i>حفظ وخصم من الرصيد</button>
+                <button type="button" class="btn btn-danger" id="paperInvoiceReturnSubmitBtn" onclick="submitPaperInvoiceReturn()"><i class="bi bi-check-lg me-1"></i>حفظ وخصم من الرصيد</button>
             </div>
         </div>
     </div>
@@ -3157,7 +3157,7 @@ document.addEventListener('DOMContentLoaded', function() {
 <div class="modal fade" id="paperInvoiceReturnImageViewModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-fullscreen modal-dialog-centered">
         <div class="modal-content">
-            <div class="modal-header bg-warning text-dark"><h5 class="modal-title mb-0">عرض صورة مرتجع الفاتورة الورقية</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="إغلاق"></button></div>
+            <div class="modal-header bg-danger text-white"><h5 class="modal-title mb-0">عرض صورة مرتجع الفاتورة الورقية</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="إغلاق"></button></div>
             <div class="modal-body d-flex align-items-center justify-content-center overflow-auto p-2" style="min-height: 0;"><img id="paperInvoiceReturnViewImage" src="" alt="صورة المرتجع" style="max-width: 100%; max-height: calc(100vh - 120px); width: auto; height: auto; object-fit: contain; display: block;"></div>
         </div>
     </div>
@@ -3165,7 +3165,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <!-- بطاقة عرض صورة مرتجع الفاتورة الورقية - للموبايل -->
 <div class="card shadow-sm mb-4 d-md-none position-fixed top-0 start-0 end-0 m-2" id="paperInvoiceReturnViewCard" style="display: none; z-index: 1060; max-height: 95vh;">
-    <div class="card-header bg-warning text-dark d-flex align-items-center justify-content-between py-2">
+    <div class="card-header bg-danger text-white d-flex align-items-center justify-content-between py-2">
         <span class="fw-bold">عرض صورة مرتجع الفاتورة الورقية</span>
         <button type="button" class="btn btn-light btn-sm fw-bold" onclick="closePaperInvoiceReturnViewCard()" aria-label="إغلاق">✕ إغلاق</button>
     </div>
@@ -3176,7 +3176,7 @@ document.addEventListener('DOMContentLoaded', function() {
 <div class="modal fade" id="localCustomerReturnModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content shadow-lg">
-            <div class="modal-header bg-warning text-dark border-bottom border-warning">
+            <div class="modal-header bg-danger text-white border-bottom border-danger">
                 <h5 class="modal-title d-flex align-items-center">
                     <i class="bi bi-arrow-return-left me-2 fs-4"></i>
                     <span>إرجاع منتجات - <strong id="localReturnCustomerName">عميل محلي</strong></span>
@@ -6337,9 +6337,9 @@ function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns
         const dateStr = (pr.return_date || pr.created_at || '-').toString().substring(0, 10);
         const returnAmt = parseFloat(pr.return_amount || 0);
         const viewBtn = pr.image_path
-            ? '<button type="button" class="btn btn-sm btn-outline-warning" onclick="showPaperInvoiceReturnImage(' + parseInt(pr.id, 10) + ')" title="عرض صورة المرتجع"><i class="bi bi-image me-1"></i></button>'
+            ? '<button type="button" class="btn btn-sm btn-outline-danger" onclick="showPaperInvoiceReturnImage(' + parseInt(pr.id, 10) + ')" title="عرض صورة المرتجع"><i class="bi bi-image me-1"></i></button>'
             : '<span class="text-muted small">لا توجد صورة</span>';
-        allEntries.push({ sortDate: normDate(pr.return_date || pr.created_at), effect: -returnAmt, cells: ['<td>' + safeNum + '</td>', '<td class="text-warning">-' + returnAmt.toFixed(2) + ' ج.م</td>', '<td>' + dateStr + '</td>', '<td>' + viewBtn + '</td>'] });
+        allEntries.push({ sortDate: normDate(pr.return_date || pr.created_at), effect: -returnAmt, cells: ['<td class="text-danger">' + safeNum + '</td>', '<td class="text-danger">-' + returnAmt.toFixed(2) + ' ج.م</td>', '<td>' + dateStr + '</td>', '<td>' + viewBtn + '</td>'] });
     });
     collections.forEach(function(col) {
         const safeNum = ('تحصيل - ' + (col.collection_number || col.id)).replace(/</g, '&lt;').replace(/>/g, '&gt;');
