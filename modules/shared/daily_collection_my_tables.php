@@ -21,6 +21,9 @@ require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../includes/db.php';
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/path_helper.php';
+if (!function_exists('logAudit')) {
+    require_once __DIR__ . '/../../includes/audit_log.php';
+}
 
 requireRole(['driver', 'sales', 'production', 'manager', 'accountant', 'developer']);
 
@@ -91,6 +94,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && isset($_
         $error = $isControlRole ? 'البند غير موجود.' : 'البند غير موجود أو غير مخصص لك.';
     } else {
         if ($action === 'mark_collected') {
+            $collectionAmount = isset($_POST['collection_amount']) ? (float) str_replace(',', '', (string)$_POST['collection_amount']) : 0;
+            $localCustomerId = isset($_POST['local_customer_id']) ? (int)$_POST['local_customer_id'] : 0;
+            $localCustomerName = trim((string)($_POST['local_customer_name'] ?? ''));
+            if (!$isControlRole && $collectionAmount > 0 && $localCustomerId > 0 && $localCustomerName !== '') {
+                $walletRequestsTable = $db->queryOne("SHOW TABLES LIKE 'user_wallet_local_collection_requests'");
+                if (!empty($walletRequestsTable)) {
+                    try {
+                        $db->execute(
+                            "INSERT INTO user_wallet_local_collection_requests (user_id, local_customer_id, customer_name, amount, status) VALUES (?, ?, ?, ?, 'pending')",
+                            [$userId, $localCustomerId, $localCustomerName, $collectionAmount]
+                        );
+                        $requestId = $db->getLastInsertId();
+                        if (function_exists('logAudit')) {
+                            logAudit($userId, 'wallet_local_collection_request', 'user_wallet_local_collection_requests', $requestId, null, ['local_customer_id' => $localCustomerId, 'amount' => $collectionAmount]);
+                        }
+                    } catch (Throwable $e) {
+                        error_log('Daily collection wallet request: ' . $e->getMessage());
+                    }
+                }
+            }
             $existing = $db->queryOne("SELECT id, status FROM daily_collection_daily_records WHERE schedule_item_id = ? AND record_date = ?", [$itemId, $recordDate]);
             if ($existing) {
                 $db->execute("UPDATE daily_collection_daily_records SET status = 'collected', collected_at = NOW(), collected_by = ? WHERE id = ?", [$userId, $existing['id']]);
@@ -179,6 +202,7 @@ foreach ($schedules as $s) {
             'schedule_id' => $s['id'],
             'schedule_name' => $s['name'],
             'item_id' => $it['item_id'],
+            'customer_id' => (int)($it['customer_id'] ?? 0),
             'customer_name' => $it['customer_name'] ?? '—',
             'customer_balance' => isset($it['customer_balance']) ? (float)$it['customer_balance'] : 0,
             'daily_amount' => $it['daily_amount'],
@@ -344,12 +368,18 @@ $pageName = 'daily_collection_my_tables';
                                     </td>
                                     <td class="text-end">
                                         <?php if ($it['status'] !== 'collected'): ?>
-                                        <form method="post" class="d-inline form-daily-collection-action" data-item="<?php echo $it['item_id']; ?>" data-date="<?php echo $viewDate; ?>">
-                                            <input type="hidden" name="record_date" value="<?php echo $viewDate; ?>">
-                                            <input type="hidden" name="item_id" value="<?php echo $it['item_id']; ?>">
-                                            <input type="hidden" name="action" value="mark_collected">
-                                            <button type="submit" class="btn btn-sm btn-success">تم التحصيل</button>
-                                        </form>
+                                            <?php if ($isControlRole): ?>
+                                                <form method="post" class="d-inline form-daily-collection-action" data-item="<?php echo $it['item_id']; ?>" data-date="<?php echo $viewDate; ?>">
+                                                    <input type="hidden" name="record_date" value="<?php echo $viewDate; ?>">
+                                                    <input type="hidden" name="item_id" value="<?php echo $it['item_id']; ?>">
+                                                    <input type="hidden" name="action" value="mark_collected">
+                                                    <button type="submit" class="btn btn-sm btn-success">تم التحصيل</button>
+                                                </form>
+                                            <?php else: ?>
+                                                <button type="button" class="btn btn-sm btn-success btn-mark-collected" data-item-id="<?php echo (int)$it['item_id']; ?>" data-record-date="<?php echo htmlspecialchars($viewDate); ?>" data-customer-id="<?php echo (int)$it['customer_id']; ?>" data-customer-name="<?php echo htmlspecialchars($it['customer_name'] ?? ''); ?>" data-customer-balance="<?php echo (float)$it['customer_balance']; ?>" data-daily-amount="<?php echo (float)$it['daily_amount']; ?>">
+                                                    تم التحصيل
+                                                </button>
+                                            <?php endif; ?>
                                         <?php endif; ?>
                                     </td>
                                 </tr>
@@ -387,6 +417,50 @@ $pageName = 'daily_collection_my_tables';
             <?php endif; ?>
         </div>
     <?php endif; ?>
+
+    <?php if (!$isControlRole): ?>
+    <!-- بطاقة تسجيل التحصيل (رصيد العميل + المبلغ المحصل فعلياً + إرسال طلب لمحفظة المستخدم) -->
+    <div class="modal fade" id="dailyCollectionModal" tabindex="-1" aria-labelledby="dailyCollectionModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="dailyCollectionModalLabel"><i class="bi bi-cash-coin me-2"></i>تسجيل التحصيل</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="إغلاق"></button>
+                </div>
+                <form id="daily-collection-modal-form">
+                    <div class="modal-body">
+                        <input type="hidden" name="page" value="daily_collection_my_tables">
+                        <input type="hidden" name="action" value="mark_collected">
+                        <input type="hidden" name="item_id" id="modal_item_id" value="">
+                        <input type="hidden" name="record_date" id="modal_record_date" value="">
+                        <input type="hidden" name="local_customer_id" id="modal_local_customer_id" value="">
+                        <input type="hidden" name="local_customer_name" id="modal_local_customer_name" value="">
+                        <div class="mb-3">
+                            <label class="form-label text-muted small">العميل</label>
+                            <div class="fw-bold" id="modal_customer_name_display">—</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label text-muted small">رصيد العميل</label>
+                            <div class="form-control bg-light fw-bold" id="modal_customer_balance_display">—</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="modal_collection_amount" class="form-label">المبلغ المحصل فعلياً <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text">ج.م</span>
+                                <input type="number" step="0.01" min="0.01" class="form-control form-control-lg" id="modal_collection_amount" name="collection_amount" required placeholder="0.00">
+                            </div>
+                            <small class="text-muted">يُسجّل طلب تحصيل في محفظتك في انتظار موافقة المحاسب أو المدير.</small>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">إلغاء</button>
+                        <button type="submit" class="btn btn-success"><i class="bi bi-check-circle me-1"></i>تسجيل التحصيل</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
 </div>
 <script>
 (function() {
@@ -414,5 +488,53 @@ $pageName = 'daily_collection_my_tables';
             }
         });
     });
+
+    var modalEl = document.getElementById('dailyCollectionModal');
+    var modalForm = document.getElementById('daily-collection-modal-form');
+    if (modalEl && modalForm) {
+        var modal = typeof bootstrap !== 'undefined' && bootstrap.Modal ? new bootstrap.Modal(modalEl) : null;
+        var formatNum = function(n) { return (typeof n === 'number' && !isNaN(n)) ? n.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'; };
+        document.querySelectorAll('.btn-mark-collected').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var itemId = btn.getAttribute('data-item-id');
+                var recordDate = btn.getAttribute('data-record-date');
+                var customerId = btn.getAttribute('data-customer-id');
+                var customerName = btn.getAttribute('data-customer-name') || '—';
+                var customerBalance = parseFloat(btn.getAttribute('data-customer-balance')) || 0;
+                var dailyAmount = parseFloat(btn.getAttribute('data-daily-amount')) || 0;
+                document.getElementById('modal_item_id').value = itemId;
+                document.getElementById('modal_record_date').value = recordDate;
+                document.getElementById('modal_local_customer_id').value = customerId;
+                document.getElementById('modal_local_customer_name').value = customerName;
+                document.getElementById('modal_customer_name_display').textContent = customerName;
+                document.getElementById('modal_customer_balance_display').textContent = formatNum(customerBalance) + ' ج.م';
+                document.getElementById('modal_collection_amount').value = dailyAmount > 0 ? dailyAmount : '';
+                document.getElementById('modal_collection_amount').focus();
+                if (modal) modal.show();
+            });
+        });
+        modalForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            var fd = new FormData(modalForm);
+            var amount = parseFloat(document.getElementById('modal_collection_amount').value) || 0;
+            if (amount <= 0) {
+                alert('يرجى إدخال مبلغ التحصيل أكبر من صفر.');
+                return;
+            }
+            var submitBtn = modalForm.querySelector('button[type="submit"]');
+            if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'جاري التسجيل...'; }
+            fetch(window.location.href, {
+                method: 'POST',
+                body: fd,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            }).then(function(r) { return r.json(); }).then(function(data) {
+                if (modal) modal.hide();
+                if (data.success) window.location.reload();
+                else if (data.message) alert(data.message);
+            }).catch(function() { alert('حدث خطأ في الاتصال.'); }).finally(function() {
+                if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = '<i class="bi bi-check-circle me-1"></i>تسجيل التحصيل'; }
+            });
+        });
+    }
 })();
 </script>
