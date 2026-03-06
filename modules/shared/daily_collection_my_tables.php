@@ -487,4 +487,61 @@ $pageName = 'daily_collection_my_tables';
         });
     });
 })();
+
+<?php if (!$isControlRole): ?>
+// فتح/إغلاق بطاقة التحصيل من نفس الصفحة (يعمل مع التحميل العادي و AJAX)
+(function() {
+    var formatNum = function(n) {
+        return (typeof n === 'number' && !isNaN(n)) ? n.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
+    };
+    function openCard(btn) {
+        if (!btn) return;
+        var card = document.getElementById('dailyCollectionCard');
+        if (!card) return;
+        var itemId = btn.getAttribute('data-item-id');
+        var recordDate = btn.getAttribute('data-record-date');
+        var customerId = btn.getAttribute('data-customer-id');
+        var customerName = btn.getAttribute('data-customer-name') || '—';
+        var customerBalance = parseFloat(btn.getAttribute('data-customer-balance')) || 0;
+        var dailyAmount = parseFloat(btn.getAttribute('data-daily-amount')) || 0;
+        var mid = document.getElementById('modal_item_id');
+        var mrd = document.getElementById('modal_record_date');
+        var mlcid = document.getElementById('modal_local_customer_id');
+        var mlcname = document.getElementById('modal_local_customer_name');
+        var mname = document.getElementById('modal_customer_name_display');
+        var mbal = document.getElementById('modal_customer_balance_display');
+        var mamt = document.getElementById('modal_collection_amount');
+        if (mid) mid.value = itemId || '';
+        if (mrd) mrd.value = recordDate || '';
+        if (mlcid) mlcid.value = customerId || '';
+        if (mlcname) mlcname.value = customerName;
+        if (mname) mname.textContent = customerName;
+        if (mbal) mbal.textContent = formatNum(customerBalance) + ' ج.م';
+        if (mamt) { mamt.value = dailyAmount > 0 ? dailyAmount : ''; }
+        card.style.display = 'block';
+        card.removeAttribute('aria-hidden');
+        if (mamt) setTimeout(function() { mamt.focus(); }, 100);
+    }
+    function closeCard() {
+        var card = document.getElementById('dailyCollectionCard');
+        if (card) { card.style.display = 'none'; card.setAttribute('aria-hidden', 'true'); }
+    }
+    document.addEventListener('click', function(e) {
+        var t = e.target;
+        if (!t || !t.closest) return;
+        if (t.closest('.btn-mark-collected')) {
+            e.preventDefault();
+            e.stopPropagation();
+            openCard(t.closest('.btn-mark-collected'));
+            return;
+        }
+        if (t.closest('.btn-close-card')) {
+            e.preventDefault();
+            closeCard();
+        }
+    }, true);
+    window.openDailyCollectionModal = openCard;
+    window.hideDailyCollectionModal = closeCard;
+})();
+<?php endif; ?>
 </script>
