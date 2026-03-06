@@ -20,7 +20,10 @@
         el.style.display = 'block';
         el.removeAttribute('aria-hidden');
         var firstInput = el.querySelector('#modal_collection_amount');
-        if (firstInput) setTimeout(function() { firstInput.focus(); }, 100);
+        setTimeout(function() {
+            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (firstInput) firstInput.focus();
+        }, 100);
     }
 
     window.openDailyCollectionModal = function(btn) {

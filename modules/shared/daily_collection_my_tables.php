@@ -339,7 +339,6 @@ $pageName = 'daily_collection_my_tables';
                     <table class="table table-hover mb-0">
                         <thead class="table-light">
                             <tr>
-                                <th>الجدول</th>
                                 <th>العميل</th>
                                 <th class="text-end">رصيد العميل</th>
                                 <th class="text-end">مبلغ التحصيل اليومي</th>
@@ -352,7 +351,6 @@ $pageName = 'daily_collection_my_tables';
                         <tbody>
                             <?php foreach ($itemsPage as $it): ?>
                                 <tr class="<?php echo $it['status'] === 'collected' ? 'table-success' : ''; ?>">
-                                    <td><?php echo htmlspecialchars($it['schedule_name']); ?></td>
                                     <td><?php echo htmlspecialchars($it['customer_name']); ?></td>
                                     <td class="text-end"><?php echo function_exists('formatCurrency') ? formatCurrency($it['customer_balance']) : number_format($it['customer_balance'], 2); ?></td>
                                     <td class="text-end"><?php echo function_exists('formatCurrency') ? formatCurrency($it['daily_amount']) : number_format($it['daily_amount'], 2); ?></td>
@@ -520,7 +518,10 @@ $pageName = 'daily_collection_my_tables';
         if (mamt) { mamt.value = dailyAmount > 0 ? dailyAmount : ''; }
         card.style.display = 'block';
         card.removeAttribute('aria-hidden');
-        if (mamt) setTimeout(function() { mamt.focus(); }, 100);
+        setTimeout(function() {
+            card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (mamt) mamt.focus();
+        }, 100);
     }
     function closeCard() {
         var card = document.getElementById('dailyCollectionCard');
