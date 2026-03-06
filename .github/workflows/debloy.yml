@@ -38,8 +38,8 @@ jobs:
           log-level: verbose
 
           server-dir: /httpdocs/
-          # غيّر هذا الاسم مؤقتاً (مثلاً state-2) لفرض رفع كامل إذا ظنّ الإكشن أن كل شيء محدّث
-          state-name: .ftp-deploy-sync-state.json
+          # اسم جديد لملف الحالة = الإكشن يتجاهل الحالة القديمة ويرفع كل التعديلات في التشغيل القادم
+          state-name: .ftp-deploy-sync-state-v2.json
 
           # مهم: لا يحذف ملفات السيرفر
           dangerous-clean-slate: false
