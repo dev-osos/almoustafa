@@ -504,6 +504,8 @@ $pageName = 'daily_collection_my_tables';
     white-space: nowrap;
     font-size: inherit;
     font-weight: inherit;
+    padding-left: 0.65rem !important;
+    padding-right: 0.65rem !important;
 }
 #daily-collection-table-wrap .daily-collection-table-compact th.daily-collection-num-col {
     font-size: 0.75rem;
@@ -516,6 +518,8 @@ $pageName = 'daily_collection_my_tables';
         width: 5rem !important;
         min-width: 5rem !important;
         max-width: 5rem !important;
+        padding-left: 0.55rem !important;
+        padding-right: 0.55rem !important;
     }
 }
 </style>
