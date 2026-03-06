@@ -308,6 +308,32 @@ if (empty($financialNotesTableCheck)) {
     }
 }
 
+// إنشاء جدول الخصومات المعلقة على الراتب (مرجعية — لا تؤثر على حساب الراتب)
+$pendingDeductionsTableCheck = $db->queryOne("SHOW TABLES LIKE 'salary_pending_deductions'");
+if (empty($pendingDeductionsTableCheck)) {
+    try {
+        $db->execute("
+            CREATE TABLE IF NOT EXISTS `salary_pending_deductions` (
+              `id` int(11) NOT NULL AUTO_INCREMENT,
+              `user_id` int(11) NOT NULL COMMENT 'الموظف المطلوب تعليق الخصم له',
+              `amount` decimal(10,2) NOT NULL COMMENT 'مبلغ الخصم',
+              `reason` varchar(500) NOT NULL COMMENT 'سبب الخصم',
+              `month` tinyint(2) NOT NULL COMMENT 'الشهر 1-12',
+              `year` smallint(4) NOT NULL COMMENT 'السنة',
+              `created_by` int(11) DEFAULT NULL COMMENT 'المدير أو المحاسب',
+              `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              PRIMARY KEY (`id`),
+              KEY `user_id` (`user_id`),
+              KEY `month_year` (`month`, `year`),
+              CONSTRAINT `salary_pending_deductions_user_fk` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+              CONSTRAINT `salary_pending_deductions_created_by_fk` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='خصومات معلقة مرجعية للشهر — لا تؤثر على الراتب'
+        ");
+    } catch (Exception $e) {
+        error_log("Error creating salary_pending_deductions table: " . $e->getMessage());
+    }
+}
+
 // الحصول على الشهر والسنة الحالية
 $selectedMonth = isset($_GET['month']) ? intval($_GET['month']) : date('n');
 $selectedYear = isset($_GET['year']) ? intval($_GET['year']) : date('Y');
@@ -498,6 +524,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($userId) {
             $redirectUrl .= '&user_id=' . $userId;
         }
+        header('Location: ' . $redirectUrl);
+        exit;
+    } elseif ($action === 'add_pending_deduction') {
+        $month = intval($_POST['month'] ?? $selectedMonth);
+        $year = intval($_POST['year'] ?? $selectedYear);
+        $userId = intval($_POST['user_id'] ?? 0);
+        $amount = cleanFinancialValue($_POST['amount'] ?? 0);
+        $reason = trim($_POST['reason'] ?? '');
+        if ($month < 1 || $month > 12 || $year < 2000 || $year > 2100) {
+            $_SESSION['salaries_error'] = 'الشهر أو السنة غير صحيح.';
+        } elseif ($userId <= 0) {
+            $_SESSION['salaries_error'] = 'يرجى اختيار الموظف.';
+        } elseif ($amount <= 0) {
+            $_SESSION['salaries_error'] = 'يرجى إدخال مبلغ الخصم (أكبر من صفر).';
+        } elseif ($reason === '') {
+            $_SESSION['salaries_error'] = 'يرجى إدخال سبب الخصم.';
+        } else {
+            try {
+                $db->execute(
+                    "INSERT INTO salary_pending_deductions (user_id, amount, reason, month, year, created_by) VALUES (?, ?, ?, ?, ?, ?)",
+                    [$userId, $amount, $reason, $month, $year, $currentUser['id']]
+                );
+                $_SESSION['salaries_success'] = 'تم إضافة الخصم المعلق بنجاح.';
+                if (function_exists('logAudit')) {
+                    logAudit($currentUser['id'], 'add_pending_deduction', 'salary_pending_deductions', $db->getLastInsertId(), null, ['user_id' => $userId, 'amount' => $amount, 'month' => $month, 'year' => $year]);
+                }
+            } catch (Exception $e) {
+                error_log('add_pending_deduction: ' . $e->getMessage());
+                $_SESSION['salaries_error'] = 'حدث خطأ أثناء الإضافة.';
+            }
+        }
+        $redirectUrl = $currentUrl . '?page=salaries&view=' . urlencode($view) . '&month=' . $month . '&year=' . $year . '#pending-deductions-card';
+        header('Location: ' . $redirectUrl);
+        exit;
+    } elseif ($action === 'delete_pending_deduction') {
+        $id = intval($_POST['id'] ?? 0);
+        $month = intval($_POST['month'] ?? $selectedMonth);
+        $year = intval($_POST['year'] ?? $selectedYear);
+        if ($id <= 0) {
+            $_SESSION['salaries_error'] = 'معرف الخصم غير صحيح.';
+        } else {
+            $row = $db->queryOne("SELECT id FROM salary_pending_deductions WHERE id = ?", [$id]);
+            if ($row) {
+                $db->execute("DELETE FROM salary_pending_deductions WHERE id = ?", [$id]);
+                $_SESSION['salaries_success'] = 'تم حذف الخصم المعلق.';
+                if (function_exists('logAudit')) {
+                    logAudit($currentUser['id'], 'delete_pending_deduction', 'salary_pending_deductions', $id, null, []);
+                }
+            }
+        }
+        $redirectUrl = $currentUrl . '?page=salaries&view=' . urlencode($view) . '&month=' . $month . '&year=' . $year . '#pending-deductions-card';
         header('Location: ' . $redirectUrl);
         exit;
     } elseif ($action === 'modify_salary') {
@@ -1981,6 +2058,23 @@ if (in_array($currentUser['role'] ?? '', ['manager', 'developer'], true)) {
         error_log("Error fetching pending modifications: " . $e->getMessage());
         $pendingModifications = [];
     }
+}
+
+// جلب الخصومات المعلقة للشهر المحدد (مرجعية — لا تؤثر على الراتب)
+$pendingDeductions = [];
+try {
+    $tableExists = $db->queryOne("SHOW TABLES LIKE 'salary_pending_deductions'");
+    if (!empty($tableExists)) {
+        $pendingDeductions = $db->query(
+            "SELECT pd.*, u.full_name, u.username FROM salary_pending_deductions pd LEFT JOIN users u ON pd.user_id = u.id WHERE pd.month = ? AND pd.year = ? ORDER BY u.full_name ASC, pd.created_at ASC",
+            [$selectedMonth, $selectedYear]
+        );
+    }
+} catch (Exception $e) {
+    error_log("Error fetching pending deductions: " . $e->getMessage());
+}
+if (!is_array($pendingDeductions)) {
+    $pendingDeductions = [];
 }
 
 // جلب طلبات السلف مع الفلاتر
@@ -4643,6 +4737,97 @@ $advanceStatusLabels = [
 
 
 <?php endif; ?>
+
+<!-- بطاقة الخصومات المعلقة على الراتب (مرجعية — لا تؤثر على الراتب) -->
+<div class="card shadow-sm mb-4" id="pending-deductions-card">
+    <div class="card-header bg-light d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h5 class="mb-0"><i class="bi bi-pin-angle me-2"></i>الخصومات المعلقة على الراتب</h5>
+        <span class="text-muted small">مرتبطة بشهر: <?php echo date('F', mktime(0, 0, 0, $selectedMonth, 1)); ?> <?php echo $selectedYear; ?></span>
+    </div>
+    <div class="card-body">
+        <p class="text-muted small mb-3">يحددها المدير أو المحاسب ولا تؤثر على حساب الراتب — مرجع لخصومات الشهر المحدد فقط.</p>
+        <form method="post" class="mb-4">
+            <input type="hidden" name="action" value="add_pending_deduction">
+            <input type="hidden" name="month" value="<?php echo (int)$selectedMonth; ?>">
+            <input type="hidden" name="year" value="<?php echo (int)$selectedYear; ?>">
+            <input type="hidden" name="view" value="<?php echo htmlspecialchars($view); ?>">
+            <div class="row g-3 align-items-end">
+                <div class="col-12 col-md-4">
+                    <label for="pending_deduction_user" class="form-label">الموظف المطلوب تعليق الخصم له <span class="text-danger">*</span></label>
+                    <select name="user_id" id="pending_deduction_user" class="form-select" required>
+                        <option value="">— اختر الموظف —</option>
+                        <?php foreach ($users as $u): ?>
+                            <option value="<?php echo (int)$u['id']; ?>"><?php echo htmlspecialchars($u['full_name'] ?? $u['username'] ?? '#' . $u['id']); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-12 col-md-3">
+                    <label for="pending_deduction_amount" class="form-label">مبلغ الخصم <span class="text-danger">*</span></label>
+                    <input type="number" name="amount" id="pending_deduction_amount" class="form-control" step="0.01" min="0.01" required placeholder="0.00">
+                </div>
+                <div class="col-12 col-md-3">
+                    <label for="pending_deduction_reason" class="form-label">سبب الخصم <span class="text-danger">*</span></label>
+                    <input type="text" name="reason" id="pending_deduction_reason" class="form-control" maxlength="500" required placeholder="مثال: غياب، تأخير...">
+                </div>
+                <div class="col-12 col-md-2">
+                    <button type="submit" class="btn btn-primary w-100"><i class="bi bi-plus-lg me-1"></i>إضافة</button>
+                </div>
+            </div>
+        </form>
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>الموظف</th>
+                        <th class="text-end">مبلغ الخصم</th>
+                        <th>سبب الخصم</th>
+                        <th>من أضاف</th>
+                        <th>التاريخ</th>
+                        <th class="text-end">إجراء</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php if (empty($pendingDeductions)): ?>
+                        <tr><td colspan="6" class="text-center text-muted py-3">لا توجد خصومات معلقة لهذا الشهر.</td></tr>
+                    <?php else: ?>
+                        <?php
+                        $creatorCache = [];
+                        foreach ($pendingDeductions as $pd):
+                            $creatorName = '';
+                            if (!empty($pd['created_by'])) {
+                                if (!isset($creatorCache[$pd['created_by']])) {
+                                    $cr = $db->queryOne("SELECT full_name, username FROM users WHERE id = ?", [$pd['created_by']]);
+                                    $creatorCache[$pd['created_by']] = $cr ? ($cr['full_name'] ?? $cr['username']) : '—';
+                                }
+                                $creatorName = $creatorCache[$pd['created_by']];
+                            } else {
+                                $creatorName = '—';
+                            }
+                        ?>
+                            <tr>
+                                <td><?php echo htmlspecialchars($pd['full_name'] ?? $pd['username'] ?? '—'); ?></td>
+                                <td class="text-end"><?php echo function_exists('formatCurrency') ? formatCurrency($pd['amount']) : number_format($pd['amount'], 2); ?></td>
+                                <td><?php echo htmlspecialchars($pd['reason'] ?? '—'); ?></td>
+                                <td><?php echo htmlspecialchars($creatorName); ?></td>
+                                <td><?php echo !empty($pd['created_at']) ? date('Y-m-d H:i', strtotime($pd['created_at'])) : '—'; ?></td>
+                                <td class="text-end">
+                                    <form method="post" class="d-inline" onsubmit="return confirm('حذف هذا الخصم المعلق؟');">
+                                        <input type="hidden" name="action" value="delete_pending_deduction">
+                                        <input type="hidden" name="id" value="<?php echo (int)$pd['id']; ?>">
+                                        <input type="hidden" name="month" value="<?php echo (int)$selectedMonth; ?>">
+                                        <input type="hidden" name="year" value="<?php echo (int)$selectedYear; ?>">
+                                        <input type="hidden" name="view" value="<?php echo htmlspecialchars($view); ?>">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="حذف"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
 
 <script>
 // ===== دوال أساسية للموبايل - متاحة لجميع الأقسام =====
