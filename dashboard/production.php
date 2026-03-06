@@ -48,6 +48,11 @@ if ($page === 'user_wallet' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_
     include __DIR__ . '/../modules/user/user_wallet.php';
     exit;
 }
+if ($page === 'daily_collection_my_tables' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && isset($_POST['item_id']) && !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+    while (ob_get_level() > 0) ob_end_clean();
+    include __DIR__ . '/../modules/shared/daily_collection_my_tables.php';
+    exit;
+}
 
 $isTemplateAjax = ($page === 'production' && isset($_GET['ajax']));
 
