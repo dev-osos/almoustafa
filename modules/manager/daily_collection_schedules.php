@@ -178,7 +178,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 // إنشاء أو تحديث جدول (أيام الأسبوع + عملاء مدينون)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && in_array($_POST['action'], ['create_schedule', 'update_schedule'], true)) {
     $name = trim($_POST['name'] ?? '');
-    $weekDaysRaw = isset($_POST['week_days']) ? (array)$_POST['week_days'] : [];
+    // دعم المفتاح week_days أو week_days[] وقيمة نصية مفصولة بفاصلة
+    $weekDaysRaw = isset($_POST['week_days']) ? $_POST['week_days'] : (isset($_POST['week_days[]']) ? $_POST['week_days[]'] : []);
+    if (is_string($weekDaysRaw)) {
+        $weekDaysRaw = array_filter(array_map('trim', explode(',', $weekDaysRaw)));
+    }
+    $weekDaysRaw = (array)$weekDaysRaw;
     $weekDays = array_values(array_unique(array_filter(array_map('intval', $weekDaysRaw), function ($d) { return $d >= 0 && $d <= 6; })));
     sort($weekDays);
     $weekDaysStr = $weekDays === [] ? null : implode(',', $weekDays);
@@ -187,6 +192,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && in_array
     $amounts = isset($_POST['amounts']) ? (array)$_POST['amounts'] : [];
     $assignUserIds = isset($_POST['assign_user_ids']) ? array_filter(array_map('intval', (array)$_POST['assign_user_ids'])) : [];
     $scheduleId = (int)($_POST['schedule_id'] ?? 0);
+
+    // عند التحديث: إذا لم تُرسل أيام من النموذج، نُبقي على أيام الجدول الحالية (تفادي تعيين أيام افتراضية بالخطأ)
+    if ($_POST['action'] === 'update_schedule' && $scheduleId > 0 && empty($weekDays)) {
+        $existingSchedule = $db->queryOne("SELECT id, week_days FROM daily_collection_schedules WHERE id = ?", [$scheduleId]);
+        if ($existingSchedule && !empty(trim((string)($existingSchedule['week_days'] ?? $existingSchedule['WEEK_DAYS'] ?? '')))) {
+            $existingWd = trim((string)($existingSchedule['week_days'] ?? $existingSchedule['WEEK_DAYS'] ?? ''));
+            $weekDays = array_values(array_unique(array_filter(array_map('intval', explode(',', $existingWd)), function ($d) { return $d >= 0 && $d <= 6; })));
+            sort($weekDays);
+            $weekDaysStr = $weekDays === [] ? null : implode(',', $weekDays);
+        }
+    }
 
     if ($name === '') {
         $error = 'يرجى إدخال اسم الجدول.';
@@ -294,8 +310,9 @@ $editWeekDays = [];
 if ($editId > 0) {
     $editSchedule = $db->queryOne("SELECT id, name, week_days FROM daily_collection_schedules WHERE id = ?", [$editId]);
     if ($editSchedule) {
-        if (!empty($editSchedule['week_days'])) {
-            $editWeekDays = array_map('intval', array_filter(explode(',', $editSchedule['week_days'])));
+        $editWeekDaysRaw = $editSchedule['week_days'] ?? $editSchedule['WEEK_DAYS'] ?? '';
+        if ($editWeekDaysRaw !== '' && $editWeekDaysRaw !== null) {
+            $editWeekDays = array_values(array_filter(array_map('intval', explode(',', (string)$editWeekDaysRaw)), function ($d) { return $d >= 0 && $d <= 6; }));
         }
         $editItems = $db->query(
             "SELECT si.id, si.local_customer_id, si.daily_amount, lc.name AS customer_name
