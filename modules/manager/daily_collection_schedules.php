@@ -194,6 +194,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && in_array
         $error = 'يرجى اختيار يوم واحد على الأقل من أيام الأسبوع.';
     } elseif (empty($customerIds)) {
         $error = 'يرجى اختيار عميل مدين واحد على الأقل.';
+    } elseif (empty($assignUserIds)) {
+        $error = 'يرجى اختيار مستخدم واحد على الأقل في «إظهار الجدول للمستخدمين» حتى يظهر الجدول للسائقين أو المندوبين أو عمال الإنتاج.';
     } else {
         try {
             $db->beginTransaction();
@@ -222,13 +224,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && in_array
                 );
             }
             foreach ($assignUserIds as $uid) {
+                $uid = (int)$uid;
                 if ($uid <= 0) continue;
+                $assignedBy = (int)$currentUser['id'];
                 $db->execute(
                     "INSERT INTO daily_collection_schedule_assignments (schedule_id, user_id, assigned_by) VALUES (?, ?, ?)",
-                    [$scheduleId, $uid, $currentUser['id']]
+                    [$scheduleId, $uid, $assignedBy]
                 );
             }
             $db->commit();
+            if (method_exists($db, 'clearCache')) {
+                try { $db->clearCache(); } catch (Throwable $e) { /* ignore */ }
+            }
             $_SESSION['daily_collection_success'] = ($_POST['action'] === 'create_schedule') ? 'تم إنشاء الجدول بنجاح. التحصيل يتكرر في الأيام المحددة كل أسبوع.' : 'تم تحديث الجدول بنجاح.';
         } catch (Throwable $e) {
             if ($db->inTransaction()) $db->rollBack();
@@ -421,13 +428,20 @@ if ($editId > 0) {
                             </div>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">إظهار الجدول للمستخدمين</label>
-                            <select name="assign_user_ids[]" class="form-select" multiple size="5">
-                                <?php foreach ($assignableUsers as $u): ?>
-                                                    <option value="<?php echo $u['id']; ?>" <?php echo in_array($u['id'], $editAssignments) ? 'selected' : ''; ?>><?php echo htmlspecialchars($u['full_name'] ?: $u['username']); ?> (<?php echo $roleLabels[$u['role']] ?? $u['role']; ?>)</option>
-                                                <?php endforeach; ?>
-                            </select>
-                            <small class="text-muted">يمكن اختيار أكثر من مستخدم (سائق، مندوب مبيعات، عامل إنتاج)</small>
+                            <label class="form-label">إظهار الجدول للمستخدمين <span class="text-danger">*</span></label>
+                            <small class="text-muted d-block mb-1">المستخدمون المحددون يرون هذا الجدول في صفحة «جداول التحصيل» في أيام التحصيل المحددة أعلاه. اختر مستخدمين واحداً أو أكثر.</small>
+                            <div class="border rounded p-2 bg-light" style="max-height:200px;overflow-y:auto;">
+                                <?php if (empty($assignableUsers)): ?>
+                                    <p class="text-muted small mb-0">لا يوجد مستخدمون (سائق / مندوب مبيعات / عامل إنتاج) نشطون. أضف مستخدمين من إدارة المستخدمين.</p>
+                                <?php else: ?>
+                                    <?php foreach ($assignableUsers as $u): ?>
+                                        <label class="d-block mb-1 mb-md-0 py-1 py-md-0">
+                                            <input type="checkbox" name="assign_user_ids[]" value="<?php echo (int)$u['id']; ?>" class="form-check-input me-2" <?php echo in_array($u['id'], $editAssignments) ? 'checked' : ''; ?>>
+                                            <?php echo htmlspecialchars($u['full_name'] ?: $u['username']); ?> <span class="text-muted">(<?php echo $roleLabels[$u['role']] ?? $u['role']; ?>)</span>
+                                        </label>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
+                            </div>
                         </div>
                         <button type="submit" class="btn btn-primary"><?php echo $editId ? 'حفظ التعديلات' : 'إنشاء الجدول'; ?></button>
                     </form>
@@ -523,6 +537,7 @@ if ($editId > 0) {
         form.addEventListener('submit', function(e) {
             var weekDays = form.querySelectorAll('input[name="week_days[]"]:checked');
             var customers = form.querySelectorAll('input[name="customer_ids[]"]:checked');
+            var assignUsers = form.querySelectorAll('input[name="assign_user_ids[]"]:checked');
             if (weekDays.length === 0) {
                 e.preventDefault();
                 alert('يرجى اختيار يوم واحد على الأقل من أيام الأسبوع.');
@@ -531,6 +546,11 @@ if ($editId > 0) {
             if (customers.length === 0) {
                 e.preventDefault();
                 alert('يرجى اختيار عميل مدين واحد على الأقل.');
+                return;
+            }
+            if (assignUsers.length === 0) {
+                e.preventDefault();
+                alert('يرجى اختيار مستخدم واحد على الأقل في «إظهار الجدول للمستخدمين» حتى يظهر الجدول للمُعينين.');
             }
         });
     }

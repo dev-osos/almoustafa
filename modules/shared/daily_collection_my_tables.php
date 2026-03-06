@@ -25,6 +25,10 @@ require_once __DIR__ . '/../../includes/path_helper.php';
 requireRole(['driver', 'sales', 'production', 'manager', 'accountant', 'developer']);
 
 $currentUser = getCurrentUser();
+if (!$currentUser || empty($currentUser['id'])) {
+    echo '<div class="container-fluid"><div class="alert alert-warning">يجب تسجيل الدخول لعرض جداول التحصيل.</div></div>';
+    return;
+}
 $userId = (int)$currentUser['id'];
 $db = db();
 
@@ -104,17 +108,27 @@ $scheduleFilter = isset($_GET['schedule_id']) && $_GET['schedule_id'] !== '' ? (
 
 // الجداول المخصصة للمستخدم الحالي (أو كل الجداول للمدير/المحاسب) — مع فلترة حسب يوم الأسبوع للتاريخ المعروض
 $viewDayOfWeek = (int)date('w', strtotime($viewDate)); // 0=الأحد .. 6=السبت
+$schedulesBeforeDateFilter = [];
 if ($isControlRole) {
     $schedules = $db->query(
         "SELECT s.id, s.name, s.week_days FROM daily_collection_schedules s ORDER BY s.name ASC"
     ) ?: [];
 } else {
-    $schedules = $db->query(
-        "SELECT s.id, s.name, s.week_days FROM daily_collection_schedules s
-         INNER JOIN daily_collection_schedule_assignments a ON a.schedule_id = s.id AND a.user_id = ?
-         ORDER BY s.name ASC",
+    // جلب التخصيصات أولاً ثم الجداول لضمان ظهور الجدول للمُعينين
+    $assignedScheduleIds = $db->query(
+        "SELECT a.schedule_id FROM daily_collection_schedule_assignments a WHERE a.user_id = ?",
         [$userId]
     ) ?: [];
+    $assignedScheduleIds = array_values(array_unique(array_column($assignedScheduleIds, 'schedule_id')));
+    $schedules = [];
+    if (!empty($assignedScheduleIds)) {
+        $placeholders = implode(',', array_fill(0, count($assignedScheduleIds), '?'));
+        $schedules = $db->query(
+            "SELECT s.id, s.name, s.week_days FROM daily_collection_schedules s WHERE s.id IN ($placeholders) ORDER BY s.name ASC",
+            $assignedScheduleIds
+        ) ?: [];
+    }
+    $schedulesBeforeDateFilter = $schedules;
 }
 // عرض الجدول فقط في التواريخ التي تطابق أيامه (إن وُجد week_days). إذا week_days فارغ = عرض كل يوم للتوافق مع الجداول القديمة
 $schedules = array_filter($schedules, function ($s) use ($viewDayOfWeek) {
@@ -125,6 +139,8 @@ $schedules = array_filter($schedules, function ($s) use ($viewDayOfWeek) {
 });
 $schedules = array_values($schedules);
 $isControlRole = in_array(strtolower($currentUser['role'] ?? ''), ['manager', 'accountant', 'developer'], true);
+$hasAssignedSchedulesButNoneForThisDate = !$isControlRole && count($schedulesBeforeDateFilter) > 0 && count($schedules) === 0;
+$viewDayName = [0 => 'الأحد', 1 => 'الإثنين', 2 => 'الثلاثاء', 3 => 'الأربعاء', 4 => 'الخميس', 5 => 'الجمعة', 6 => 'السبت'][$viewDayOfWeek] ?? '';
 
 // بناء قائمة مسطحة من كل البنود مع اسم الجدول والحالة (فقط للجداول المطبقة على تاريخ العرض)
 $allItems = [];
@@ -231,7 +247,14 @@ $pageName = 'daily_collection_my_tables';
         </div>
     </form>
 
-    <?php if (empty($schedules)): ?>
+    <?php if ($hasAssignedSchedulesButNoneForThisDate): ?>
+        <div class="alert alert-warning">
+            <i class="bi bi-calendar-event me-2"></i>
+            <strong>لا توجد جداول للتحصيل في هذا اليوم.</strong><br>
+            التاريخ المحدد هو <strong><?php echo htmlspecialchars($viewDate); ?></strong> (<?php echo $viewDayName; ?>). الجداول المخصصة لك تظهر فقط في أيام التحصيل المحددة لكل جدول (مثلاً السبت، الخميس).<br>
+            <span class="d-block mt-2">غيّر التاريخ من الأعلى إلى يوم تحصيل لعرض الجدول.</span>
+        </div>
+    <?php elseif (empty($schedules)): ?>
         <div class="alert alert-info">لا توجد جداول مخصصة لك. تواصل مع المدير أو المحاسب لربطك بجدول تحصيل.</div>
     <?php elseif ($totalItems === 0): ?>
         <div class="alert alert-info">لا توجد بنود تطابق الفلتر المحدد.</div>
