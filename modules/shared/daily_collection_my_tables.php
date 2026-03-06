@@ -155,7 +155,7 @@ $viewDayName = [0 => 'الأحد', 1 => 'الإثنين', 2 => 'الثلاثاء
 // بناء قائمة مسطحة من كل البنود مع اسم الجدول والحالة (فقط للجداول المطبقة على تاريخ العرض)
 $allItems = [];
 foreach ($schedules as $s) {
-    $sql = "SELECT si.id AS item_id, si.schedule_id, si.daily_amount, lc.id AS customer_id, lc.name AS customer_name
+    $sql = "SELECT si.id AS item_id, si.schedule_id, si.daily_amount, lc.id AS customer_id, lc.name AS customer_name, COALESCE(lc.balance, 0) AS customer_balance
             FROM daily_collection_schedule_items si
             LEFT JOIN local_customers lc ON lc.id = si.local_customer_id
             WHERE si.schedule_id = ? ORDER BY si.sort_order, si.id";
@@ -180,6 +180,7 @@ foreach ($schedules as $s) {
             'schedule_name' => $s['name'],
             'item_id' => $it['item_id'],
             'customer_name' => $it['customer_name'] ?? '—',
+            'customer_balance' => isset($it['customer_balance']) ? (float)$it['customer_balance'] : 0,
             'daily_amount' => $it['daily_amount'],
             'status' => $status,
             'record' => $rec
@@ -316,7 +317,8 @@ $pageName = 'daily_collection_my_tables';
                             <tr>
                                 <th>الجدول</th>
                                 <th>العميل</th>
-                                <th>مبلغ التحصيل اليومي</th>
+                                <th class="text-end">رصيد العميل</th>
+                                <th class="text-end">مبلغ التحصيل اليومي</th>
                                 <th>الحالة</th>
                                 <?php if (!$isControlRole): ?>
                                     <th class="text-end">إجراءات</th>
@@ -328,7 +330,8 @@ $pageName = 'daily_collection_my_tables';
                                 <tr class="<?php echo $it['status'] === 'collected' ? 'table-success' : ''; ?>">
                                     <td><?php echo htmlspecialchars($it['schedule_name']); ?></td>
                                     <td><?php echo htmlspecialchars($it['customer_name']); ?></td>
-                                    <td><?php echo function_exists('formatCurrency') ? formatCurrency($it['daily_amount']) : number_format($it['daily_amount'], 2); ?></td>
+                                    <td class="text-end"><?php echo function_exists('formatCurrency') ? formatCurrency($it['customer_balance']) : number_format($it['customer_balance'], 2); ?></td>
+                                    <td class="text-end"><?php echo function_exists('formatCurrency') ? formatCurrency($it['daily_amount']) : number_format($it['daily_amount'], 2); ?></td>
                                     <td>
                                         <?php if ($it['status'] === 'collected'): ?>
                                             <span class="badge bg-success">تم التحصيل</span>
