@@ -2479,7 +2479,7 @@ if ($isAjaxNavigation) {
 
 <?php if (!$isAjaxNavigation): ?>
 <?php include __DIR__ . '/../templates/footer.php'; ?>
-<script src="<?php echo ASSETS_URL; ?>js/local_customers_search.js?v=2" defer></script>
+<script src="<?php echo ASSETS_URL; ?>js/local_customers_search.js?v=3" defer></script>
 <script src="<?php echo ASSETS_URL; ?>js/reports.js" defer></script>
 <?php else: ?>
 <?php
