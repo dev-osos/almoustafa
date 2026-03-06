@@ -4,6 +4,7 @@
  */
 
 define('ACCESS_ALLOWED', true);
+define('DAILY_COLLECTION_MODAL_SCRIPT', true);
 // تعريف ثابت لمنع حذف الجلسة في sales.php
 define('SALES_PAGE_ACTIVE', true);
 

@@ -5,6 +5,7 @@
  */
 
 define('ACCESS_ALLOWED', true);
+define('DAILY_COLLECTION_MODAL_SCRIPT', true);
 
 while (ob_get_level() > 0) {
     ob_end_clean();

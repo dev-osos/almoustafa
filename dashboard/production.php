@@ -4,6 +4,7 @@
  */
 
 define('ACCESS_ALLOWED', true);
+define('DAILY_COLLECTION_MODAL_SCRIPT', true);
 
 // تنظيف أي output buffer سابق قبل أي شيء
 while (ob_get_level() > 0) {

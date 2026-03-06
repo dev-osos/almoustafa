@@ -700,7 +700,11 @@ if (!defined('ACCESS_ALLOWED')) {
     
     <!-- البحث عن عميل في قوائم العملاء (دروب داون) -->
     <script src="<?php echo $assetsUrl; ?>js/customer-select-search.js?v=<?php echo $cacheVersion; ?>" defer></script>
-    
+    <?php if (defined('DAILY_COLLECTION_MODAL_SCRIPT') && DAILY_COLLECTION_MODAL_SCRIPT): ?>
+    <!-- بطاقة تسجيل التحصيل (جداول التحصيل اليومية - سائق/إنتاج/مبيعات) -->
+    <script src="<?php echo $assetsUrl; ?>js/daily-collection-modal.js?v=<?php echo isset($cacheVersion) ? $cacheVersion : '1'; ?>"></script>
+    <?php endif; ?>
+
     <!-- معالجة زر مسح الكل - بدون تنبيهات -->
     <script>
     // دالة مساعدة لحساب المسار الصحيح لـ API (مثل getApiPath في notifications.js)
