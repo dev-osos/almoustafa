@@ -34,6 +34,17 @@ if (empty($tableCheck)) {
     echo '<div class="container-fluid"><div class="alert alert-warning">جداول التحصيل غير مفعّلة بعد. يرجى تشغيل migration أو طلب تفعيلها من المدير.</div></div>';
     return;
 }
+// التأكد من وجود عمود week_days (أيام الأسبوع) إن وُجدت الجداول
+$colCheck = @$db->rawQuery("SHOW COLUMNS FROM daily_collection_schedules LIKE 'week_days'");
+$hasWeekDays = $colCheck && ($colCheck instanceof mysqli_result) && $colCheck->num_rows > 0;
+if ($colCheck && $colCheck instanceof mysqli_result) $colCheck->free();
+if (!$hasWeekDays) {
+    try {
+        $db->rawQuery("ALTER TABLE daily_collection_schedules ADD COLUMN week_days VARCHAR(20) DEFAULT NULL COMMENT 'أيام الأسبوع 0-6 مفصولة بفاصلة' AFTER name");
+    } catch (Throwable $e) {
+        error_log('Daily collection week_days column: ' . $e->getMessage());
+    }
+}
 
 $today = date('Y-m-d');
 $viewDate = isset($_GET['date']) ? date('Y-m-d', strtotime($_GET['date'])) : $today;
@@ -91,22 +102,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && isset($_
 $statusFilter = isset($_GET['status']) && in_array($_GET['status'], ['collected', 'pending'], true) ? $_GET['status'] : 'all';
 $scheduleFilter = isset($_GET['schedule_id']) && $_GET['schedule_id'] !== '' ? (int)$_GET['schedule_id'] : null;
 
-// الجداول المخصصة للمستخدم الحالي (أو كل الجداول للمدير/المحاسب)
+// الجداول المخصصة للمستخدم الحالي (أو كل الجداول للمدير/المحاسب) — مع فلترة حسب يوم الأسبوع للتاريخ المعروض
+$viewDayOfWeek = (int)date('w', strtotime($viewDate)); // 0=الأحد .. 6=السبت
 if ($isControlRole) {
     $schedules = $db->query(
-        "SELECT s.id, s.name FROM daily_collection_schedules s ORDER BY s.name ASC"
+        "SELECT s.id, s.name, s.week_days FROM daily_collection_schedules s ORDER BY s.name ASC"
     ) ?: [];
 } else {
     $schedules = $db->query(
-        "SELECT s.id, s.name FROM daily_collection_schedules s
+        "SELECT s.id, s.name, s.week_days FROM daily_collection_schedules s
          INNER JOIN daily_collection_schedule_assignments a ON a.schedule_id = s.id AND a.user_id = ?
          ORDER BY s.name ASC",
         [$userId]
     ) ?: [];
 }
+// عرض الجدول فقط في التواريخ التي تطابق أيامه (إن وُجد week_days). إذا week_days فارغ = عرض كل يوم للتوافق مع الجداول القديمة
+$schedules = array_filter($schedules, function ($s) use ($viewDayOfWeek) {
+    $wd = $s['week_days'] ?? '';
+    if ($wd === '' || $wd === null) return true;
+    $days = array_map('intval', explode(',', $wd));
+    return in_array($viewDayOfWeek, $days, true);
+});
+$schedules = array_values($schedules);
 $isControlRole = in_array(strtolower($currentUser['role'] ?? ''), ['manager', 'accountant', 'developer'], true);
 
-// بناء قائمة مسطحة من كل البنود مع اسم الجدول والحالة
+// بناء قائمة مسطحة من كل البنود مع اسم الجدول والحالة (فقط للجداول المطبقة على تاريخ العرض)
 $allItems = [];
 foreach ($schedules as $s) {
     $sql = "SELECT si.id AS item_id, si.schedule_id, si.daily_amount, lc.id AS customer_id, lc.name AS customer_name

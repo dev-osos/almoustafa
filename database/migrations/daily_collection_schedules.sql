@@ -7,6 +7,7 @@ SET NAMES utf8mb4;
 CREATE TABLE IF NOT EXISTS `daily_collection_schedules` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `name` varchar(200) NOT NULL COMMENT 'اسم الجدول للعرض',
+  `week_days` varchar(20) DEFAULT NULL COMMENT 'أيام الأسبوع للتحصيل 0-6 مفصولة بفاصلة (يتكرر كل أسبوع)',
   `created_by` int(11) NOT NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,

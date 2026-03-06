@@ -72,8 +72,29 @@ function ensureDailyCollectionTables($db) {
     }
 }
 
+/** التحقق من وجود عمود week_days وتشغيل الهجرة إن لزم */
+function ensureDailyCollectionWeekDaysColumn($db) {
+    $r = @$db->rawQuery("SHOW COLUMNS FROM daily_collection_schedules LIKE 'week_days'");
+    $exists = $r && ($r instanceof mysqli_result) && $r->num_rows > 0;
+    if ($r && $r instanceof mysqli_result) $r->free();
+    if ($exists) return;
+    $migrationPath = __DIR__ . '/../../database/migrations/daily_collection_schedules_add_week_days.sql';
+    if (!file_exists($migrationPath)) return;
+    $sql = trim(file_get_contents($migrationPath));
+    foreach (array_filter(array_map('trim', explode(';', $sql))) as $stmt) {
+        if ($stmt === '' || strpos($stmt, '--') === 0) continue;
+        try {
+            $db->rawQuery($stmt . ';');
+        } catch (Throwable $e) {
+            error_log('Daily collection week_days migration: ' . $e->getMessage());
+        }
+        break;
+    }
+}
+
 try {
     ensureDailyCollectionTables($db);
+    ensureDailyCollectionWeekDaysColumn($db);
 
     if (!dailyCollectionTableExists($db, 'local_customers')) {
         echo '<div class="container-fluid"><div class="alert alert-warning">جدول العملاء المحليين غير موجود. يرجى استخدام صفحة العملاء المحليين أولاً.</div></div>';
@@ -154,9 +175,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     if (!headers_sent()) { header('Location: ' . $redirect); exit; }
 }
 
-// إنشاء أو تحديث جدول
+// إنشاء أو تحديث جدول (أيام الأسبوع + عملاء مدينون)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && in_array($_POST['action'], ['create_schedule', 'update_schedule'], true)) {
     $name = trim($_POST['name'] ?? '');
+    $weekDaysRaw = isset($_POST['week_days']) ? (array)$_POST['week_days'] : [];
+    $weekDays = array_values(array_unique(array_filter(array_map('intval', $weekDaysRaw), function ($d) { return $d >= 0 && $d <= 6; })));
+    sort($weekDays);
+    $weekDaysStr = $weekDays === [] ? null : implode(',', $weekDays);
+
     $customerIds = isset($_POST['customer_ids']) ? array_filter(array_map('intval', (array)$_POST['customer_ids'])) : [];
     $amounts = isset($_POST['amounts']) ? (array)$_POST['amounts'] : [];
     $assignUserIds = isset($_POST['assign_user_ids']) ? array_filter(array_map('intval', (array)$_POST['assign_user_ids'])) : [];
@@ -164,13 +190,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && in_array
 
     if ($name === '') {
         $error = 'يرجى إدخال اسم الجدول.';
+    } elseif (empty($weekDays)) {
+        $error = 'يرجى اختيار يوم واحد على الأقل من أيام الأسبوع.';
     } elseif (empty($customerIds)) {
-        $error = 'يرجى اختيار عميل محلي واحد على الأقل.';
+        $error = 'يرجى اختيار عميل مدين واحد على الأقل.';
     } else {
         try {
             $db->beginTransaction();
             if ($_POST['action'] === 'create_schedule') {
-                $db->execute("INSERT INTO daily_collection_schedules (name, created_by) VALUES (?, ?)", [$name, $currentUser['id']]);
+                $db->execute("INSERT INTO daily_collection_schedules (name, week_days, created_by) VALUES (?, ?, ?)", [$name, $weekDaysStr, $currentUser['id']]);
                 $scheduleId = (int)$db->getLastInsertId();
                 if (function_exists('logAudit')) {
                     logAudit($currentUser['id'], 'daily_collection_schedule_created', 'daily_collection_schedules', $scheduleId, null, ['name' => $name]);
@@ -179,7 +207,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && in_array
                 if ($scheduleId <= 0) throw new InvalidArgumentException('معرف الجدول غير صحيح.');
                 $existing = $db->queryOne("SELECT id FROM daily_collection_schedules WHERE id = ?", [$scheduleId]);
                 if (!$existing) throw new InvalidArgumentException('الجدول غير موجود.');
-                $db->execute("UPDATE daily_collection_schedules SET name = ?, updated_at = NOW() WHERE id = ?", [$name, $scheduleId]);
+                $db->execute("UPDATE daily_collection_schedules SET name = ?, week_days = ?, updated_at = NOW() WHERE id = ?", [$name, $weekDaysStr, $scheduleId]);
                 $db->execute("DELETE FROM daily_collection_schedule_items WHERE schedule_id = ?", [$scheduleId]);
                 $db->execute("DELETE FROM daily_collection_schedule_assignments WHERE schedule_id = ?", [$scheduleId]);
             }
@@ -187,7 +215,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && in_array
             $sortOrder = 0;
             foreach ($customerIds as $i => $cid) {
                 if ($cid <= 0) continue;
-                $amount = isset($amounts[$i]) ? (float)str_replace(',', '', $amounts[$i]) : 0;
+                $amount = isset($amounts[$cid]) ? (float)str_replace(',', '', $amounts[$cid]) : (isset($amounts[$i]) ? (float)str_replace(',', '', $amounts[$i]) : 0);
                 $db->execute(
                     "INSERT INTO daily_collection_schedule_items (schedule_id, local_customer_id, daily_amount, sort_order) VALUES (?, ?, ?, ?)",
                     [$scheduleId, $cid, $amount, $sortOrder++]
@@ -201,7 +229,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && in_array
                 );
             }
             $db->commit();
-            $_SESSION['daily_collection_success'] = ($_POST['action'] === 'create_schedule') ? 'تم إنشاء الجدول بنجاح.' : 'تم تحديث الجدول بنجاح.';
+            $_SESSION['daily_collection_success'] = ($_POST['action'] === 'create_schedule') ? 'تم إنشاء الجدول بنجاح. التحصيل يتكرر في الأيام المحددة كل أسبوع.' : 'تم تحديث الجدول بنجاح.';
         } catch (Throwable $e) {
             if ($db->inTransaction()) $db->rollBack();
             error_log('Daily collection schedule save: ' . $e->getMessage());
@@ -214,9 +242,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && in_array
     }
 }
 
-// قائمة الجداول
+// قائمة الجداول (مع أيام الأسبوع)
 $schedules = $db->query(
-    "SELECT s.id, s.name, s.created_at, u.full_name AS created_by_name
+    "SELECT s.id, s.name, s.week_days, s.created_at, u.full_name AS created_by_name
      FROM daily_collection_schedules s
      LEFT JOIN users u ON u.id = s.created_by
      ORDER BY s.created_at DESC"
@@ -243,7 +271,10 @@ if (!empty($scheduleIds)) {
     }
 }
 
-$localCustomers = $db->query("SELECT id, name, phone FROM local_customers WHERE status = 'active' ORDER BY name ASC") ?: [];
+// العملاء المدينون فقط (رصيد > 0) لاختيارهم في جدول التحصيل
+$debtorCustomers = $db->query(
+    "SELECT id, name, phone, COALESCE(balance, 0) AS balance FROM local_customers WHERE status = 'active' AND (balance IS NOT NULL AND balance > 0) ORDER BY name ASC"
+) ?: [];
 $assignableUsers = $db->query(
     "SELECT id, full_name, username, role FROM users WHERE status = 'active' AND role IN ('driver', 'sales', 'production') ORDER BY role, full_name, username"
 ) ?: [];
@@ -252,9 +283,13 @@ $roleLabels = ['driver' => 'سائق', 'sales' => 'مندوب مبيعات', 'pr
 $editSchedule = null;
 $editItems = [];
 $editAssignments = [];
+$editWeekDays = [];
 if ($editId > 0) {
-    $editSchedule = $db->queryOne("SELECT id, name FROM daily_collection_schedules WHERE id = ?", [$editId]);
+    $editSchedule = $db->queryOne("SELECT id, name, week_days FROM daily_collection_schedules WHERE id = ?", [$editId]);
     if ($editSchedule) {
+        if (!empty($editSchedule['week_days'])) {
+            $editWeekDays = array_map('intval', array_filter(explode(',', $editSchedule['week_days'])));
+        }
         $editItems = $db->query(
             "SELECT si.id, si.local_customer_id, si.daily_amount, lc.name AS customer_name
              FROM daily_collection_schedule_items si
@@ -274,12 +309,13 @@ if ($editId > 0) {
     $schedules = [];
     $itemsCount = [];
     $assignmentsBySchedule = [];
-    $localCustomers = [];
+    $debtorCustomers = [];
     $assignableUsers = [];
     $roleLabels = ['driver' => 'سائق', 'sales' => 'مندوب مبيعات', 'production' => 'عامل إنتاج'];
     $editSchedule = null;
     $editItems = [];
     $editAssignments = [];
+    $editWeekDays = [];
 }
 ?>
 <div class="container-fluid">
@@ -321,47 +357,68 @@ if ($editId > 0) {
                                    placeholder="مثال: جدول تحصيل منطقة أ">
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">العملاء المحليون ومبلغ التحصيل اليومي <span class="text-danger">*</span></label>
-                            <small class="text-muted d-block mb-1">اكتب اسم العميل أو رقم الهاتف لعرض التطابقات من جدول العملاء المحليين</small>
-                            <div id="schedule-items-container" class="border rounded p-2 bg-light">
+                            <label class="form-label">أيام التحصيل في الأسبوع <span class="text-danger">*</span></label>
+                            <small class="text-muted d-block mb-1">يُعاد التحصيل في الأيام المحددة كل أسبوع (كل شهر/طوال السنة)</small>
+                            <div class="d-flex flex-wrap gap-2 gap-md-3" id="week-days-container">
                                 <?php
-                                if (!empty($editItems)) {
-                                    foreach ($editItems as $idx => $item) {
-                                        $custName = $item['customer_name'] ?? '';
-                                        $custId = (int)($item['local_customer_id'] ?? 0);
-                                        ?>
-                                        <div class="row g-2 mb-2 schedule-item-row">
-                                            <div class="col-12 col-md-6 position-relative">
-                                                <input type="text" class="form-control form-control-sm customer-search-input" placeholder="ابحث أو اكتب اسم العميل..." value="<?php echo htmlspecialchars($custName); ?>" autocomplete="off">
-                                                <input type="hidden" name="customer_ids[]" class="customer-id-input" value="<?php echo $custId ?: ''; ?>">
-                                                <div class="customer-search-results list-group position-absolute w-100" style="z-index:1050;display:none;max-height:200px;overflow-y:auto;"></div>
-                                            </div>
-                                            <div class="col-8 col-md-4">
-                                                <input type="text" name="amounts[]" class="form-control form-control-sm" placeholder="مبلغ يومي" value="<?php echo htmlspecialchars($item['daily_amount'] ?? ''); ?>">
-                                            </div>
-                                            <div class="col-4 col-md-2">
-                                                <button type="button" class="btn btn-outline-danger btn-sm w-100 remove-item" title="حذف"><i class="bi bi-trash"></i></button>
-                                            </div>
-                                        </div>
-                                    <?php }
-                                } else {
-                                    ?>
-                                    <div class="row g-2 mb-2 schedule-item-row">
-                                        <div class="col-12 col-md-6 position-relative">
-                                            <input type="text" class="form-control form-control-sm customer-search-input" placeholder="ابحث أو اكتب اسم العميل..." autocomplete="off">
-                                            <input type="hidden" name="customer_ids[]" class="customer-id-input" value="">
-                                            <div class="customer-search-results list-group position-absolute w-100" style="z-index:1050;display:none;max-height:200px;overflow-y:auto;"></div>
-                                        </div>
-                                        <div class="col-8 col-md-4">
-                                            <input type="text" name="amounts[]" class="form-control form-control-sm" placeholder="مبلغ يومي">
-                                        </div>
-                                        <div class="col-4 col-md-2">
-                                            <button type="button" class="btn btn-outline-danger btn-sm w-100 remove-item" title="حذف"><i class="bi bi-trash"></i></button>
-                                        </div>
-                                    </div>
-                                <?php } ?>
+                                $weekDayLabels = [0 => 'الأحد', 1 => 'الإثنين', 2 => 'الثلاثاء', 3 => 'الأربعاء', 4 => 'الخميس', 5 => 'الجمعة', 6 => 'السبت'];
+                                foreach ($weekDayLabels as $wd => $label):
+                                    $checked = in_array($wd, $editWeekDays, true);
+                                ?>
+                                    <label class="form-check form-check-inline border rounded px-3 py-2 mb-0">
+                                        <input type="checkbox" name="week_days[]" value="<?php echo $wd; ?>" class="form-check-input" <?php echo $checked ? 'checked' : ''; ?>>
+                                        <span class="form-check-label"><?php echo $label; ?></span>
+                                    </label>
+                                <?php endforeach; ?>
                             </div>
-                            <button type="button" class="btn btn-outline-primary btn-sm mt-1" id="add-schedule-item"><i class="bi bi-plus me-1"></i>إضافة عميل</button>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">العملاء المدينون ومبلغ التحصيل اليومي <span class="text-danger">*</span></label>
+                            <small class="text-muted d-block mb-1">اختر العملاء المدينين (رصيد &gt; 0) لضمهم للجدول في الأيام المحددة أعلاه. يمكنك تحديد مبلغ التحصيل اليومي لكل عميل.</small>
+                            <?php
+                            $editCustomerIds = array_column($editItems, 'local_customer_id');
+                            $editAmountsByCustomer = [];
+                            foreach ($editItems as $item) {
+                                $editAmountsByCustomer[(int)$item['local_customer_id']] = $item['daily_amount'] ?? 0;
+                            }
+                            ?>
+                            <div class="table-responsive border rounded">
+                                <table class="table table-sm table-hover mb-0" id="debtor-customers-table">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th class="text-center" style="width:2.5rem;"><input type="checkbox" id="select-all-debtors" title="تحديد الكل"></th>
+                                            <th>العميل</th>
+                                            <th>الهاتف</th>
+                                            <th class="text-end">الرصيد</th>
+                                            <th class="text-end" style="min-width:100px;">مبلغ التحصيل اليومي</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php if (empty($debtorCustomers)): ?>
+                                            <tr><td colspan="5" class="text-center text-muted py-3">لا يوجد عملاء مدينون (رصيد موجب) حالياً. أضف رصيداً للعملاء من صفحة العملاء المحليين.</td></tr>
+                                        <?php else: ?>
+                                            <?php foreach ($debtorCustomers as $c):
+                                                $cid = (int)$c['id'];
+                                                $selected = in_array($cid, $editCustomerIds, true);
+                                                $amount = $editAmountsByCustomer[$cid] ?? '';
+                                                $balance = isset($c['balance']) ? (float)$c['balance'] : 0;
+                                            ?>
+                                                <tr>
+                                                    <td class="text-center align-middle">
+                                                        <input type="checkbox" name="customer_ids[]" value="<?php echo $cid; ?>" class="form-check-input debtor-check" <?php echo $selected ? 'checked' : ''; ?>>
+                                                    </td>
+                                                    <td class="align-middle"><?php echo htmlspecialchars($c['name'] ?? ''); ?></td>
+                                                    <td class="align-middle"><?php echo htmlspecialchars($c['phone'] ?? '—'); ?></td>
+                                                    <td class="text-end align-middle"><?php echo function_exists('formatCurrency') ? formatCurrency($balance) : number_format($balance, 2); ?></td>
+                                                    <td class="text-end align-middle">
+                                                        <input type="text" name="amounts[<?php echo $cid; ?>]" class="form-control form-control-sm d-inline-block text-end" style="max-width:110px;" placeholder="0" value="<?php echo $amount !== '' ? htmlspecialchars($amount) : ''; ?>">
+                                                    </td>
+                                                </tr>
+                                            <?php endforeach; ?>
+                                        <?php endif; ?>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">إظهار الجدول للمستخدمين</label>
@@ -389,15 +446,27 @@ if ($editId > 0) {
                                 <thead class="table-light">
                                     <tr>
                                         <th>الاسم</th>
+                                        <th>أيام التكرار</th>
                                         <th>عدد العملاء</th>
                                         <th>المُعيّنون</th>
                                         <th class="text-end">إجراءات</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <?php foreach ($schedules as $s): ?>
+                                    <?php
+                                    $weekDayNames = [0 => 'الأحد', 1 => 'الإثنين', 2 => 'الثلاثاء', 3 => 'الأربعاء', 4 => 'الخميس', 5 => 'الجمعة', 6 => 'السبت'];
+                                    foreach ($schedules as $s):
+                                        $wdList = [];
+                                        if (!empty($s['week_days'])) {
+                                            foreach (array_map('intval', explode(',', $s['week_days'])) as $wd) {
+                                                if (isset($weekDayNames[$wd])) $wdList[] = $weekDayNames[$wd];
+                                            }
+                                        }
+                                        $weekDaysDisplay = $wdList === [] ? '<span class="text-muted">—</span>' : implode('، ', $wdList);
+                                    ?>
                                         <tr>
                                             <td><?php echo htmlspecialchars($s['name']); ?></td>
+                                            <td><?php echo $weekDaysDisplay; ?></td>
                                             <td><?php echo $itemsCount[$s['id']] ?? 0; ?></td>
                                             <td>
                                                 <?php
@@ -432,7 +501,6 @@ if ($editId > 0) {
 </div>
 <script>
 (function() {
-    // بعد التوجيه بكسر الكاش، تنظيف الرابط في شريط العنوان (إزالة _nocache)
     try {
         var u = new URL(window.location.href);
         if (u.searchParams.has('_nocache')) {
@@ -441,95 +509,32 @@ if ($editId > 0) {
             if (window.history && window.history.replaceState) window.history.replaceState({}, '', clean);
         }
     } catch (e) {}
-    var container = document.getElementById('schedule-items-container');
-    var addBtn = document.getElementById('add-schedule-item');
-    if (!container || !addBtn) return;
 
-    function buildSearchUrl() {
-        var base = (window.location.pathname || '') + (window.location.search || '');
-        if (base.indexOf('page=daily_collection_schedules') === -1) base += (base.indexOf('?') >= 0 ? '&' : '?') + 'page=daily_collection_schedules';
-        return base + (base.indexOf('?') >= 0 ? '&' : '?') + 'ajax=search_local_customers';
-    }
-
-    var searchUrl = buildSearchUrl();
-    var searchTimeout = null;
-
-    function attachAutocomplete(wrap) {
-        var input = wrap.querySelector('.customer-search-input');
-        var hidden = wrap.querySelector('.customer-id-input');
-        var resultsDiv = wrap.querySelector('.customer-search-results');
-        if (!input || !hidden || !resultsDiv) return;
-        input.addEventListener('input', function() {
-            var q = (input.value || '').trim();
-            if (q.length < 1) { resultsDiv.style.display = 'none'; resultsDiv.innerHTML = ''; hidden.value = ''; return; }
-            clearTimeout(searchTimeout);
-            searchTimeout = setTimeout(function() {
-                fetch(searchUrl + '&q=' + encodeURIComponent(q)).then(function(r) { return r.json(); }).then(function(data) {
-                    resultsDiv.innerHTML = '';
-                    if (!data.success || !data.customers || data.customers.length === 0) {
-                        resultsDiv.innerHTML = '<div class="list-group-item list-group-item-secondary small">لا توجد تطابقات</div>';
-                    } else {
-                        data.customers.forEach(function(c) {
-                            var el = document.createElement('button');
-                            el.type = 'button';
-                            el.className = 'list-group-item list-group-item-action list-group-item-light text-start small';
-                            el.textContent = (c.name || '') + (c.phone ? ' - ' + c.phone : '');
-                            el.addEventListener('click', function() {
-                                hidden.value = c.id;
-                                input.value = c.name || '';
-                                resultsDiv.style.display = 'none';
-                                resultsDiv.innerHTML = '';
-                            });
-                            resultsDiv.appendChild(el);
-                        });
-                    }
-                    resultsDiv.style.display = 'block';
-                }).catch(function() { resultsDiv.innerHTML = '<div class="list-group-item list-group-item-danger small">خطأ في البحث</div>'; resultsDiv.style.display = 'block'; });
-            }, 250);
-        });
-        input.addEventListener('focus', function() { if (resultsDiv.innerHTML) resultsDiv.style.display = 'block'; });
-        input.addEventListener('blur', function() { setTimeout(function() { resultsDiv.style.display = 'none'; }, 200); });
-    }
-
-    container.querySelectorAll('.schedule-item-row').forEach(function(row) {
-        var wrap = row.querySelector('.position-relative');
-        if (wrap) attachAutocomplete(wrap);
-    });
-
-    function addRow() {
-        var row = document.createElement('div');
-        row.className = 'row g-2 mb-2 schedule-item-row';
-        row.innerHTML = '<div class="col-12 col-md-6 position-relative">' +
-            '<input type="text" class="form-control form-control-sm customer-search-input" placeholder="ابحث أو اكتب اسم العميل..." autocomplete="off">' +
-            '<input type="hidden" name="customer_ids[]" class="customer-id-input" value="">' +
-            '<div class="customer-search-results list-group position-absolute w-100" style="z-index:1050;display:none;max-height:200px;overflow-y:auto;"></div></div>' +
-            '<div class="col-8 col-md-4"><input type="text" name="amounts[]" class="form-control form-control-sm" placeholder="مبلغ يومي"></div>' +
-            '<div class="col-4 col-md-2"><button type="button" class="btn btn-outline-danger btn-sm w-100 remove-item" title="حذف"><i class="bi bi-trash"></i></button></div>';
-        container.appendChild(row);
-        attachAutocomplete(row.querySelector('.position-relative'));
-        row.querySelector('.remove-item').addEventListener('click', function() {
-            if (container.querySelectorAll('.schedule-item-row').length <= 1) return;
-            row.remove();
+    var selectAllDebtors = document.getElementById('select-all-debtors');
+    var debtorChecks = document.querySelectorAll('.debtor-check');
+    if (selectAllDebtors && debtorChecks.length) {
+        selectAllDebtors.addEventListener('change', function() {
+            debtorChecks.forEach(function(cb) { cb.checked = selectAllDebtors.checked; });
         });
     }
-    addBtn.addEventListener('click', addRow);
-    container.addEventListener('click', function(e) {
-        if (e.target.closest('.remove-item') && container.querySelectorAll('.schedule-item-row').length > 1) {
-            e.target.closest('.schedule-item-row').remove();
-        }
-    });
 
-    document.getElementById('daily-collection-form').addEventListener('submit', function(e) {
-        var ids = container.querySelectorAll('.customer-id-input');
-        var hasOne = false;
-        for (var i = 0; i < ids.length; i++) { if (ids[i].value && parseInt(ids[i].value, 10) > 0) { hasOne = true; break; } }
-        if (!hasOne) {
-            e.preventDefault();
-            alert('يرجى اختيار عميل واحد على الأقل من خلال البحث واختيار نتيجة من القائمة.');
-        }
-    });
+    var form = document.getElementById('daily-collection-form');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            var weekDays = form.querySelectorAll('input[name="week_days[]"]:checked');
+            var customers = form.querySelectorAll('input[name="customer_ids[]"]:checked');
+            if (weekDays.length === 0) {
+                e.preventDefault();
+                alert('يرجى اختيار يوم واحد على الأقل من أيام الأسبوع.');
+                return;
+            }
+            if (customers.length === 0) {
+                e.preventDefault();
+                alert('يرجى اختيار عميل مدين واحد على الأقل.');
+            }
+        });
+    }
 
-    // إخفاء شاشة التحميل عند تحميل الصفحة (بعد إعادة التوجيه من إنشاء/تحديث الجدول) لضمان اختفائها
     (function hideLoadingOnPageLoad() {
         if (typeof window.resetPageLoading === 'function') window.resetPageLoading();
         var go = document.getElementById('global-loading-overlay');
