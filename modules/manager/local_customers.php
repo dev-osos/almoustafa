@@ -6422,7 +6422,7 @@ function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns
     if (tableBodyModal) tableBodyModal.innerHTML = '';
     
     const invoices = history.length ? groupLocalPurchaseHistoryByInvoice(history) : [];
-    const allEntries = [];
+    let allEntries = [];
     function normDate(d) {
         if (!d) return '0000-00-00';
         var s = String(d).trim().substring(0, 10);
