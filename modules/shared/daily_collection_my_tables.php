@@ -340,8 +340,8 @@ $pageName = 'daily_collection_my_tables';
                         <thead class="table-light">
                             <tr>
                                 <th>العميل</th>
-                                <th class="text-end">رصيد العميل</th>
-                                <th class="text-end">مبلغ التحصيل اليومي</th>
+                                <th class="text-end daily-collection-num-col">رصيد العميل</th>
+                                <th class="text-end daily-collection-num-col">مبلغ التحصيل اليومي</th>
                                 <th>الحالة</th>
                                 <?php if (!$isControlRole): ?>
                                     <th class="text-end">إجراءات</th>
@@ -352,8 +352,8 @@ $pageName = 'daily_collection_my_tables';
                             <?php foreach ($itemsPage as $it): ?>
                                 <tr class="<?php echo $it['status'] === 'collected' ? 'table-success' : ''; ?>">
                                     <td><?php echo htmlspecialchars($it['customer_name']); ?></td>
-                                    <td class="text-end"><?php echo function_exists('formatCurrency') ? formatCurrency($it['customer_balance']) : number_format($it['customer_balance'], 2); ?></td>
-                                    <td class="text-end"><?php echo function_exists('formatCurrency') ? formatCurrency($it['daily_amount']) : number_format($it['daily_amount'], 2); ?></td>
+                                    <td class="text-end daily-collection-num-col"><?php echo function_exists('formatCurrency') ? formatCurrency($it['customer_balance']) : number_format($it['customer_balance'], 2); ?></td>
+                                    <td class="text-end daily-collection-num-col"><?php echo function_exists('formatCurrency') ? formatCurrency($it['daily_amount']) : number_format($it['daily_amount'], 2); ?></td>
                                     <td>
                                         <?php if ($it['status'] === 'collected'): ?>
                                             <span class="badge bg-success">تم التحصيل</span>
@@ -491,6 +491,13 @@ $pageName = 'daily_collection_my_tables';
         padding-left: 0.35rem;
         padding-right: 0.35rem;
     }
+}
+/* عمودا رصيد العميل ومبلغ التحصيل اليومي بنفس الحجم والتصميم */
+.daily-collection-table-compact th.daily-collection-num-col,
+.daily-collection-table-compact td.daily-collection-num-col {
+    width: 1%;
+    min-width: 5rem;
+    white-space: nowrap;
 }
 </style>
 <script>
