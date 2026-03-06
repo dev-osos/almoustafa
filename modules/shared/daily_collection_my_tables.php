@@ -376,7 +376,7 @@ $pageName = 'daily_collection_my_tables';
                                                     <button type="submit" class="btn btn-sm btn-success">تم التحصيل</button>
                                                 </form>
                                             <?php else: ?>
-                                                <button type="button" class="btn btn-sm btn-success btn-mark-collected" data-item-id="<?php echo (int)$it['item_id']; ?>" data-record-date="<?php echo htmlspecialchars($viewDate); ?>" data-customer-id="<?php echo (int)$it['customer_id']; ?>" data-customer-name="<?php echo htmlspecialchars($it['customer_name'] ?? ''); ?>" data-customer-balance="<?php echo (float)$it['customer_balance']; ?>" data-daily-amount="<?php echo (float)$it['daily_amount']; ?>">
+                                                <button type="button" class="btn btn-sm btn-success btn-mark-collected" onclick="typeof window.openDailyCollectionModal==='function'&&window.openDailyCollectionModal(this);return false;" data-item-id="<?php echo (int)$it['item_id']; ?>" data-record-date="<?php echo htmlspecialchars($viewDate); ?>" data-customer-id="<?php echo (int)$it['customer_id']; ?>" data-customer-name="<?php echo htmlspecialchars($it['customer_name'] ?? ''); ?>" data-customer-balance="<?php echo (float)$it['customer_balance']; ?>" data-daily-amount="<?php echo (float)$it['daily_amount']; ?>">
                                                     تم التحصيل
                                                 </button>
                                             <?php endif; ?>
@@ -464,7 +464,92 @@ $pageName = 'daily_collection_my_tables';
 </div>
 <script>
 (function() {
-    function runDailyCollectionScript() {
+    var formatNum = function(n) { return (typeof n === 'number' && !isNaN(n)) ? n.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'; };
+
+    function hideDailyCollectionModal() {
+        var modalEl = document.getElementById('dailyCollectionModal');
+        if (!modalEl) return;
+        try {
+            if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+                var m = bootstrap.Modal.getInstance(modalEl);
+                if (m) m.hide();
+            } else {
+                modalEl.classList.remove('show');
+                modalEl.style.display = 'none';
+                modalEl.setAttribute('aria-hidden', 'true');
+                var b = document.getElementById('dailyCollectionModalBackdrop');
+                if (b) b.remove();
+                document.body.classList.remove('modal-open');
+            }
+        } catch (err) {
+            modalEl.classList.remove('show');
+            modalEl.style.display = 'none';
+            var b = document.getElementById('dailyCollectionModalBackdrop');
+            if (b) b.remove();
+            document.body.classList.remove('modal-open');
+        }
+    }
+
+    function showDailyCollectionModal(modalEl) {
+        if (!modalEl) return;
+        try {
+            if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+                var m = bootstrap.Modal.getOrCreateInstance(modalEl);
+                m.show();
+            } else {
+                modalEl.classList.add('show');
+                modalEl.style.display = 'block';
+                modalEl.setAttribute('aria-modal', 'true');
+                modalEl.removeAttribute('aria-hidden');
+                var backdrop = document.createElement('div');
+                backdrop.className = 'modal-backdrop fade show';
+                backdrop.id = 'dailyCollectionModalBackdrop';
+                backdrop.addEventListener('click', hideDailyCollectionModal);
+                document.body.appendChild(backdrop);
+                document.body.classList.add('modal-open');
+            }
+        } catch (err) {
+            modalEl.classList.add('show');
+            modalEl.style.display = 'block';
+            if (!document.getElementById('dailyCollectionModalBackdrop')) {
+                var backdrop = document.createElement('div');
+                backdrop.className = 'modal-backdrop fade show';
+                backdrop.id = 'dailyCollectionModalBackdrop';
+                backdrop.addEventListener('click', hideDailyCollectionModal);
+                document.body.appendChild(backdrop);
+                document.body.classList.add('modal-open');
+            }
+        }
+    }
+
+    window.openDailyCollectionModal = function(btn) {
+        if (!btn) return;
+        var modalEl = document.getElementById('dailyCollectionModal');
+        if (!modalEl) return;
+        var itemId = btn.getAttribute('data-item-id');
+        var recordDate = btn.getAttribute('data-record-date');
+        var customerId = btn.getAttribute('data-customer-id');
+        var customerName = btn.getAttribute('data-customer-name') || '—';
+        var customerBalance = parseFloat(btn.getAttribute('data-customer-balance')) || 0;
+        var dailyAmount = parseFloat(btn.getAttribute('data-daily-amount')) || 0;
+        var mid = document.getElementById('modal_item_id');
+        var mrd = document.getElementById('modal_record_date');
+        var mlcid = document.getElementById('modal_local_customer_id');
+        var mlcname = document.getElementById('modal_local_customer_name');
+        var mname = document.getElementById('modal_customer_name_display');
+        var mbal = document.getElementById('modal_customer_balance_display');
+        var mamt = document.getElementById('modal_collection_amount');
+        if (mid) mid.value = itemId || '';
+        if (mrd) mrd.value = recordDate || '';
+        if (mlcid) mlcid.value = customerId || '';
+        if (mlcname) mlcname.value = customerName;
+        if (mname) mname.textContent = customerName;
+        if (mbal) mbal.textContent = formatNum(customerBalance) + ' ج.م';
+        if (mamt) { mamt.value = dailyAmount > 0 ? dailyAmount : ''; setTimeout(function(){ mamt.focus(); }, 100); }
+        showDailyCollectionModal(modalEl);
+    };
+
+    function initDailyCollectionPage() {
         var picker = document.getElementById('view-date-picker');
         if (picker) {
             picker.addEventListener('change', function() {
@@ -478,149 +563,66 @@ $pageName = 'daily_collection_my_tables';
                 if (window.location.protocol !== 'file:' && typeof fetch === 'function') {
                     e.preventDefault();
                     var fd = new FormData(form);
-                    fetch(window.location.href, {
-                        method: 'POST',
-                        body: fd,
-                        headers: { 'X-Requested-With': 'XMLHttpRequest' }
-                    }).then(function(r) { return r.json(); }).then(function(data) {
-                        if (data.success) window.location.reload();
-                        else if (data.message) alert(data.message);
-                    }).catch(function() { form.submit(); });
+                    fetch(window.location.href, { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                        .then(function(r) { return r.json(); })
+                        .then(function(data) {
+                            if (data.success) window.location.reload();
+                            else if (data.message) alert(data.message);
+                        }).catch(function() { form.submit(); });
                 }
             });
         });
-
-        var modalEl = document.getElementById('dailyCollectionModal');
-        var modalForm = document.getElementById('daily-collection-modal-form');
-        var formatNum = function(n) { return (typeof n === 'number' && !isNaN(n)) ? n.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'; };
-
-        function showModal() {
-            if (!modalEl) return;
-            try {
-                if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
-                    var m = bootstrap.Modal.getOrCreateInstance(modalEl);
-                    m.show();
-                } else {
-                    modalEl.classList.add('show');
-                    modalEl.style.display = 'block';
-                    modalEl.setAttribute('aria-modal', 'true');
-                    modalEl.removeAttribute('aria-hidden');
-                    var backdrop = document.createElement('div');
-                    backdrop.className = 'modal-backdrop fade show';
-                    backdrop.id = 'dailyCollectionModalBackdrop';
-                    backdrop.addEventListener('click', hideModal);
-                    document.body.appendChild(backdrop);
-                    document.body.classList.add('modal-open');
-                }
-            } catch (err) {
-                modalEl.classList.add('show');
-                modalEl.style.display = 'block';
-                var backdrop = document.getElementById('dailyCollectionModalBackdrop');
-                if (!backdrop) {
-                    backdrop = document.createElement('div');
-                    backdrop.className = 'modal-backdrop fade show';
-                    backdrop.id = 'dailyCollectionModalBackdrop';
-                    backdrop.addEventListener('click', hideModal);
-                    document.body.appendChild(backdrop);
-                    document.body.classList.add('modal-open');
-                }
-            }
-        }
-        function hideModal() {
-            if (!modalEl) return;
-            try {
-                if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
-                    var m = bootstrap.Modal.getInstance(modalEl);
-                    if (m) m.hide();
-                } else {
-                    modalEl.classList.remove('show');
-                    modalEl.style.display = 'none';
-                    modalEl.setAttribute('aria-hidden', 'true');
-                    var backdrop = document.getElementById('dailyCollectionModalBackdrop');
-                    if (backdrop) backdrop.remove();
-                    document.body.classList.remove('modal-open');
-                }
-            } catch (err) {
-                modalEl.classList.remove('show');
-                modalEl.style.display = 'none';
-                var b = document.getElementById('dailyCollectionModalBackdrop');
-                if (b) b.remove();
-                document.body.classList.remove('modal-open');
-            }
-        }
 
         document.body.addEventListener('click', function(e) {
             var btn = e.target && e.target.closest && e.target.closest('.btn-mark-collected');
             if (!btn) return;
             e.preventDefault();
-            var itemId = btn.getAttribute('data-item-id');
-            var recordDate = btn.getAttribute('data-record-date');
-            var customerId = btn.getAttribute('data-customer-id');
-            var customerName = btn.getAttribute('data-customer-name') || '—';
-            var customerBalance = parseFloat(btn.getAttribute('data-customer-balance')) || 0;
-            var dailyAmount = parseFloat(btn.getAttribute('data-daily-amount')) || 0;
-            var mid = document.getElementById('modal_item_id');
-            var mrd = document.getElementById('modal_record_date');
-            var mlcid = document.getElementById('modal_local_customer_id');
-            var mlcname = document.getElementById('modal_local_customer_name');
-            var mname = document.getElementById('modal_customer_name_display');
-            var mbal = document.getElementById('modal_customer_balance_display');
-            var mamt = document.getElementById('modal_collection_amount');
-            if (mid) mid.value = itemId || '';
-            if (mrd) mrd.value = recordDate || '';
-            if (mlcid) mlcid.value = customerId || '';
-            if (mlcname) mlcname.value = customerName;
-            if (mname) mname.textContent = customerName;
-            if (mbal) mbal.textContent = formatNum(customerBalance) + ' ج.م';
-            if (mamt) { mamt.value = dailyAmount > 0 ? dailyAmount : ''; mamt.focus(); }
-            showModal();
+            window.openDailyCollectionModal(btn);
         });
 
+        var modalForm = document.getElementById('daily-collection-modal-form');
         if (modalForm) {
             modalForm.addEventListener('submit', function(e) {
                 e.preventDefault();
                 var amountEl = document.getElementById('modal_collection_amount');
                 var amount = amountEl ? parseFloat(amountEl.value) || 0 : 0;
-                if (amount <= 0) {
-                    alert('يرجى إدخال مبلغ التحصيل أكبر من صفر.');
-                    return;
-                }
+                if (amount <= 0) { alert('يرجى إدخال مبلغ التحصيل أكبر من صفر.'); return; }
                 var submitBtn = modalForm.querySelector('button[type="submit"]');
                 if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = 'جاري التسجيل...'; }
                 var fd = new FormData(modalForm);
                 var postUrl = window.location.href;
                 if (postUrl.indexOf('?') === -1) postUrl += '?page=daily_collection_my_tables';
                 else if (postUrl.indexOf('page=') === -1) postUrl += '&page=daily_collection_my_tables';
-                fetch(postUrl, {
-                    method: 'POST',
-                    body: fd,
-                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
-                }).then(function(r) {
-                    var ct = r.headers.get('content-type') || '';
-                    if (ct.indexOf('application/json') !== -1) return r.json();
-                    return r.text().then(function(t) { try { return JSON.parse(t); } catch(e) { return { success: false, message: 'استجابة غير متوقعة' }; });
-                }).then(function(data) {
-                    hideModal();
-                    if (data && data.success) window.location.reload();
-                    else if (data && data.message) alert(data.message);
-                    else alert('تم التسجيل.');
-                }).catch(function(err) {
-                    alert('حدث خطأ في الاتصال. يرجى المحاولة مرة أخرى.');
-                }).finally(function() {
-                    if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = '<i class="bi bi-check-circle me-1"></i>تسجيل التحصيل'; }
-                });
+                fetch(postUrl, { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                    .then(function(r) {
+                        var ct = r.headers.get('content-type') || '';
+                        if (ct.indexOf('application/json') !== -1) return r.json();
+                        return r.text().then(function(t) { try { return JSON.parse(t); } catch(e) { return { success: false, message: 'استجابة غير متوقعة' }; });
+                    })
+                    .then(function(data) {
+                        hideDailyCollectionModal();
+                        if (data && data.success) window.location.reload();
+                        else if (data && data.message) alert(data.message);
+                        else alert('تم التسجيل.');
+                    })
+                    .catch(function() { alert('حدث خطأ في الاتصال. يرجى المحاولة مرة أخرى.'); })
+                    .finally(function() {
+                        if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = '<i class="bi bi-check-circle me-1"></i>تسجيل التحصيل'; }
+                    });
             });
         }
 
-        var closeBtns = document.querySelectorAll('#dailyCollectionModal .btn-close, #dailyCollectionModal [data-bs-dismiss="modal"]');
-        closeBtns.forEach(function(b) {
-            b.addEventListener('click', function() { hideModal(); });
-        });
+        var modalEl = document.getElementById('dailyCollectionModal');
+        if (modalEl) {
+            var closeBtns = modalEl.querySelectorAll('.btn-close, [data-bs-dismiss="modal"]');
+            closeBtns.forEach(function(b) { b.addEventListener('click', hideDailyCollectionModal); });
+        }
     }
+
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', runDailyCollectionScript);
+        document.addEventListener('DOMContentLoaded', initDailyCollectionPage);
     } else {
-        runDailyCollectionScript();
+        initDailyCollectionPage();
     }
 })();
 </script>
