@@ -51,7 +51,26 @@ if (!$hasWeekDays) {
 }
 
 $today = date('Y-m-d');
-$viewDate = isset($_GET['date']) ? date('Y-m-d', strtotime($_GET['date'])) : $today;
+$todayWeekday = (int)date('w'); // 0=الأحد .. 6=السبت
+$isControlRole = in_array(strtolower(getCurrentUser()['role'] ?? ''), ['manager', 'accountant', 'developer'], true);
+// للمستخدم المعيّن: اليوم الافتراضي = اليوم الحالي؛ إعادة توجيه لربط اليوم في الرابط إن لزم
+if (!$isControlRole && !isset($_GET['day']) && !isset($_GET['date'])) {
+    $script = $_SERVER['SCRIPT_NAME'] ?? '';
+    if ($script !== '' && !headers_sent()) {
+        header('Location: ' . $script . '?page=daily_collection_my_tables&day=' . $todayWeekday);
+        exit;
+    }
+}
+// اختيار اليوم إما من day=0..6 أو من date؛ الافتراضي = اليوم الحالي
+$selectedDay = isset($_GET['day']) ? max(0, min(6, (int)$_GET['day'])) : $todayWeekday;
+if (isset($_GET['date']) && $_GET['date'] !== '') {
+    $viewDate = date('Y-m-d', strtotime($_GET['date']));
+} else {
+    // حساب تاريخ يوم الأسبوع المحدد ضمن أسبوع اليوم الحالي
+    $diff = $selectedDay - $todayWeekday;
+    if ($diff < 0) $diff += 7;
+    $viewDate = date('Y-m-d', strtotime("+{$diff} days"));
+}
 $success = '';
 $error = '';
 
@@ -138,7 +157,6 @@ $schedules = array_filter($schedules, function ($s) use ($viewDayOfWeek) {
     return in_array($viewDayOfWeek, $days, true);
 });
 $schedules = array_values($schedules);
-$isControlRole = in_array(strtolower($currentUser['role'] ?? ''), ['manager', 'accountant', 'developer'], true);
 $hasAssignedSchedulesButNoneForThisDate = !$isControlRole && count($schedulesBeforeDateFilter) > 0 && count($schedules) === 0;
 $viewDayName = [0 => 'الأحد', 1 => 'الإثنين', 2 => 'الثلاثاء', 3 => 'الأربعاء', 4 => 'الخميس', 5 => 'الجمعة', 6 => 'السبت'][$viewDayOfWeek] ?? '';
 
@@ -186,9 +204,16 @@ $page = min($page, $totalPages);
 $offset = ($page - 1) * $perPage;
 $itemsPage = array_slice($allItems, $offset, $perPage);
 
-$queryBase = ['page' => 'daily_collection_my_tables', 'date' => $viewDate];
-if ($statusFilter !== 'all') $queryBase['status'] = $statusFilter;
-if ($scheduleFilter !== null) $queryBase['schedule_id'] = $scheduleFilter;
+$queryBase = ['page' => 'daily_collection_my_tables', 'day' => $selectedDay];
+$queryBaseWithDate = ['page' => 'daily_collection_my_tables', 'date' => $viewDate];
+if ($statusFilter !== 'all') {
+    $queryBase['status'] = $queryBaseWithDate['status'] = $statusFilter;
+}
+if ($scheduleFilter !== null) {
+    $queryBase['schedule_id'] = $queryBaseWithDate['schedule_id'] = $scheduleFilter;
+}
+$weekDayNames = [0 => 'الأحد', 1 => 'الإثنين', 2 => 'الثلاثاء', 3 => 'الأربعاء', 4 => 'الخميس', 5 => 'الجمعة', 6 => 'السبت'];
+$paginationBase = ($isControlRole && isset($_GET['date']) && $_GET['date'] !== '') ? $queryBaseWithDate : $queryBase;
 
 $baseUrl = getDashboardUrl();
 $dashboardScript = 'driver.php';
@@ -217,51 +242,79 @@ $pageName = 'daily_collection_my_tables';
         </div>
     <?php endif; ?>
 
-    <form method="get" action="" id="daily-collection-filters" class="mb-4">
-        <input type="hidden" name="page" value="daily_collection_my_tables">
-        <div class="row g-2 align-items-end flex-wrap">
-            <div class="col-auto">
-                <label class="form-label small mb-0">التاريخ</label>
-                <input type="date" name="date" class="form-control form-control-sm" style="max-width:160px" value="<?php echo htmlspecialchars($viewDate); ?>">
+    <?php if ($isControlRole): ?>
+        <form method="get" action="" id="daily-collection-filters" class="mb-4">
+            <input type="hidden" name="page" value="daily_collection_my_tables">
+            <div class="row g-2 align-items-end flex-wrap">
+                <div class="col-auto">
+                    <label class="form-label small mb-0">التاريخ</label>
+                    <input type="date" name="date" class="form-control form-control-sm" style="max-width:160px" value="<?php echo htmlspecialchars($viewDate); ?>">
+                </div>
+                <div class="col-auto">
+                    <label class="form-label small mb-0">الحالة</label>
+                    <select name="status" class="form-select form-select-sm" style="max-width:160px">
+                        <option value="all" <?php echo $statusFilter === 'all' ? 'selected' : ''; ?>>الكل</option>
+                        <option value="collected" <?php echo $statusFilter === 'collected' ? 'selected' : ''; ?>>تم التحصيل</option>
+                        <option value="pending" <?php echo $statusFilter === 'pending' ? 'selected' : ''; ?>>قيد التحصيل</option>
+                    </select>
+                </div>
+                <div class="col-auto">
+                    <label class="form-label small mb-0">اسم الجدول</label>
+                    <select name="schedule_id" class="form-select form-select-sm" style="max-width:200px">
+                        <option value="">الكل</option>
+                        <?php foreach ($schedules as $sch): ?>
+                            <option value="<?php echo (int)$sch['id']; ?>" <?php echo $scheduleFilter === (int)$sch['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($sch['name']); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-funnel me-1"></i>عرض</button>
+                </div>
             </div>
-            <div class="col-auto">
-                <label class="form-label small mb-0">الحالة</label>
-                <select name="status" class="form-select form-select-sm" style="max-width:160px">
-                    <option value="all" <?php echo $statusFilter === 'all' ? 'selected' : ''; ?>>الكل</option>
-                    <option value="collected" <?php echo $statusFilter === 'collected' ? 'selected' : ''; ?>>تم التحصيل</option>
-                    <option value="pending" <?php echo $statusFilter === 'pending' ? 'selected' : ''; ?>>قيد التحصيل</option>
-                </select>
+        </form>
+    <?php else: ?>
+        <!-- واجهة أيام الأسبوع للمستخدم المعيّن: الافتراضي = اليوم الحالي -->
+        <div class="mb-4">
+            <p class="text-muted small mb-2">اختر يوم الأسبوع لعرض تحصيلاته. اليوم الحالي: <strong><?php echo $weekDayNames[$todayWeekday]; ?></strong></p>
+            <div class="d-flex flex-wrap gap-2 g-2" role="tablist" id="week-days-tabs">
+                <?php for ($d = 0; $d <= 6; $d++):
+                    $isActive = ($d === $selectedDay);
+                    $q = ['page' => 'daily_collection_my_tables', 'day' => $d];
+                    $href = '?' . http_build_query($q);
+                ?>
+                    <a href="<?php echo htmlspecialchars($href); ?>" class="btn <?php echo $isActive ? 'btn-primary' : 'btn-outline-secondary'; ?> week-day-btn position-relative" data-day="<?php echo $d; ?>">
+                        <?php echo $weekDayNames[$d]; ?>
+                        <?php if ($d === $todayWeekday): ?><span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-info" style="font-size:0.6rem;">اليوم</span><?php endif; ?>
+                    </a>
+                <?php endfor; ?>
             </div>
-            <div class="col-auto">
-                <label class="form-label small mb-0">اسم الجدول</label>
-                <select name="schedule_id" class="form-select form-select-sm" style="max-width:200px">
-                    <option value="">الكل</option>
-                    <?php foreach ($schedules as $sch): ?>
-                        <option value="<?php echo (int)$sch['id']; ?>" <?php echo $scheduleFilter === (int)$sch['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($sch['name']); ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="col-auto">
-                <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-funnel me-1"></i>عرض</button>
-            </div>
+            <p class="text-muted small mt-2 mb-0">عرض تحصيلات <strong><?php echo $weekDayNames[$selectedDay]; ?></strong> — <?php echo $viewDate; ?></p>
         </div>
-    </form>
+    <?php endif; ?>
 
     <?php if ($hasAssignedSchedulesButNoneForThisDate): ?>
         <div class="alert alert-warning">
             <i class="bi bi-calendar-event me-2"></i>
             <strong>لا توجد جداول للتحصيل في هذا اليوم.</strong><br>
-            التاريخ المحدد هو <strong><?php echo htmlspecialchars($viewDate); ?></strong> (<?php echo $viewDayName; ?>). الجداول المخصصة لك تظهر فقط في أيام التحصيل المحددة لكل جدول (مثلاً السبت، الخميس).<br>
-            <span class="d-block mt-2">غيّر التاريخ من الأعلى إلى يوم تحصيل لعرض الجدول.</span>
+            اليوم المحدد هو <strong><?php echo $weekDayNames[$selectedDay]; ?></strong> (<?php echo $viewDate; ?>). الجداول المخصصة لك تظهر فقط في أيام التحصيل المحددة لكل جدول.<br>
+            <span class="d-block mt-2">اختر يوماً آخر من أزرار الأيام أعلاه.</span>
         </div>
     <?php elseif (empty($schedules)): ?>
         <div class="alert alert-info">لا توجد جداول مخصصة لك. تواصل مع المدير أو المحاسب لربطك بجدول تحصيل.</div>
     <?php elseif ($totalItems === 0): ?>
-        <div class="alert alert-info">لا توجد بنود تطابق الفلتر المحدد.</div>
+        <?php if ($isControlRole): ?>
+            <div class="alert alert-info">لا توجد بنود تطابق الفلتر المحدد.</div>
+        <?php else: ?>
+            <div class="alert alert-info py-4 text-center">
+                <i class="bi bi-inbox display-6 text-muted d-block mb-2"></i>
+                <strong>لا يوجد تحصيلات لهذا اليوم</strong><br>
+                <span class="text-muted">لا توجد بنود تحصيل لـ <?php echo $weekDayNames[$selectedDay]; ?> (<?php echo $viewDate; ?>). غيّر اليوم من الأزرار أعلاه.</span>
+            </div>
+        <?php endif; ?>
     <?php else: ?>
         <div class="card shadow-sm mb-4">
             <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <h5 class="mb-0"><i class="bi bi-table me-1"></i>بنود التحصيل</h5>
+                <h5 class="mb-0"><i class="bi bi-table me-1"></i><?php echo $isControlRole ? 'بنود التحصيل' : 'تحصيلات ' . $weekDayNames[$selectedDay]; ?></h5>
                 <span class="text-muted small"><?php echo $totalItems; ?> بند</span>
             </div>
             <div class="card-body p-0">
@@ -316,9 +369,7 @@ $pageName = 'daily_collection_my_tables';
                 <nav aria-label="ترقيم البنود">
                     <ul class="pagination pagination-sm mb-0">
                         <?php
-                        $q = $queryBase;
-                        $qStr = http_build_query($q);
-                        $sep = $qStr ? '&' : '';
+                        $q = $paginationBase;
                         if ($page > 1):
                             $q['p'] = $page - 1;
                         ?>
