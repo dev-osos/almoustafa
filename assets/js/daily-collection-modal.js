@@ -8,66 +8,25 @@
         return (typeof n === 'number' && !isNaN(n)) ? n.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
     };
 
-    function hideDailyCollectionModal() {
-        var modalEl = document.getElementById('dailyCollectionModal');
-        if (!modalEl) return;
-        try {
-            if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
-                var m = bootstrap.Modal.getInstance(modalEl);
-                if (m) m.hide();
-            } else {
-                modalEl.classList.remove('show');
-                modalEl.style.display = 'none';
-                modalEl.setAttribute('aria-hidden', 'true');
-                var b = document.getElementById('dailyCollectionModalBackdrop');
-                if (b) b.remove();
-                document.body.classList.remove('modal-open');
-            }
-        } catch (err) {
-            modalEl.classList.remove('show');
-            modalEl.style.display = 'none';
-            var b = document.getElementById('dailyCollectionModalBackdrop');
-            if (b) b.remove();
-            document.body.classList.remove('modal-open');
-        }
+    function hideDailyCollectionCard() {
+        var cardEl = document.getElementById('dailyCollectionCard');
+        if (!cardEl) return;
+        cardEl.style.display = 'none';
+        cardEl.setAttribute('aria-hidden', 'true');
     }
 
-    function showDailyCollectionModal(modalEl) {
-        if (!modalEl) return;
-        try {
-            if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
-                var m = bootstrap.Modal.getOrCreateInstance(modalEl);
-                m.show();
-            } else {
-                modalEl.classList.add('show');
-                modalEl.style.display = 'block';
-                modalEl.setAttribute('aria-modal', 'true');
-                modalEl.removeAttribute('aria-hidden');
-                var backdrop = document.createElement('div');
-                backdrop.className = 'modal-backdrop fade show';
-                backdrop.id = 'dailyCollectionModalBackdrop';
-                backdrop.addEventListener('click', hideDailyCollectionModal);
-                document.body.appendChild(backdrop);
-                document.body.classList.add('modal-open');
-            }
-        } catch (err) {
-            modalEl.classList.add('show');
-            modalEl.style.display = 'block';
-            if (!document.getElementById('dailyCollectionModalBackdrop')) {
-                var backdrop = document.createElement('div');
-                backdrop.className = 'modal-backdrop fade show';
-                backdrop.id = 'dailyCollectionModalBackdrop';
-                backdrop.addEventListener('click', hideDailyCollectionModal);
-                document.body.appendChild(backdrop);
-                document.body.classList.add('modal-open');
-            }
-        }
+    function showDailyCollectionCard(el) {
+        if (!el) return;
+        el.style.display = 'block';
+        el.removeAttribute('aria-hidden');
+        var firstInput = el.querySelector('#modal_collection_amount');
+        if (firstInput) setTimeout(function() { firstInput.focus(); }, 100);
     }
 
     window.openDailyCollectionModal = function(btn) {
         if (!btn) return;
-        var modalEl = document.getElementById('dailyCollectionModal');
-        if (!modalEl) return;
+        var cardEl = document.getElementById('dailyCollectionCard');
+        if (!cardEl) return;
         var itemId = btn.getAttribute('data-item-id');
         var recordDate = btn.getAttribute('data-record-date');
         var customerId = btn.getAttribute('data-customer-id');
@@ -89,12 +48,11 @@
         if (mbal) mbal.textContent = formatNum(customerBalance) + ' ج.م';
         if (mamt) {
             mamt.value = dailyAmount > 0 ? dailyAmount : '';
-            setTimeout(function() { mamt.focus(); }, 150);
         }
-        showDailyCollectionModal(modalEl);
+        showDailyCollectionCard(cardEl);
     };
 
-    window.hideDailyCollectionModal = hideDailyCollectionModal;
+    window.hideDailyCollectionModal = hideDailyCollectionCard;
 
     document.addEventListener('click', function(e) {
         var target = e.target;
@@ -106,10 +64,10 @@
             window.openDailyCollectionModal(btn);
             return;
         }
-        var modalEl = document.getElementById('dailyCollectionModal');
-        if (modalEl && (target.closest('#dailyCollectionModal .btn-close') || target.closest('#dailyCollectionModal [data-bs-dismiss="modal"]'))) {
+        var card = document.getElementById('dailyCollectionCard');
+        if (card && (target.closest('.btn-close-card') || target.closest('#dailyCollectionCard .btn-close-card'))) {
             e.preventDefault();
-            hideDailyCollectionModal();
+            hideDailyCollectionCard();
         }
     }, true);
 

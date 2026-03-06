@@ -420,44 +420,44 @@ $pageName = 'daily_collection_my_tables';
 
     <?php if (!$isControlRole): ?>
     <!-- بطاقة تسجيل التحصيل (رصيد العميل + المبلغ المحصل فعلياً + إرسال طلب لمحفظة المستخدم) -->
-    <div class="modal fade" id="dailyCollectionModal" tabindex="-1" aria-labelledby="dailyCollectionModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="dailyCollectionModalLabel"><i class="bi bi-cash-coin me-2"></i>تسجيل التحصيل</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="إغلاق"></button>
-                </div>
-                <form id="daily-collection-modal-form">
-                    <div class="modal-body">
-                        <input type="hidden" name="page" value="daily_collection_my_tables">
-                        <input type="hidden" name="action" value="mark_collected">
-                        <input type="hidden" name="item_id" id="modal_item_id" value="">
-                        <input type="hidden" name="record_date" id="modal_record_date" value="">
-                        <input type="hidden" name="local_customer_id" id="modal_local_customer_id" value="">
-                        <input type="hidden" name="local_customer_name" id="modal_local_customer_name" value="">
-                        <div class="mb-3">
+    <div class="daily-collection-card-wrapper mb-4" id="dailyCollectionCard" style="display: none;">
+        <div class="card border shadow-sm">
+            <div class="card-header d-flex justify-content-between align-items-center bg-success text-white">
+                <h5 class="card-title mb-0"><i class="bi bi-cash-coin me-2"></i>تسجيل التحصيل</h5>
+                <button type="button" class="btn btn-sm btn-light btn-close-card" aria-label="إغلاق"><i class="bi bi-x-lg"></i></button>
+            </div>
+            <form id="daily-collection-modal-form">
+                <div class="card-body">
+                    <input type="hidden" name="page" value="daily_collection_my_tables">
+                    <input type="hidden" name="action" value="mark_collected">
+                    <input type="hidden" name="item_id" id="modal_item_id" value="">
+                    <input type="hidden" name="record_date" id="modal_record_date" value="">
+                    <input type="hidden" name="local_customer_id" id="modal_local_customer_id" value="">
+                    <input type="hidden" name="local_customer_name" id="modal_local_customer_name" value="">
+                    <div class="row g-3">
+                        <div class="col-12 col-md-6">
                             <label class="form-label text-muted small">العميل</label>
                             <div class="fw-bold" id="modal_customer_name_display">—</div>
                         </div>
-                        <div class="mb-3">
+                        <div class="col-12 col-md-6">
                             <label class="form-label text-muted small">رصيد العميل</label>
                             <div class="form-control bg-light fw-bold" id="modal_customer_balance_display">—</div>
                         </div>
-                        <div class="mb-3">
+                        <div class="col-12">
                             <label for="modal_collection_amount" class="form-label">المبلغ المحصل فعلياً <span class="text-danger">*</span></label>
-                            <div class="input-group">
+                            <div class="input-group input-group-lg">
                                 <span class="input-group-text">ج.م</span>
-                                <input type="number" step="0.01" min="0.01" class="form-control form-control-lg" id="modal_collection_amount" name="collection_amount" required placeholder="0.00">
+                                <input type="number" step="0.01" min="0.01" class="form-control" id="modal_collection_amount" name="collection_amount" required placeholder="0.00">
                             </div>
                             <small class="text-muted">يُسجّل طلب تحصيل في محفظتك في انتظار موافقة المحاسب أو المدير.</small>
                         </div>
                     </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">إلغاء</button>
-                        <button type="submit" class="btn btn-success"><i class="bi bi-check-circle me-1"></i>تسجيل التحصيل</button>
-                    </div>
-                </form>
-            </div>
+                </div>
+                <div class="card-footer bg-light d-flex gap-2 flex-wrap">
+                    <button type="button" class="btn btn-outline-secondary btn-close-card">إلغاء</button>
+                    <button type="submit" class="btn btn-success"><i class="bi bi-check-circle me-1"></i>تسجيل التحصيل</button>
+                </div>
+            </form>
         </div>
     </div>
     <?php endif; ?>
