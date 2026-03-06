@@ -352,7 +352,7 @@ $pageName = 'daily_collection_my_tables';
                             <?php foreach ($itemsPage as $it): ?>
                                 <tr class="<?php echo $it['status'] === 'collected' ? 'table-success' : ''; ?>">
                                     <td><?php echo htmlspecialchars($it['customer_name']); ?></td>
-                                    <td class="text-end daily-collection-num-col"><?php echo number_format((int)round($it['customer_balance']), 0, '.', ',') . ' ' . (function_exists('getCurrencySymbol') ? getCurrencySymbol() : 'ج.م'); ?></td>
+                                    <td class="text-end daily-collection-num-col"><?php echo number_format((int)round($it['customer_balance']), 0, '.', ',') . ' ' ; ?></td>
                                     <td class="text-end daily-collection-num-col"><?php echo number_format((int)round($it['daily_amount']), 0, '.', ',') . ' ' . (function_exists('getCurrencySymbol') ? getCurrencySymbol() : 'ج.م'); ?></td>
                                     <td>
                                         <?php if ($it['status'] === 'collected'): ?>
