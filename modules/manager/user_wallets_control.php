@@ -144,7 +144,7 @@ if ($isWalletControlAjax) {
                     $accountantTableExists = $db->queryOne("SHOW TABLES LIKE 'accountant_transactions'");
                     if (!empty($accountantTableExists)) {
                         $desc = 'تحصيل من عميل محلي (محفظة مستخدم): ' . $customerName;
-                        $ref = 'WALLET-LOC-' . $requestId . '-' . date('YmdHis');
+                        $ref =  $requestId . '-' . date('Ymd');
                         $db->execute(
                             "INSERT INTO accountant_transactions (transaction_type, amount, description, reference_number, payment_method, status, created_by, approved_by, approved_at) VALUES ('income', ?, ?, ?, 'cash', 'approved', ?, ?, NOW())",
                             [$amount, $desc, $ref, $currentUser['id'], $currentUser['id']]
