@@ -336,7 +336,7 @@ $pageName = 'daily_collection_my_tables';
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
-                    <table class="table table-hover mb-0">
+                    <table class="table table-hover table-sm mb-0 daily-collection-table-compact">
                         <thead class="table-light">
                             <tr>
                                 <th>العميل</th>
@@ -460,6 +460,22 @@ $pageName = 'daily_collection_my_tables';
     </div>
     <?php endif; ?>
 </div>
+<style>
+/* تقليل الفراغ بين صفوف جدول التحصيلات على الهاتف والشاشات الصغيرة */
+.daily-collection-table-compact th,
+.daily-collection-table-compact td {
+    padding-top: 0.35rem;
+    padding-bottom: 0.35rem;
+    vertical-align: middle;
+}
+@media (max-width: 767.98px) {
+    .daily-collection-table-compact th,
+    .daily-collection-table-compact td {
+        padding-top: 0.25rem;
+        padding-bottom: 0.25rem;
+    }
+}
+</style>
 <script>
 (function() {
     var picker = document.getElementById('view-date-picker');
