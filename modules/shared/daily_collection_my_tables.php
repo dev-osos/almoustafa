@@ -461,18 +461,35 @@ $pageName = 'daily_collection_my_tables';
     <?php endif; ?>
 </div>
 <style>
-/* تقليل الفراغ بين صفوف جدول التحصيلات على الهاتف والشاشات الصغيرة */
+/* تقليل الفراغ بين صفوف جدول التحصيلات — مضغوط جداً على الهاتف */
 .daily-collection-table-compact th,
 .daily-collection-table-compact td {
-    padding-top: 0.35rem;
-    padding-bottom: 0.35rem;
+    padding-top: 0.2rem;
+    padding-bottom: 0.2rem;
+    padding-left: 0.4rem;
+    padding-right: 0.4rem;
     vertical-align: middle;
+    line-height: 1.25;
+}
+.daily-collection-table-compact .badge {
+    padding: 0.2em 0.4em;
+    font-size: 0.7rem;
+}
+.daily-collection-table-compact td .small.d-block {
+    margin-top: 0.1rem;
+    line-height: 1.2;
+}
+.daily-collection-table-compact .btn-sm {
+    padding: 0.2rem 0.4rem;
+    font-size: 0.75rem;
 }
 @media (max-width: 767.98px) {
     .daily-collection-table-compact th,
     .daily-collection-table-compact td {
-        padding-top: 0.25rem;
-        padding-bottom: 0.25rem;
+        padding-top: 0.15rem;
+        padding-bottom: 0.15rem;
+        padding-left: 0.35rem;
+        padding-right: 0.35rem;
     }
 }
 </style>
