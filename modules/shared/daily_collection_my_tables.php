@@ -335,8 +335,8 @@ $pageName = 'daily_collection_my_tables';
                 <span class="text-muted small"><?php echo $totalItems; ?> بند</span>
             </div>
             <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-hover table-sm mb-0 daily-collection-table-compact">
+                <div class="table-responsive" id="daily-collection-table-wrap">
+                    <table class="table table-hover table-sm mb-0 daily-collection-table-compact" style="table-layout: fixed;">
                         <thead class="table-light">
                             <tr>
                                 <th>العميل</th>
@@ -492,12 +492,31 @@ $pageName = 'daily_collection_my_tables';
         padding-right: 0.35rem;
     }
 }
-/* عمودا رصيد العميل ومبلغ التحصيل اليومي بنفس الحجم والتصميم */
-.daily-collection-table-compact th.daily-collection-num-col,
-.daily-collection-table-compact td.daily-collection-num-col {
-    width: 1%;
-    min-width: 5rem;
+/* عمودا رصيد العميل ومبلغ التحصيل اليومي — نفس العرض والتصميم تماماً */
+#daily-collection-table-wrap .daily-collection-table-compact {
+    table-layout: fixed;
+}
+#daily-collection-table-wrap .daily-collection-table-compact th.daily-collection-num-col,
+#daily-collection-table-wrap .daily-collection-table-compact td.daily-collection-num-col {
+    width: 6rem !important;
+    min-width: 6rem !important;
+    max-width: 6rem !important;
     white-space: nowrap;
+    font-size: inherit;
+    font-weight: inherit;
+}
+#daily-collection-table-wrap .daily-collection-table-compact th.daily-collection-num-col {
+    font-size: 0.75rem;
+    white-space: normal;
+    line-height: 1.2;
+}
+@media (max-width: 767.98px) {
+    #daily-collection-table-wrap .daily-collection-table-compact th.daily-collection-num-col,
+    #daily-collection-table-wrap .daily-collection-table-compact td.daily-collection-num-col {
+        width: 5rem !important;
+        min-width: 5rem !important;
+        max-width: 5rem !important;
+    }
 }
 </style>
 <script>
