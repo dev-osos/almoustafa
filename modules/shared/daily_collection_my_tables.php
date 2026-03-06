@@ -293,7 +293,7 @@ $pageName = 'daily_collection_my_tables';
     <?php endif; ?>
 
     <?php if ($hasAssignedSchedulesButNoneForThisDate): ?>
-        <div class="alert alert-warning">
+        <div class="alert alert-warning sticky-top shadow-sm mb-0" style="z-index: 1030;">
             <i class="bi bi-calendar-event me-2"></i>
             <strong>لا توجد جداول للتحصيل في هذا اليوم.</strong><br>
             اليوم المحدد هو <strong><?php echo $weekDayNames[$selectedDay]; ?></strong> (<?php echo $viewDate; ?>). الجداول المخصصة لك تظهر فقط في أيام التحصيل المحددة لكل جدول.<br>
