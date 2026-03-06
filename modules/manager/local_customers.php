@@ -2106,14 +2106,13 @@ document.addEventListener('DOMContentLoaded', function() {
                         <th>الرصيد</th>
                         <th>العنوان</th>
                         <th>المنطقة</th>
-                        <th>الموقع</th>
                         <th>الإجراءات</th>
                     </tr>
                 </thead>
                 <tbody id="customersTableBody">
                     <?php if (empty($customers)): ?>
                         <tr>
-                            <td colspan="7" class="text-center text-muted">لا توجد عملاء محليين</td>
+                            <td colspan="6" class="text-center text-muted">لا توجد عملاء محليين</td>
                         </tr>
                     <?php else: ?>
                         <?php foreach ($customers as $customer): ?>
@@ -2152,39 +2151,6 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <td><?php echo htmlspecialchars($customer['region_name'] ?? '-'); ?></td>
                                 <td>
                                     <?php
-                                    $hasLocation = isset($customer['latitude'], $customer['longitude']) &&
-                                        $customer['latitude'] !== null &&
-                                        $customer['longitude'] !== null;
-                                    $latValue = $hasLocation ? (float)$customer['latitude'] : null;
-                                    $lngValue = $hasLocation ? (float)$customer['longitude'] : null;
-                                    ?>
-                                    <div class="d-flex flex-nowrap align-items-center gap-2">
-                                        <button
-                                            type="button"
-                                            class="btn btn-sm btn-outline-primary location-capture-btn flex-shrink-0"
-                                            data-customer-id="<?php echo (int)$customer['id']; ?>"
-                                            data-customer-name="<?php echo htmlspecialchars($customer['name']); ?>"
-                                        >
-                                            <i class="bi bi-geo-alt me-1"></i>تحديد
-                                        </button>
-                                        <?php if ($hasLocation): ?>
-                                            <button
-                                                type="button"
-                                                class="btn btn-sm btn-outline-info location-view-btn flex-shrink-0"
-                                                data-customer-id="<?php echo (int)$customer['id']; ?>"
-                                                data-customer-name="<?php echo htmlspecialchars($customer['name']); ?>"
-                                                data-latitude="<?php echo htmlspecialchars(number_format($latValue, 8, '.', '')); ?>"
-                                                data-longitude="<?php echo htmlspecialchars(number_format($lngValue, 8, '.', '')); ?>"
-                                            >
-                                                <i class="bi bi-map me-1"></i>عرض
-                                            </button>
-                                        <?php else: ?>
-                                            <span class="badge bg-secondary-subtle text-secondary">غير محدد</span>
-                                        <?php endif; ?>
-                                    </div>
-                                </td>
-                                <td>
-                                    <?php
                                     $customerBalance = isset($customer['balance']) ? (float)$customer['balance'] : 0.0;
                                     $displayBalanceForButton = $customerBalance < 0 ? abs($customerBalance) : $customerBalance;
                                     $formattedBalance = formatCurrency($displayBalanceForButton);
@@ -2198,12 +2164,29 @@ document.addEventListener('DOMContentLoaded', function() {
                                         $rowPhones = [$customer['phone']];
                                     }
                                     $rowPhonesJson = htmlspecialchars(json_encode(array_values(array_filter(array_map('trim', $rowPhones)))), ENT_QUOTES, 'UTF-8');
+                                    $hasLocation = isset($customer['latitude'], $customer['longitude']) &&
+                                        $customer['latitude'] !== null &&
+                                        $customer['longitude'] !== null;
+                                    $latValue = $hasLocation ? (float)$customer['latitude'] : null;
+                                    $lngValue = $hasLocation ? (float)$customer['longitude'] : null;
                                     ?>
                                     <div class="dropdown table-actions-dropdown" data-bs-boundary="viewport">
                                         <button type="button" class="btn btn-sm btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
                                             <i class="bi bi-gear me-1"></i>إجراءات
                                         </button>
                                         <ul class="dropdown-menu dropdown-menu-end">
+                                            <li>
+                                                <button type="button" class="dropdown-item location-capture-btn" data-customer-id="<?php echo $custId; ?>" data-customer-name="<?php echo $custName; ?>">
+                                                    <i class="bi bi-geo-alt me-2"></i>تحديد الموقع
+                                                </button>
+                                            </li>
+                                            <?php if ($hasLocation): ?>
+                                            <li>
+                                                <button type="button" class="dropdown-item location-view-btn" data-customer-id="<?php echo $custId; ?>" data-customer-name="<?php echo $custName; ?>" data-latitude="<?php echo htmlspecialchars(number_format($latValue, 8, '.', '')); ?>" data-longitude="<?php echo htmlspecialchars(number_format($lngValue, 8, '.', '')); ?>">
+                                                    <i class="bi bi-map me-2"></i>عرض الموقع
+                                                </button>
+                                            </li>
+                                            <?php endif; ?>
                                             <li>
                                                 <button type="button" class="dropdown-item local-customer-phone-btn" onclick="showLocalCustomerPhoneCard(this)" data-customer-name="<?php echo $custName; ?>" data-customer-phones="<?php echo $rowPhonesJson; ?>">
                                                     <i class="bi bi-telephone me-2"></i>الهاتف
@@ -8126,16 +8109,9 @@ function printDebtorCustomers() {
         min-width: 65px;
     }
     
-    /* الموقع */
+    /* الإجراءات - عمود ثابت لظهور زر الإجراءات دائماً على الموبايل (LTR: يمين | RTL: يسار) */
     .dashboard-table thead th:nth-child(6),
     .dashboard-table tbody td:nth-child(6) {
-        width: 12%;
-        min-width: 90px;
-    }
-    
-    /* الإجراءات - عمود ثابت لظهور زر الإجراءات دائماً على الموبايل (LTR: يمين | RTL: يسار) */
-    .dashboard-table thead th:nth-child(7),
-    .dashboard-table tbody td:nth-child(7) {
         width: 20%;
         min-width: 140px;
         position: sticky !important;
@@ -8145,11 +8121,11 @@ function printDebtorCustomers() {
         z-index: 2;
         box-shadow: -4px 0 8px rgba(0,0,0,0.06);
     }
-    .dashboard-table thead th:nth-child(7) {
+    .dashboard-table thead th:nth-child(6) {
         z-index: 3;
     }
-    [dir="rtl"] .dashboard-table thead th:nth-child(7),
-    [dir="rtl"] .dashboard-table tbody td:nth-child(7) {
+    [dir="rtl"] .dashboard-table thead th:nth-child(6),
+    [dir="rtl"] .dashboard-table tbody td:nth-child(6) {
         right: auto !important;
         left: 0 !important;
         box-shadow: 4px 0 8px rgba(0,0,0,0.06);
@@ -8193,18 +8169,6 @@ function printDebtorCustomers() {
     .dashboard-table .badge {
         font-size: 0.65rem;
         padding: 0.2rem 0.4rem;
-    }
-    
-    /* تحسين عمود الموقع */
-    .dashboard-table tbody td:nth-child(6) .d-flex {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 0.3rem;
-    }
-    
-    .dashboard-table tbody td:nth-child(6) .btn {
-        width: 100%;
-        justify-content: center;
     }
 }
 
@@ -8271,19 +8235,9 @@ function printDebtorCustomers() {
         min-width: 70px;
     }
     
+    /* عمود الإجراءات ثابت */
     .dashboard-table thead th:nth-child(6),
     .dashboard-table tbody td:nth-child(6) {
-        min-width: 60px;
-    }
-    
-    .dashboard-table thead th:nth-child(7),
-    .dashboard-table tbody td:nth-child(7) {
-        min-width: 85px;
-    }
-    
-    /* عمود الإجراءات ثابت */
-    .dashboard-table thead th:nth-child(8),
-    .dashboard-table tbody td:nth-child(8) {
         min-width: 130px;
         position: sticky !important;
         right: 0 !important;
@@ -8292,9 +8246,9 @@ function printDebtorCustomers() {
         z-index: 2;
         box-shadow: -4px 0 8px rgba(0,0,0,0.06);
     }
-    .dashboard-table thead th:nth-child(8) { z-index: 3; }
-    [dir="rtl"] .dashboard-table thead th:nth-child(8),
-    [dir="rtl"] .dashboard-table tbody td:nth-child(8) {
+    .dashboard-table thead th:nth-child(6) { z-index: 3; }
+    [dir="rtl"] .dashboard-table thead th:nth-child(6),
+    [dir="rtl"] .dashboard-table tbody td:nth-child(6) {
         right: auto !important;
         left: 0 !important;
         box-shadow: 4px 0 8px rgba(0,0,0,0.06);
