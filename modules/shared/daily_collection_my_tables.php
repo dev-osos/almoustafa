@@ -53,15 +53,7 @@ if (!$hasWeekDays) {
 $today = date('Y-m-d');
 $todayWeekday = (int)date('w'); // 0=الأحد .. 6=السبت
 $isControlRole = in_array(strtolower(getCurrentUser()['role'] ?? ''), ['manager', 'accountant', 'developer'], true);
-// للمستخدم المعيّن: اليوم الافتراضي = اليوم الحالي؛ إعادة توجيه لربط اليوم في الرابط إن لزم
-if (!$isControlRole && !isset($_GET['day']) && !isset($_GET['date'])) {
-    $script = $_SERVER['SCRIPT_NAME'] ?? '';
-    if ($script !== '' && !headers_sent()) {
-        header('Location: ' . $script . '?page=daily_collection_my_tables&day=' . $todayWeekday);
-        exit;
-    }
-}
-// اختيار اليوم إما من day=0..6 أو من date؛ الافتراضي = اليوم الحالي
+// اختيار اليوم إما من day=0..6 أو من date؛ الافتراضي = اليوم الحالي (بدون إعادة توجيه لتجنب تعارض Service Worker)
 $selectedDay = isset($_GET['day']) ? max(0, min(6, (int)$_GET['day'])) : $todayWeekday;
 if (isset($_GET['date']) && $_GET['date'] !== '') {
     $viewDate = date('Y-m-d', strtotime($_GET['date']));
