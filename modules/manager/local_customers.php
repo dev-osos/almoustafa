@@ -2103,7 +2103,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     <tr>
                         <th>ID</th>
                         <th>الاسم</th>
-                        <th>رقم الهاتف</th>
                         <th>الرصيد</th>
                         <th>العنوان</th>
                         <th>المنطقة</th>
@@ -2114,7 +2113,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 <tbody id="customersTableBody">
                     <?php if (empty($customers)): ?>
                         <tr>
-                            <td colspan="8" class="text-center text-muted">لا توجد عملاء محليين</td>
+                            <td colspan="7" class="text-center text-muted">لا توجد عملاء محليين</td>
                         </tr>
                     <?php else: ?>
                         <?php foreach ($customers as $customer): ?>
@@ -2129,35 +2128,10 @@ document.addEventListener('DOMContentLoaded', function() {
                                         </span>
                                     <?php elseif (!empty($balanceUpdatedAt)): ?>
                                         <span class="badge bg-info-subtle text-info mb-1 d-inline-block" style="font-size: 0.7rem;" title="آخر تعديل للرصيد">
-                                            <i class="bi bi-clock-history me-1"></i><?php echo date('Y-m-d H:i', strtotime($balanceUpdatedAt)); ?>
+                                            <i class="bi bi-clock-history me-1"></i><?php echo date('m-d H:i', strtotime($balanceUpdatedAt)); ?>
                                         </span>
                                     <?php endif; ?>
                                     <strong><?php echo htmlspecialchars($customer['name']); ?></strong>
-                                </td>
-                                <td>
-                                    <?php
-                                    // استخدام البيانات المجمعة مسبقاً بدلاً من استعلام منفصل
-                                    $customerId = (int)$customer['id'];
-                                    $phones = $customerPhonesMap[$customerId] ?? [];
-                                    
-                                    // إذا لم تكن هناك أرقام في local_customer_phones، استخدم الرقم القديم
-                                    if (empty($phones) && !empty($customer['phone'])) {
-                                        $phones = [$customer['phone']];
-                                    }
-                                    
-                                    if (!empty($phones)) {
-                                        foreach ($phones as $phoneNumber) {
-                                            $phoneNumber = trim($phoneNumber ?? '');
-                                            if (!empty($phoneNumber)) {
-                                                echo '<a href="tel:' . htmlspecialchars($phoneNumber) . '" class="btn btn-sm btn-outline-primary me-1 mb-1" title="اتصل بـ ' . htmlspecialchars($phoneNumber) . '">';
-                                                echo '<i class="bi bi-telephone-fill"></i> ' ;
-                                                echo '</a>';
-                                            }
-                                        }
-                                    } else {
-                                        echo '-';
-                                    }
-                                    ?>
                                 </td>
                                 <td>
                                     <?php
@@ -2184,10 +2158,10 @@ document.addEventListener('DOMContentLoaded', function() {
                                     $latValue = $hasLocation ? (float)$customer['latitude'] : null;
                                     $lngValue = $hasLocation ? (float)$customer['longitude'] : null;
                                     ?>
-                                    <div class="d-flex flex-wrap align-items-center gap-2">
+                                    <div class="d-flex flex-nowrap align-items-center gap-2">
                                         <button
                                             type="button"
-                                            class="btn btn-sm btn-outline-primary location-capture-btn"
+                                            class="btn btn-sm btn-outline-primary location-capture-btn flex-shrink-0"
                                             data-customer-id="<?php echo (int)$customer['id']; ?>"
                                             data-customer-name="<?php echo htmlspecialchars($customer['name']); ?>"
                                         >
@@ -2196,7 +2170,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                         <?php if ($hasLocation): ?>
                                             <button
                                                 type="button"
-                                                class="btn btn-sm btn-outline-info location-view-btn"
+                                                class="btn btn-sm btn-outline-info location-view-btn flex-shrink-0"
                                                 data-customer-id="<?php echo (int)$customer['id']; ?>"
                                                 data-customer-name="<?php echo htmlspecialchars($customer['name']); ?>"
                                                 data-latitude="<?php echo htmlspecialchars(number_format($latValue, 8, '.', '')); ?>"
@@ -2219,12 +2193,22 @@ document.addEventListener('DOMContentLoaded', function() {
                                     $custName = htmlspecialchars($customer['name']);
                                     $custPhone = htmlspecialchars($customer['phone'] ?? '');
                                     $custAddress = htmlspecialchars($customer['address'] ?? '');
+                                    $rowPhones = $customerPhonesMap[$custId] ?? [];
+                                    if (empty($rowPhones) && !empty($customer['phone'])) {
+                                        $rowPhones = [$customer['phone']];
+                                    }
+                                    $rowPhonesJson = htmlspecialchars(json_encode(array_values(array_filter(array_map('trim', $rowPhones)))), ENT_QUOTES, 'UTF-8');
                                     ?>
                                     <div class="dropdown table-actions-dropdown" data-bs-boundary="viewport">
                                         <button type="button" class="btn btn-sm btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
                                             <i class="bi bi-gear me-1"></i>إجراءات
                                         </button>
                                         <ul class="dropdown-menu dropdown-menu-end">
+                                            <li>
+                                                <button type="button" class="dropdown-item local-customer-phone-btn" onclick="showLocalCustomerPhoneCard(this)" data-customer-name="<?php echo $custName; ?>" data-customer-phones="<?php echo $rowPhonesJson; ?>">
+                                                    <i class="bi bi-telephone me-2"></i>الهاتف
+                                                </button>
+                                            </li>
                                             <?php if (in_array($currentRole, ['manager', 'developer', 'accountant', 'sales'], true)): ?>
                                             <li>
                                                 <button type="button" class="dropdown-item" onclick="showEditLocalCustomerModal(this)" data-customer-id="<?php echo $custId; ?>" data-customer-name="<?php echo $custName; ?>" data-customer-phone="<?php echo $custPhone; ?>" data-customer-address="<?php echo $custAddress; ?>" data-customer-region-id="<?php echo (int)($customer['region_id'] ?? 0); ?>" data-customer-balance="<?php echo $rawBalance; ?>">
@@ -2644,7 +2628,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             <?php endforeach; ?>
                         </select>
                         <?php if (in_array($currentRole, ['manager', 'developer'], true)): ?>
-                        <button type="button" class="btn btn-outline-primary" onclick="showAddRegionModal()">
+                        <button type="button" class="btn btn-outline-primary" onclick="showAddRegionFromLocalCustomerModal()">
                             <i class="bi bi-plus-circle"></i>
                         </button>
                         <?php endif; ?>
@@ -3492,7 +3476,8 @@ function closeAllForms() {
         'collectPaymentCard', 
         'addLocalCustomerCard', 
         'editLocalCustomerCard',
-        'addRegionFromLocalCustomerCard', 
+        'addRegionFromLocalCustomerCard',
+        'localCustomerPhoneCard',
         'importLocalCustomersCard', 
         'deleteLocalCustomerCard',
         'customerExportCard',
@@ -3621,6 +3606,86 @@ if (typeof window.closeAddRegionFromLocalCustomerCard === 'undefined') {
             }
         } catch (error) {
             console.error('Error in closeAddRegionFromLocalCustomerCard:', error);
+        }
+    };
+}
+
+// فتح بطاقة هاتف العميل (نسخ الرقم / الاتصال)
+if (typeof window.showLocalCustomerPhoneCard === 'undefined') {
+    window.showLocalCustomerPhoneCard = function(button) {
+        if (!button) return;
+        var name = button.getAttribute('data-customer-name') || '';
+        var phonesJson = button.getAttribute('data-customer-phones') || '[]';
+        var phones = [];
+        try {
+            phones = JSON.parse(phonesJson);
+            if (!Array.isArray(phones)) phones = [];
+        } catch (e) {
+            phones = [];
+        }
+        phones = phones.map(function(p) { return String(p || '').trim(); }).filter(Boolean);
+        if (typeof closeAllForms === 'function') closeAllForms();
+        var card = document.getElementById('localCustomerPhoneCard');
+        var nameEl = document.getElementById('localCustomerPhoneCardName');
+        var numbersEl = document.getElementById('localCustomerPhoneCardNumbers');
+        var copyBtn = document.getElementById('localCustomerPhoneCardCopyBtn');
+        var callLink = document.getElementById('localCustomerPhoneCardCallLink');
+        if (!card || !nameEl || !numbersEl || !copyBtn || !callLink) return;
+        nameEl.textContent = name;
+        if (phones.length === 0) {
+            numbersEl.textContent = 'لا يوجد رقم مسجل.';
+            copyBtn.disabled = true;
+            callLink.style.display = 'none';
+        } else {
+            numbersEl.textContent = phones.join(' ، ');
+            copyBtn.disabled = false;
+            copyBtn.onclick = function() {
+                var text = phones.join('\n');
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(text).then(function() {
+                        var orig = copyBtn.innerHTML;
+                        copyBtn.innerHTML = '<i class="bi bi-check-lg me-2"></i>تم النسخ';
+                        setTimeout(function() { copyBtn.innerHTML = orig; }, 2000);
+                    }).catch(function() {
+                        fallbackCopy(text, copyBtn);
+                    });
+                } else {
+                    fallbackCopy(text, copyBtn);
+                }
+            };
+            var firstPhone = phones[0];
+            callLink.href = 'tel:' + firstPhone.replace(/\s/g, '');
+            callLink.style.display = 'inline-flex';
+        }
+        card.style.display = 'block';
+        card.classList.remove('d-none');
+        setTimeout(function() {
+            if (typeof scrollToElement === 'function') scrollToElement(card);
+            else if (card && card.scrollIntoView) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 50);
+    };
+}
+function fallbackCopy(text, btn) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+        document.execCommand('copy');
+        var orig = btn.innerHTML;
+        btn.innerHTML = '<i class="bi bi-check-lg me-2"></i>تم النسخ';
+        setTimeout(function() { btn.innerHTML = orig; }, 2000);
+    } catch (e) {}
+    document.body.removeChild(ta);
+}
+if (typeof window.closeLocalCustomerPhoneCard === 'undefined') {
+    window.closeLocalCustomerPhoneCard = function() {
+        var card = document.getElementById('localCustomerPhoneCard');
+        if (card) {
+            card.style.display = 'none';
+            card.classList.add('d-none');
         }
     };
 }
@@ -6599,11 +6664,13 @@ document.addEventListener('DOMContentLoaded', function() {
     var addRegionFromLocalCustomerCard = document.getElementById('addRegionFromLocalCustomerCard');
     var addLocalCustomerRegionSelect = document.getElementById('addLocalCustomerRegionId');
     var editLocalCustomerRegionSelect = document.getElementById('editLocalCustomerRegionId');
+    var addCustomerCardRegionSelect = document.getElementById('addCustomerCardRegionId');
     
     console.log('Form elements:', {
         form: !!addRegionFromLocalCustomerCardForm,
         card: !!addRegionFromLocalCustomerCard,
         addSelect: !!addLocalCustomerRegionSelect,
+        addCardSelect: !!addCustomerCardRegionSelect,
         editSelect: !!editLocalCustomerRegionSelect
     });
     
@@ -6674,8 +6741,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     newOption.selected = true;
                     
                     if (addLocalCustomerRegionSelect) {
-                        addLocalCustomerRegionSelect.appendChild(newOption);
+                        addLocalCustomerRegionSelect.appendChild(newOption.cloneNode(true));
                         addLocalCustomerRegionSelect.value = data.region.id;
+                    }
+                    
+                    if (addCustomerCardRegionSelect) {
+                        var cardOption = newOption.cloneNode(true);
+                        addCustomerCardRegionSelect.appendChild(cardOption);
+                        addCustomerCardRegionSelect.value = data.region.id;
                     }
                     
                     if (editLocalCustomerRegionSelect) {
@@ -7323,6 +7396,25 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
 </div>
 <?php endif; ?>
+
+<!-- Card هاتف العميل: نسخ الرقم / الاتصال -->
+<div class="card shadow-sm mb-4" id="localCustomerPhoneCard" style="display: none;">
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0"><i class="bi bi-telephone me-2"></i>هاتف العميل: <span id="localCustomerPhoneCardName"></span></h5>
+    </div>
+    <div class="card-body">
+        <p class="text-muted small mb-3" id="localCustomerPhoneCardNumbers"></p>
+        <div class="d-flex flex-wrap gap-2">
+            <button type="button" class="btn btn-outline-primary" id="localCustomerPhoneCardCopyBtn">
+                <i class="bi bi-clipboard me-2"></i>نسخ الرقم
+            </button>
+            <a href="#" class="btn btn-primary" id="localCustomerPhoneCardCallLink">
+                <i class="bi bi-telephone-fill me-2"></i>الاتصال بالعميل
+            </a>
+            <button type="button" class="btn btn-secondary" onclick="closeLocalCustomerPhoneCard()">إغلاق</button>
+        </div>
+    </div>
+</div>
 
 <!-- Modal تصدير العملاء المحددين - للكمبيوتر فقط -->
 <?php if (in_array($currentRole, ['manager', 'developer', 'accountant'], true)): ?>
@@ -8011,23 +8103,16 @@ function printDebtorCustomers() {
         min-width: 110px;
     }
     
-    /* رقم الهاتف: 11 حرف */
+    /* الرصيد: 7 حرف */
     .dashboard-table thead th:nth-child(3),
     .dashboard-table tbody td:nth-child(3) {
-        width: 13%;
-        min-width: 85px;
-    }
-    
-    /* الرصيد: 7 حرف */
-    .dashboard-table thead th:nth-child(4),
-    .dashboard-table tbody td:nth-child(4) {
         width: 10%;
         min-width: 65px;
     }
     
     /* العنوان: 8 حرف */
-    .dashboard-table thead th:nth-child(5),
-    .dashboard-table tbody td:nth-child(5) {
+    .dashboard-table thead th:nth-child(4),
+    .dashboard-table tbody td:nth-child(4) {
         width: 12%;
         min-width: 75px;
         word-wrap: break-word;
@@ -8035,22 +8120,22 @@ function printDebtorCustomers() {
     }
     
     /* المنطقة: 7 حرف */
-    .dashboard-table thead th:nth-child(6),
-    .dashboard-table tbody td:nth-child(6) {
+    .dashboard-table thead th:nth-child(5),
+    .dashboard-table tbody td:nth-child(5) {
         width: 10%;
         min-width: 65px;
     }
     
     /* الموقع */
-    .dashboard-table thead th:nth-child(7),
-    .dashboard-table tbody td:nth-child(7) {
+    .dashboard-table thead th:nth-child(6),
+    .dashboard-table tbody td:nth-child(6) {
         width: 12%;
         min-width: 90px;
     }
     
     /* الإجراءات - عمود ثابت لظهور زر الإجراءات دائماً على الموبايل (LTR: يمين | RTL: يسار) */
-    .dashboard-table thead th:nth-child(8),
-    .dashboard-table tbody td:nth-child(8) {
+    .dashboard-table thead th:nth-child(7),
+    .dashboard-table tbody td:nth-child(7) {
         width: 20%;
         min-width: 140px;
         position: sticky !important;
@@ -8060,11 +8145,11 @@ function printDebtorCustomers() {
         z-index: 2;
         box-shadow: -4px 0 8px rgba(0,0,0,0.06);
     }
-    .dashboard-table thead th:nth-child(8) {
+    .dashboard-table thead th:nth-child(7) {
         z-index: 3;
     }
-    [dir="rtl"] .dashboard-table thead th:nth-child(8),
-    [dir="rtl"] .dashboard-table tbody td:nth-child(8) {
+    [dir="rtl"] .dashboard-table thead th:nth-child(7),
+    [dir="rtl"] .dashboard-table tbody td:nth-child(7) {
         right: auto !important;
         left: 0 !important;
         box-shadow: 4px 0 8px rgba(0,0,0,0.06);
