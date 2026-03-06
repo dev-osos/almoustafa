@@ -4972,19 +4972,14 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    // معالج الموقع الجغرافي
-    var locationCaptureButtons = document.querySelectorAll('.location-capture-btn');
+    // معالج الموقع الجغرافي (event delegation ليدعم الصفوف المُضافة ديناميكياً عند البحث)
     var viewLocationModal = document.getElementById('viewLocationModal');
     var locationMapFrame = viewLocationModal ? viewLocationModal.querySelector('.location-map-frame') : null;
     var locationCustomerName = viewLocationModal ? viewLocationModal.querySelector('.location-customer-name') : null;
     var locationExternalLink = viewLocationModal ? viewLocationModal.querySelector('.location-open-map') : null;
-    var locationViewButtons = document.querySelectorAll('.location-view-btn');
 
     function setButtonLoading(button, isLoading) {
-        if (!button) {
-            return;
-        }
-
+        if (!button) return;
         if (isLoading) {
             button.dataset.originalHtml = button.innerHTML;
             button.disabled = true;
@@ -5002,172 +4997,101 @@ document.addEventListener('DOMContentLoaded', function () {
         window.alert(message);
     }
 
-    locationCaptureButtons.forEach(function (button) {
-        button.addEventListener('click', function () {
-            var customerId = button.getAttribute('data-customer-id');
-            var customerName = button.getAttribute('data-customer-name') || '';
-
-            if (!customerId) {
-                showAlert('تعذر تحديد العميل.');
-                return;
-            }
-
-            if (!navigator.geolocation) {
-                showAlert('المتصفح الحالي لا يدعم تحديد الموقع الجغرافي.');
-                return;
-            }
-
-            // التحقق من الصلاحيات قبل الطلب
-            if (navigator.permissions && navigator.permissions.query) {
-                navigator.permissions.query({ name: 'geolocation' }).then(function(result) {
-                    if (result.state === 'denied') {
-                        showAlert('تم رفض إذن الموقع الجغرافي. يرجى السماح بالوصول في إعدادات المتصفح.');
-                        return;
-                    }
-                    requestGeolocation();
-                }).catch(function() {
-                    // إذا فشل query، حاول مباشرة
-                    requestGeolocation();
-                });
-            } else {
-                requestGeolocation();
-            }
-
-            function requestGeolocation() {
-                setButtonLoading(button, true);
-
-                navigator.geolocation.getCurrentPosition(function (position) {
-                var latitude = position.coords.latitude.toFixed(8);
-                var longitude = position.coords.longitude.toFixed(8);
-                var requestUrl = window.location.pathname + window.location.search;
-
-                var formData = new URLSearchParams();
-                formData.append('action', 'update_location');
-                formData.append('customer_id', customerId);
-                formData.append('latitude', latitude);
-                formData.append('longitude', longitude);
-
-                fetch(requestUrl, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                        'X-Requested-With': 'XMLHttpRequest'
-                    },
-                    body: formData.toString()
-                })
-                    .then(function (response) {
-                        return response.json();
-                    })
-                    .then(function (data) {
-                        setButtonLoading(button, false);
-                        if (data.success) {
-                            showAlert('تم حفظ الموقع بنجاح!');
-                            // مسح الكاش قبل إعادة التحميل
-                            if (window.LocalStorageCache && typeof window.LocalStorageCache.clearAll === 'function') {
-                                window.LocalStorageCache.clearAll().then(function() {
-                                    location.reload();
-                                }).catch(function() {
-                                    location.reload();
-                                });
-                            } else {
-                                location.reload();
-                            }
-                        } else {
-                            showAlert(data.message || 'حدث خطأ أثناء حفظ الموقع.');
-                        }
-                    })
-                    .catch(function (error) {
-                        setButtonLoading(button, false);
-                        showAlert('حدث خطأ في الاتصال بالخادم.');
-                        console.error('Error:', error);
-                    });
-                }, function (error) {
-                    setButtonLoading(button, false);
-                    var errorMessage = 'تعذر الحصول على الموقع.';
-                    if (error.code === 1) {
-                        errorMessage = 'تم رفض طلب الحصول على الموقع. يرجى السماح بالوصول إلى الموقع في إعدادات المتصفح.';
-                    } else if (error.code === 2) {
-                        errorMessage = 'تعذر تحديد الموقع. يرجى المحاولة مرة أخرى.';
-                    } else if (error.code === 3) {
-                        errorMessage = 'انتهت مهلة طلب الموقع. يرجى المحاولة مرة أخرى.';
-                    }
-                    showAlert(errorMessage);
-                }, {
-                    enableHighAccuracy: true,
-                    timeout: 10000,
-                    maximumAge: 0
-                });
-            }
-        });
-    });
-
-    if (locationViewButtons && locationViewButtons.length > 0) {
-        locationViewButtons.forEach(function (button) {
-            button.addEventListener('click', function () {
-                var customerName = button.getAttribute('data-customer-name') || '-';
-                var latitude = button.getAttribute('data-latitude');
-                var longitude = button.getAttribute('data-longitude');
-
-                if (!latitude || !longitude) {
-                    return;
+    var localCustomersTable = document.getElementById('localCustomersTable');
+    if (localCustomersTable) {
+        localCustomersTable.addEventListener('click', function(e) {
+            var captureBtn = e.target.closest('.location-capture-btn');
+            if (captureBtn) {
+                e.preventDefault();
+                var customerId = captureBtn.getAttribute('data-customer-id');
+                var customerName = captureBtn.getAttribute('data-customer-name') || '';
+                if (!customerId) { showAlert('تعذر تحديد العميل.'); return; }
+                if (!navigator.geolocation) { showAlert('المتصفح الحالي لا يدعم تحديد الموقع الجغرافي.'); return; }
+                function requestGeolocation() {
+                    setButtonLoading(captureBtn, true);
+                    navigator.geolocation.getCurrentPosition(function(position) {
+                        var latitude = position.coords.latitude.toFixed(8);
+                        var longitude = position.coords.longitude.toFixed(8);
+                        var formData = new URLSearchParams();
+                        formData.append('action', 'update_location');
+                        formData.append('customer_id', customerId);
+                        formData.append('latitude', latitude);
+                        formData.append('longitude', longitude);
+                        fetch(window.location.pathname + window.location.search, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+                            body: formData.toString()
+                        }).then(function(r) { return r.json(); }).then(function(data) {
+                            setButtonLoading(captureBtn, false);
+                            if (data.success) {
+                                showAlert('تم حفظ الموقع بنجاح!');
+                                if (window.LocalStorageCache && typeof window.LocalStorageCache.clearAll === 'function') {
+                                    window.LocalStorageCache.clearAll().then(function() { location.reload(); }).catch(function() { location.reload(); });
+                                } else { location.reload(); }
+                            } else { showAlert(data.message || 'حدث خطأ أثناء حفظ الموقع.'); }
+                        }).catch(function(err) {
+                            setButtonLoading(captureBtn, false);
+                            showAlert('حدث خطأ في الاتصال بالخادم.');
+                        });
+                    }, function(error) {
+                        setButtonLoading(captureBtn, false);
+                        var msg = 'تعذر الحصول على الموقع.';
+                        if (error.code === 1) msg = 'تم رفض طلب الحصول على الموقع. يرجى السماح بالوصول في إعدادات المتصفح.';
+                        else if (error.code === 2) msg = 'تعذر تحديد الموقع. يرجى المحاولة مرة أخرى.';
+                        else if (error.code === 3) msg = 'انتهت مهلة طلب الموقع. يرجى المحاولة مرة أخرى.';
+                        showAlert(msg);
+                    }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
                 }
-
+                if (navigator.permissions && navigator.permissions.query) {
+                    navigator.permissions.query({ name: 'geolocation' }).then(function(result) {
+                        if (result.state === 'denied') {
+                            showAlert('تم رفض إذن الموقع الجغرافي. يرجى السماح بالوصول في إعدادات المتصفح.');
+                            return;
+                        }
+                        requestGeolocation();
+                    }).catch(function() { requestGeolocation(); });
+                } else {
+                    requestGeolocation();
+                }
+                return;
+            }
+            var viewBtn = e.target.closest('.location-view-btn');
+            if (viewBtn) {
+                e.preventDefault();
+                var customerName = viewBtn.getAttribute('data-customer-name') || '-';
+                var latitude = viewBtn.getAttribute('data-latitude');
+                var longitude = viewBtn.getAttribute('data-longitude');
+                if (!latitude || !longitude) return;
                 if (isMobile()) {
-                    // على الموبايل: استخدام Card
                     var locationCard = document.getElementById('viewLocationCard');
                     if (locationCard) {
-                        var locationCardCustomerName = locationCard.querySelector('.location-customer-name-card');
-                        var locationCardMapFrame = locationCard.querySelector('.location-map-frame-card');
-                        var locationCardExternalLink = locationCard.querySelector('.location-open-map-card');
-
-                        if (locationCardCustomerName) {
-                            locationCardCustomerName.textContent = customerName;
-                        }
-
-                        if (locationCardMapFrame) {
-                            var mapUrl = 'https://www.google.com/maps?q=' + encodeURIComponent(latitude + ',' + longitude) + '&hl=ar&z=16&output=embed';
-                            locationCardMapFrame.src = mapUrl;
-                        }
-
-                        if (locationCardExternalLink) {
-                            locationCardExternalLink.href = 'https://www.google.com/maps?q=' + encodeURIComponent(latitude + ',' + longitude) + '&hl=ar&z=16';
-                        }
-
+                        var cardName = locationCard.querySelector('.location-customer-name-card');
+                        var cardMap = locationCard.querySelector('.location-map-frame-card');
+                        var cardLink = locationCard.querySelector('.location-open-map-card');
+                        if (cardName) cardName.textContent = customerName;
+                        if (cardMap) cardMap.src = 'https://www.google.com/maps?q=' + encodeURIComponent(latitude + ',' + longitude) + '&hl=ar&z=16&output=embed';
+                        if (cardLink) cardLink.href = 'https://www.google.com/maps?q=' + encodeURIComponent(latitude + ',' + longitude) + '&hl=ar&z=16';
                         locationCard.style.display = 'block';
-                        setTimeout(function() {
-                            scrollToElement(locationCard);
-                        }, 50);
+                        setTimeout(function() { if (typeof scrollToElement === 'function') scrollToElement(locationCard); }, 50);
                     }
-                } else {
-                    // على الكمبيوتر: استخدام Modal
-                    if (viewLocationModal) {
-                        if (locationCustomerName) {
-                            locationCustomerName.textContent = customerName;
-                        }
-
-                        if (locationMapFrame) {
-                            var mapUrl = 'https://www.google.com/maps?q=' + encodeURIComponent(latitude + ',' + longitude) + '&hl=ar&z=16&output=embed';
-                            // استخدام data-src للـ lazy loading
-                            locationMapFrame.setAttribute('data-src', mapUrl);
-                            // تحميل الخريطة فقط عند فتح الـ modal
-                            viewLocationModal.addEventListener('shown.bs.modal', function loadMap() {
-                                if (locationMapFrame.getAttribute('data-src')) {
-                                    locationMapFrame.src = locationMapFrame.getAttribute('data-src');
-                                    locationMapFrame.removeAttribute('data-src');
-                                }
-                                viewLocationModal.removeEventListener('shown.bs.modal', loadMap);
-                            }, { once: true });
-                        }
-
-                        if (locationExternalLink) {
-                            locationExternalLink.href = 'https://www.google.com/maps?q=' + encodeURIComponent(latitude + ',' + longitude) + '&hl=ar&z=16';
-                        }
-
-                        var modal = new bootstrap.Modal(viewLocationModal);
-                        modal.show();
+                } else if (viewLocationModal) {
+                    if (locationCustomerName) locationCustomerName.textContent = customerName;
+                    if (locationMapFrame) {
+                        var mapUrl = 'https://www.google.com/maps?q=' + encodeURIComponent(latitude + ',' + longitude) + '&hl=ar&z=16&output=embed';
+                        locationMapFrame.setAttribute('data-src', mapUrl);
+                        viewLocationModal.addEventListener('shown.bs.modal', function loadMap() {
+                            if (locationMapFrame.getAttribute('data-src')) {
+                                locationMapFrame.src = locationMapFrame.getAttribute('data-src');
+                                locationMapFrame.removeAttribute('data-src');
+                            }
+                            viewLocationModal.removeEventListener('shown.bs.modal', loadMap);
+                        }, { once: true });
                     }
+                    if (locationExternalLink) locationExternalLink.href = 'https://www.google.com/maps?q=' + encodeURIComponent(latitude + ',' + longitude) + '&hl=ar&z=16';
+                    var modal = new bootstrap.Modal(viewLocationModal);
+                    modal.show();
                 }
-            });
+            }
         });
     }
 
