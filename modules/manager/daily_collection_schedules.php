@@ -362,8 +362,8 @@ if ($editId > 0) {
     <?php endif; ?>
 
     <div class="row">
-        <div class="col-12 col-lg-6 mb-4">
-            <div class="card shadow-sm h-100">
+        <div class="col-12 mb-4">
+            <div class="card shadow-sm">
                 <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <h5 class="mb-0"><i class="bi bi-plus-circle me-1"></i><?php echo $editId ? 'تعديل الجدول' : 'جدول تحصيل جديد'; ?></h5>
                     <?php if ($editId): ?>
@@ -399,6 +399,10 @@ if ($editId > 0) {
                         <div class="mb-3">
                             <label class="form-label">العملاء المدينون ومبلغ التحصيل اليومي <span class="text-danger">*</span></label>
                             <small class="text-muted d-block mb-1">اختر العملاء المدينين (رصيد &gt; 0) لضمهم للجدول في الأيام المحددة أعلاه. يمكنك تحديد مبلغ التحصيل اليومي لكل عميل.</small>
+                            <button type="button" class="btn btn-outline-primary btn-sm mb-2" id="toggle-debtor-list-btn" data-bs-toggle="collapse" data-bs-target="#debtor-customers-list-wrap" aria-expanded="false" aria-controls="debtor-customers-list-wrap">
+                                <i class="bi bi-chevron-down me-1 toggle-debtor-icon"></i>
+                                <span class="toggle-debtor-text">عرض قائمة العملاء المدينين</span>
+                            </button>
                             <?php
                             $editCustomerIds = array_column($editItems, 'local_customer_id');
                             $editAmountsByCustomer = [];
@@ -406,6 +410,7 @@ if ($editId > 0) {
                                 $editAmountsByCustomer[(int)$item['local_customer_id']] = $item['daily_amount'] ?? 0;
                             }
                             ?>
+                            <div id="debtor-customers-list-wrap" class="collapse">
                             <div class="table-responsive border rounded">
                                 <table class="table table-sm table-hover mb-0" id="debtor-customers-table">
                                     <thead class="table-light">
@@ -443,6 +448,7 @@ if ($editId > 0) {
                                     </tbody>
                                 </table>
                             </div>
+                            </div>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">إظهار الجدول للمستخدمين <span class="text-danger">*</span></label>
@@ -465,7 +471,9 @@ if ($editId > 0) {
                 </div>
             </div>
         </div>
-        <div class="col-12 col-lg-6">
+    </div>
+    <div class="row">
+        <div class="col-12">
             <div class="card shadow-sm">
                 <div class="card-header"><h5 class="mb-0"><i class="bi bi-list-ul me-1"></i>الجداول الحالية</h5></div>
                 <div class="card-body p-0">
@@ -546,6 +554,21 @@ if ($editId > 0) {
     if (selectAllDebtors && debtorChecks.length) {
         selectAllDebtors.addEventListener('change', function() {
             debtorChecks.forEach(function(cb) { cb.checked = selectAllDebtors.checked; });
+        });
+    }
+
+    var debtorListWrap = document.getElementById('debtor-customers-list-wrap');
+    var toggleDebtorBtn = document.getElementById('toggle-debtor-list-btn');
+    if (debtorListWrap && toggleDebtorBtn) {
+        var txtSpan = toggleDebtorBtn.querySelector('.toggle-debtor-text');
+        var iconEl = toggleDebtorBtn.querySelector('.toggle-debtor-icon');
+        debtorListWrap.addEventListener('shown.bs.collapse', function() {
+            if (txtSpan) txtSpan.textContent = 'إخفاء القائمة';
+            if (iconEl) iconEl.classList.replace('bi-chevron-down', 'bi-chevron-up');
+        });
+        debtorListWrap.addEventListener('hidden.bs.collapse', function() {
+            if (txtSpan) txtSpan.textContent = 'عرض قائمة العملاء المدينين';
+            if (iconEl) iconEl.classList.replace('bi-chevron-up', 'bi-chevron-down');
         });
     }
 
