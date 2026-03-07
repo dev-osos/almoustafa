@@ -597,26 +597,7 @@ function tasksHandleAction(string $action, array $input, array $context): array
                 enforceTasksRetentionLimit($db, $retentionLimit);
                 logAudit($currentUser['id'], 'add_task', 'tasks', $insertId, null, ['title' => $title, 'type' => $taskType]);
 
-                // إرسال إشعارات للعمال المخصصين
-                if ($assignedTo > 0) {
-                    try {
-                        $notificationTitle = 'مهمة جديدة من الإدارة';
-                        $notificationMessage = $title;
-                        // استخدام getDashboardUrl لبناء URL صحيح يحتوي على /dashboard/
-                        $notificationUrl = getDashboardUrl('production') . '?page=tasks';
-                        createNotification(
-                            $assignedTo,
-                            $notificationTitle,
-                            $notificationMessage,
-                            'info',
-                            $notificationUrl
-                        );
-                    } catch (Throwable $notificationError) {
-                        error_log('Task creation notification error: ' . $notificationError->getMessage());
-                    }
-                }
-
-                // إرسال إشعار لعمال الإنتاج والمدير والمحاسب مع اسم منشئ الأوردر
+                // إرسال إشعار واحد فقط لعمال الإنتاج والمدير والمحاسب (يظهر في صندوق الإشعارات في التوب بار)
                 try {
                     $creatorName = $currentUser['full_name'] ?? $currentUser['name'] ?? 'غير معروف';
                     $taskSummary = !empty($displayProductName) ? $displayProductName : ($title ?: 'مهمة جديدة');
@@ -625,12 +606,23 @@ function tasksHandleAction(string $action, array $input, array $context): array
                     }
                     $notificationTitle = 'أوردر جديد';
                     $notificationMessage = $taskSummary . ' - أنشأه: ' . $creatorName;
-                    $productionUrl = getDashboardUrl('production') . '?page=tasks';
-                    $managerUrl = getDashboardUrl('manager') . '?page=tasks';
-                    $accountantUrl = getDashboardUrl('accountant') . '?page=tasks';
-                    createNotificationForRole('production', $notificationTitle, $notificationMessage, 'info', $productionUrl, true);
-                    createNotificationForRole('manager', $notificationTitle, $notificationMessage, 'info', $managerUrl, true);
-                    createNotificationForRole('accountant', $notificationTitle, $notificationMessage, 'info', $accountantUrl, true);
+                    $rolesLinks = [
+                        'production' => getDashboardUrl('production') . '?page=tasks',
+                        'manager'    => getDashboardUrl('manager') . '?page=tasks',
+                        'accountant' => getDashboardUrl('accountant') . '?page=tasks',
+                    ];
+                    $notifiedUserIds = [];
+                    foreach (['production', 'manager', 'accountant'] as $role) {
+                        $users = $db->query("SELECT id FROM users WHERE role = ? AND status = 'active'", [$role]);
+                        foreach ($users as $u) {
+                            $uid = (int) ($u['id'] ?? 0);
+                            if ($uid > 0 && !isset($notifiedUserIds[$uid])) {
+                                $notifiedUserIds[$uid] = true;
+                                $link = $rolesLinks[$role];
+                                createNotification($uid, $notificationTitle, $notificationMessage, 'info', $link, true);
+                            }
+                        }
+                    }
                 } catch (Throwable $notificationError) {
                     error_log('Task order notification error: ' . $notificationError->getMessage());
                 }
