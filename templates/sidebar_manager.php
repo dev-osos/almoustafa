@@ -148,6 +148,20 @@ $baseUrl = getDashboardUrl();
                     <span>العملاء المحليين</span>
                 </a>
             </li>
+            <li class="nav-item">
+                <a class="nav-link <?php echo (isset($_GET['page']) && $_GET['page'] === 'daily_collection_schedules') ? 'active' : ''; ?>" 
+                   href="<?php echo $baseUrl; ?>manager.php?page=daily_collection_schedules">
+                    <i class="bi bi-calendar2-range"></i>
+                    <span>جداول التحصيل اليومية</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link <?php echo (isset($_GET['page']) && $_GET['page'] === 'daily_collection_my_tables') ? 'active' : ''; ?>" 
+                   href="<?php echo $baseUrl; ?>manager.php?page=daily_collection_my_tables">
+                    <i class="bi bi-calendar-check"></i>
+                    <span>عرض وتحديث التحصيل اليومي</span>
+                </a>
+            </li>
             
             <li class="nav-item">
                 <a class="nav-link <?php echo (isset($_GET['page']) && $_GET['page'] === 'regions') ? 'active' : ''; ?>" 
@@ -183,7 +197,7 @@ $baseUrl = getDashboardUrl();
             </li>
                 
             <li class="nav-item">
-                <a class="nav-link" href="<?php echo $baseUrl; ?>manager.php?page=system_settings">
+                <a class="nav-link <?php echo (isset($_GET['page']) && $_GET['page'] === 'system_settings') ? 'active' : ''; ?>" href="<?php echo $baseUrl; ?>manager.php?page=system_settings">
                     <i class="bi bi-gear"></i>
                     <span>إعدادات النظام</span>
                 </a>

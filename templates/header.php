@@ -58,6 +58,23 @@ if (!isset($currentUser) || $currentUser === null) {
     $currentUser = getCurrentUser();
 }
 
+// التحقق من تفعيل مود رمضان (لزينة التوب بار)
+$ramadanMode = false;
+try {
+    if (function_exists('isRamadanMode')) {
+        $ramadanMode = isRamadanMode();
+    } else {
+        $db = db();
+        $tableCheck = $db->queryOne("SHOW TABLES LIKE 'system_settings'");
+        if (!empty($tableCheck)) {
+            $row = $db->queryOne("SELECT value FROM system_settings WHERE `key` = 'ramadan_mode' LIMIT 1");
+            $ramadanMode = !empty($row['value']) && $row['value'] === '1';
+        }
+    }
+} catch (Throwable $e) {
+    // تجاهل الأخطاء
+}
+
 // التحقق من أننا في profile.php - منع حذف الجلسة في profile.php
 $isProfilePage = false;
 
@@ -559,6 +576,11 @@ if (ob_get_level() > 0) {
             .homeline-sidebar{transform:translateX(-100%);z-index:1050}
             .dashboard-main{margin-left:0!important;margin-right:0!important}
         }
+        /* Critical: زينة رمضان */
+        .ramadan-topbar-strip{position:fixed;top:0;left:0;right:0;height:36px;z-index:1000;display:flex;align-items:center;justify-content:center;gap:.5rem;background:linear-gradient(135deg,#0d5c2e 0%,#1a7d3e 30%,#2d9d57 50%,#b8860b 85%,#8b6914 100%);color:#fff;font-size:.9rem;font-weight:600}
+        .homeline-topbar.ramadan-mode{top:36px}
+        .dashboard-body.ramadan-mode .dashboard-main{padding-top:100px}
+        @media (max-width:768px){.ramadan-topbar-strip{height:32px;font-size:.8rem}.homeline-topbar.ramadan-mode{top:32px}.dashboard-body.ramadan-mode .dashboard-main{padding-top:88px}}
         
         /* منع Layout forced - إخفاء المحتوى حتى تحميل CSS */
         body:not(.css-loaded) {
@@ -3511,13 +3533,33 @@ if (ob_get_level() > 0) {
     </script>
     <?php endif; ?>
 </head>
-<body class="dashboard-body<?php echo isset($pageBodyClass) ? ' ' . htmlspecialchars($pageBodyClass) : ''; ?>"
+<body class="dashboard-body<?php echo isset($pageBodyClass) ? ' ' . htmlspecialchars($pageBodyClass) : ''; ?><?php echo $ramadanMode ? ' ramadan-mode' : ''; ?>"
       data-user-role="<?php echo htmlspecialchars(isset($currentUser['role']) ? $currentUser['role'] : ''); ?>"
       data-user-id="<?php echo isset($currentUser['id']) ? (int) $currentUser['id'] : 0; ?>">
     <!-- Accessibility: Skip to main content -->
     <a href="#main-content" class="skip-link visually-hidden-focusable">
         <?php echo isset($lang['skip_to_main']) ? $lang['skip_to_main'] : 'تخطي إلى المحتوى الرئيسي'; ?>
     </a>
+
+    <!-- شاشة التحميل الديناميكية التفاعلية (تظهر عند الإرسال وتختفي بعد تحديث البيانات) -->
+    <div id="global-loading-overlay" class="global-loading-overlay" aria-hidden="true" aria-live="polite" role="status">
+        <div class="global-loading-backdrop"></div>
+        <div class="global-loading-content">
+            <div class="global-loading-spinner"></div>
+            <p class="global-loading-text"><?php echo isset($lang['loading']) ? $lang['loading'] : 'جاري التحميل...'; ?></p>
+            <p class="global-loading-hint small text-muted mt-2"><?php echo isset($lang['please_wait']) ? $lang['please_wait'] : 'يرجى الانتظار حتى يتم حفظ وعرض البيانات'; ?></p>
+        </div>
+    </div>
+    <style>
+    .global-loading-overlay { position: fixed; inset: 0; z-index: 99999; display: flex; align-items: center; justify-content: center; opacity: 0; visibility: hidden; transition: opacity 0.25s ease, visibility 0.25s ease; pointer-events: none; }
+    .global-loading-overlay.is-active { opacity: 1; visibility: visible; pointer-events: auto; }
+    .global-loading-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.45); backdrop-filter: blur(4px); }
+    .global-loading-content { position: relative; z-index: 1; text-align: center; padding: 2rem; background: var(--bs-body-bg, #fff); border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.2); min-width: 220px; max-width: 90vw; }
+    .global-loading-spinner { width: 48px; height: 48px; margin: 0 auto 1rem; border: 4px solid var(--bs-border-color, #dee2e6); border-top-color: var(--bs-primary, #0d6efd); border-radius: 50%; animation: global-loading-spin 0.8s linear infinite; }
+    .global-loading-text { margin: 0; font-weight: 600; font-size: 1.1rem; color: var(--bs-body-color, #212529); }
+    @keyframes global-loading-spin { to { transform: rotate(360deg); } }
+    @media (max-width: 576px) { .global-loading-content { padding: 1.5rem; min-width: 180px; } .global-loading-spinner { width: 40px; height: 40px; } }
+    </style>
 
     <div class="dashboard-wrapper">
         <!-- Homeline Style Sidebar -->
@@ -3587,9 +3629,21 @@ if (ob_get_level() > 0) {
         </div>
         <?php endif; ?>
         
+        <?php if ($ramadanMode): ?>
+        <!-- زينة رمضان فوق التوب بار -->
+        <div class="ramadan-topbar-strip" aria-hidden="true">
+            <span class="ramadan-strip-icon" aria-hidden="true">🌙</span>
+            <span class="ramadan-strip-text"><?php echo isset($lang['ramadan_kareem']) ? $lang['ramadan_kareem'] : 'رمضان كريم'; ?></span>
+            <span class="ramadan-strip-icon" aria-hidden="true">🪔</span>
+        </div>
+        <?php endif; ?>
+        
         <!-- Top Bar -->
-        <div class="homeline-topbar">
+        <div class="homeline-topbar<?php echo $ramadanMode ? ' ramadan-mode' : ''; ?>">
             <div class="topbar-left">
+                <?php if ($ramadanMode): ?>
+                <span class="ramadan-topbar-badge d-none d-md-inline-flex" aria-hidden="true" title="<?php echo isset($lang['ramadan_kareem']) ? $lang['ramadan_kareem'] : 'رمضان كريم'; ?>">🌙</span>
+                <?php endif; ?>
                 <!-- Mobile Menu Toggle -->
                  <button class="mobile-menu-toggle d-md-none" 
                          id="mobileMenuToggle" 
@@ -3747,6 +3801,16 @@ if (ob_get_level() > 0) {
                         </li>
                         <?php endif; ?>
                         
+                        <!-- صفحة الحضور (لجميع الأدوار ما عدا المدير) -->
+                        <?php if (isLoggedIn() && $currentUserRole !== 'manager'): ?>
+                        <li>
+                            <a class="dropdown-item" href="<?php echo getRelativeUrl('attendance.php'); ?>">
+                                <i class="bi bi-calendar-check me-2" aria-hidden="true"></i>
+                                <span><?php echo isset($lang['menu_attendance']) ? $lang['menu_attendance'] : 'صفحة الحضور'; ?></span>
+                            </a>
+                        </li>
+                        <?php endif; ?>
+                        
                         <!-- Refresh Page Button -->
                         <li>
                             <a class="dropdown-item" href="#" id="refreshPageBtnDropdown">
@@ -3787,6 +3851,12 @@ if (ob_get_level() > 0) {
                     </ul>
                 </div>
             </div>
+            <?php if ($ramadanMode): ?>
+            <!-- زينة رمضان المعلقة في نهاية التوب بار -->
+            <div class="ramadan-topbar-hanging" aria-hidden="true">
+                <span class="ramadan-hanging-icon">🪔</span>
+            </div>
+            <?php endif; ?>
         </div>
         
         

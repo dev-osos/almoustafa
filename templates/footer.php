@@ -12,7 +12,7 @@ if (!defined('ACCESS_ALLOWED')) {
             <div class="row">
                 <div class="col-md-6 text-center text-md-start">
                     <small class="text-muted">
-                        &copy; <?php echo date('Y'); ?> <?php echo COMPANY_NAME; ?>. <?php echo $lang['all_rights_reserved'] ?? 'جميع الحقوق محفوظة'; ?>
+                        powered by <a href="https://www.facebook.com/osama.saied.3382?mibextid=wwXIfr&rdid=IzHWpq4MfAwtaSFI&share_url=https%3A%2F%2Fwww.facebook.com%2Fshare%2F1GeL6Hnxqk%2F%3Fmibextid%3DwwXIfr" target="_blank">Osama Saied</a>
                     </small>
                 </div>
             </div>
@@ -684,6 +684,8 @@ if (!defined('ACCESS_ALLOWED')) {
     
     <!-- Main JS -->
     <script src="<?php echo $assetsUrl; ?>js/main.js?v=<?php echo $cacheVersion; ?>" defer></script>
+    <!-- شاشة التحميل الديناميكية التفاعلية (جميع الصفحات) -->
+    <script src="<?php echo $assetsUrl; ?>js/global-loading.js?v=<?php echo $cacheVersion; ?>" defer></script>
     <script src="<?php echo $assetsUrl; ?>js/sidebar.js?v=<?php echo $cacheVersion; ?>" defer></script>
     
     <!-- Auto Refresh Navigation - إعادة تحميل تلقائي للتنقل (مدير، مندوب مبيعات، عامل إنتاج) -->
@@ -698,7 +700,11 @@ if (!defined('ACCESS_ALLOWED')) {
     
     <!-- البحث عن عميل في قوائم العملاء (دروب داون) -->
     <script src="<?php echo $assetsUrl; ?>js/customer-select-search.js?v=<?php echo $cacheVersion; ?>" defer></script>
-    
+    <?php if (defined('DAILY_COLLECTION_MODAL_SCRIPT') && DAILY_COLLECTION_MODAL_SCRIPT): ?>
+    <!-- بطاقة تسجيل التحصيل (جداول التحصيل اليومية - سائق/إنتاج/مبيعات) -->
+    <script src="<?php echo $assetsUrl; ?>js/daily-collection-modal.js?v=<?php echo isset($cacheVersion) ? $cacheVersion : '1'; ?>"></script>
+    <?php endif; ?>
+
     <!-- معالجة زر مسح الكل - بدون تنبيهات -->
     <script>
     // دالة مساعدة لحساب المسار الصحيح لـ API (مثل getApiPath في notifications.js)

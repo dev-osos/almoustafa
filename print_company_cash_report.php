@@ -12,6 +12,14 @@ require_once __DIR__ . '/includes/approval_system.php';
 
 requireRole(['manager', 'accountant']);
 
+// منع الكاش عند التبديل بين الصفحات لضمان عدم رجوع أي كاش قديم
+if (!headers_sent()) {
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Cache-Control: post-check=0, pre-check=0', false);
+    header('Pragma: no-cache');
+    header('Expires: 0');
+}
+
 $currentUser = getCurrentUser();
 $db = db();
 
@@ -683,8 +691,8 @@ $statusLabels = [
         <?php endif; ?>
         
         <div class="footer">
-            <p>تم إنشاء هذا التقرير تلقائياً من نظام إدارة خزنة الشركة</p>
-            <p>© <?php echo date('Y'); ?> - جميع الحقوق محفوظة</p>
+        powered by <a href="https://www.facebook.com/osama.saied.3382?mibextid=wwXIfr&rdid=IzHWpq4MfAwtaSFI&share_url=https%3A%2F%2Fwww.facebook.com%2Fshare%2F1GeL6Hnxqk%2F%3Fmibextid%3DwwXIfr" target="_blank">Osama Saied</a>
+        <p>© <?php echo date('Y'); ?> - جميع الحقوق محفوظة</p>
         </div>
     </div>
     

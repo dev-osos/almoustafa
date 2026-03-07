@@ -4,6 +4,7 @@
  */
 
 define('ACCESS_ALLOWED', true);
+define('DAILY_COLLECTION_MODAL_SCRIPT', true);
 
 // تنظيف أي output buffer سابق قبل أي شيء
 while (ob_get_level() > 0) {
@@ -13,6 +14,14 @@ while (ob_get_level() > 0) {
 // بدء output buffering لضمان عدم وجود محتوى قبل DOCTYPE
 if (!ob_get_level()) {
     ob_start();
+}
+
+// منع الكاش عند التبديل بين الصفحات/الحسابات لضمان عدم رجوع أي كاش قديم
+if (!headers_sent()) {
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Cache-Control: post-check=0, pre-check=0', false);
+    header('Pragma: no-cache');
+    header('Expires: 0');
 }
 
 require_once __DIR__ . '/../includes/config.php';
@@ -32,6 +41,17 @@ $page = $_GET['page'] ?? 'dashboard';
 
 if ($page === 'attendance') {
     header('Location: ' . getRelativeUrl('attendance.php'));
+    exit;
+}
+
+if ($page === 'user_wallet' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+    while (ob_get_level() > 0) ob_end_clean();
+    include __DIR__ . '/../modules/user/user_wallet.php';
+    exit;
+}
+if ($page === 'daily_collection_my_tables' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && isset($_POST['item_id']) && !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+    while (ob_get_level() > 0) ob_end_clean();
+    include __DIR__ . '/../modules/shared/daily_collection_my_tables.php';
     exit;
 }
 
@@ -1097,13 +1117,23 @@ if ($isAjaxNavigation) {
                 ?>
                 
             <?php elseif ($page === 'tasks'): ?>
-                <!-- صفحة إدارة المهام -->
+                <!-- صفحة إدارة الاوردرات -->
                 <?php 
                 $modulePath = __DIR__ . '/../modules/production/tasks.php';
                 if (file_exists($modulePath)) {
                     include $modulePath;
                 } else {
-                    echo '<div class="alert alert-warning">صفحة المهام غير متاحة حالياً</div>';
+                    echo '<div class="alert alert-warning">صفحة الاوردرات غير متاحة حالياً</div>';
+                }
+                ?>
+                
+            <?php elseif ($page === 'daily_collection_my_tables'): ?>
+                <?php
+                $modulePath = __DIR__ . '/../modules/shared/daily_collection_my_tables.php';
+                if (file_exists($modulePath)) {
+                    include $modulePath;
+                } else {
+                    echo '<div class="alert alert-warning">صفحة جداول التحصيل اليومية غير متاحة حالياً</div>';
                 }
                 ?>
                 

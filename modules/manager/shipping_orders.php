@@ -7,6 +7,14 @@ if (!defined('ACCESS_ALLOWED')) {
     die('Direct access not allowed');
 }
 
+// منع الكاش عند التبديل بين تبويبات الشريط الجانبي لضمان عدم رجوع أي كاش قديم
+if (!headers_sent()) {
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Cache-Control: post-check=0, pre-check=0', false);
+    header('Pragma: no-cache');
+    header('Expires: 0');
+}
+
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../includes/db.php';
 require_once __DIR__ . '/../../includes/auth.php';
@@ -23,12 +31,20 @@ $db = db();
 
 $sessionErrorKey = 'manager_shipping_orders_error';
 $sessionSuccessKey = 'manager_shipping_orders_success';
+$sessionCollectionResultKey = 'manager_shipping_collection_result';
+$sessionCollectionCopyableKey = 'manager_shipping_collection_copyable';
 $error = '';
 $success = '';
+$shippingCollectionResult = '';
 
 if (!empty($_SESSION[$sessionErrorKey])) {
     $error = $_SESSION[$sessionErrorKey];
     unset($_SESSION[$sessionErrorKey]);
+}
+
+// رسالة التحصيل/الخصم القابلة للنسخ — لا تُحذف عند العرض؛ تُحذف فقط عند طلب POST آخر
+if (!empty($_SESSION[$sessionCollectionCopyableKey]['full_text'])) {
+    $shippingCollectionResult = $_SESSION[$sessionCollectionCopyableKey]['full_text'];
 }
 
 if (!empty($_SESSION[$sessionSuccessKey])) {
@@ -177,6 +193,29 @@ try {
     error_log('shipping_orders: shipping_company_collections table -> ' . $e->getMessage());
 }
 
+// جدول خصومات شركات الشحن (إجراء خصم من الرصيد بدون تحصيل نقدي)
+try {
+    $deductionsTableExists = $db->queryOne("SHOW TABLES LIKE 'shipping_company_deductions'");
+    if (empty($deductionsTableExists)) {
+        $db->execute(
+            "CREATE TABLE IF NOT EXISTS `shipping_company_deductions` (
+                `id` int(11) NOT NULL AUTO_INCREMENT,
+                `shipping_company_id` int(11) NOT NULL,
+                `amount` decimal(15,2) NOT NULL COMMENT 'المبلغ المخصوم',
+                `notes` text DEFAULT NULL COMMENT 'ملاحظات',
+                `created_by` int(11) DEFAULT NULL,
+                `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (`id`),
+                KEY `shipping_company_id` (`shipping_company_id`),
+                KEY `created_at` (`created_at`),
+                CONSTRAINT `sc_deductions_company_fk` FOREIGN KEY (`shipping_company_id`) REFERENCES `shipping_companies` (`id`) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='خصومات من رصيد شركات الشحن'"
+        );
+    }
+} catch (Throwable $e) {
+    error_log('shipping_orders: shipping_company_deductions table -> ' . $e->getMessage());
+}
+
 // جدول الفواتير الورقية لشركات الشحن (سجل فواتير ورقية مرفقة بكل شركة)
 $paperInvTable = $db->queryOne("SHOW TABLES LIKE 'shipping_company_paper_invoices'");
 if (empty($paperInvTable)) {
@@ -223,6 +262,128 @@ function generateShippingOrderNumber(Database $db): string
     return substr(time(), -5);
 }
 
+/**
+ * جلب بيانات كشف حساب شركة الشحن (سجل الحركات المالية: مدين/دائن والرصيد بعد كل معاملة)
+ */
+function getShippingCompanyStatementData($companyId) {
+    $db = db();
+    $movements = [];
+
+    // طلبات الشحن المسلّمة للشركة (مدين) - نستخدم handed_over_at أو created_at
+    $orders = $db->query(
+        "SELECT id, order_number, total_amount, handed_over_at, created_at, status
+         FROM shipping_company_orders
+         WHERE shipping_company_id = ? AND status IN ('assigned', 'in_transit', 'delivered')
+         ORDER BY COALESCE(handed_over_at, created_at) ASC",
+        [$companyId]
+    ) ?: [];
+    $hasDeliveredAt = false;
+    try {
+        $hasDeliveredAt = !empty($db->queryOne("SHOW COLUMNS FROM shipping_company_orders LIKE 'delivered_at'"));
+    } catch (Throwable $e) { /* ignore */ }
+    foreach ($orders as $o) {
+        $date = !empty($o['handed_over_at']) ? $o['handed_over_at'] : $o['created_at'];
+        $sortDate = date('Y-m-d', strtotime($date));
+        $movements[] = [
+            'sort_date' => $sortDate,
+            'sort_id' => (int)$o['id'],
+            'type_order' => 1,
+            'type' => 'order',
+            'date' => $date,
+            'label' => 'طلب شحن #' . ($o['order_number'] ?? $o['id']),
+            'debit' => (float)($o['total_amount'] ?? 0),
+            'credit' => 0.0,
+        ];
+    }
+
+    // تسليم الطلب للعميل (دائن) — عند التسليم يُخصم المبلغ من دين الشركة في النظام، فيجب ظهوره في الكشف
+    if ($hasDeliveredAt) {
+        $deliveredOrders = $db->query(
+            "SELECT id, order_number, total_amount, delivered_at FROM shipping_company_orders
+             WHERE shipping_company_id = ? AND status = 'delivered' AND delivered_at IS NOT NULL
+             ORDER BY delivered_at ASC",
+            [$companyId]
+        ) ?: [];
+        foreach ($deliveredOrders as $o) {
+            $movements[] = [
+                'sort_date' => date('Y-m-d', strtotime($o['delivered_at'])),
+                'sort_id' => (int)$o['id'] + 400000,
+                'type_order' => 2,
+                'type' => 'delivery_to_customer',
+                'date' => $o['delivered_at'],
+                'label' => 'تسليم الطلب للعميل #' . ($o['order_number'] ?? $o['id']),
+                'debit' => 0.0,
+                'credit' => (float)($o['total_amount'] ?? 0),
+            ];
+        }
+    }
+
+    // التحصيلات (دائن)
+    $collectionsTableExists = $db->queryOne("SHOW TABLES LIKE 'shipping_company_collections'");
+    if (!empty($collectionsTableExists)) {
+        $collections = $db->query(
+            "SELECT id, amount, date, collection_number FROM shipping_company_collections WHERE shipping_company_id = ? ORDER BY date ASC, id ASC",
+            [$companyId]
+        ) ?: [];
+        foreach ($collections as $c) {
+            $label = !empty($c['collection_number']) ? 'تحصيل ' . $c['collection_number'] : ('تحصيل #' . $c['id']);
+            $movements[] = [
+                'sort_date' => $c['date'],
+                'sort_id' => (int)$c['id'] + 500000,
+                'type_order' => 3,
+                'type' => 'collection',
+                'date' => $c['date'],
+                'label' => $label,
+                'debit' => 0.0,
+                'credit' => (float)($c['amount'] ?? 0),
+            ];
+        }
+    }
+
+    // الخصومات (دائن)
+    $deductionsTableExists = $db->queryOne("SHOW TABLES LIKE 'shipping_company_deductions'");
+    if (!empty($deductionsTableExists)) {
+        $deductions = $db->query(
+            "SELECT id, amount, notes, created_at FROM shipping_company_deductions WHERE shipping_company_id = ? ORDER BY created_at ASC",
+            [$companyId]
+        ) ?: [];
+        foreach ($deductions as $d) {
+            $movements[] = [
+                'sort_date' => date('Y-m-d', strtotime($d['created_at'])),
+                'sort_id' => (int)$d['id'] + 600000,
+                'type_order' => 4,
+                'type' => 'deduction',
+                'date' => $d['created_at'],
+                'label' => 'خصم' . (!empty(trim($d['notes'] ?? '')) ? ' - ' . trim($d['notes']) : ''),
+                'debit' => 0.0,
+                'credit' => (float)($d['amount'] ?? 0),
+            ];
+        }
+    }
+
+    usort($movements, function ($a, $b) {
+        $c = strcmp($a['sort_date'], $b['sort_date']);
+        if ($c !== 0) return $c;
+        $to = ($a['type_order'] ?? 9) - ($b['type_order'] ?? 9);
+        return $to !== 0 ? $to : ($a['sort_id'] - $b['sort_id']);
+    });
+
+    $balance = 0.0;
+    foreach ($movements as &$m) {
+        $balance += $m['debit'] - $m['credit'];
+        $m['balance_after'] = $balance;
+    }
+    unset($m);
+
+    $totals = ['total_debit' => 0, 'total_credit' => 0, 'net_balance' => $balance];
+    foreach ($movements as $m) {
+        $totals['total_debit'] += $m['debit'];
+        $totals['total_credit'] += $m['credit'];
+    }
+
+    return ['movements' => $movements, 'totals' => $totals];
+}
+
 $mainWarehouse = $db->queryOne("SELECT id, name FROM warehouses WHERE warehouse_type = 'main' AND status = 'active' LIMIT 1");
 if (!$mainWarehouse) {
     $db->execute(
@@ -234,7 +395,36 @@ if (!$mainWarehouse) {
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
+    // عند أي طلب POST آخر (غير التحصيل والخصم)، إخفاء رسالة التحصيل/الخصم السابقة
+    if ($action !== 'collect_from_shipping_company' && $action !== 'deduct_from_shipping_company' && isset($_SESSION[$sessionCollectionCopyableKey])) {
+        unset($_SESSION[$sessionCollectionCopyableKey]);
+    }
     $isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
+
+    if ($action === 'get_shipping_company_statement' && $isAjax) {
+        $companyId = isset($_POST['company_id']) ? (int)$_POST['company_id'] : 0;
+        if ($companyId <= 0) {
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['success' => false, 'error' => 'معرف الشركة غير صالح.'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $company = $db->queryOne("SELECT id, name, balance FROM shipping_companies WHERE id = ?", [$companyId]);
+        if (!$company) {
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['success' => false, 'error' => 'الشركة غير موجودة.'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $data = getShippingCompanyStatementData($companyId);
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode([
+            'success' => true,
+            'company_name' => $company['name'] ?? '',
+            'current_balance' => (float)($company['balance'] ?? 0),
+            'movements' => $data['movements'],
+            'totals' => $data['totals'],
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
 
     if ($action === 'search_orders') {
         $query = trim($_POST['query'] ?? '');
@@ -611,18 +801,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $hasNotesColumn = !empty($db->queryOne("SHOW COLUMNS FROM shipping_company_collections LIKE 'notes'"));
 
                     if ($hasCollectionNumberColumn) {
-                        $year = date('Y');
-                        $month = date('m');
-                        $lastCollection = $db->queryOne(
-                            "SELECT collection_number FROM shipping_company_collections WHERE collection_number LIKE ? ORDER BY collection_number DESC LIMIT 1 FOR UPDATE",
-                            ["SHIP-COL-{$year}{$month}-%"]
-                        );
-                        $serial = 1;
-                        if (!empty($lastCollection['collection_number'])) {
-                            $parts = explode('-', $lastCollection['collection_number']);
-                            $serial = (int)($parts[3] ?? 0) + 1;
-                        }
-                        $collectionNumber = sprintf("SHIP-COL-%s%s-%04d", $year, $month, $serial);
+                        $collectionNumber = (string) random_int(100000, 999999);
                     }
 
                     $collectionDate = date('Y-m-d');
@@ -705,11 +884,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $db->commit();
                 $transactionStarted = false;
-                $msg = 'تم تحصيل المبلغ بنجاح.';
-                if (!empty($collectionNumber)) {
-                    $msg .= ' رقم التحصيل: ' . $collectionNumber . '.';
-                }
-                $_SESSION[$sessionSuccessKey] = $msg;
+                $referenceNumber = $collectionNumber ?? ('SHIP-CUST-' . $companyId . '-' . date('YmdHis'));
+                $msg = "تم تحصيل المبلغ بنجاح من ديون الشركة.\nرقم المرجع: " . $referenceNumber . ".\nالرصيد بعد المعاملة: " . number_format($newBalance, 2) . " ج.م.";
+                $_SESSION[$sessionCollectionCopyableKey] = ['full_text' => $msg];
                 if ($isAjax) {
                     header('Content-Type: application/json; charset=utf-8');
                     echo json_encode([
@@ -751,6 +928,94 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!empty($_SESSION[$sessionErrorKey])) {
                 unset($_SESSION[$sessionErrorKey]);
             }
+            exit;
+        }
+        redirectAfterPost('shipping_orders', [], [], 'manager');
+        exit;
+    }
+
+    if ($action === 'deduct_from_shipping_company') {
+        $companyId = isset($_POST['company_id']) ? (int)$_POST['company_id'] : 0;
+        $amount = isset($_POST['amount']) ? cleanFinancialValue($_POST['amount']) : 0;
+        $notes = trim($_POST['notes'] ?? '');
+
+        if ($companyId <= 0) {
+            $_SESSION[$sessionErrorKey] = 'معرف شركة الشحن غير صالح.';
+        } elseif ($amount <= 0) {
+            $_SESSION[$sessionErrorKey] = 'يجب إدخال مبلغ خصم أكبر من صفر.';
+        } else {
+            try {
+                $company = $db->queryOne(
+                    "SELECT id, name, balance FROM shipping_companies WHERE id = ? FOR UPDATE",
+                    [$companyId]
+                );
+                if (!$company) {
+                    throw new InvalidArgumentException('لم يتم العثور على شركة الشحن.');
+                }
+                $currentBalance = (float)($company['balance'] ?? 0);
+                if ($amount > $currentBalance) {
+                    throw new InvalidArgumentException('المبلغ المدخل أكبر من ديون الشركة الحالية.');
+                }
+                $newBalance = round(max($currentBalance - $amount, 0), 2);
+
+                $db->execute(
+                    "UPDATE shipping_companies SET balance = ?, updated_by = ?, updated_at = NOW() WHERE id = ?",
+                    [$newBalance, $currentUser['id'] ?? null, $companyId]
+                );
+
+                $deductionsTableExists = $db->queryOne("SHOW TABLES LIKE 'shipping_company_deductions'");
+                if (!empty($deductionsTableExists)) {
+                    $db->execute(
+                        "INSERT INTO shipping_company_deductions (shipping_company_id, amount, notes, created_by) VALUES (?, ?, ?, ?)",
+                        [$companyId, $amount, $notes ?: null, $currentUser['id'] ?? null]
+                    );
+                }
+
+                logAudit(
+                    $currentUser['id'] ?? null,
+                    'deduct_from_shipping_company',
+                    'shipping_company',
+                    $companyId,
+                    null,
+                    ['amount' => $amount, 'previous_balance' => $currentBalance, 'new_balance' => $newBalance]
+                );
+
+                $deductMsg = "تم خصم المبلغ بنجاح من ديون الشركة.\nالرصيد بعد المعاملة: " . number_format($newBalance, 2) . " ج.م.";
+                if ($notes !== '') {
+                    $deductMsg .= "\nالملاحظات / سبب الخصم: " . $notes;
+                }
+                $_SESSION[$sessionCollectionCopyableKey] = ['full_text' => $deductMsg];
+                if ($isAjax) {
+                    header('Content-Type: application/json; charset=utf-8');
+                    echo json_encode([
+                        'success' => true,
+                        'message' => $deductMsg,
+                        'new_balance' => (float)$newBalance,
+                        'company_id' => $companyId
+                    ], JSON_UNESCAPED_UNICODE);
+                    exit;
+                }
+            } catch (InvalidArgumentException $e) {
+                $_SESSION[$sessionErrorKey] = $e->getMessage();
+                if ($isAjax) {
+                    header('Content-Type: application/json; charset=utf-8');
+                    echo json_encode(['success' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+                    exit;
+                }
+            } catch (Throwable $e) {
+                error_log('shipping_orders: deduct_from_shipping_company -> ' . $e->getMessage());
+                $_SESSION[$sessionErrorKey] = 'حدث خطأ أثناء تنفيذ الخصم. يرجى المحاولة مرة أخرى.';
+                if ($isAjax) {
+                    header('Content-Type: application/json; charset=utf-8');
+                    echo json_encode(['success' => false, 'error' => 'حدث خطأ أثناء تنفيذ الخصم.'], JSON_UNESCAPED_UNICODE);
+                    exit;
+                }
+            }
+        }
+        if ($isAjax) {
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['success' => false, 'error' => $_SESSION[$sessionErrorKey] ?? 'خطأ في البيانات المدخلة.'], JSON_UNESCAPED_UNICODE);
+            if (!empty($_SESSION[$sessionErrorKey])) unset($_SESSION[$sessionErrorKey]);
             exit;
         }
         redirectAfterPost('shipping_orders', [], [], 'manager');
@@ -814,7 +1079,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 $productIds[] = $originalProductId;
-                $lineTotal = round($quantity * $unitPrice, 2);
+                $lineTotal = isset($itemRow['line_total']) && (float)$itemRow['line_total'] >= 0
+                    ? round((float)$itemRow['line_total'], 2)
+                    : round($quantity * $unitPrice, 2);
                 $totalAmountFromItems += $lineTotal;
 
                 $normalizedItems[] = [
@@ -3222,11 +3489,70 @@ $hasShippingCompanies = !empty($shippingCompanies);
 <?php endif; ?>
 
 <?php if ($success): ?>
-    <div class="alert alert-success alert-dismissible fade show" id="successAlert" data-auto-refresh="true">
+    <div class="alert alert-success alert-dismissible fade show" id="successAlert" data-auto-refresh="<?php echo !empty($shippingCollectionResult) ? 'false' : 'true'; ?>">
         <i class="bi bi-check-circle-fill me-2"></i>
         <?php echo htmlspecialchars($success); ?>
         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
     </div>
+<?php endif; ?>
+
+<?php if (!empty($shippingCollectionResult)): ?>
+    <div class="alert alert-success alert-dismissible fade show" id="shippingCollectionSuccessAlert" data-auto-refresh="false">
+        <i class="bi bi-check-circle-fill me-2"></i>
+        تمت العملية بنجاح.
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    <div class="card border-success shadow-sm mb-4" id="shippingCollectionCopyableCard">
+        <div class="card-body py-3">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                <span class="text-muted small"><i class="bi bi-clipboard me-1"></i>نسخ الرسالة</span>
+                <button type="button" class="btn btn-outline-success btn-sm" id="shippingCollectionCopyBtn" title="نسخ">
+                    <i class="bi bi-clipboard-plus me-1"></i>نسخ
+                </button>
+            </div>
+            <pre id="shippingCollectionCopyableText" class="mb-0 p-3 bg-light rounded border user-select-all" style="white-space: pre-wrap; word-break: break-word; font-family: inherit; font-size: 0.95rem;"><?php echo htmlspecialchars($shippingCollectionResult); ?></pre>
+        </div>
+    </div>
+    <script>
+    (function() {
+        var btn = document.getElementById('shippingCollectionCopyBtn');
+        var pre = document.getElementById('shippingCollectionCopyableText');
+        if (btn && pre) {
+            btn.addEventListener('click', function() {
+                var text = pre.textContent;
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(text).then(function() {
+                        btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>تم النسخ';
+                        btn.classList.remove('btn-outline-success');
+                        btn.classList.add('btn-success');
+                        setTimeout(function() {
+                            btn.innerHTML = '<i class="bi bi-clipboard-plus me-1"></i>نسخ';
+                            btn.classList.remove('btn-success');
+                            btn.classList.add('btn-outline-success');
+                        }, 2000);
+                    });
+                } else {
+                    var ta = document.createElement('textarea');
+                    ta.value = text;
+                    ta.style.position = 'fixed';
+                    ta.style.opacity = '0';
+                    document.body.appendChild(ta);
+                    ta.select();
+                    try { document.execCommand('copy'); } catch (e) {}
+                    document.body.removeChild(ta);
+                    btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>تم النسخ';
+                    btn.classList.remove('btn-outline-success');
+                    btn.classList.add('btn-success');
+                    setTimeout(function() {
+                        btn.innerHTML = '<i class="bi bi-clipboard-plus me-1"></i>نسخ';
+                        btn.classList.remove('btn-success');
+                        btn.classList.add('btn-outline-success');
+                    }, 2000);
+                }
+            });
+        }
+    })();
+    </script>
 <?php endif; ?>
 
 <div class="card shadow-sm mb-4">
@@ -3313,9 +3639,10 @@ $hasShippingCompanies = !empty($shippingCompanies);
                             <tr>
                                 <th style="min-width: 220px;">المنتج</th>
                                 <th style="width: 110px;">المتاح</th>
-                                <th style="width: 140px;">الكمية <span class="text-danger">*</span></th>
-                                <th style="width: 160px;">سعر الوحدة <span class="text-danger">*</span></th>
-                                <th style="width: 160px;">الإجمالي</th>
+                                <th style="width: 100px;">الوحدة</th>
+                                <th style="width: 120px;">الكمية <span class="text-danger">*</span></th>
+                                <th style="width: 140px;">سعر الوحدة <span class="text-danger">*</span></th>
+                                <th style="width: 160px;">الإجمالي (قابل للتحكم)</th>
                                 <th style="width: 80px;">حذف</th>
                             </tr>
                         </thead>
@@ -3392,7 +3719,7 @@ $hasShippingCompanies = !empty($shippingCompanies);
     </div>
 </div>
 
-<div class="card shadow-sm mb-4">
+<div class="card shadow-sm mb-4" id="shippingCompaniesCard">
     <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
         <h5 class="mb-0">شركات الشحن</h5>
         <button type="button" class="btn btn-primary btn-sm" onclick="showAddShippingCompanyModal()" title="إضافة شركة شحن">
@@ -3403,7 +3730,14 @@ $hasShippingCompanies = !empty($shippingCompanies);
         <?php if (empty($shippingCompanies)): ?>
             <div class="p-4 text-center text-muted">لم يتم إضافة شركات شحن بعد.</div>
         <?php else: ?>
-            <div class="table-responsive">
+            <div class="table-responsive dashboard-table-wrapper">
+                <style>
+                /* قائمة إجراءات: قابلة للتمرير ومرئية فوق الجدول على الموبايل */
+                .task-actions-dropdown-menu-inbody { max-height: 70vh !important; overflow-y: auto !important; z-index: 1060 !important; }
+                @media (max-width: 768px) {
+                    .dashboard-table-wrapper .dropdown-menu { max-height: 70vh; overflow-y: auto; }
+                }
+                </style>
                 <table class="table table-striped table-hover mb-0 align-middle">
                     <thead class="table-light">
                         <tr>
@@ -3418,8 +3752,12 @@ $hasShippingCompanies = !empty($shippingCompanies);
                         <?php foreach ($shippingCompanies as $company):
                             $companyBalance = (float)($company['balance'] ?? 0);
                             $balanceFormatted = formatCurrency($companyBalance);
+                            $cid = (int)$company['id'];
+                            $cname = htmlspecialchars($company['name'], ENT_QUOTES, 'UTF-8');
+                            $cnameAttr = htmlspecialchars(json_encode($company['name'], JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
+                            $balanceFormattedAttr = htmlspecialchars(json_encode($balanceFormatted, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
                         ?>
-                            <tr>
+                            <tr data-company-id="<?php echo $cid; ?>">
                                 <td><?php echo htmlspecialchars($company['name']); ?></td>
                                 <td><?php echo $company['phone'] ? htmlspecialchars($company['phone']) : '<span class="text-muted">غير متوفر</span>'; ?></td>
                                 <td>
@@ -3433,30 +3771,18 @@ $hasShippingCompanies = !empty($shippingCompanies);
                                     <?php echo $balanceFormatted; ?>
                                 </td>
                                 <td>
-                                    <div class="d-flex flex-wrap gap-2">
-                                        <button type="button" class="btn btn-sm btn-outline-info" onclick="showCompanyPaperInvoicesCard(this)"
-                                                data-company-id="<?php echo (int)$company['id']; ?>"
-                                                data-company-name="<?php echo htmlspecialchars($company['name']); ?>"
-                                                title="سجل الفواتير الورقية">
-                                            <i class="bi bi-receipt-cutoff me-1"></i>فواتير ورقية
+                                    <div class="dropdown">
+                                        <button type="button" class="btn btn-sm btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="إجراءات">
+                                            <i class="bi bi-gear me-1"></i>إجراءات
                                         </button>
-                                        <button type="button" class="btn btn-sm btn-outline-warning" onclick="showEditShippingCompanyBalanceModal(this)"
-                                                data-company-id="<?php echo (int)$company['id']; ?>"
-                                                data-company-name="<?php echo htmlspecialchars($company['name']); ?>"
-                                                data-company-balance="<?php echo $companyBalance; ?>"
-                                                title="تعديل ديون الشركة">
-                                            <i class="bi bi-pencil me-1"></i>تعديل الديون
-                                        </button>
-                                        <button type="button" class="btn btn-sm <?php echo $companyBalance > 0 ? 'btn-success' : 'btn-outline-secondary'; ?>"
-                                                onclick="showCollectFromShippingCompanyModal(this)"
-                                                data-company-id="<?php echo (int)$company['id']; ?>"
-                                                data-company-name="<?php echo htmlspecialchars($company['name']); ?>"
-                                                data-company-balance="<?php echo $companyBalance; ?>"
-                                                data-company-balance-formatted="<?php echo htmlspecialchars($balanceFormatted); ?>"
-                                                <?php echo $companyBalance <= 0 ? ' disabled' : ''; ?>
-                                                title="تحصيل من شركة الشحن">
-                                            <i class="bi bi-cash-coin me-1"></i>تحصيل
-                                        </button>
+                                        <ul class="dropdown-menu dropdown-menu-end">
+                                            <li><button type="button" class="dropdown-item w-100 text-start border-0 bg-transparent js-shipping-company-action" data-action="statement" data-company-id="<?php echo $cid; ?>" data-company-name="<?php echo $cnameAttr; ?>"><i class="bi bi-journal-text me-2"></i>كشف حساب</button></li>
+                                            <li><button type="button" class="dropdown-item w-100 text-start border-0 bg-transparent js-shipping-company-action" data-action="paper-invoices" data-company-id="<?php echo $cid; ?>" data-company-name="<?php echo $cnameAttr; ?>"><i class="bi bi-receipt-cutoff me-2"></i>فواتير ورقية</button></li>
+                                            <li><button type="button" class="dropdown-item w-100 text-start border-0 bg-transparent js-shipping-company-action" data-action="edit-balance" data-company-id="<?php echo $cid; ?>" data-company-name="<?php echo $cnameAttr; ?>" data-balance="<?php echo (float)$companyBalance; ?>"><i class="bi bi-pencil me-2"></i>تعديل الديون</button></li>
+                                            <li><button type="button" class="dropdown-item w-100 text-start border-0 bg-transparent js-shipping-company-action <?php echo $companyBalance <= 0 ? 'disabled' : ''; ?>" data-action="collect" data-company-id="<?php echo $cid; ?>" data-company-name="<?php echo $cnameAttr; ?>" data-balance="<?php echo (float)$companyBalance; ?>" data-balance-formatted="<?php echo $balanceFormattedAttr; ?>"><i class="bi bi-cash-coin me-2"></i>تحصيل</button></li>
+                                            <li><hr class="dropdown-divider"></li>
+                                            <li><button type="button" class="dropdown-item w-100 text-start border-0 bg-transparent js-shipping-company-action <?php echo $companyBalance <= 0 ? 'disabled' : ''; ?>" data-action="deduct" data-company-id="<?php echo $cid; ?>" data-company-name="<?php echo $cnameAttr; ?>" data-balance="<?php echo (float)$companyBalance; ?>"><i class="bi bi-dash-circle me-2"></i>خصم</button></li>
+                                        </ul>
                                     </div>
                                 </td>
                             </tr>
@@ -3465,6 +3791,144 @@ $hasShippingCompanies = !empty($shippingCompanies);
                 </table>
             </div>
         <?php endif; ?>
+    </div>
+    <div class="card-footer border-0 pt-0" id="shippingCollectionResultWrap" style="<?php echo empty($shippingCollectionResult) ? 'display:none;' : ''; ?>">
+        <div class="alert alert-success mb-0 d-flex flex-wrap align-items-center gap-2 flex-row-reverse" role="status">
+            <button type="button" class="btn btn-sm btn-outline-success ms-auto" onclick="copyShippingCollectionResult(this)" title="نسخ النص">
+                <i class="bi bi-clipboard"></i> نسخ
+            </button>
+            <div class="flex-grow-1 user-select-all" style="cursor: text; min-height: 1.5em;" id="shippingCollectionResultText"><?php echo empty($shippingCollectionResult) ? '' : htmlspecialchars($shippingCollectionResult); ?></div>
+            <i class="bi bi-check-circle-fill flex-shrink-0"></i>
+        </div>
+    </div>
+</div>
+
+<script>
+function showShippingCollectionResultMessage(msg) {
+    var wrap = document.getElementById('shippingCollectionResultWrap');
+    var textEl = document.getElementById('shippingCollectionResultText');
+    if (wrap && textEl && msg) {
+        textEl.textContent = msg;
+        wrap.style.display = '';
+    }
+}
+function updateShippingCompanyBalanceInTable(companyId, newBalance) {
+    var row = document.querySelector('#shippingCompaniesCard tr[data-company-id="' + companyId + '"]');
+    if (!row) return;
+    var cells = row.querySelectorAll('td');
+    if (cells.length < 4) return;
+    var formatted = parseFloat(newBalance).toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+    cells[3].textContent = formatted;
+    cells[3].className = 'fw-semibold text-' + (parseFloat(newBalance) > 0 ? 'danger' : 'muted');
+}
+function copyShippingCollectionResult(btn) {
+    var el = document.getElementById('shippingCollectionResultText');
+    if (!el) return;
+    var text = el.textContent || el.innerText;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function() {
+            var icon = btn.querySelector('i');
+            if (icon) { icon.className = 'bi bi-check'; }
+            btn.textContent = '';
+            btn.appendChild(icon);
+            btn.insertBefore(document.createTextNode(' تم النسخ '), icon);
+            setTimeout(function() { icon.className = 'bi bi-clipboard'; btn.innerHTML = '<i class=\"bi bi-clipboard\"></i> نسخ'; }, 2000);
+        });
+    } else {
+        var ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); } catch (e) {}
+        document.body.removeChild(ta);
+        var icon = btn.querySelector('i');
+        if (icon) { icon.className = 'bi bi-check'; }
+        btn.innerHTML = '<i class=\"bi bi-check\"></i> تم النسخ';
+        setTimeout(function() { btn.innerHTML = '<i class=\"bi bi-clipboard\"></i> نسخ'; }, 2000);
+    }
+}
+(function() {
+    'use strict';
+    function initTableActionsDropdowns() {
+        var wrapper = document.querySelector('.dashboard-table-wrapper');
+        if (!wrapper) return;
+        wrapper.querySelectorAll('.dropdown').forEach(function(dropdownEl) {
+            if (dropdownEl._tableActionsInit) return;
+            dropdownEl._tableActionsInit = true;
+            var toggle = dropdownEl.querySelector('[data-bs-toggle="dropdown"]');
+            var menu = dropdownEl.querySelector('.dropdown-menu');
+            if (!toggle || !menu) return;
+            dropdownEl.addEventListener('show.bs.dropdown', function() {
+                var rect = toggle.getBoundingClientRect();
+                var menuHeight = Math.min(menu.scrollHeight, window.innerHeight * 0.7);
+                var spaceBelow = window.innerHeight - rect.bottom;
+                var openAbove = spaceBelow < menuHeight && rect.top > spaceBelow;
+                menu.classList.add('task-actions-dropdown-menu-inbody');
+                document.body.appendChild(menu);
+                var style = menu.style;
+                style.position = 'fixed';
+                if (document.documentElement.dir === 'rtl') {
+                    style.right = (window.innerWidth - rect.right) + 'px';
+                    style.left = 'auto';
+                } else {
+                    style.left = rect.left + 'px';
+                }
+                style.top = openAbove ? (rect.top - menuHeight) + 'px' : rect.bottom + 'px';
+                style.minWidth = rect.width + 'px';
+                style.maxHeight = '70vh';
+                style.overflowY = 'auto';
+                style.zIndex = '1060';
+            });
+            dropdownEl.addEventListener('hide.bs.dropdown', function() {
+                menu.classList.remove('task-actions-dropdown-menu-inbody');
+                menu.removeAttribute('style');
+                dropdownEl.appendChild(menu);
+            });
+        });
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initTableActionsDropdowns);
+    } else {
+        initTableActionsDropdowns();
+    }
+})();
+</script>
+
+<!-- بطاقة كشف حساب شركة الشحن (سجل الحركات المالية) -->
+<div class="card shadow-sm mb-4 border-primary" id="shippingCompanyStatementCard" style="display: none;">
+    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h5 class="mb-0"><i class="bi bi-journal-text me-2"></i>كشف حساب - <span id="statementCardCompanyName">-</span></h5>
+        <button type="button" class="btn btn-sm btn-light" onclick="closeShippingCompanyStatementCard()" aria-label="إغلاق"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <div class="card-body">
+        <input type="hidden" id="statementCardCompanyId" value="">
+        <div id="statementCardLoading" class="text-center py-4 text-muted">
+            <div class="spinner-border" role="status"></div>
+            <p class="mt-2 mb-0">جاري تحميل كشف الحساب...</p>
+        </div>
+        <div id="statementCardContent" style="display: none;">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th>التاريخ</th>
+                            <th>البيان</th>
+                            <th class="text-end">مدين</th>
+                            <th class="text-end">دائن</th>
+                            <th class="text-end">الرصيد</th>
+                        </tr>
+                    </thead>
+                    <tbody id="statementCardTableBody"></tbody>
+                </table>
+            </div>
+            <div class="row mt-3 text-muted small">
+                <div class="col">إجمالي المدين: <strong id="statementTotalDebit">0</strong> ج.م</div>
+                <div class="col">إجمالي الدائن: <strong id="statementTotalCredit">0</strong> ج.م</div>
+                <div class="col">الرصيد من الكشف: <strong id="statementNetBalance" class="text-primary">0</strong> ج.م</div>
+                <div class="col">الرصيد الحالي في السجل: <strong id="statementCurrentBalance">0</strong> ج.م</div>
+            </div>
+        </div>
+        <div id="statementCardEmpty" class="text-center py-4 text-muted" style="display: none;">
+            <i class="bi bi-inbox fs-1"></i>
+            <p class="mb-0">لا توجد حركات مالية مسجلة لهذه الشركة.</p>
+        </div>
     </div>
 </div>
 
@@ -3503,7 +3967,8 @@ $hasShippingCompanies = !empty($shippingCompanies);
                 </div>
                 <div class="mb-3">
                     <label class="form-label">إجمالي الفاتورة (ج.م) <span class="text-danger">*</span></label>
-                    <input type="number" step="0.01" min="0.01" class="form-control" id="companyPaperInvoiceAddTotal" placeholder="0.00">
+                    <input type="number" step="0.01" class="form-control" id="companyPaperInvoiceAddTotal" placeholder="موجب = زيادة الديون، سالب = تقليل الديون">
+                    <div class="form-text">موجب لزيادة ديون الشركة، سالب لتقليل الديون.</div>
                 </div>
                 <div id="companyPaperInvoiceAddMessage" class="alert d-none mb-0"></div>
                 <button type="button" class="btn btn-primary" id="companyPaperInvoiceAddSubmitBtn" onclick="submitCompanyPaperInvoice()">
@@ -3528,6 +3993,10 @@ $hasShippingCompanies = !empty($shippingCompanies);
                 <tbody id="companyPaperInvoicesTableBody"></tbody>
             </table>
         </div>
+        <nav id="companyPaperInvoicesPaginationWrap" class="mt-2 d-flex flex-wrap justify-content-between align-items-center gap-2" style="display: none !important;" aria-label="تقسيم سجل الفواتير الورقية">
+            <div class="text-muted small" id="companyPaperInvoicesPaginationInfo"></div>
+            <ul class="pagination pagination-sm mb-0 flex-wrap" id="companyPaperInvoicesPagination"></ul>
+        </nav>
         <div id="companyPaperInvoicesEmpty" class="text-center py-4 text-muted" style="display: none;">
             <i class="bi bi-inbox fs-1"></i>
             <p class="mb-0">لا توجد فواتير ورقية مسجلة لهذه الشركة بعد.</p>
@@ -3993,7 +4462,7 @@ $hasShippingCompanies = !empty($shippingCompanies);
                 <h5 class="modal-title"><i class="bi bi-cash-coin me-2"></i>تحصيل من شركة الشحن</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="إغلاق"></button>
             </div>
-            <form method="POST">
+            <form method="POST" data-no-loading="true">
                 <input type="hidden" name="action" value="collect_from_shipping_company">
                 <input type="hidden" name="company_id" id="collectCompanyId">
                 <div class="modal-body">
@@ -4037,6 +4506,45 @@ $hasShippingCompanies = !empty($shippingCompanies);
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
                     <button type="submit" class="btn btn-primary">تحصيل المبلغ</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal خصم من رصيد شركة الشحن - للكمبيوتر -->
+<div class="modal fade d-none d-md-block" id="deductFromShippingCompanyModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-dash-circle me-2"></i>خصم من رصيد شركة الشحن</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="إغلاق"></button>
+            </div>
+            <form method="POST" data-no-loading="true" id="deductShippingCompanyFormModal">
+                <input type="hidden" name="action" value="deduct_from_shipping_company">
+                <input type="hidden" name="company_id" id="deductModalCompanyId">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <div class="fw-semibold text-muted">شركة الشحن</div>
+                        <div class="fs-5" id="deductModalCompanyName">-</div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="fw-semibold text-muted">الديون الحالية</div>
+                        <div class="fs-5 text-warning" id="deductModalCurrentDebt">-</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="deductModalAmount">مبلغ الخصم <span class="text-danger">*</span></label>
+                        <input type="number" class="form-control" id="deductModalAmount" name="amount" step="0.01" min="0.01" required>
+                        <div class="form-text">سيُخصم من ديون الشركة (بدون تحصيل نقدي).</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="deductModalNotes">ملاحظات (اختياري)</label>
+                        <textarea class="form-control" id="deductModalNotes" name="notes" rows="2" placeholder="سبب الخصم أو تفاصيل إضافية"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                    <button type="submit" class="btn btn-warning">تنفيذ الخصم</button>
                 </div>
             </form>
         </div>
@@ -4112,7 +4620,7 @@ $hasShippingCompanies = !empty($shippingCompanies);
         <h5 class="mb-0"><i class="bi bi-cash-coin me-2"></i>تحصيل من شركة الشحن</h5>
     </div>
     <div class="card-body">
-        <form method="POST">
+        <form method="POST" data-no-loading="true">
             <input type="hidden" name="action" value="collect_from_shipping_company">
             <input type="hidden" name="company_id" id="collectCardCompanyId">
             <div class="mb-3">
@@ -4147,6 +4655,39 @@ $hasShippingCompanies = !empty($shippingCompanies);
             <div class="d-flex gap-2">
                 <button type="submit" class="btn btn-primary">تحصيل المبلغ</button>
                 <button type="button" class="btn btn-secondary" onclick="closeCollectFromShippingCard()">إلغاء</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Card للموبايل - خصم من رصيد شركة الشحن -->
+<div class="card shadow-sm mb-4 d-md-none" id="deductFromShippingCompanyCard" style="display: none;">
+    <div class="card-header bg-warning text-dark">
+        <h5 class="mb-0"><i class="bi bi-dash-circle me-2"></i>خصم من رصيد شركة الشحن</h5>
+    </div>
+    <div class="card-body">
+        <form method="POST" data-no-loading="true" id="deductShippingCompanyFormCard">
+            <input type="hidden" name="action" value="deduct_from_shipping_company">
+            <input type="hidden" name="company_id" id="deductCardCompanyId">
+            <div class="mb-3">
+                <div class="fw-semibold text-muted">شركة الشحن</div>
+                <div class="fs-5" id="deductCardCompanyName">-</div>
+            </div>
+            <div class="mb-3">
+                <div class="fw-semibold text-muted">الديون الحالية</div>
+                <div class="fs-5 text-warning" id="deductCardCurrentDebt">-</div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="deductCardAmount">مبلغ الخصم <span class="text-danger">*</span></label>
+                <input type="number" class="form-control" id="deductCardAmount" name="amount" step="0.01" min="0.01" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="deductCardNotes">ملاحظات (اختياري)</label>
+                <textarea class="form-control" id="deductCardNotes" name="notes" rows="2"></textarea>
+            </div>
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-warning">تنفيذ الخصم</button>
+                <button type="button" class="btn btn-secondary" onclick="closeDeductFromShippingCard()">إلغاء</button>
             </div>
         </form>
     </div>
@@ -4254,7 +4795,7 @@ function scrollToElement(element) {
 }
 
 function closeAllForms() {
-    const cards = ['addShippingCompanyCard', 'addLocalCustomerCard'];
+    const cards = ['addShippingCompanyCard', 'addLocalCustomerCard', 'companyPaperInvoicesCard', 'shippingCompanyStatementCard', 'collectFromShippingCompanyCard', 'deductFromShippingCompanyCard'];
     cards.forEach(function(cardId) {
         const card = document.getElementById(cardId);
         if (card && card.style.display !== 'none') {
@@ -4264,7 +4805,7 @@ function closeAllForms() {
         }
     });
     
-    const modals = ['addShippingCompanyModal', 'addLocalCustomerModal', 'deliveryModal', 'editShippingCompanyBalanceModal', 'collectFromShippingCompanyModal'];
+    const modals = ['addShippingCompanyModal', 'addLocalCustomerModal', 'deliveryModal', 'editShippingCompanyBalanceModal', 'collectFromShippingCompanyModal', 'deductFromShippingCompanyModal'];
     
     // إضافة deliveryCard
     const deliveryCard = document.getElementById('deliveryCard');
@@ -4403,6 +4944,148 @@ function showCollectFromShippingCompanyModal(button) {
 
 function closeCollectFromShippingCard() {
     var card = document.getElementById('collectFromShippingCompanyCard');
+    if (card) card.style.display = 'none';
+}
+
+function closeShippingCompanyStatementCard() {
+    var card = document.getElementById('shippingCompanyStatementCard');
+    if (card) card.style.display = 'none';
+}
+
+function showShippingCompanyStatement(companyId, companyName) {
+    closeAllForms();
+    var card = document.getElementById('shippingCompanyStatementCard');
+    if (!card) return;
+    document.getElementById('statementCardCompanyId').value = companyId;
+    document.getElementById('statementCardCompanyName').textContent = companyName || '-';
+    document.getElementById('statementCardLoading').style.display = 'block';
+    document.getElementById('statementCardContent').style.display = 'none';
+    document.getElementById('statementCardEmpty').style.display = 'none';
+    card.style.display = 'block';
+    setTimeout(function() { scrollToElement(card); }, 50);
+    var formData = new FormData();
+    formData.append('action', 'get_shipping_company_statement');
+    formData.append('company_id', companyId);
+    fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: formData, credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            document.getElementById('statementCardLoading').style.display = 'none';
+            if (data.success && data.movements && data.movements.length) {
+                var tbody = document.getElementById('statementCardTableBody');
+                tbody.innerHTML = '';
+                var fmt = function(n) { return (parseFloat(n) || 0).toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+                data.movements.forEach(function(m) {
+                    var dateStr = (m.date && m.date.toString().substring) ? m.date.toString().substring(0, 10) : (m.date || '-');
+                    var tr = document.createElement('tr');
+                    tr.innerHTML = '<td>' + dateStr + '</td><td>' + (m.label || '-') + '</td><td class="text-end">' + (m.debit > 0 ? fmt(m.debit) + ' ج.م' : '-') + '</td><td class="text-end">' + (m.credit > 0 ? fmt(m.credit) + ' ج.م' : '-') + '</td><td class="text-end fw-semibold">' + fmt(m.balance_after) + ' ج.م</td>';
+                    tbody.appendChild(tr);
+                });
+                document.getElementById('statementTotalDebit').textContent = fmt(data.totals.total_debit);
+                document.getElementById('statementTotalCredit').textContent = fmt(data.totals.total_credit);
+                document.getElementById('statementNetBalance').textContent = fmt(data.totals.net_balance);
+                var currentBal = typeof data.current_balance !== 'undefined' ? data.current_balance : '';
+                var currentBalEl = document.getElementById('statementCurrentBalance');
+                if (currentBalEl) {
+                    currentBalEl.textContent = fmt(currentBal);
+                    currentBalEl.classList.remove('text-success', 'text-danger');
+                    if (Math.abs((parseFloat(data.totals.net_balance) || 0) - (parseFloat(currentBal) || 0)) > 0.01)
+                        currentBalEl.classList.add('text-danger');
+                    else
+                        currentBalEl.classList.add('text-success');
+                }
+                document.getElementById('statementCardContent').style.display = 'block';
+            } else {
+                document.getElementById('statementCardEmpty').style.display = 'block';
+            }
+        })
+        .catch(function() {
+            document.getElementById('statementCardLoading').style.display = 'none';
+            document.getElementById('statementCardEmpty').innerHTML = '<i class="bi bi-exclamation-triangle fs-1"></i><p class="mb-0">حدث خطأ في تحميل كشف الحساب.</p>';
+            document.getElementById('statementCardEmpty').style.display = 'block';
+        });
+}
+
+function showCompanyPaperInvoicesByIdName(companyId, companyName) {
+    var btn = document.createElement('button');
+    btn.setAttribute('data-company-id', companyId);
+    btn.setAttribute('data-company-name', companyName);
+    showCompanyPaperInvoicesCard(btn);
+}
+
+function showEditBalanceByIdName(companyId, companyName, balance) {
+    var btn = document.createElement('button');
+    btn.setAttribute('data-company-id', companyId);
+    btn.setAttribute('data-company-name', companyName);
+    btn.setAttribute('data-company-balance', balance);
+    showEditShippingCompanyBalanceModal(btn);
+}
+
+function showCollectByIdName(companyId, companyName, balance, balanceFormatted) {
+    var btn = document.createElement('button');
+    btn.setAttribute('data-company-id', companyId);
+    btn.setAttribute('data-company-name', companyName);
+    btn.setAttribute('data-company-balance', balance);
+    btn.setAttribute('data-company-balance-formatted', balanceFormatted || balance);
+    showCollectFromShippingCompanyModal(btn);
+}
+
+function showDeductFromShippingCompany(companyId, companyName, balance) {
+    closeAllForms();
+    var balanceFormatted = (parseFloat(balance) || 0).toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+    if (isMobile()) {
+        var card = document.getElementById('deductFromShippingCompanyCard');
+        if (card) {
+            document.getElementById('deductCardCompanyId').value = companyId;
+            document.getElementById('deductCardCompanyName').textContent = companyName || '-';
+            document.getElementById('deductCardCurrentDebt').textContent = balanceFormatted;
+            var amountInput = document.getElementById('deductCardAmount');
+            if (amountInput) { amountInput.value = ''; amountInput.max = balance; }
+            document.getElementById('deductCardNotes').value = '';
+            card.style.display = 'block';
+            setTimeout(function() { scrollToElement(card); }, 50);
+        }
+    } else {
+        var modal = document.getElementById('deductFromShippingCompanyModal');
+        if (modal) {
+            document.getElementById('deductModalCompanyId').value = companyId;
+            document.getElementById('deductModalCompanyName').textContent = companyName || '-';
+            document.getElementById('deductModalCurrentDebt').textContent = balanceFormatted;
+            var amountInput = document.getElementById('deductModalAmount');
+            if (amountInput) { amountInput.value = ''; amountInput.max = balance; }
+            document.getElementById('deductModalNotes').value = '';
+            var modalInstance = new bootstrap.Modal(modal);
+            modalInstance.show();
+        }
+    }
+}
+
+(function() {
+    function parseCompanyName(val) {
+        if (val == null || val === '') return '';
+        try { return JSON.parse(val); } catch (e) { return val; }
+    }
+    var container = document.getElementById('shippingCompaniesCard');
+    if (!container) return;
+    // استخدام document لأن القائمة تُنقل إلى body عند الفتح فالنقر لا يصل إلى الـ card
+    document.addEventListener('click', function(e) {
+        var btn = e.target && e.target.closest && e.target.closest('.js-shipping-company-action');
+        if (!btn || btn.classList.contains('disabled')) return;
+        e.preventDefault();
+        var action = btn.getAttribute('data-action');
+        var companyId = parseInt(btn.getAttribute('data-company-id'), 10);
+        var companyName = parseCompanyName(btn.getAttribute('data-company-name'));
+        var balance = parseFloat(btn.getAttribute('data-balance')) || 0;
+        var balanceFormatted = parseCompanyName(btn.getAttribute('data-balance-formatted')) || (balance + ' ج.م');
+        if (action === 'statement') showShippingCompanyStatement(companyId, companyName);
+        else if (action === 'paper-invoices') showCompanyPaperInvoicesByIdName(companyId, companyName);
+        else if (action === 'edit-balance') showEditBalanceByIdName(companyId, companyName, balance);
+        else if (action === 'collect') showCollectByIdName(companyId, companyName, balance, balanceFormatted);
+        else if (action === 'deduct') showDeductFromShippingCompany(companyId, companyName, balance);
+    }, true);
+})();
+
+function closeDeductFromShippingCard() {
+    var card = document.getElementById('deductFromShippingCompanyCard');
     if (card) card.style.display = 'none';
 }
 
@@ -4608,6 +5291,7 @@ function closeAddLocalCustomerCard() {
                 <option value="${product.id}" 
                         data-available="${available}" 
                         data-unit-price="${unitPrice}"
+                        data-unit="${unit}"
                         data-batch-id="${batchId}"
                         data-product-type="${productType}">
                     ${name} (المتاح: ${available} ${unit})
@@ -4616,7 +5300,7 @@ function closeAddLocalCustomerCard() {
         }).join('');
     };
 
-    const recalculateTotals = () => {
+    const recalculateTotals = (skipLineTotalUpdate) => {
         const rows = itemsBody.querySelectorAll('tr');
         let totalItems = 0;
         let totalAmount = 0;
@@ -4624,7 +5308,7 @@ function closeAddLocalCustomerCard() {
         rows.forEach(row => {
             const quantityInput = row.querySelector('input[name$="[quantity]"]');
             const unitPriceInput = row.querySelector('input[name$="[unit_price]"]');
-            const lineTotalEl = row.querySelector('.line-total');
+            const lineTotalInput = row.querySelector('.line-total-input');
 
             const quantity = parseFloat(quantityInput?.value || '0');
             const unitPrice = parseFloat(unitPriceInput?.value || '0');
@@ -4633,10 +5317,13 @@ function closeAddLocalCustomerCard() {
             if (quantity > 0) {
                 totalItems += quantity;
             }
-            totalAmount += lineTotal;
-
-            if (lineTotalEl) {
-                lineTotalEl.textContent = formatCurrency(lineTotal);
+            if (lineTotalInput) {
+                if (!skipLineTotalUpdate) {
+                    lineTotalInput.value = lineTotal > 0 ? lineTotal.toFixed(2) : '';
+                }
+                totalAmount += parseFloat(lineTotalInput.value || '0') || 0;
+            } else {
+                totalAmount += lineTotal;
             }
         });
 
@@ -4645,6 +5332,10 @@ function closeAddLocalCustomerCard() {
         }
         if (orderTotalEl) {
             orderTotalEl.textContent = formatCurrency(totalAmount);
+        }
+        const customTotalInput = document.getElementById('customTotalAmount');
+        if (customTotalInput && !customTotalInput.dataset.manual) {
+            customTotalInput.value = totalAmount > 0 ? totalAmount.toFixed(2) : '';
         }
     };
 
@@ -4659,6 +5350,7 @@ function closeAddLocalCustomerCard() {
             const selectedOption = productSelect?.selectedOptions?.[0];
             const available = parseFloat(selectedOption?.dataset?.available || '0');
             const unitPrice = parseFloat(selectedOption?.dataset?.unitPrice || '0');
+            const unit = selectedOption?.dataset?.unit || '-';
             const batchId = selectedOption?.dataset?.batchId || '';
             const productType = selectedOption?.dataset?.productType || 'external';
 
@@ -4670,6 +5362,12 @@ function closeAddLocalCustomerCard() {
             }
             if (productTypeInput) {
                 productTypeInput.value = productType;
+            }
+
+            // تحديث عرض الوحدة حسب المنتج المختار
+            const unitLabel = row.querySelector('.unit-label');
+            if (unitLabel) {
+                unitLabel.textContent = unit;
             }
 
             if (quantityInput) {
@@ -4685,7 +5383,7 @@ function closeAddLocalCustomerCard() {
 
             if (availableBadges.length) {
                 const message = selectedOption && available > 0
-                    ? `المتاح: ${available.toLocaleString('ar-EG')} وحدة`
+                    ? `المتاح: ${available.toLocaleString('ar-EG')} ${unit}`
                     : 'لا توجد كمية متاحة';
                 availableBadges.forEach((badge) => {
                     badge.textContent = message;
@@ -4695,6 +5393,18 @@ function closeAddLocalCustomerCard() {
 
             recalculateTotals();
         };
+
+        const lineTotalInput = row.querySelector('.line-total-input');
+        if (lineTotalInput) {
+            lineTotalInput.addEventListener('input', function() {
+                const qty = parseFloat(quantityInput?.value || '0');
+                const totalVal = parseFloat(this.value || '0');
+                if (qty > 0 && totalVal >= 0 && unitPriceInput) {
+                    unitPriceInput.value = (totalVal / qty).toFixed(2);
+                }
+                recalculateTotals(true);
+            });
+        }
 
         productSelect?.addEventListener('change', updateAvailability);
         quantityInput?.addEventListener('input', recalculateTotals);
@@ -4724,13 +5434,21 @@ function closeAddLocalCustomerCard() {
             <td class="text-muted fw-semibold">
                 <span class="available-qty d-inline-block">-</span>
             </td>
-            <td>
-                <input type="number" class="form-control" name="items[${rowIndex}][quantity]" step="1" min="0" value="1" required>
+            <td class="text-muted small row-unit">
+                <span class="unit-label">-</span>
             </td>
             <td>
-                <input type="number" class="form-control" name="items[${rowIndex}][unit_price]" step="0.1" min="0" required>
+                <input type="number" class="form-control" name="items[${rowIndex}][quantity]" step="any" min="0" value="1" required>
             </td>
-            <td class="fw-semibold line-total">${formatCurrency(0)}</td>
+            <td>
+                <input type="number" class="form-control" name="items[${rowIndex}][unit_price]" step="0.01" min="0" required>
+            </td>
+            <td>
+                <div class="input-group input-group-sm">
+                    <input type="number" class="form-control fw-semibold line-total-input" name="items[${rowIndex}][line_total]" step="0.01" min="0" placeholder="0.00" title="الإجمالي = الكمية × سعر الوحدة (قابل للتعديل)">
+                    <span class="input-group-text">ج.م</span>
+                </div>
+            </td>
             <td>
                 <button type="button" class="btn btn-outline-danger btn-sm remove-item" title="حذف المنتج">
                     <i class="bi bi-trash"></i>
@@ -5064,6 +5782,10 @@ function confirmCancelOrderWithDeductedAmount() {
                 <tbody id="shippingInvoiceLogTableBody"></tbody>
             </table>
         </div>
+        <nav id="shippingInvoiceLogPaginationWrap" class="mt-2 d-flex flex-wrap justify-content-between align-items-center gap-2" style="display: none !important;" aria-label="تقسيم سجل الفواتير">
+            <div class="text-muted small" id="shippingInvoiceLogPaginationInfo"></div>
+            <ul class="pagination pagination-sm mb-0 flex-wrap" id="shippingInvoiceLogPagination"></ul>
+        </nav>
         <div id="shippingInvoiceLogEmpty" class="text-center py-4 text-muted" style="display: none;">
             <i class="bi bi-inbox fs-1"></i>
             <p class="mb-0" id="shippingInvoiceLogEmptyText">لا توجد فواتير مسجلة لهذا العميل بعد.</p>
@@ -5077,8 +5799,8 @@ function confirmCancelOrderWithDeductedAmount() {
         <h5 class="mb-0">عرض الفاتورة الورقية</h5>
         <button type="button" class="btn btn-sm btn-light" onclick="closeShippingPaperInvoiceViewCard()" aria-label="إغلاق"><i class="bi bi-x-lg"></i></button>
     </div>
-    <div class="card-body text-center p-0">
-        <img id="shippingPaperInvoiceViewImg" src="" alt="صورة الفاتورة" class="img-fluid" style="max-height: 80vh;">
+    <div class="card-body d-flex align-items-center justify-content-center overflow-auto p-2" style="min-height: 300px; max-height: 85vh;">
+        <img id="shippingPaperInvoiceViewImg" src="" alt="صورة الفاتورة" style="max-width: 100%; max-height: 82vh; width: auto; height: auto; object-fit: contain;">
     </div>
 </div>
 
@@ -5167,10 +5889,28 @@ function displayCompanyPaperInvoices(list) {
     tbody.innerHTML = '';
     if (!list || list.length === 0) {
         document.getElementById('companyPaperInvoicesEmpty').style.display = 'block';
+        document.getElementById('companyPaperInvoicesPaginationWrap').style.display = 'none';
         return;
     }
-    document.getElementById('companyPaperInvoicesTableWrap').style.display = 'block';
-    list.forEach(function(pi) {
+    window._companyPaperInvoicesFullList = list;
+    window._companyPaperInvoicesPage = 1;
+    window._companyPaperInvoicesPerPage = 15;
+    goToCompanyPaperInvoicesPage(1);
+}
+
+function goToCompanyPaperInvoicesPage(page) {
+    var list = window._companyPaperInvoicesFullList;
+    if (!list || !list.length) return;
+    var perPage = window._companyPaperInvoicesPerPage || 15;
+    var totalPages = Math.ceil(list.length / perPage);
+    page = Math.max(1, Math.min(page, totalPages));
+    window._companyPaperInvoicesPage = page;
+    var start = (page - 1) * perPage;
+    var slice = list.slice(start, start + perPage);
+    var tbody = document.getElementById('companyPaperInvoicesTableBody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    slice.forEach(function(pi) {
         var safeNum = (pi.invoice_number || 'ورقية-' + pi.id).replace(/</g, '&lt;').replace(/>/g, '&gt;');
         var dateStr = (pi.created_at || '-').toString().substring(0, 10);
         var viewBtn = pi.image_path
@@ -5180,6 +5920,36 @@ function displayCompanyPaperInvoices(list) {
         tr.innerHTML = '<td>' + safeNum + '</td><td>' + parseFloat(pi.total_amount || 0).toFixed(2) + ' ج.م</td><td>' + dateStr + '</td><td>' + viewBtn + '</td>';
         tbody.appendChild(tr);
     });
+    document.getElementById('companyPaperInvoicesTableWrap').style.display = 'block';
+    var wrap = document.getElementById('companyPaperInvoicesPaginationWrap');
+    if (totalPages <= 1) {
+        wrap.style.display = 'none';
+        return;
+    }
+    wrap.style.display = 'flex';
+    var from = start + 1;
+    var to = Math.min(start + perPage, list.length);
+    document.getElementById('companyPaperInvoicesPaginationInfo').textContent = 'عرض ' + from + '-' + to + ' من ' + list.length;
+    var ul = document.getElementById('companyPaperInvoicesPagination');
+    ul.innerHTML = '';
+    var prevLi = document.createElement('li');
+    prevLi.className = 'page-item' + (page <= 1 ? ' disabled' : '');
+    prevLi.innerHTML = '<a class="page-link" href="#" onclick="goToCompanyPaperInvoicesPage(' + (page - 1) + '); return false;" aria-label="السابق"><i class="bi bi-chevron-right"></i></a>';
+    ul.appendChild(prevLi);
+    var maxVisible = 5;
+    var fromPage = Math.max(1, page - Math.floor(maxVisible / 2));
+    var toPage = Math.min(totalPages, fromPage + maxVisible - 1);
+    if (toPage - fromPage < maxVisible - 1) fromPage = Math.max(1, toPage - maxVisible + 1);
+    for (var p = fromPage; p <= toPage; p++) {
+        var li = document.createElement('li');
+        li.className = 'page-item' + (p === page ? ' active' : '');
+        li.innerHTML = '<a class="page-link" href="#" onclick="goToCompanyPaperInvoicesPage(' + p + '); return false;">' + p + '</a>';
+        ul.appendChild(li);
+    }
+    var nextLi = document.createElement('li');
+    nextLi.className = 'page-item' + (page >= totalPages ? ' disabled' : '');
+    nextLi.innerHTML = '<a class="page-link" href="#" onclick="goToCompanyPaperInvoicesPage(' + (page + 1) + '); return false;" aria-label="التالي"><i class="bi bi-chevron-left"></i></a>';
+    ul.appendChild(nextLi);
 }
 
 function openCompanyPaperInvoiceForm() {
@@ -5208,7 +5978,8 @@ function submitCompanyPaperInvoice() {
     var submitBtn = document.getElementById('companyPaperInvoiceAddSubmitBtn');
     if (!companyId) { alert('لم يتم تحديد الشركة'); return; }
     if (!invoiceNumber) { alert('يرجى إدخال رقم الفاتورة'); return; }
-    if (!total || isNaN(parseFloat(total)) || parseFloat(total) <= 0) { alert('يرجى إدخال إجمالي صحيح'); return; }
+    var totalNum = parseFloat(total);
+    if (total === '' || isNaN(totalNum) || totalNum === 0) { alert('يرجى إدخال إجمالي صحيح (موجب أو سالب، غير صفر)'); return; }
     if (!file) { alert('يرجى اختيار صورة الفاتورة الورقية'); return; }
     if (msgEl) { msgEl.classList.add('d-none'); msgEl.innerHTML = ''; }
     if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>جاري الحفظ...'; }
@@ -5379,21 +6150,10 @@ function displayShippingInvoiceLog(history, paperInvoices, paperInvoiceReturns) 
     if (!tbody) return;
     tbody.innerHTML = '';
     var invoices = groupShippingHistoryByInvoice(history);
-    var hasAny = invoices.length > 0 || paperInvoices.length > 0 || paperInvoiceReturns.length > 0;
-    var isLocal = document.getElementById('shippingInvoiceLogIsLocal');
-    isLocal = isLocal ? (parseInt(isLocal.value, 10) !== 0) : true;
-    if (!hasAny) {
-        document.getElementById('shippingInvoiceLogEmpty').style.display = 'block';
-        var emptyText = document.getElementById('shippingInvoiceLogEmptyText');
-        if (emptyText && !isLocal) emptyText.textContent = 'العميل غير مسجل كعميل محلي. سجل الفواتير والفاتورة الورقية متاح للعملاء المحليين فقط.';
-        return;
-    }
-    document.getElementById('shippingInvoiceLogTableWrap').style.display = 'block';
+    var rows = [];
     invoices.forEach(function(inv) {
         var safeNum = (inv.invoice_number || '-').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        var tr = document.createElement('tr');
-        tr.innerHTML = '<td>' + safeNum + '</td><td>' + parseFloat(inv.total_amount || 0).toFixed(2) + ' ج.م</td><td>' + (inv.invoice_date || '-') + '</td><td><span class="text-muted small">فاتورة نظام</span></td>';
-        tbody.appendChild(tr);
+        rows.push('<td>' + safeNum + '</td><td>' + parseFloat(inv.total_amount || 0).toFixed(2) + ' ج.م</td><td>' + (inv.invoice_date || '-') + '</td><td><span class="text-muted small">فاتورة نظام</span></td>');
     });
     paperInvoices.forEach(function(pi) {
         var safeNum = (pi.invoice_number || 'ورقية-' + pi.id).replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -5401,9 +6161,7 @@ function displayShippingInvoiceLog(history, paperInvoices, paperInvoiceReturns) 
         var viewBtn = pi.image_path
             ? '<button type="button" class="btn btn-sm btn-outline-primary" onclick="showShippingPaperInvoiceImage(' + parseInt(pi.id, 10) + ')" title="عرض صورة الفاتورة"><i class="bi bi-image me-1"></i>عرض الفاتورة</button>'
             : '<span class="text-muted small">لا توجد صورة</span>';
-        var tr = document.createElement('tr');
-        tr.innerHTML = '<td>' + safeNum + '</td><td>' + parseFloat(pi.total_amount || 0).toFixed(2) + ' ج.م</td><td>' + dateStr + '</td><td>' + viewBtn + '</td>';
-        tbody.appendChild(tr);
+        rows.push('<td>' + safeNum + '</td><td>' + parseFloat(pi.total_amount || 0).toFixed(2) + ' ج.م</td><td>' + dateStr + '</td><td>' + viewBtn + '</td>');
     });
     paperInvoiceReturns.forEach(function(pr) {
         var safeNum = ('مرتجع ورقية - ' + (pr.invoice_number || pr.id)).replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -5411,10 +6169,71 @@ function displayShippingInvoiceLog(history, paperInvoices, paperInvoiceReturns) 
         var viewBtn = pr.image_path
             ? '<button type="button" class="btn btn-sm btn-outline-warning" onclick="showShippingPaperInvoiceReturnImage(' + parseInt(pr.id, 10) + ')" title="عرض صورة المرتجع"><i class="bi bi-image me-1"></i>عرض المرتجع</button>'
             : '<span class="text-muted small">لا توجد صورة</span>';
+        rows.push('<td>' + safeNum + '</td><td class="text-warning">-' + parseFloat(pr.return_amount || 0).toFixed(2) + ' ج.م</td><td>' + dateStr + '</td><td>' + viewBtn + '</td>');
+    });
+    var hasAny = rows.length > 0;
+    var isLocal = document.getElementById('shippingInvoiceLogIsLocal');
+    isLocal = isLocal ? (parseInt(isLocal.value, 10) !== 0) : true;
+    if (!hasAny) {
+        document.getElementById('shippingInvoiceLogEmpty').style.display = 'block';
+        document.getElementById('shippingInvoiceLogPaginationWrap').style.display = 'none';
+        var emptyText = document.getElementById('shippingInvoiceLogEmptyText');
+        if (emptyText && !isLocal) emptyText.textContent = 'العميل غير مسجل كعميل محلي. سجل الفواتير والفاتورة الورقية متاح للعملاء المحليين فقط.';
+        return;
+    }
+    window._shippingInvoiceLogRows = rows;
+    window._shippingInvoiceLogPage = 1;
+    window._shippingInvoiceLogPerPage = 15;
+    document.getElementById('shippingInvoiceLogTableWrap').style.display = 'block';
+    goToShippingInvoiceLogPage(1);
+}
+
+function goToShippingInvoiceLogPage(page) {
+    var rows = window._shippingInvoiceLogRows;
+    if (!rows || !rows.length) return;
+    var perPage = window._shippingInvoiceLogPerPage || 15;
+    var totalPages = Math.ceil(rows.length / perPage);
+    page = Math.max(1, Math.min(page, totalPages));
+    window._shippingInvoiceLogPage = page;
+    var start = (page - 1) * perPage;
+    var slice = rows.slice(start, start + perPage);
+    var tbody = document.getElementById('shippingInvoiceLogTableBody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    slice.forEach(function(rowHtml) {
         var tr = document.createElement('tr');
-        tr.innerHTML = '<td>' + safeNum + '</td><td class="text-warning">-' + parseFloat(pr.return_amount || 0).toFixed(2) + ' ج.م</td><td>' + dateStr + '</td><td>' + viewBtn + '</td>';
+        tr.innerHTML = rowHtml;
         tbody.appendChild(tr);
     });
+    var wrap = document.getElementById('shippingInvoiceLogPaginationWrap');
+    if (totalPages <= 1) {
+        wrap.style.display = 'none';
+        return;
+    }
+    wrap.style.display = 'flex';
+    var from = start + 1;
+    var to = Math.min(start + perPage, rows.length);
+    document.getElementById('shippingInvoiceLogPaginationInfo').textContent = 'عرض ' + from + '-' + to + ' من ' + rows.length;
+    var ul = document.getElementById('shippingInvoiceLogPagination');
+    ul.innerHTML = '';
+    var prevLi = document.createElement('li');
+    prevLi.className = 'page-item' + (page <= 1 ? ' disabled' : '');
+    prevLi.innerHTML = '<a class="page-link" href="#" onclick="goToShippingInvoiceLogPage(' + (page - 1) + '); return false;" aria-label="السابق"><i class="bi bi-chevron-right"></i></a>';
+    ul.appendChild(prevLi);
+    var maxVisible = 5;
+    var fromPage = Math.max(1, page - Math.floor(maxVisible / 2));
+    var toPage = Math.min(totalPages, fromPage + maxVisible - 1);
+    if (toPage - fromPage < maxVisible - 1) fromPage = Math.max(1, toPage - maxVisible + 1);
+    for (var p = fromPage; p <= toPage; p++) {
+        var li = document.createElement('li');
+        li.className = 'page-item' + (p === page ? ' active' : '');
+        li.innerHTML = '<a class="page-link" href="#" onclick="goToShippingInvoiceLogPage(' + p + '); return false;">' + p + '</a>';
+        ul.appendChild(li);
+    }
+    var nextLi = document.createElement('li');
+    nextLi.className = 'page-item' + (page >= totalPages ? ' disabled' : '');
+    nextLi.innerHTML = '<a class="page-link" href="#" onclick="goToShippingInvoiceLogPage(' + (page + 1) + '); return false;" aria-label="التالي"><i class="bi bi-chevron-left"></i></a>';
+    ul.appendChild(nextLi);
 }
 
 function openShippingPaperInvoiceForm() {
@@ -5793,15 +6612,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = 'تحصيل المبلغ'; }
+                    if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
                     if (data.success) {
                         var msg = data.message || 'تم التحصيل بنجاح.';
-                        if (data.amount_collected != null) {
-                            msg += ' المبلغ المحصل: ' + parseFloat(data.amount_collected).toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م.';
-                        }
-                        if (data.new_balance != null) {
-                            msg += ' المبلغ المتبقي (ديون الشركة): ' + parseFloat(data.new_balance).toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م.';
-                        }
                         showShippingToast(msg, 'success');
+                        if (typeof showShippingCollectionResultMessage === 'function') showShippingCollectionResultMessage(msg);
+                        if (data.company_id != null && data.new_balance != null && typeof updateShippingCompanyBalanceInTable === 'function') updateShippingCompanyBalanceInTable(data.company_id, data.new_balance);
                         var debtEl = collectModal.querySelector('.collection-shipping-current-debt');
                         if (debtEl && data.new_balance != null) debtEl.textContent = parseFloat(data.new_balance).toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
                         if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
@@ -5814,6 +6630,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 })
                 .catch(function() {
                     if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = 'تحصيل المبلغ'; }
+                    if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
                     showShippingToast('حدث خطأ في الاتصال.', 'danger');
                 });
             return false;
@@ -5832,15 +6649,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = 'تحصيل المبلغ'; }
+                    if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
                     if (data.success) {
                         var msg = data.message || 'تم التحصيل بنجاح.';
-                        if (data.amount_collected != null) {
-                            msg += ' المبلغ المحصل: ' + parseFloat(data.amount_collected).toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م.';
-                        }
-                        if (data.new_balance != null) {
-                            msg += ' المبلغ المتبقي (ديون الشركة): ' + parseFloat(data.new_balance).toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م.';
-                        }
                         showShippingToast(msg, 'success');
+                        if (typeof showShippingCollectionResultMessage === 'function') showShippingCollectionResultMessage(msg);
+                        if (data.company_id != null && data.new_balance != null && typeof updateShippingCompanyBalanceInTable === 'function') updateShippingCompanyBalanceInTable(data.company_id, data.new_balance);
                         var debtEl = document.getElementById('collectCardCurrentDebt');
                         if (debtEl && data.new_balance != null) debtEl.textContent = parseFloat(data.new_balance).toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
                         if (collectCard) { collectCard.style.display = 'none'; if (collectCardForm.reset) collectCardForm.reset(); }
@@ -5850,6 +6664,77 @@ document.addEventListener('DOMContentLoaded', function() {
                 })
                 .catch(function() {
                     if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = 'تحصيل المبلغ'; }
+                    if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
+                    showShippingToast('حدث خطأ في الاتصال.', 'danger');
+                });
+            return false;
+        });
+    }
+
+    var deductModalForm = document.getElementById('deductShippingCompanyFormModal');
+    if (deductModalForm) {
+        deductModalForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            var formData = new FormData(deductModalForm);
+            var submitBtn = deductModalForm.querySelector('button[type="submit"]');
+            if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>جاري الخصم...'; }
+            fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: formData, credentials: 'same-origin' })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = 'تنفيذ الخصم'; }
+                    if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
+                    if (data.success) {
+                        var msg = data.message || 'تم خصم المبلغ بنجاح.';
+                        showShippingToast(msg, 'success');
+                        if (typeof showShippingCollectionResultMessage === 'function') showShippingCollectionResultMessage(msg);
+                        if (data.company_id != null && data.new_balance != null && typeof updateShippingCompanyBalanceInTable === 'function') updateShippingCompanyBalanceInTable(data.company_id, data.new_balance);
+                        var deductModal = document.getElementById('deductFromShippingCompanyModal');
+                        if (typeof bootstrap !== 'undefined' && bootstrap.Modal && deductModal) {
+                            var m = bootstrap.Modal.getInstance(deductModal);
+                            if (m) m.hide();
+                        }
+                        if (data.new_balance != null) {
+                            var debtEl = document.getElementById('deductModalCurrentDebt');
+                            if (debtEl) debtEl.textContent = parseFloat(data.new_balance).toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+                        }
+                    } else {
+                        showShippingToast(data.error || 'حدث خطأ.', 'danger');
+                    }
+                })
+                .catch(function() {
+                    if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = 'تنفيذ الخصم'; }
+                    if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
+                    showShippingToast('حدث خطأ في الاتصال.', 'danger');
+                });
+            return false;
+        });
+    }
+
+    var deductCardForm = document.getElementById('deductShippingCompanyFormCard');
+    if (deductCardForm) {
+        deductCardForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            var formData = new FormData(deductCardForm);
+            var submitBtn = deductCardForm.querySelector('button[type="submit"]');
+            if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>جاري الخصم...'; }
+            fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: formData, credentials: 'same-origin' })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = 'تنفيذ الخصم'; }
+                    if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
+                    if (data.success) {
+                        var msg = data.message || 'تم خصم المبلغ بنجاح.';
+                        showShippingToast(msg, 'success');
+                        if (typeof showShippingCollectionResultMessage === 'function') showShippingCollectionResultMessage(msg);
+                        if (data.company_id != null && data.new_balance != null && typeof updateShippingCompanyBalanceInTable === 'function') updateShippingCompanyBalanceInTable(data.company_id, data.new_balance);
+                        closeDeductFromShippingCard();
+                    } else {
+                        showShippingToast(data.error || 'حدث خطأ.', 'danger');
+                    }
+                })
+                .catch(function() {
+                    if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = 'تنفيذ الخصم'; }
+                    if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
                     showShippingToast('حدث خطأ في الاتصال.', 'danger');
                 });
             return false;

@@ -56,7 +56,7 @@
         function showError(message) {
             var tbody = document.getElementById('customersTableBody');
             if (tbody) {
-                tbody.innerHTML = '<tr><td colspan="8" class="text-center text-danger">' + escapeHtml(message) + '</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">' + escapeHtml(message) + '</td></tr>';
             }
         }
 
@@ -131,47 +131,37 @@
             tbody.innerHTML = '';
 
             if (customers.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">لا توجد عملاء محليين</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">لا توجد عملاء محليين</td></tr>';
                 if (paginationEl) paginationEl.style.display = 'none';
                 return;
             }
 
+            var phonesList = function(c) {
+                    if (c.phones && c.phones.length > 0) return c.phones.filter(function(p) { return p && String(p).trim(); }).map(function(p) { return String(p).trim(); });
+                    if (c.phone) return [String(c.phone).trim()];
+                    return [];
+                };
             customers.forEach(function(customer) {
                 var row = document.createElement('tr');
-                var phonesHtml = '';
-                if (customer.phones && customer.phones.length > 0) {
-                    customer.phones.forEach(function(phone) {
-                        if (phone && phone.trim()) {
-                            phonesHtml += '<a href="tel:' + escapeHtml(phone) + '" class="btn btn-sm btn-outline-primary me-1 mb-1" title="اتصل بـ ' + escapeHtml(phone) + '"><i class="bi bi-telephone-fill"></i> </a>';
-                        }
-                    });
-                } else if (customer.phone) {
-                    phonesHtml = '<a href="tel:' + escapeHtml(customer.phone) + '" class="btn btn-sm btn-outline-primary me-1 mb-1" title="اتصل بـ ' + escapeHtml(customer.phone) + '"><i class="bi bi-telephone-fill"></i> </a>';
-                }
-                if (!phonesHtml) phonesHtml = '-';
-
                 var balanceHtml = '<strong>' + customer.balance_formatted + '</strong>';
                 if (customer.balance !== 0) {
                     balanceHtml += ' <span class="badge ' + customer.balance_badge_class + ' ms-1">' + customer.balance_badge_text + '</span>';
                 }
-
-                var locationHtml = '<div class="d-flex flex-wrap align-items-center gap-2">';
-                locationHtml += '<button type="button" class="btn btn-sm btn-outline-primary location-capture-btn" data-customer-id="' + customer.id + '" data-customer-name="' + escapeHtml(customer.name) + '"><i class="bi bi-geo-alt me-1"></i>تحديد</button>';
-                if (customer.has_location) {
-                    locationHtml += '<button type="button" class="btn btn-sm btn-outline-info location-view-btn" data-customer-id="' + customer.id + '" data-customer-name="' + escapeHtml(customer.name) + '" data-latitude="' + customer.latitude.toFixed(8) + '" data-longitude="' + customer.longitude.toFixed(8) + '"><i class="bi bi-map me-1"></i>عرض</button>';
-                } else {
-                    locationHtml += '<span class="badge bg-secondary-subtle text-secondary">غير محدد</span>';
-                }
-                locationHtml += '</div>';
+                var phonesJson = JSON.stringify(phonesList(customer));
 
                 var actionsHtml = '<div class="dropdown table-actions-dropdown" data-bs-boundary="viewport">';
                 actionsHtml += '<button type="button" class="btn btn-sm btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi bi-gear me-1"></i>إجراءات</button>';
                 actionsHtml += '<ul class="dropdown-menu dropdown-menu-end">';
+                actionsHtml += '<li><button type="button" class="dropdown-item location-capture-btn" data-customer-id="' + customer.id + '" data-customer-name="' + escapeHtml(customer.name) + '"><i class="bi bi-geo-alt me-2"></i>تحديد الموقع</button></li>';
+                if (customer.has_location) {
+                    actionsHtml += '<li><button type="button" class="dropdown-item location-view-btn" data-customer-id="' + customer.id + '" data-customer-name="' + escapeHtml(customer.name) + '" data-latitude="' + (customer.latitude != null ? Number(customer.latitude).toFixed(8) : '') + '" data-longitude="' + (customer.longitude != null ? Number(customer.longitude).toFixed(8) : '') + '"><i class="bi bi-map me-2"></i>عرض الموقع</button></li>';
+                }
+                actionsHtml += '<li><button type="button" class="dropdown-item local-customer-phone-btn" onclick="showLocalCustomerPhoneCard(this)" data-customer-name="' + escapeHtml(customer.name) + '" data-customer-phones="' + escapeHtml(phonesJson) + '"><i class="bi bi-telephone me-2"></i>الهاتف</button></li>';
                 if (['manager', 'developer', 'accountant', 'sales'].indexOf(currentRole) !== -1) {
                     actionsHtml += '<li><button type="button" class="dropdown-item" onclick="showEditLocalCustomerModal(this)" data-customer-id="' + customer.id + '" data-customer-name="' + escapeHtml(customer.name) + '" data-customer-phone="' + escapeHtml(customer.phone || '') + '" data-customer-address="' + escapeHtml(customer.address || '') + '" data-customer-region-id="' + customer.region_id + '" data-customer-balance="' + customer.raw_balance + '"><i class="bi bi-pencil me-2"></i>تعديل</button></li>';
                 }
                 actionsHtml += '<li><button type="button" class="dropdown-item ' + (customer.balance <= 0 ? 'disabled' : '') + '" onclick="showCollectPaymentModal(this)" data-customer-id="' + customer.id + '" data-customer-name="' + escapeHtml(customer.name) + '" data-customer-balance="' + customer.raw_balance + '" data-customer-balance-formatted="' + escapeHtml(customer.balance_formatted) + '" ' + (customer.balance > 0 ? '' : 'disabled') + '><i class="bi bi-cash-coin me-2"></i>تحصيل</button></li>';
-                actionsHtml += '<li><button type="button" class="dropdown-item local-customer-purchase-history-btn" onclick="showLocalCustomerPurchaseHistoryModal(this)" data-customer-id="' + customer.id + '" data-customer-name="' + escapeHtml(customer.name) + '" data-customer-phone="' + escapeHtml(customer.phone || '') + '" data-customer-address="' + escapeHtml(customer.address || '') + '"><i class="bi bi-receipt me-2"></i>سجل المشتريات</button></li>';
+                actionsHtml += '<li><button type="button" class="dropdown-item local-customer-purchase-history-btn" onclick="showLocalCustomerPurchaseHistoryModal(this)" data-customer-id="' + customer.id + '" data-customer-name="' + escapeHtml(customer.name) + '" data-customer-phone="' + escapeHtml(customer.phone || '') + '" data-customer-address="' + escapeHtml(customer.address || '') + '" data-customer-balance="' + customer.raw_balance + '" data-customer-balance-formatted="' + escapeHtml(customer.balance_formatted) + '"><i class="bi bi-receipt me-2"></i>سجل المشتريات</button></li>';
                 actionsHtml += '<li><hr class="dropdown-divider"></li>';
                 actionsHtml += '<li><button type="button" class="dropdown-item" onclick="showPaperInvoiceModal(this)" data-customer-id="' + customer.id + '" data-customer-name="' + escapeHtml(customer.name) + '"><i class="bi bi-receipt-cutoff me-2"></i>فاتورة ورقية</button></li>';
                 actionsHtml += '<li><button type="button" class="dropdown-item" onclick="showPaperInvoiceReturnModal(this)" data-customer-id="' + customer.id + '" data-customer-name="' + escapeHtml(customer.name) + '"><i class="bi bi-arrow-return-left me-2"></i>مرتجع من فاتورة ورقية</button></li>';
@@ -191,22 +181,23 @@
                 row.innerHTML =
                     '<td><strong>' + customer.id + '</strong></td>' +
                     '<td>' + nameCellHtml + '</td>' +
-                    '<td>' + phonesHtml + '</td>' +
                     '<td>' + balanceHtml + '</td>' +
                     '<td>' + escapeHtml(customer.address || '-') + '</td>' +
                     '<td>' + escapeHtml(customer.region_name || '-') + '</td>' +
-                    '<td>' + locationHtml + '</td>' +
                     '<td>' + actionsHtml + '</td>';
                 tbody.appendChild(row);
             });
 
             updatePagination(pagination);
-            // على الموبايل: تهيئة قوائم الإجراءات لعدم قص القائمة (strategy: fixed)
+            // تهيئة قوائم الإجراءات (نقل القائمة إلى body على الموبايل) بعد تحديث الجدول بالبحث
+            if (typeof window.reinitTableActionsDropdownsInBody === 'function') {
+                setTimeout(function() { window.reinitTableActionsDropdownsInBody(); }, 0);
+            }
             if (typeof window.reinitLocalCustomersTableActionsDropdowns === 'function') {
                 setTimeout(function() { window.reinitLocalCustomersTableActionsDropdowns(); }, 0);
             }
             // على الموبايل: تمرير الجدول لعرض عمود الإجراءات فوراً بعد البحث
-            if (tbody && tbody.querySelector('tr td:nth-child(8)')) {
+            if (tbody && tbody.querySelector('tr td:nth-child(6)')) {
                 var isMobile = window.matchMedia && window.matchMedia('(max-width: 767.98px)').matches;
                 if (isMobile) {
                     setTimeout(function() {
@@ -309,7 +300,7 @@
                 var balanceText = 'رصيد: ' + result.balance_formatted;
                 if (result.balance > 0) { balanceClass = 'positive'; balanceText = 'مدين: ' + result.balance_formatted; }
                 else if (result.balance < 0) { balanceClass = 'negative'; balanceText = 'دائن: ' + result.balance_formatted; }
-                html += '<div class="autocomplete-item" data-index="' + index + '" data-customer-id="' + result.id + '" role="option" tabindex="0">';
+                html += '<div class="autocomplete-item search-dropdown-item" data-index="' + index + '" data-customer-id="' + result.id + '" role="option" tabindex="0">';
                 html += '<div class="autocomplete-item-name">' + escapeHtml(result.name) + '</div>';
                 html += '<div class="autocomplete-item-sub">';
                 if (result.sub_text) html += '<span>' + escapeHtml(result.sub_text) + '</span>';
@@ -375,6 +366,7 @@
             });
         }
 
+        // مثل خانة العميل في صفحة الأسعار المخصصة: الكتابة تظهر القائمة المنسدلة فقط، والجدول يتحدث عند الاختيار من القائمة أو Enter
         customerSearchInput.addEventListener('input', function() {
             var v = this.value;
             if (v === undefined || v === null) { this.value = ''; v = ''; }
@@ -387,9 +379,6 @@
             } else {
                 hideAutocomplete();
             }
-            if (searchTimeout) clearTimeout(searchTimeout);
-            if (currentAbortController) currentAbortController.abort();
-            searchTimeout = setTimeout(function() { fetchCustomers(1); }, 500);
         });
 
         customerSearchInput.addEventListener('keydown', function(e) {
@@ -446,6 +435,11 @@
             if (autocompleteDropdown && customerSearchInput && !customerSearchInput.contains(e.target) && !autocompleteDropdown.contains(e.target)) {
                 hideAutocomplete();
             }
+        });
+
+        customerSearchInput.addEventListener('focus', function() {
+            var query = (this.value || '').trim();
+            if (query.length >= 1) performAutocompleteSearch(query);
         });
 
         customerSearchInput.addEventListener('blur', function() {

@@ -1532,8 +1532,8 @@ try {
 }
 
 // إنشاء قائمة بأسماء المواد فقط للعرض في القائمة المنسدلة
-// المواد الخام الأساسية: عسل، زيت زيتون، شمع عسل، مشتقات، مكسرات، طحينة، تلبينات، عطاره
-$allowedMaterials = ['عسل', 'زيت زيتون', 'شمع عسل', 'مشتقات', 'مكسرات', 'طحينة', 'التلبينات', 'العطاره'];
+// المواد الخام الأساسية: عسل، زيت زيتون، شمع عسل، مشتقات، مكسرات، طحينة، سمسم، تلبينات، عطاره
+$allowedMaterials = ['عسل', 'زيت زيتون', 'شمع عسل', 'مشتقات', 'مكسرات', 'طحينة', 'سمسم', 'التلبينات', 'العطاره'];
 
 // إضافة المواد الأساسية إلى $rawMaterialsData إذا لم تكن موجودة
 // الأنواع لكل مادة تُجلب من مخزن نفس المادة أعلاه (عسل من honey_stock، مكسرات من nuts_stock/mixed_nuts، تلبينات من turbine_stock، عطاره من herbal_stock، إلخ)
@@ -1552,6 +1552,8 @@ foreach ($allowedMaterials as $material) {
             $materialType = 'derivatives';
         } elseif ($material === 'طحينة') {
             $materialType = 'tahini';
+        } elseif ($material === 'سمسم') {
+            $materialType = 'sesame';
         } elseif ($material === 'التلبينات') {
             $materialType = 'talbina';
         } elseif ($material === 'العطاره') {
@@ -1811,7 +1813,7 @@ $baseUrl = getRelativeUrl('dashboard/manager.php?page=product_templates');
             $createdAtLabel = $template['created_at_label'] ?? formatDate($template['created_at']);
             $templateSearchText = $template['product_name'] ?? '';
             ?>
-            <div class="col-lg-4 col-md-6 template-list-item" data-search="<?php echo htmlspecialchars($templateSearchText, ENT_QUOTES, 'UTF-8'); ?>">
+            <div class="col-6 col-md-6 col-lg-4 template-list-item" data-search="<?php echo htmlspecialchars($templateSearchText, ENT_QUOTES, 'UTF-8'); ?>">
                 <div class="card shadow-sm h-100 template-card" style="border-top: 4px solid <?php echo $cardAccentColor; ?>; transition: transform 0.2s, box-shadow 0.2s;">
                     <span class="badge template-status-badge <?php echo $statusBadgeClass; ?>"><?php echo $statusLabel; ?></span>
                     <div class="card-body template-card-body text-center">
@@ -2201,29 +2203,72 @@ if (file_exists($specificationsModulePath)) {
 }
 
 @media (max-width: 768px) {
+    #templateCardsRow {
+        --bs-gutter-x: 0.4rem;
+        --bs-gutter-y: 0.4rem;
+    }
     .template-card {
-        margin-bottom: 1rem;
+        margin-bottom: 0.35rem;
     }
     .template-card-body {
-        padding: 2.25rem 1.25rem 1.5rem;
-        min-height: 200px;
+        padding: 0.35rem 0.4rem 0.35rem;
+        min-height: 0;
     }
     .template-details-snippet {
-        font-size: 0.85rem;
+        font-size: 0.62rem;
+        margin-top: 0.3rem !important;
+    }
+    .template-details-snippet .template-snippet-section {
+        margin-bottom: 0.25rem !important;
     }
     .template-snippet-section {
-        padding: 0.6rem 0.75rem;
+        padding: 0.2rem 0.25rem;
+    }
+    .template-snippet-header {
+        font-size: 0.58rem;
+    }
+    .template-snippet-list {
+        max-height: 1.6em;
+        overflow: hidden;
+    }
+    .template-snippet-list li {
+        padding: 0.04rem 0;
     }
     .details-list-wrapper {
         min-height: auto;
     }
     .template-icon {
-        width: 82px;
-        height: 82px;
-        font-size: 2.35rem;
+        width: 32px;
+        height: 32px;
+        font-size: 1rem;
     }
     .template-product-name {
-        font-size: 1.25rem;
+        font-size: 0.68rem;
+        line-height: 1.2;
+        margin-bottom: 0.15rem !important;
+        display: -webkit-box;
+        -webkit-line-clamp: 1;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+    .template-card-footer {
+        padding: 0.25rem 0.35rem;
+        flex-wrap: wrap;
+        gap: 0.2rem;
+    }
+    .template-card-footer .btn {
+        padding: 0.15rem 0.3rem;
+        font-size: 0.62rem;
+    }
+    .template-card-footer .btn i {
+        margin-inline-end: 0;
+    }
+    .template-card-footer .text-muted {
+        font-size: 0.55rem;
+    }
+    .template-status-badge {
+        font-size: 0.52rem;
+        padding: 0.12rem 0.3rem;
     }
     .template-toast {
         inset-inline: 16px;
@@ -2340,7 +2385,7 @@ if (file_exists($specificationsModulePath)) {
                     <div class="mb-3">
                         <label class="form-label">المواد الخام الأساسية</label>
                         <p class="text-muted small mb-2">
-                            أضف جميع المكوّنات المستخدمة في المنتج (مثل العسل، المكسرات، التلبينات، العطاره، الإضافات...).<br>
+                            أضف جميع المكوّنات المستخدمة في المنتج (مثل العسل، المكسرات، الطحينة، السمسم، التلبينات، العطاره، الإضافات...).<br>
                             <strong>ملاحظة:</strong> نوع العسل يتم تحديده لاحقاً أثناء إنشاء تشغيلة الإنتاج.
                         </p>
                         <div id="rawMaterialsContainer">
@@ -2466,7 +2511,7 @@ if (file_exists($specificationsModulePath)) {
             <div class="mb-3">
                 <label class="form-label">المواد الخام الأساسية</label>
                 <p class="text-muted small mb-2">
-                    أضف جميع المكوّنات المستخدمة في المنتج (مثل العسل، المكسرات، التلبينات، العطاره، الإضافات...).<br>
+                    أضف جميع المكوّنات المستخدمة في المنتج (مثل العسل، المكسرات، الطحينة، السمسم، التلبينات، العطاره، الإضافات...).<br>
                     <strong>ملاحظة:</strong> نوع العسل يتم تحديده لاحقاً أثناء إنشاء تشغيلة الإنتاج.
                 </p>
                 <div id="rawMaterialsCardContainer">
@@ -2594,7 +2639,7 @@ if (file_exists($specificationsModulePath)) {
                     <div class="mb-3">
                         <label class="form-label">المواد الخام الأساسية</label>
                         <p class="text-muted small mb-2">
-                            أضف جميع المكوّنات المستخدمة في المنتج (مثل العسل، المكسرات، التلبينات، العطاره، الإضافات...).<br>
+                            أضف جميع المكوّنات المستخدمة في المنتج (مثل العسل، المكسرات، الطحينة، السمسم، التلبينات، العطاره، الإضافات...).<br>
                             <strong>ملاحظة:</strong> نوع العسل يتم تحديده لاحقاً أثناء إنشاء تشغيلة الإنتاج.
                         </p>
                         <div id="editRawMaterialsContainer">
@@ -2720,7 +2765,7 @@ if (file_exists($specificationsModulePath)) {
             <div class="mb-3">
                 <label class="form-label">المواد الخام الأساسية</label>
                 <p class="text-muted small mb-2">
-                    أضف جميع المكوّنات المستخدمة في المنتج (مثل العسل، المكسرات، التلبينات، العطاره، الإضافات...).<br>
+                    أضف جميع المكوّنات المستخدمة في المنتج (مثل العسل، المكسرات، الطحينة، السمسم، التلبينات، العطاره، الإضافات...).<br>
                     <strong>ملاحظة:</strong> نوع العسل يتم تحديده لاحقاً أثناء إنشاء تشغيلة الإنتاج.
                 </p>
                 <div id="editRawMaterialsCardContainer">

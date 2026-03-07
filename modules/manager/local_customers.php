@@ -8,8 +8,13 @@ if (!defined('ACCESS_ALLOWED')) {
     die('Direct access not allowed');
 }
 
-// ملاحظة: Headers يتم إرسالها من dashboard/accountant.php أو dashboard/manager.php
-// لا حاجة لإرسالها هنا لتجنب مشاكل headers already sent
+// منع الكاش عند التبديل بين تبويبات الشريط الجانبي لضمان عدم رجوع أي كاش قديم
+if (!headers_sent()) {
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Cache-Control: post-check=0, pre-check=0', false);
+    header('Pragma: no-cache');
+    header('Expires: 0');
+}
 
 if (!defined('LOCAL_CUSTOMERS_MODULE_BOOTSTRAPPED')) {
     define('LOCAL_CUSTOMERS_MODULE_BOOTSTRAPPED', true);
@@ -644,6 +649,13 @@ $success = '';
 // قراءة الرسائل من session
 applyPRGPattern($error, $success);
 
+// رسالة التحصيل القابلة للنسخ (بعد كل تحصيل من عميل محلي)
+// لا تُحذف من الجلسة عند العرض؛ تُحذف فقط عند قيام المستخدم بطلب آخر (POST) في الصفحة
+$collectionCopyableText = null;
+if (!empty($_SESSION['local_collection_copyable']['full_text'])) {
+    $collectionCopyableText = $_SESSION['local_collection_copyable']['full_text'];
+}
+
 $customerStats = [
     'total_count' => 0,
     'debtor_count' => 0,
@@ -662,7 +674,11 @@ $localCustomersPageBase = $localCustomersBaseScript . '?page=local_customers';
 // معالجة POST requests
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
-    
+    // عند أي طلب POST آخر (غير التحصيل)، إخفاء رسالة التحصيل السابقة حتى لا تبقى بعد عمل المستخدم
+    if ($action !== 'collect_debt' && isset($_SESSION['local_collection_copyable'])) {
+        unset($_SESSION['local_collection_copyable']);
+    }
+
     if ($action === 'collect_debt') {
         $customerId = isset($_POST['customer_id']) ? (int)$_POST['customer_id'] : 0;
         $amount = isset($_POST['amount']) ? cleanFinancialValue($_POST['amount']) : 0;
@@ -727,22 +743,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $hasCollectionNumberColumn = !empty($db->queryOne("SHOW COLUMNS FROM local_collections LIKE 'collection_number'"));
                     $hasNotesColumn = !empty($db->queryOne("SHOW COLUMNS FROM local_collections LIKE 'notes'"));
 
-                    // توليد رقم التحصيل
+                    // توليد رقم التحصيل (٦ أرقام عشوائية)
                     if ($hasCollectionNumberColumn) {
-                        $year = date('Y');
-                        $month = date('m');
-                        $lastCollection = $db->queryOne(
-                            "SELECT collection_number FROM local_collections WHERE collection_number LIKE ? ORDER BY collection_number DESC LIMIT 1 FOR UPDATE",
-                            ["LOC-COL-{$year}{$month}-%"]
-                        );
-
-                        $serial = 1;
-                        if (!empty($lastCollection['collection_number'])) {
-                            $parts = explode('-', $lastCollection['collection_number']);
-                            $serial = intval($parts[3] ?? 0) + 1;
+                        $maxAttempts = 10;
+                        for ($attempt = 0; $attempt < $maxAttempts; $attempt++) {
+                            $candidate = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+                            $exists = $db->queryOne("SELECT 1 FROM local_collections WHERE collection_number = ?", [$candidate]);
+                            if (empty($exists)) {
+                                $collectionNumber = $candidate;
+                                break;
+                            }
                         }
-
-                        $collectionNumber = sprintf("LOC-COL-%s%s-%04d", $year, $month, $serial);
                     }
 
                     $collectionDate = date('Y-m-d');
@@ -897,19 +908,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $db->commit();
                 $transactionStarted = false;
 
-                $messageParts = ['تم تحصيل المبلغ بنجاح.'];
-                if ($collectionNumber !== null) {
-                    $messageParts[] = 'رقم التحصيل: ' . $collectionNumber . '.';
+                $shortMessage = 'تم التحصيل بنجاح.';
+                $customerName = isset($customer['name']) ? $customer['name'] : '';
+                $copyableLines = [
+                    'تم التحصيل بنجاح',
+                    'المبلغ المحصل: ' . formatCurrency($amount),
+                    'المتبقي بعد التحصيل: ' . formatCurrency($newBalance),
+                ];
+                if ($customerName !== '') {
+                    $copyableLines[] = 'العميل: ' . $customerName;
                 }
+                if ($collectionNumber !== null) {
+                    $copyableLines[] = 'رقم التحصيل: ' . $collectionNumber;
+                }
+                $_SESSION['local_collection_copyable'] = [
+                    'lines' => $copyableLines,
+                    'full_text' => implode("\n", $copyableLines),
+                ];
 
-                $_SESSION['success_message'] = implode(' ', array_filter($messageParts));
-
-                redirectAfterPost(
-                    'local_customers',
-                    [],
-                    [],
+                preventDuplicateSubmission(
+                    $shortMessage,
+                    ['page' => 'local_customers'],
+                    null,
                     $currentRole
                 );
+                exit;
             } catch (InvalidArgumentException $userError) {
                 if ($transactionStarted) {
                     $db->rollback();
@@ -925,6 +948,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } elseif ($action === 'edit_customer') {
         $customerId = isset($_POST['customer_id']) ? (int)$_POST['customer_id'] : 0;
+        $name = trim($_POST['name'] ?? '');
         $phone = trim($_POST['phone'] ?? '');
         $address = trim($_POST['address'] ?? '');
         $regionId = isset($_POST['region_id']) && $_POST['region_id'] !== '' ? (int)$_POST['region_id'] : null;
@@ -943,13 +967,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $allowedFields = [];
                     
                     if (in_array($currentRole, ['manager', 'developer'], true)) {
-                        // المدير والمطور يعدلون جميع البيانات ما عدا اسم العميل
+                        // المدير والمطور يعدلون جميع البيانات بما فيها اسم العميل
                         $canEdit = true;
-                        $allowedFields = ['phone', 'address', 'region_id', 'balance'];
+                        $allowedFields = ['name', 'phone', 'address', 'region_id', 'balance'];
                     } elseif (in_array($currentRole, ['accountant', 'sales'], true)) {
-                        // المحاسب والمندوب يعدلون فقط (العنوان – الهاتف – المنطقة)
+                        // المحاسب والمندوب يعدلون (الاسم – العنوان – الهاتف – المنطقة)
                         $canEdit = true;
-                        $allowedFields = ['phone', 'address', 'region_id'];
+                        $allowedFields = ['name', 'phone', 'address', 'region_id'];
                     }
                     
                     if (!$canEdit) {
@@ -958,7 +982,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $updateFields = [];
                         $updateValues = [];
                         
-                        if (in_array('phone', $allowedFields)) {
+                        if (in_array('name', $allowedFields)) {
+                            if (empty($name)) {
+                                $error = 'يجب إدخال اسم العميل';
+                            } else {
+                                $updateFields[] = 'name = ?';
+                                $updateValues[] = $name;
+                            }
+                        }
+                        
+                        if (empty($error) && in_array('phone', $allowedFields)) {
                             $updateFields[] = 'phone = ?';
                             $updateValues[] = $phone ?: null;
                             
@@ -990,7 +1023,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             }
                         }
                         
-                        if (in_array('address', $allowedFields)) {
+                        if (empty($error) && in_array('address', $allowedFields)) {
                             $updateFields[] = 'address = ?';
                             $updateValues[] = $address ?: null;
                         }
@@ -1009,7 +1042,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             }
                         }
                         
-                        if (!empty($updateFields)) {
+                        if (empty($error) && !empty($updateFields)) {
                             $updateValues[] = $customerId;
                             $db->execute(
                                 "UPDATE local_customers SET " . implode(', ', $updateFields) . " WHERE id = ?",
@@ -1018,6 +1051,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             
                             logAudit($currentUser['id'], 'edit_local_customer', 'local_customer', $customerId, null, [
                                 'name' => $customer['name'],
+                                'new_name' => in_array('name', $allowedFields) ? $name : null,
                                 'updated_fields' => $allowedFields
                             ]);
                             
@@ -1029,7 +1063,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 [],
                                 $currentRole
                             );
-                        } else {
+                        } elseif (empty($error)) {
                             $error = 'لم يتم تحديد أي حقول للتعديل';
                         }
                     }
@@ -1876,11 +1910,68 @@ var dashboardWrapper = null;
 <?php endif; ?>
 
 <?php if ($success): ?>
-    <div class="alert alert-success alert-dismissible fade show" id="successAlert" data-auto-refresh="true">
+    <div class="alert alert-success alert-dismissible fade show" id="successAlert" data-auto-refresh="<?php echo !empty($collectionCopyableText) ? 'false' : 'true'; ?>">
         <i class="bi bi-check-circle-fill me-2"></i>
         <?php echo htmlspecialchars($success); ?>
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
+    <?php if (!empty($collectionCopyableText)): ?>
+    <div class="card border-success shadow-sm mb-4" id="localCollectionCopyableCard">
+        <div class="card-body py-3">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                <span class="text-muted small"><i class="bi bi-clipboard me-1"></i>نسخ الرسالة</span>
+                <button type="button" class="btn btn-outline-success btn-sm" id="localCollectionCopyBtn" title="نسخ">
+                    <i class="bi bi-clipboard-plus me-1"></i>نسخ
+                </button>
+            </div>
+            <pre id="localCollectionCopyableText" class="mb-0 p-3 bg-light rounded border user-select-all" style="white-space: pre-wrap; word-break: break-word; font-family: inherit; font-size: 0.95rem;"><?php echo htmlspecialchars($collectionCopyableText); ?></pre>
+        </div>
+    </div>
+    <script>
+    (function() {
+        var btn = document.getElementById('localCollectionCopyBtn');
+        var pre = document.getElementById('localCollectionCopyableText');
+        if (btn && pre) {
+            btn.addEventListener('click', function() {
+                var text = pre.textContent;
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(text).then(function() {
+                        btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>تم النسخ';
+                        btn.classList.remove('btn-outline-success');
+                        btn.classList.add('btn-success');
+                        setTimeout(function() {
+                            btn.innerHTML = '<i class="bi bi-clipboard-plus me-1"></i>نسخ';
+                            btn.classList.remove('btn-success');
+                            btn.classList.add('btn-outline-success');
+                        }, 2000);
+                    });
+                } else {
+                    var ta = document.createElement('textarea');
+                    ta.value = text;
+                    ta.setAttribute('readonly', '');
+                    ta.style.position = 'absolute';
+                    ta.style.left = '-9999px';
+                    document.body.appendChild(ta);
+                    ta.select();
+                    try {
+                        document.execCommand('copy');
+                        btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>تم النسخ';
+                        btn.classList.remove('btn-outline-success');
+                        btn.classList.add('btn-success');
+                        setTimeout(function() {
+                            btn.innerHTML = '<i class="bi bi-clipboard-plus me-1"></i>نسخ';
+                            btn.classList.remove('btn-success');
+                            btn.classList.add('btn-outline-success');
+                        }, 2000);
+                    } finally {
+                        document.body.removeChild(ta);
+                    }
+                }
+            });
+        }
+    })();
+    </script>
+    <?php endif; ?>
 <?php endif; ?>
 
 <!-- شريط البحث المتقدم - نتائج لحظية فور التوقف عن الكتابة -->
@@ -1890,8 +1981,8 @@ var dashboardWrapper = null;
             <input type="hidden" name="page" value="local_customers">
             <div class="row g-3 align-items-end">
                 <div class="col-12">
-                    <label for="customerSearch" class="form-label small text-muted mb-1">بحث في جميع بيانات العميل</label>
-                    <div class="local-search-input-wrapper position-relative">
+                    <label for="customerSearch" class="form-label small text-muted mb-1">ابحث عن العميل المحلي</label>
+                    <div class="local-search-input-wrapper position-relative search-wrap">
                         <span class="local-search-icon">
                             <i class="bi bi-search"></i>
                         </span>
@@ -1901,7 +1992,7 @@ var dashboardWrapper = null;
                             id="customerSearch"
                             name="search"
                             value="<?php echo htmlspecialchars($search); ?>"
-                            placeholder="ابحث في الاسم، الهاتف، العنوان، المنطقة، الرقم، من أضاف العميل، رصيد العميل..."
+                            placeholder="اكتب للبحث في قائمة العملاء المحليين..."
                             autocomplete="off"
                             aria-label="بحث عن العملاء المحليين"
                             aria-autocomplete="list"
@@ -1911,9 +2002,9 @@ var dashboardWrapper = null;
                         <button type="button" class="btn btn-link local-search-clear" id="localSearchClearBtn" title="مسح البحث" style="display: <?php echo $search !== '' ? 'inline-block' : 'none'; ?>;">
                             <i class="bi bi-x-circle-fill text-muted"></i>
                         </button>
-                        <span class="local-search-hint small text-muted">اكتب أي حرف — النتائج تُحدَّث بشكل لحظي</span>
-                        <!-- Autocomplete Dropdown -->
-                        <div id="autocompleteDropdown" class="autocomplete-dropdown" role="listbox" aria-label="نتائج البحث"></div>
+                        <span class="local-search-hint small text-muted">اكتب ثم اختر من القائمة أو اضغط Enter للبحث</span>
+                        <!-- قائمة منسدلة مثل خانة العميل في صفحة الأسعار المخصصة -->
+                        <div id="autocompleteDropdown" class="autocomplete-dropdown search-dropdown" role="listbox" aria-label="نتائج البحث"></div>
                     </div>
                 </div>
                 <div class="col-12 col-md-auto d-flex flex-wrap gap-2 align-items-center">
@@ -1993,6 +2084,13 @@ document.addEventListener('DOMContentLoaded', function() {
         <h5 class="mb-0">قائمة العملاء المحليين (<span id="customersCount"><?php echo $totalCustomers; ?></span>)</h5>
     </div>
     <div class="card-body">
+        <style>
+        /* قائمة إجراءات: قابلة للتمرير ومرئية فوق الجدول على الموبايل */
+        .task-actions-dropdown-menu-inbody { max-height: 70vh !important; overflow-y: auto !important; z-index: 1060 !important; }
+        @media (max-width: 768px) {
+            .dashboard-table-wrapper .dropdown-menu { max-height: 70vh; overflow-y: auto; }
+        }
+        </style>
         <div id="customersTableLoading" class="text-center py-4" style="display: none;">
             <div class="spinner-border text-primary" role="status">
                 <span class="visually-hidden">جاري التحميل...</span>
@@ -2005,18 +2103,16 @@ document.addEventListener('DOMContentLoaded', function() {
                     <tr>
                         <th>ID</th>
                         <th>الاسم</th>
-                        <th>رقم الهاتف</th>
                         <th>الرصيد</th>
                         <th>العنوان</th>
                         <th>المنطقة</th>
-                        <th>الموقع</th>
                         <th>الإجراءات</th>
                     </tr>
                 </thead>
                 <tbody id="customersTableBody">
                     <?php if (empty($customers)): ?>
                         <tr>
-                            <td colspan="8" class="text-center text-muted">لا توجد عملاء محليين</td>
+                            <td colspan="6" class="text-center text-muted">لا توجد عملاء محليين</td>
                         </tr>
                     <?php else: ?>
                         <?php foreach ($customers as $customer): ?>
@@ -2031,35 +2127,10 @@ document.addEventListener('DOMContentLoaded', function() {
                                         </span>
                                     <?php elseif (!empty($balanceUpdatedAt)): ?>
                                         <span class="badge bg-info-subtle text-info mb-1 d-inline-block" style="font-size: 0.7rem;" title="آخر تعديل للرصيد">
-                                            <i class="bi bi-clock-history me-1"></i><?php echo date('Y-m-d H:i', strtotime($balanceUpdatedAt)); ?>
+                                            <i class="bi bi-clock-history me-1"></i><?php echo date('m-d H:i', strtotime($balanceUpdatedAt)); ?>
                                         </span>
                                     <?php endif; ?>
                                     <strong><?php echo htmlspecialchars($customer['name']); ?></strong>
-                                </td>
-                                <td>
-                                    <?php
-                                    // استخدام البيانات المجمعة مسبقاً بدلاً من استعلام منفصل
-                                    $customerId = (int)$customer['id'];
-                                    $phones = $customerPhonesMap[$customerId] ?? [];
-                                    
-                                    // إذا لم تكن هناك أرقام في local_customer_phones، استخدم الرقم القديم
-                                    if (empty($phones) && !empty($customer['phone'])) {
-                                        $phones = [$customer['phone']];
-                                    }
-                                    
-                                    if (!empty($phones)) {
-                                        foreach ($phones as $phoneNumber) {
-                                            $phoneNumber = trim($phoneNumber ?? '');
-                                            if (!empty($phoneNumber)) {
-                                                echo '<a href="tel:' . htmlspecialchars($phoneNumber) . '" class="btn btn-sm btn-outline-primary me-1 mb-1" title="اتصل بـ ' . htmlspecialchars($phoneNumber) . '">';
-                                                echo '<i class="bi bi-telephone-fill"></i> ' ;
-                                                echo '</a>';
-                                            }
-                                        }
-                                    } else {
-                                        echo '-';
-                                    }
-                                    ?>
                                 </td>
                                 <td>
                                     <?php
@@ -2080,39 +2151,6 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <td><?php echo htmlspecialchars($customer['region_name'] ?? '-'); ?></td>
                                 <td>
                                     <?php
-                                    $hasLocation = isset($customer['latitude'], $customer['longitude']) &&
-                                        $customer['latitude'] !== null &&
-                                        $customer['longitude'] !== null;
-                                    $latValue = $hasLocation ? (float)$customer['latitude'] : null;
-                                    $lngValue = $hasLocation ? (float)$customer['longitude'] : null;
-                                    ?>
-                                    <div class="d-flex flex-wrap align-items-center gap-2">
-                                        <button
-                                            type="button"
-                                            class="btn btn-sm btn-outline-primary location-capture-btn"
-                                            data-customer-id="<?php echo (int)$customer['id']; ?>"
-                                            data-customer-name="<?php echo htmlspecialchars($customer['name']); ?>"
-                                        >
-                                            <i class="bi bi-geo-alt me-1"></i>تحديد
-                                        </button>
-                                        <?php if ($hasLocation): ?>
-                                            <button
-                                                type="button"
-                                                class="btn btn-sm btn-outline-info location-view-btn"
-                                                data-customer-id="<?php echo (int)$customer['id']; ?>"
-                                                data-customer-name="<?php echo htmlspecialchars($customer['name']); ?>"
-                                                data-latitude="<?php echo htmlspecialchars(number_format($latValue, 8, '.', '')); ?>"
-                                                data-longitude="<?php echo htmlspecialchars(number_format($lngValue, 8, '.', '')); ?>"
-                                            >
-                                                <i class="bi bi-map me-1"></i>عرض
-                                            </button>
-                                        <?php else: ?>
-                                            <span class="badge bg-secondary-subtle text-secondary">غير محدد</span>
-                                        <?php endif; ?>
-                                    </div>
-                                </td>
-                                <td>
-                                    <?php
                                     $customerBalance = isset($customer['balance']) ? (float)$customer['balance'] : 0.0;
                                     $displayBalanceForButton = $customerBalance < 0 ? abs($customerBalance) : $customerBalance;
                                     $formattedBalance = formatCurrency($displayBalanceForButton);
@@ -2121,12 +2159,39 @@ document.addEventListener('DOMContentLoaded', function() {
                                     $custName = htmlspecialchars($customer['name']);
                                     $custPhone = htmlspecialchars($customer['phone'] ?? '');
                                     $custAddress = htmlspecialchars($customer['address'] ?? '');
+                                    $rowPhones = $customerPhonesMap[$custId] ?? [];
+                                    if (empty($rowPhones) && !empty($customer['phone'])) {
+                                        $rowPhones = [$customer['phone']];
+                                    }
+                                    $rowPhonesJson = htmlspecialchars(json_encode(array_values(array_filter(array_map('trim', $rowPhones)))), ENT_QUOTES, 'UTF-8');
+                                    $hasLocation = isset($customer['latitude'], $customer['longitude']) &&
+                                        $customer['latitude'] !== null &&
+                                        $customer['longitude'] !== null;
+                                    $latValue = $hasLocation ? (float)$customer['latitude'] : null;
+                                    $lngValue = $hasLocation ? (float)$customer['longitude'] : null;
                                     ?>
                                     <div class="dropdown table-actions-dropdown" data-bs-boundary="viewport">
                                         <button type="button" class="btn btn-sm btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
                                             <i class="bi bi-gear me-1"></i>إجراءات
                                         </button>
                                         <ul class="dropdown-menu dropdown-menu-end">
+                                            <li>
+                                                <button type="button" class="dropdown-item location-capture-btn" data-customer-id="<?php echo $custId; ?>" data-customer-name="<?php echo $custName; ?>">
+                                                    <i class="bi bi-geo-alt me-2"></i>تحديد الموقع
+                                                </button>
+                                            </li>
+                                            <?php if ($hasLocation): ?>
+                                            <li>
+                                                <button type="button" class="dropdown-item location-view-btn" data-customer-id="<?php echo $custId; ?>" data-customer-name="<?php echo $custName; ?>" data-latitude="<?php echo htmlspecialchars(number_format($latValue, 8, '.', '')); ?>" data-longitude="<?php echo htmlspecialchars(number_format($lngValue, 8, '.', '')); ?>">
+                                                    <i class="bi bi-map me-2"></i>عرض الموقع
+                                                </button>
+                                            </li>
+                                            <?php endif; ?>
+                                            <li>
+                                                <button type="button" class="dropdown-item local-customer-phone-btn" onclick="showLocalCustomerPhoneCard(this)" data-customer-name="<?php echo $custName; ?>" data-customer-phones="<?php echo $rowPhonesJson; ?>">
+                                                    <i class="bi bi-telephone me-2"></i>الهاتف
+                                                </button>
+                                            </li>
                                             <?php if (in_array($currentRole, ['manager', 'developer', 'accountant', 'sales'], true)): ?>
                                             <li>
                                                 <button type="button" class="dropdown-item" onclick="showEditLocalCustomerModal(this)" data-customer-id="<?php echo $custId; ?>" data-customer-name="<?php echo $custName; ?>" data-customer-phone="<?php echo $custPhone; ?>" data-customer-address="<?php echo $custAddress; ?>" data-customer-region-id="<?php echo (int)($customer['region_id'] ?? 0); ?>" data-customer-balance="<?php echo $rawBalance; ?>">
@@ -2140,7 +2205,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                                 </button>
                                             </li>
                                             <li>
-                                                <button type="button" class="dropdown-item local-customer-purchase-history-btn" onclick="showLocalCustomerPurchaseHistoryModal(this)" data-customer-id="<?php echo $custId; ?>" data-customer-name="<?php echo $custName; ?>" data-customer-phone="<?php echo $custPhone; ?>" data-customer-address="<?php echo $custAddress; ?>">
+                                                <button type="button" class="dropdown-item local-customer-purchase-history-btn" onclick="showLocalCustomerPurchaseHistoryModal(this)" data-customer-id="<?php echo $custId; ?>" data-customer-name="<?php echo $custName; ?>" data-customer-phone="<?php echo $custPhone; ?>" data-customer-address="<?php echo $custAddress; ?>" data-customer-balance="<?php echo $rawBalance; ?>" data-customer-balance-formatted="<?php echo htmlspecialchars($formattedBalance); ?>">
                                                     <i class="bi bi-receipt me-2"></i>سجل المشتريات
                                                 </button>
                                             </li>
@@ -2148,16 +2213,6 @@ document.addEventListener('DOMContentLoaded', function() {
                                             <li>
                                                 <button type="button" class="dropdown-item" onclick="showPaperInvoiceModal(this)" data-customer-id="<?php echo $custId; ?>" data-customer-name="<?php echo $custName; ?>">
                                                     <i class="bi bi-receipt-cutoff me-2"></i>فاتورة ورقية
-                                                </button>
-                                            </li>
-                                            <li>
-                                                <button type="button" class="dropdown-item" onclick="showPaperInvoiceReturnModal(this)" data-customer-id="<?php echo $custId; ?>" data-customer-name="<?php echo $custName; ?>">
-                                                    <i class="bi bi-arrow-return-left me-2"></i>مرتجع من فاتورة ورقية
-                                                </button>
-                                            </li>
-                                            <li>
-                                                <button type="button" class="dropdown-item local-customer-return-btn" onclick="showLocalCustomerReturnModal(this)" data-customer-id="<?php echo $custId; ?>" data-customer-name="<?php echo $custName; ?>" data-customer-phone="<?php echo $custPhone; ?>" data-customer-address="<?php echo $custAddress; ?>">
-                                                    <i class="bi bi-arrow-return-left me-2"></i>مرتجع
                                                 </button>
                                             </li>
                                             <?php if ($currentRole === 'manager'): ?>
@@ -2218,6 +2273,55 @@ document.addEventListener('DOMContentLoaded', function() {
         </nav>
     </div>
 </div>
+
+<script>
+(function() {
+    'use strict';
+    function initTableActionsDropdowns() {
+        var wrapper = document.querySelector('.dashboard-table-wrapper');
+        if (!wrapper) return;
+        wrapper.querySelectorAll('.dropdown').forEach(function(dropdownEl) {
+            if (dropdownEl._tableActionsInit) return;
+            dropdownEl._tableActionsInit = true;
+            var toggle = dropdownEl.querySelector('[data-bs-toggle="dropdown"]');
+            var menu = dropdownEl.querySelector('.dropdown-menu');
+            if (!toggle || !menu) return;
+            dropdownEl.addEventListener('show.bs.dropdown', function() {
+                var rect = toggle.getBoundingClientRect();
+                var menuHeight = Math.min(menu.scrollHeight, window.innerHeight * 0.7);
+                var spaceBelow = window.innerHeight - rect.bottom;
+                var openAbove = spaceBelow < menuHeight && rect.top > spaceBelow;
+                menu.classList.add('task-actions-dropdown-menu-inbody');
+                document.body.appendChild(menu);
+                var style = menu.style;
+                style.position = 'fixed';
+                if (document.documentElement.dir === 'rtl') {
+                    style.right = (window.innerWidth - rect.right) + 'px';
+                    style.left = 'auto';
+                } else {
+                    style.left = rect.left + 'px';
+                }
+                style.top = openAbove ? (rect.top - menuHeight) + 'px' : rect.bottom + 'px';
+                style.minWidth = rect.width + 'px';
+                style.maxHeight = '70vh';
+                style.overflowY = 'auto';
+                style.zIndex = '1060';
+            });
+            dropdownEl.addEventListener('hide.bs.dropdown', function() {
+                menu.classList.remove('task-actions-dropdown-menu-inbody');
+                menu.removeAttribute('style');
+                dropdownEl.appendChild(menu);
+            });
+        });
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initTableActionsDropdowns);
+    } else {
+        initTableActionsDropdowns();
+    }
+    window.reinitTableActionsDropdownsInBody = initTableActionsDropdowns;
+})();
+</script>
 
 <!-- Modal تحصيل ديون العميل - للكمبيوتر فقط -->
 <div class="modal fade d-none d-md-block" id="collectPaymentModal" tabindex="-1" aria-hidden="true">
@@ -2507,7 +2611,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             <?php endforeach; ?>
                         </select>
                         <?php if (in_array($currentRole, ['manager', 'developer'], true)): ?>
-                        <button type="button" class="btn btn-outline-primary" onclick="showAddRegionModal()">
+                        <button type="button" class="btn btn-outline-primary" onclick="showAddRegionFromLocalCustomerModal()">
                             <i class="bi bi-plus-circle"></i>
                         </button>
                         <?php endif; ?>
@@ -2554,17 +2658,21 @@ document.addEventListener('DOMContentLoaded', function() {
                 <div class="card mb-3">
                     <div class="card-body">
                         <div class="row">
-                            <div class="col-md-4">
+                            <div class="col-6 col-md-3">
                                 <div class="text-muted small">العميل</div>
                                 <div class="fs-5 fw-bold" id="localPurchaseHistoryCustomerName">-</div>
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-6 col-md-3">
                                 <div class="text-muted small">الهاتف</div>
                                 <div id="localPurchaseHistoryCustomerPhone">-</div>
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-6 col-md-3">
                                 <div class="text-muted small">العنوان</div>
                                 <div id="localPurchaseHistoryCustomerAddress">-</div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="text-muted small">رصيد العميل</div>
+                                <div id="localPurchaseHistoryCustomerBalance" class="fw-semibold">-</div>
                             </div>
                         </div>
                     </div>
@@ -2574,28 +2682,43 @@ document.addEventListener('DOMContentLoaded', function() {
                 <div class="card mb-3">
                     <div class="card-body">
                         <div class="row g-2">
-                            <div class="col-md-4">
+                            <div class="col-12 col-md-6 col-lg-3">
+                                <label class="form-label small text-muted mb-0">بحث متقدم</label>
                                 <input type="text" class="form-control form-control-sm" 
-                                       id="localPurchaseHistorySearchProduct" 
-                                       placeholder="البحث باسم المنتج">
+                                       id="localPurchaseHistorySearchInvoiceOrAmount" 
+                                       placeholder="رقم الفاتورة، المبلغ، التاريخ... أي مطابقة">
                             </div>
-                            <div class="col-md-4">
-                                <input type="text" class="form-control form-control-sm" 
-                                       id="localPurchaseHistorySearchBatch" 
-                                       placeholder="البحث برقم التشغيلة">
+                            <div class="col-6 col-md-6 col-lg-2">
+                                <label class="form-label small text-muted mb-0">من تاريخ</label>
+                                <input type="date" class="form-control form-control-sm" id="localPurchaseHistoryDateFrom">
                             </div>
-                            <div class="col-md-4">
-                                <button type="button" class="btn btn-primary btn-sm w-100" 
-                                        onclick="loadLocalCustomerPurchaseHistory()">
+                            <div class="col-6 col-md-6 col-lg-2">
+                                <label class="form-label small text-muted mb-0">إلى تاريخ</label>
+                                <input type="date" class="form-control form-control-sm" id="localPurchaseHistoryDateTo">
+                            </div>
+                            <div class="col-6 col-md-6 col-lg-2">
+                                <label class="form-label small text-muted mb-0">الترتيب</label>
+                                <select class="form-select form-select-sm" id="localPurchaseHistorySortOrder">
+                                    <option value="asc">تصاعدي (الأقدم أولاً)</option>
+                                    <option value="desc">تنازلي (الأحدث أولاً)</option>
+                                </select>
+                            </div>
+                            <div class="col-6 col-md-6 col-lg-2 d-flex align-items-end gap-1 flex-wrap">
+                                <button type="button" class="btn btn-primary btn-sm flex-grow-1" 
+                                        onclick="applyLocalPurchaseHistoryFilters()">
                                     <i class="bi bi-search me-1"></i>بحث
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm flex-grow-1" 
+                                        onclick="clearLocalPurchaseHistoryFilters()" title="إزالة الفلتر والبحث">
+                                    <i class="bi bi-x-circle me-1"></i>إزالة الفلتر
                                 </button>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Loading -->
-                <div class="text-center py-4" id="localPurchaseHistoryLoading">
+                <!-- Loading (مخفي افتراضياً؛ يُعرض أثناء التحميل فقط) -->
+                <div class="text-center py-4 d-none" id="localPurchaseHistoryLoading">
                     <div class="spinner-border text-primary" role="status">
                         <span class="visually-hidden">جاري التحميل...</span>
                     </div>
@@ -2604,8 +2727,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 <!-- Error -->
                 <div class="alert alert-danger d-none" id="localPurchaseHistoryError"></div>
 
-                <!-- Purchase History Table - سطر لكل فاتورة -->
-                <div id="localPurchaseHistoryTable" class="d-none">
+                <!-- Purchase History Table - سطر لكل فاتورة (يُعرض دائماً مع المحتوى) -->
+                <div id="localPurchaseHistoryTable" style="min-height: 120px;">
                     <div class="table-responsive">
                         <table class="table table-hover table-bordered">
                             <thead class="table-light">
@@ -2613,6 +2736,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                     <th>رقم الفاتورة</th>
                                     <th>السعر الإجمالي</th>
                                     <th>تاريخ الشراء</th>
+                                    <th>الرصيد بعد المعاملة</th>
                                     <th style="width: 140px;">إجراءات</th>
                                 </tr>
                             </thead>
@@ -2620,10 +2744,14 @@ document.addEventListener('DOMContentLoaded', function() {
                             </tbody>
                         </table>
                     </div>
+                    <nav id="localPurchaseHistoryPaginationWrap" class="mt-2 d-flex flex-wrap justify-content-between align-items-center gap-2" style="display: none !important;" aria-label="تقسيم سجل المشتريات">
+                        <div class="text-muted small" id="localPurchaseHistoryPaginationInfo"></div>
+                        <ul class="pagination pagination-sm mb-0 flex-wrap" id="localPurchaseHistoryPagination"></ul>
+                    </nav>
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-primary" id="printLocalCustomerStatementBtn" onclick="printLocalCustomerStatement()" style="display: none;">
+                <button type="button" class="btn btn-primary" id="printLocalCustomerStatementBtn" onclick="printLocalCustomerStatement()">
                     <i class="bi bi-printer me-1"></i>طباعة كشف الحساب
                 </button>
                 <button type="button" class="btn btn-success" id="localCustomerReturnBtn" onclick="openLocalCustomerReturnModal()" style="display: inline-block;">
@@ -2660,6 +2788,10 @@ document.addEventListener('DOMContentLoaded', function() {
                         <div class="text-muted small">العنوان</div>
                         <div id="localPurchaseHistoryCardCustomerAddress">-</div>
                     </div>
+                    <div class="col-6 mb-2">
+                        <div class="text-muted small">رصيد العميل</div>
+                        <div id="localPurchaseHistoryCardCustomerBalance" class="fw-semibold">-</div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -2669,20 +2801,38 @@ document.addEventListener('DOMContentLoaded', function() {
             <div class="card-body">
                 <div class="row g-2">
                     <div class="col-12">
+                        <label class="form-label small text-muted mb-0">بحث متقدم</label>
                         <input type="text" class="form-control form-control-sm" 
-                               id="localPurchaseHistoryCardSearchProduct" 
-                               placeholder="البحث باسم المنتج">
+                               id="localPurchaseHistoryCardSearchInvoiceOrAmount" 
+                               placeholder="رقم الفاتورة، المبلغ، التاريخ... أي مطابقة">
                     </div>
-                    <div class="col-12">
-                        <input type="text" class="form-control form-control-sm" 
-                               id="localPurchaseHistoryCardSearchBatch" 
-                               placeholder="البحث برقم التشغيلة">
+                    <div class="col-6">
+                        <label class="form-label small text-muted mb-0">من تاريخ</label>
+                        <input type="date" class="form-control form-control-sm" id="localPurchaseHistoryCardDateFrom">
                     </div>
-                    <div class="col-12">
-                        <button type="button" class="btn btn-primary btn-sm w-100" 
-                                onclick="loadLocalCustomerPurchaseHistory()">
-                            <i class="bi bi-search me-1"></i>بحث
-                        </button>
+                    <div class="col-6">
+                        <label class="form-label small text-muted mb-0">إلى تاريخ</label>
+                        <input type="date" class="form-control form-control-sm" id="localPurchaseHistoryCardDateTo">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small text-muted mb-0">الترتيب</label>
+                        <select class="form-select form-select-sm" id="localPurchaseHistoryCardSortOrder">
+                            <option value="asc">تصاعدي (الأقدم أولاً)</option>
+                            <option value="desc">تنازلي (الأحدث أولاً)</option>
+                        </select>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small text-muted mb-0 d-block">&nbsp;</label>
+                        <div class="d-flex gap-1">
+                            <button type="button" class="btn btn-primary btn-sm flex-grow-1" 
+                                    onclick="applyLocalPurchaseHistoryFilters()">
+                                <i class="bi bi-search me-1"></i>بحث
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm flex-grow-1" 
+                                    onclick="clearLocalPurchaseHistoryFilters()" title="إزالة الفلتر والبحث">
+                                <i class="bi bi-x-circle me-1"></i>إزالة الفلتر
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -2707,6 +2857,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             <th>رقم الفاتورة</th>
                             <th>السعر الإجمالي</th>
                             <th>تاريخ الشراء</th>
+                            <th>الرصيد بعد المعاملة</th>
                             <th style="width: 140px;">إجراءات</th>
                         </tr>
                     </thead>
@@ -2714,6 +2865,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     </tbody>
                 </table>
             </div>
+            <nav id="localPurchaseHistoryCardPaginationWrap" class="mt-2 d-flex flex-wrap justify-content-between align-items-center gap-2" style="display: none !important;" aria-label="تقسيم سجل المشتريات">
+                <div class="text-muted small" id="localPurchaseHistoryCardPaginationInfo"></div>
+                <ul class="pagination pagination-sm mb-0 flex-wrap" id="localPurchaseHistoryCardPagination"></ul>
+            </nav>
         </div>
         
         <div class="d-flex gap-2 mt-3">
@@ -2821,10 +2976,14 @@ document.addEventListener('DOMContentLoaded', function() {
         <input type="hidden" id="paperInvoiceCardCustomerId" value="">
         <div class="mb-3">
             <label class="form-label">صورة الفاتورة <span class="text-danger">*</span></label>
+            <input type="file" id="paperInvoiceCardImageInput" class="d-none" accept="image/jpeg,image/png,image/gif,image/webp" capture="environment">
+            <input type="file" id="paperInvoiceCardImageInputFile" class="d-none" accept="image/jpeg,image/png,image/gif,image/webp">
             <div class="d-flex gap-2 flex-wrap align-items-center">
-                <input type="file" id="paperInvoiceCardImageInput" class="form-control form-control-sm" accept="image/jpeg,image/png,image/gif,image/webp" capture="environment">
-                <button type="button" class="btn btn-outline-secondary btn-sm" id="paperInvoiceCardCaptureBtn" title="فتح الكاميرا">
-                    <i class="bi bi-camera me-1"></i>التقاط
+                <button type="button" class="btn btn-outline-primary btn-sm" id="paperInvoiceCardSelectFileBtn" title="اختيار من الملفات أو معرض الصور">
+                    <i class="bi bi-folder2-open me-1"></i>من الملفات أو الصور
+                </button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="paperInvoiceCardCaptureBtn" title="التقاط بالكاميرا">
+                    <i class="bi bi-camera me-1"></i>التقاط بالكاميرا
                 </button>
             </div>
             <div id="paperInvoiceCardImagePreview" class="mt-2 text-center" style="display: none;">
@@ -2865,10 +3024,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 <input type="hidden" id="paperInvoiceCustomerId" value="">
                 <div class="mb-3">
                     <label class="form-label">صورة الفاتورة <span class="text-danger">*</span></label>
+                    <input type="file" id="paperInvoiceImageInput" class="d-none" accept="image/jpeg,image/png,image/gif,image/webp" capture="environment">
+                    <input type="file" id="paperInvoiceImageInputFile" class="d-none" accept="image/jpeg,image/png,image/gif,image/webp">
                     <div class="d-flex gap-2 flex-wrap align-items-center">
-                        <input type="file" id="paperInvoiceImageInput" class="form-control form-control-sm" accept="image/jpeg,image/png,image/gif,image/webp" capture="environment">
-                        <button type="button" class="btn btn-outline-secondary btn-sm" id="paperInvoiceCaptureBtn" title="فتح الكاميرا">
-                            <i class="bi bi-camera me-1"></i>التقاط
+                        <button type="button" class="btn btn-outline-primary btn-sm" id="paperInvoiceSelectFileBtn" title="اختيار من الملفات أو معرض الصور">
+                            <i class="bi bi-folder2-open me-1"></i>من الملفات أو الصور
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="paperInvoiceCaptureBtn" title="التقاط بالكاميرا">
+                            <i class="bi bi-camera me-1"></i>التقاط بالكاميرا
                         </button>
                     </div>
                     <div id="paperInvoiceImagePreview" class="mt-2 text-center" style="display: none;">
@@ -2895,38 +3058,38 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
 </div>
 
-<!-- Modal عرض صورة الفاتورة الورقية - للكمبيوتر -->
+<!-- Modal عرض صورة الفاتورة الورقية - للكمبيوتر (عرض كامل الصورة) -->
 <div class="modal fade" id="paperInvoiceImageViewModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-dialog modal-fullscreen modal-dialog-centered">
         <div class="modal-content">
-            <div class="modal-header bg-secondary text-white d-flex align-items-center justify-content-between">
+            <div class="modal-header bg-secondary text-white d-flex align-items-center justify-content-between py-2">
                 <h5 class="modal-title mb-0">عرض الفاتورة الورقية</h5>
                 <div class="d-flex gap-1">
                     <button type="button" class="btn btn-light btn-sm" id="paperInvoiceModalCloseFastBtn" onclick="closePaperInvoiceImageViewNow()" title="إغلاق فوري">إغلاق</button>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="إغلاق"></button>
                 </div>
             </div>
-            <div class="modal-body text-center p-0">
-                <img id="paperInvoiceViewImage" src="" alt="صورة الفاتورة" class="img-fluid" style="max-height: 80vh;">
+            <div class="modal-body d-flex align-items-center justify-content-center overflow-auto p-2" style="min-height: 0;">
+                <img id="paperInvoiceViewImage" src="" alt="صورة الفاتورة" class="paper-invoice-full-image" style="max-width: 100%; max-height: calc(100vh - 120px); width: auto; height: auto; object-fit: contain; display: block;">
             </div>
         </div>
     </div>
 </div>
 
-<!-- بطاقة عرض صورة الفاتورة الورقية - للموبايل فقط (إغلاق فوري بدون تجمّد) -->
+<!-- بطاقة عرض صورة الفاتورة الورقية - للموبايل فقط (عرض كامل الصورة) -->
 <div class="card shadow-sm mb-4 d-md-none position-fixed top-0 start-0 end-0 m-2" id="paperInvoiceViewCard" style="display: none; z-index: 1060; max-height: 95vh;">
     <div class="card-header bg-secondary text-white d-flex align-items-center justify-content-between py-2">
         <span class="fw-bold">عرض الفاتورة الورقية</span>
         <button type="button" class="btn btn-light btn-sm fw-bold" onclick="closePaperInvoiceViewCard()" aria-label="إغلاق">✕ إغلاق</button>
     </div>
-    <div class="card-body p-2 overflow-auto" style="max-height: 85vh;">
-        <img id="paperInvoiceViewCardImage" src="" alt="صورة الفاتورة" class="img-fluid w-100">
+    <div class="card-body p-2 d-flex align-items-center justify-content-center overflow-auto" style="max-height: 85vh;">
+        <img id="paperInvoiceViewCardImage" src="" alt="صورة الفاتورة" style="max-width: 100%; max-height: 82vh; width: auto; height: auto; object-fit: contain;">
     </div>
 </div>
 
 <!-- بطاقة مرتجع من فاتورة ورقية - للموبايل فقط -->
 <div class="card shadow-sm mb-4 d-md-none" id="paperInvoiceReturnCard" style="display: none;">
-    <div class="card-header bg-warning text-dark d-flex align-items-center justify-content-between">
+    <div class="card-header bg-danger text-white d-flex align-items-center justify-content-between">
         <h5 class="mb-0"><i class="bi bi-arrow-return-left me-2"></i>مرتجع من فاتورة ورقية - <span id="paperInvoiceReturnCardCustomerName">-</span></h5>
         <button type="button" class="btn btn-sm btn-light" onclick="closePaperInvoiceReturnCard()" aria-label="إغلاق"><i class="bi bi-x-lg"></i></button>
     </div>
@@ -2935,7 +3098,12 @@ document.addEventListener('DOMContentLoaded', function() {
         <input type="hidden" id="paperInvoiceReturnCardCustomerId" value="">
         <div class="mb-3">
             <label class="form-label">صورة الفاتورة / المرتجع <span class="text-danger">*</span></label>
-            <input type="file" id="paperInvoiceReturnCardImageInput" class="form-control form-control-sm" accept="image/jpeg,image/png,image/gif,image/webp" capture="environment">
+            <input type="file" id="paperInvoiceReturnCardImageInput" class="d-none" accept="image/jpeg,image/png,image/gif,image/webp" capture="environment">
+            <input type="file" id="paperInvoiceReturnCardImageInputFile" class="d-none" accept="image/jpeg,image/png,image/gif,image/webp">
+            <div class="d-flex gap-2 flex-wrap align-items-center">
+                <button type="button" class="btn btn-outline-primary btn-sm" id="paperInvoiceReturnCardSelectFileBtn" title="اختيار من الملفات أو معرض الصور"><i class="bi bi-folder2-open me-1"></i>من الملفات أو الصور</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="paperInvoiceReturnCardCaptureBtn" title="التقاط بالكاميرا"><i class="bi bi-camera me-1"></i>التقاط بالكاميرا</button>
+            </div>
             <div id="paperInvoiceReturnCardImagePreview" class="mt-2 text-center" style="display: none;"><img id="paperInvoiceReturnCardPreviewImg" src="" alt="معاينة" class="img-fluid rounded border" style="max-height: 200px;"></div>
         </div>
         <div class="mb-3">
@@ -2949,7 +3117,7 @@ document.addEventListener('DOMContentLoaded', function() {
         <div id="paperInvoiceReturnCardMessage" class="alert d-none mb-0"></div>
         <div class="d-flex gap-2 mt-3">
             <button type="button" class="btn btn-secondary flex-fill" onclick="closePaperInvoiceReturnCard()">إلغاء</button>
-            <button type="button" class="btn btn-warning flex-fill" id="paperInvoiceReturnCardSubmitBtn" onclick="submitPaperInvoiceReturn()"><i class="bi bi-check-lg me-1"></i>حفظ وخصم من الرصيد</button>
+            <button type="button" class="btn btn-danger flex-fill" id="paperInvoiceReturnCardSubmitBtn" onclick="submitPaperInvoiceReturn()"><i class="bi bi-check-lg me-1"></i>حفظ وخصم من الرصيد</button>
         </div>
     </div>
 </div>
@@ -2958,7 +3126,7 @@ document.addEventListener('DOMContentLoaded', function() {
 <div class="modal fade d-none d-md-block" id="paperInvoiceReturnModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
-            <div class="modal-header bg-warning text-dark">
+            <div class="modal-header bg-danger text-white">
                 <h5 class="modal-title"><i class="bi bi-arrow-return-left me-2"></i>مرتجع من فاتورة ورقية - <span id="paperInvoiceReturnCustomerName">-</span></h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="إغلاق"></button>
             </div>
@@ -2967,7 +3135,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 <input type="hidden" id="paperInvoiceReturnCustomerId" value="">
                 <div class="mb-3">
                     <label class="form-label">صورة الفاتورة / المرتجع <span class="text-danger">*</span></label>
-                    <input type="file" id="paperInvoiceReturnImageInput" class="form-control form-control-sm" accept="image/jpeg,image/png,image/gif,image/webp" capture="environment">
+                    <input type="file" id="paperInvoiceReturnImageInput" class="d-none" accept="image/jpeg,image/png,image/gif,image/webp" capture="environment">
+                    <input type="file" id="paperInvoiceReturnImageInputFile" class="d-none" accept="image/jpeg,image/png,image/gif,image/webp">
+                    <div class="d-flex gap-2 flex-wrap align-items-center">
+                        <button type="button" class="btn btn-outline-primary btn-sm" id="paperInvoiceReturnSelectFileBtn" title="اختيار من الملفات أو معرض الصور"><i class="bi bi-folder2-open me-1"></i>من الملفات أو الصور</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="paperInvoiceReturnCaptureBtn" title="التقاط بالكاميرا"><i class="bi bi-camera me-1"></i>التقاط بالكاميرا</button>
+                    </div>
                     <div id="paperInvoiceReturnImagePreview" class="mt-2 text-center" style="display: none;"><img id="paperInvoiceReturnPreviewImg" src="" alt="معاينة" class="img-fluid rounded border" style="max-height: 200px;"></div>
                 </div>
                 <div class="mb-3">
@@ -2982,36 +3155,36 @@ document.addEventListener('DOMContentLoaded', function() {
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
-                <button type="button" class="btn btn-warning" id="paperInvoiceReturnSubmitBtn" onclick="submitPaperInvoiceReturn()"><i class="bi bi-check-lg me-1"></i>حفظ وخصم من الرصيد</button>
+                <button type="button" class="btn btn-danger" id="paperInvoiceReturnSubmitBtn" onclick="submitPaperInvoiceReturn()"><i class="bi bi-check-lg me-1"></i>حفظ وخصم من الرصيد</button>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Modal عرض صورة مرتجع الفاتورة الورقية - للكمبيوتر -->
+<!-- Modal عرض صورة مرتجع الفاتورة الورقية - للكمبيوتر (عرض كامل الصورة) -->
 <div class="modal fade" id="paperInvoiceReturnImageViewModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-dialog modal-fullscreen modal-dialog-centered">
         <div class="modal-content">
-            <div class="modal-header bg-warning text-dark"><h5 class="modal-title mb-0">عرض صورة مرتجع الفاتورة الورقية</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="إغلاق"></button></div>
-            <div class="modal-body text-center p-0"><img id="paperInvoiceReturnViewImage" src="" alt="صورة المرتجع" class="img-fluid" style="max-height: 80vh;"></div>
+            <div class="modal-header bg-danger text-white"><h5 class="modal-title mb-0">عرض صورة مرتجع الفاتورة الورقية</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="إغلاق"></button></div>
+            <div class="modal-body d-flex align-items-center justify-content-center overflow-auto p-2" style="min-height: 0;"><img id="paperInvoiceReturnViewImage" src="" alt="صورة المرتجع" style="max-width: 100%; max-height: calc(100vh - 120px); width: auto; height: auto; object-fit: contain; display: block;"></div>
         </div>
     </div>
 </div>
 
 <!-- بطاقة عرض صورة مرتجع الفاتورة الورقية - للموبايل -->
 <div class="card shadow-sm mb-4 d-md-none position-fixed top-0 start-0 end-0 m-2" id="paperInvoiceReturnViewCard" style="display: none; z-index: 1060; max-height: 95vh;">
-    <div class="card-header bg-warning text-dark d-flex align-items-center justify-content-between py-2">
+    <div class="card-header bg-danger text-white d-flex align-items-center justify-content-between py-2">
         <span class="fw-bold">عرض صورة مرتجع الفاتورة الورقية</span>
         <button type="button" class="btn btn-light btn-sm fw-bold" onclick="closePaperInvoiceReturnViewCard()" aria-label="إغلاق">✕ إغلاق</button>
     </div>
-    <div class="card-body p-2 overflow-auto" style="max-height: 85vh;"><img id="paperInvoiceReturnViewCardImage" src="" alt="صورة المرتجع" class="img-fluid w-100"></div>
+    <div class="card-body p-2 d-flex align-items-center justify-content-center overflow-auto" style="max-height: 85vh;"><img id="paperInvoiceReturnViewCardImage" src="" alt="صورة المرتجع" style="max-width: 100%; max-height: 82vh; width: auto; height: auto; object-fit: contain;"></div>
 </div>
 
 <!-- Modal إرجاع منتجات العميل المحلي - للكمبيوتر فقط -->
 <div class="modal fade" id="localCustomerReturnModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content shadow-lg">
-            <div class="modal-header bg-warning text-dark border-bottom border-warning">
+            <div class="modal-header bg-danger text-white border-bottom border-danger">
                 <h5 class="modal-title d-flex align-items-center">
                     <i class="bi bi-arrow-return-left me-2 fs-4"></i>
                     <span>إرجاع منتجات - <strong id="localReturnCustomerName">عميل محلي</strong></span>
@@ -3286,7 +3459,8 @@ function closeAllForms() {
         'collectPaymentCard', 
         'addLocalCustomerCard', 
         'editLocalCustomerCard',
-        'addRegionFromLocalCustomerCard', 
+        'addRegionFromLocalCustomerCard',
+        'localCustomerPhoneCard',
         'importLocalCustomersCard', 
         'deleteLocalCustomerCard',
         'customerExportCard',
@@ -3415,6 +3589,86 @@ if (typeof window.closeAddRegionFromLocalCustomerCard === 'undefined') {
             }
         } catch (error) {
             console.error('Error in closeAddRegionFromLocalCustomerCard:', error);
+        }
+    };
+}
+
+// فتح بطاقة هاتف العميل (نسخ الرقم / الاتصال)
+if (typeof window.showLocalCustomerPhoneCard === 'undefined') {
+    window.showLocalCustomerPhoneCard = function(button) {
+        if (!button) return;
+        var name = button.getAttribute('data-customer-name') || '';
+        var phonesJson = button.getAttribute('data-customer-phones') || '[]';
+        var phones = [];
+        try {
+            phones = JSON.parse(phonesJson);
+            if (!Array.isArray(phones)) phones = [];
+        } catch (e) {
+            phones = [];
+        }
+        phones = phones.map(function(p) { return String(p || '').trim(); }).filter(Boolean);
+        if (typeof closeAllForms === 'function') closeAllForms();
+        var card = document.getElementById('localCustomerPhoneCard');
+        var nameEl = document.getElementById('localCustomerPhoneCardName');
+        var numbersEl = document.getElementById('localCustomerPhoneCardNumbers');
+        var copyBtn = document.getElementById('localCustomerPhoneCardCopyBtn');
+        var callLink = document.getElementById('localCustomerPhoneCardCallLink');
+        if (!card || !nameEl || !numbersEl || !copyBtn || !callLink) return;
+        nameEl.textContent = name;
+        if (phones.length === 0) {
+            numbersEl.textContent = 'لا يوجد رقم مسجل.';
+            copyBtn.disabled = true;
+            callLink.style.display = 'none';
+        } else {
+            numbersEl.textContent = phones.join(' ، ');
+            copyBtn.disabled = false;
+            copyBtn.onclick = function() {
+                var text = phones.join('\n');
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(text).then(function() {
+                        var orig = copyBtn.innerHTML;
+                        copyBtn.innerHTML = '<i class="bi bi-check-lg me-2"></i>تم النسخ';
+                        setTimeout(function() { copyBtn.innerHTML = orig; }, 2000);
+                    }).catch(function() {
+                        fallbackCopy(text, copyBtn);
+                    });
+                } else {
+                    fallbackCopy(text, copyBtn);
+                }
+            };
+            var firstPhone = phones[0];
+            callLink.href = 'tel:' + firstPhone.replace(/\s/g, '');
+            callLink.style.display = 'inline-flex';
+        }
+        card.style.display = 'block';
+        card.classList.remove('d-none');
+        setTimeout(function() {
+            if (typeof scrollToElement === 'function') scrollToElement(card);
+            else if (card && card.scrollIntoView) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 50);
+    };
+}
+function fallbackCopy(text, btn) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+        document.execCommand('copy');
+        var orig = btn.innerHTML;
+        btn.innerHTML = '<i class="bi bi-check-lg me-2"></i>تم النسخ';
+        setTimeout(function() { btn.innerHTML = orig; }, 2000);
+    } catch (e) {}
+    document.body.removeChild(ta);
+}
+if (typeof window.closeLocalCustomerPhoneCard === 'undefined') {
+    window.closeLocalCustomerPhoneCard = function() {
+        var card = document.getElementById('localCustomerPhoneCard');
+        if (card) {
+            card.style.display = 'none';
+            card.classList.add('d-none');
         }
     };
 }
@@ -3651,7 +3905,10 @@ function showPaperInvoiceModal(button) {
     setEl('paperInvoiceCustomerName', customerName);
     setEl('paperInvoiceInvoiceNumber', '');
     setEl('paperInvoiceTotalAmount', '');
-    setEl('paperInvoiceImageInput', '');
+    var piInput = document.getElementById('paperInvoiceImageInput');
+    if (piInput) piInput.value = '';
+    var piInputFile = document.getElementById('paperInvoiceImageInputFile');
+    if (piInputFile) piInputFile.value = '';
     var preview = document.getElementById('paperInvoiceImagePreview');
     var previewImg = document.getElementById('paperInvoicePreviewImg');
     if (preview) preview.style.display = 'none';
@@ -3664,6 +3921,8 @@ function showPaperInvoiceModal(button) {
     setEl('paperInvoiceCardTotalAmount', '');
     var cardInput = document.getElementById('paperInvoiceCardImageInput');
     if (cardInput) cardInput.value = '';
+    var cardInputFile = document.getElementById('paperInvoiceCardImageInputFile');
+    if (cardInputFile) cardInputFile.value = '';
     var cardPreview = document.getElementById('paperInvoiceCardImagePreview');
     var cardPreviewImg = document.getElementById('paperInvoiceCardPreviewImg');
     if (cardPreview) cardPreview.style.display = 'none';
@@ -3684,9 +3943,9 @@ function showPaperInvoiceModal(button) {
     }
 }
 
-// معاينة صورة الفاتورة الورقية عند اختيار ملف (مودال + بطاقة)
+// معاينة صورة الفاتورة الورقية عند اختيار ملف (مودال + بطاقة) — دعم: من الملفات/الصور + التقاط بالكاميرا
 document.addEventListener('DOMContentLoaded', function() {
-    function setupFilePreview(inputId, previewId, previewImgId, captureBtnId) {
+    function setupFilePreview(inputId, previewId, previewImgId, triggerBtnId) {
         var input = document.getElementById(inputId);
         if (!input) return;
         input.addEventListener('change', function() {
@@ -3698,25 +3957,20 @@ document.addEventListener('DOMContentLoaded', function() {
             reader.onload = function(e) { previewImg.src = e.target.result; preview.style.display = 'block'; };
             reader.readAsDataURL(file);
         });
-        var captureBtn = document.getElementById(captureBtnId);
-        if (captureBtn) captureBtn.addEventListener('click', function() { input.click(); });
+        var btn = document.getElementById(triggerBtnId);
+        if (btn) btn.addEventListener('click', function() { input.click(); });
     }
+    // فاتورة ورقية: مودال (من الملفات + كاميرا)
     setupFilePreview('paperInvoiceImageInput', 'paperInvoiceImagePreview', 'paperInvoicePreviewImg', 'paperInvoiceCaptureBtn');
+    setupFilePreview('paperInvoiceImageInputFile', 'paperInvoiceImagePreview', 'paperInvoicePreviewImg', 'paperInvoiceSelectFileBtn');
+    // فاتورة ورقية: بطاقة موبايل
     setupFilePreview('paperInvoiceCardImageInput', 'paperInvoiceCardImagePreview', 'paperInvoiceCardPreviewImg', 'paperInvoiceCardCaptureBtn');
-    var retInput = document.getElementById('paperInvoiceReturnImageInput');
-    if (retInput) retInput.addEventListener('change', function() {
-        var file = this.files && this.files[0];
-        var preview = document.getElementById('paperInvoiceReturnImagePreview');
-        var previewImg = document.getElementById('paperInvoiceReturnPreviewImg');
-        if (file && preview && previewImg) { var r = new FileReader(); r.onload = function(e) { previewImg.src = e.target.result; preview.style.display = 'block'; }; r.readAsDataURL(file); }
-    });
-    var retCardInput = document.getElementById('paperInvoiceReturnCardImageInput');
-    if (retCardInput) retCardInput.addEventListener('change', function() {
-        var file = this.files && this.files[0];
-        var preview = document.getElementById('paperInvoiceReturnCardImagePreview');
-        var previewImg = document.getElementById('paperInvoiceReturnCardPreviewImg');
-        if (file && preview && previewImg) { var r = new FileReader(); r.onload = function(e) { previewImg.src = e.target.result; preview.style.display = 'block'; }; r.readAsDataURL(file); }
-    });
+    setupFilePreview('paperInvoiceCardImageInputFile', 'paperInvoiceCardImagePreview', 'paperInvoiceCardPreviewImg', 'paperInvoiceCardSelectFileBtn');
+    // مرتجع فاتورة ورقية: مودال + بطاقة
+    setupFilePreview('paperInvoiceReturnImageInput', 'paperInvoiceReturnImagePreview', 'paperInvoiceReturnPreviewImg', 'paperInvoiceReturnCaptureBtn');
+    setupFilePreview('paperInvoiceReturnImageInputFile', 'paperInvoiceReturnImagePreview', 'paperInvoiceReturnPreviewImg', 'paperInvoiceReturnSelectFileBtn');
+    setupFilePreview('paperInvoiceReturnCardImageInput', 'paperInvoiceReturnCardImagePreview', 'paperInvoiceReturnCardPreviewImg', 'paperInvoiceReturnCardCaptureBtn');
+    setupFilePreview('paperInvoiceReturnCardImageInputFile', 'paperInvoiceReturnCardImagePreview', 'paperInvoiceReturnCardPreviewImg', 'paperInvoiceReturnCardSelectFileBtn');
 });
 
 // إرسال فاتورة ورقية (صورة + إجمالي) - يدعم البطاقة (موبايل) أو المودال (كمبيوتر)
@@ -3729,7 +3983,8 @@ function submitPaperInvoice() {
     var totalEl = useCard ? document.getElementById('paperInvoiceCardTotalAmount') : document.getElementById('paperInvoiceTotalAmount');
     var totalAmount = totalEl ? totalEl.value.replace(',', '.').trim() : '';
     var fileInput = useCard ? document.getElementById('paperInvoiceCardImageInput') : document.getElementById('paperInvoiceImageInput');
-    var file = fileInput && fileInput.files && fileInput.files[0];
+    var fileInputFile = useCard ? document.getElementById('paperInvoiceCardImageInputFile') : document.getElementById('paperInvoiceImageInputFile');
+    var file = (fileInputFile && fileInputFile.files && fileInputFile.files[0]) || (fileInput && fileInput.files && fileInput.files[0]);
     var msgEl = useCard ? document.getElementById('paperInvoiceCardMessage') : document.getElementById('paperInvoiceMessage');
     var submitBtn = useCard ? document.getElementById('paperInvoiceCardSubmitBtn') : document.getElementById('paperInvoiceSubmitBtn');
 
@@ -3745,8 +4000,7 @@ function submitPaperInvoice() {
         return;
     }
     if (!file) {
-        alert('يرجى اختيار أو تصوير صورة الفاتورة الورقية');
-        if (fileInput) fileInput.focus();
+        alert('يرجى اختيار صورة من الملفات/الصور أو التقاط صورة بالكاميرا');
         return;
     }
 
@@ -3770,11 +4024,12 @@ function submitPaperInvoice() {
                 msgEl.className = data.success ? 'alert alert-success mb-0' : 'alert alert-danger mb-0';
                 msgEl.textContent = data.message || (data.success ? 'تم الحفظ.' : 'حدث خطأ.');
             }
-            if (data.success) {
+                if (data.success) {
                 if (useCard) {
                     if (invoiceNumberEl) invoiceNumberEl.value = '';
                     if (totalEl) totalEl.value = '';
                     if (fileInput) fileInput.value = '';
+                    if (fileInputFile) fileInputFile.value = '';
                     var cardPreview = document.getElementById('paperInvoiceCardImagePreview');
                     var cardPreviewImg = document.getElementById('paperInvoiceCardPreviewImg');
                     if (cardPreview) cardPreview.style.display = 'none';
@@ -3784,6 +4039,8 @@ function submitPaperInvoice() {
                     document.getElementById('paperInvoiceInvoiceNumber').value = '';
                     document.getElementById('paperInvoiceTotalAmount').value = '';
                     document.getElementById('paperInvoiceImageInput').value = '';
+                    var piFileEl = document.getElementById('paperInvoiceImageInputFile');
+                    if (piFileEl) piFileEl.value = '';
                     var preview = document.getElementById('paperInvoiceImagePreview');
                     var previewImg = document.getElementById('paperInvoicePreviewImg');
                     if (preview) preview.style.display = 'none';
@@ -3852,13 +4109,18 @@ function showPaperInvoiceReturnModal(button) {
     setEl('paperInvoiceReturnCustomerName', customerName);
     setEl('paperInvoiceReturnInvoiceNumber', '');
     setEl('paperInvoiceReturnReturnAmount', '');
-    setEl('paperInvoiceReturnImageInput', '');
+    var retInput = document.getElementById('paperInvoiceReturnImageInput');
+    if (retInput) retInput.value = '';
+    var retInputFile = document.getElementById('paperInvoiceReturnImageInputFile');
+    if (retInputFile) retInputFile.value = '';
     setEl('paperInvoiceReturnCardCustomerId', customerId);
     setEl('paperInvoiceReturnCardCustomerName', customerName);
     setEl('paperInvoiceReturnCardInvoiceNumber', '');
     setEl('paperInvoiceReturnCardReturnAmount', '');
     var cardInput = document.getElementById('paperInvoiceReturnCardImageInput');
     if (cardInput) cardInput.value = '';
+    var cardInputFile = document.getElementById('paperInvoiceReturnCardImageInputFile');
+    if (cardInputFile) cardInputFile.value = '';
     var previews = ['paperInvoiceReturnImagePreview', 'paperInvoiceReturnCardImagePreview'];
     previews.forEach(function(id) { var p = document.getElementById(id); if (p) p.style.display = 'none'; });
     var msgs = [document.getElementById('paperInvoiceReturnMessage'), document.getElementById('paperInvoiceReturnCardMessage')];
@@ -3883,13 +4145,14 @@ function submitPaperInvoiceReturn() {
     var amountEl = useCard ? document.getElementById('paperInvoiceReturnCardReturnAmount') : document.getElementById('paperInvoiceReturnReturnAmount');
     var returnAmount = amountEl ? amountEl.value.replace(',', '.').trim() : '';
     var fileInput = useCard ? document.getElementById('paperInvoiceReturnCardImageInput') : document.getElementById('paperInvoiceReturnImageInput');
-    var file = fileInput && fileInput.files && fileInput.files[0];
+    var fileInputFile = useCard ? document.getElementById('paperInvoiceReturnCardImageInputFile') : document.getElementById('paperInvoiceReturnImageInputFile');
+    var file = (fileInputFile && fileInputFile.files && fileInputFile.files[0]) || (fileInput && fileInput.files && fileInput.files[0]);
     var msgEl = useCard ? document.getElementById('paperInvoiceReturnCardMessage') : document.getElementById('paperInvoiceReturnMessage');
     var submitBtn = useCard ? document.getElementById('paperInvoiceReturnCardSubmitBtn') : document.getElementById('paperInvoiceReturnSubmitBtn');
     if (!customerId) { alert('لم يتم تحديد العميل'); return; }
     if (!invoiceNumber) { alert('يرجى إدخال رقم الفاتورة'); if (invoiceNumberEl) invoiceNumberEl.focus(); return; }
     if (!returnAmount || isNaN(parseFloat(returnAmount)) || parseFloat(returnAmount) <= 0) { alert('يرجى إدخال مبلغ مرتجع صحيح'); if (amountEl) amountEl.focus(); return; }
-    if (!file) { alert('يرجى اختيار صورة الفاتورة/المرتجع'); if (fileInput) fileInput.focus(); return; }
+    if (!file) { alert('يرجى اختيار صورة من الملفات/الصور أو التقاط صورة بالكاميرا'); return; }
     if (msgEl) { msgEl.classList.add('d-none'); msgEl.innerHTML = ''; }
     if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>جاري الحفظ...'; }
     var formData = new FormData();
@@ -3909,6 +4172,7 @@ function submitPaperInvoiceReturn() {
                     if (invoiceNumberEl) invoiceNumberEl.value = '';
                     if (amountEl) amountEl.value = '';
                     if (fileInput) fileInput.value = '';
+                    if (fileInputFile) fileInputFile.value = '';
                     var cardPreview = document.getElementById('paperInvoiceReturnCardImagePreview');
                     if (cardPreview) cardPreview.style.display = 'none';
                     setTimeout(function() { closePaperInvoiceReturnCard(); }, 1500);
@@ -3916,6 +4180,8 @@ function submitPaperInvoiceReturn() {
                     document.getElementById('paperInvoiceReturnInvoiceNumber').value = '';
                     document.getElementById('paperInvoiceReturnReturnAmount').value = '';
                     document.getElementById('paperInvoiceReturnImageInput').value = '';
+                    var retFileEl = document.getElementById('paperInvoiceReturnImageInputFile');
+                    if (retFileEl) retFileEl.value = '';
                     var preview = document.getElementById('paperInvoiceReturnImagePreview');
                     if (preview) preview.style.display = 'none';
                     var modalEl = document.getElementById('paperInvoiceReturnModal');
@@ -4184,6 +4450,7 @@ window.showLocalCustomerPurchaseHistoryModal = function(button) {
     const customerName = button.getAttribute('data-customer-name');
     const customerPhone = button.getAttribute('data-customer-phone') || '-';
     const customerAddress = button.getAttribute('data-customer-address') || '-';
+    const customerBalanceFormatted = button.getAttribute('data-customer-balance-formatted') || '-';
     
     if (!customerId) return;
     
@@ -4219,9 +4486,11 @@ window.showLocalCustomerPurchaseHistoryModal = function(button) {
         const errorElement = card.querySelector('#localPurchaseHistoryCardError');
         
         // تحديث معلومات العميل (اختياري إن وُجد العنصر)
+        const balanceElementCard = card.querySelector('#localPurchaseHistoryCardCustomerBalance');
         if (nameElement) nameElement.textContent = customerName || '-';
         if (phoneElement) phoneElement.textContent = customerPhone || '-';
         if (addressElement) addressElement.textContent = customerAddress || '-';
+        if (balanceElementCard) balanceElementCard.textContent = customerBalanceFormatted || '-';
         
         if (loadingElement) {
             loadingElement.classList.remove('d-none');
@@ -4293,6 +4562,7 @@ window.showLocalCustomerPurchaseHistoryModal = function(button) {
             const nameElement = document.getElementById('localPurchaseHistoryCustomerName');
             const phoneElement = document.getElementById('localPurchaseHistoryCustomerPhone');
             const addressElement = document.getElementById('localPurchaseHistoryCustomerAddress');
+            const balanceElement = document.getElementById('localPurchaseHistoryCustomerBalance');
             const loadingElement = document.getElementById('localPurchaseHistoryLoading');
             const contentElement = document.getElementById('localPurchaseHistoryTable');
             let errorElement = document.getElementById('localPurchaseHistoryError');
@@ -4331,10 +4601,11 @@ window.showLocalCustomerPurchaseHistoryModal = function(button) {
             nameElement.textContent = customerName || '-';
             phoneElement.textContent = customerPhone || '-';
             addressElement.textContent = customerAddress || '-';
+            if (balanceElement) balanceElement.textContent = customerBalanceFormatted || '-';
             
-            // إظهار loading وإخفاء المحتوى
+            // إظهار loading (الجدول يبقى ظاهراً بجسمه الفارغ)
             loadingElement.classList.remove('d-none');
-            contentElement.classList.add('d-none');
+            if (contentElement) contentElement.classList.remove('d-none');
             if (errorElement) {
                 errorElement.classList.add('d-none');
                 errorElement.innerHTML = '';
@@ -4701,19 +4972,14 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    // معالج الموقع الجغرافي
-    var locationCaptureButtons = document.querySelectorAll('.location-capture-btn');
+    // معالج الموقع الجغرافي (event delegation ليدعم الصفوف المُضافة ديناميكياً عند البحث)
     var viewLocationModal = document.getElementById('viewLocationModal');
     var locationMapFrame = viewLocationModal ? viewLocationModal.querySelector('.location-map-frame') : null;
     var locationCustomerName = viewLocationModal ? viewLocationModal.querySelector('.location-customer-name') : null;
     var locationExternalLink = viewLocationModal ? viewLocationModal.querySelector('.location-open-map') : null;
-    var locationViewButtons = document.querySelectorAll('.location-view-btn');
 
     function setButtonLoading(button, isLoading) {
-        if (!button) {
-            return;
-        }
-
+        if (!button) return;
         if (isLoading) {
             button.dataset.originalHtml = button.innerHTML;
             button.disabled = true;
@@ -4731,172 +4997,101 @@ document.addEventListener('DOMContentLoaded', function () {
         window.alert(message);
     }
 
-    locationCaptureButtons.forEach(function (button) {
-        button.addEventListener('click', function () {
-            var customerId = button.getAttribute('data-customer-id');
-            var customerName = button.getAttribute('data-customer-name') || '';
-
-            if (!customerId) {
-                showAlert('تعذر تحديد العميل.');
-                return;
-            }
-
-            if (!navigator.geolocation) {
-                showAlert('المتصفح الحالي لا يدعم تحديد الموقع الجغرافي.');
-                return;
-            }
-
-            // التحقق من الصلاحيات قبل الطلب
-            if (navigator.permissions && navigator.permissions.query) {
-                navigator.permissions.query({ name: 'geolocation' }).then(function(result) {
-                    if (result.state === 'denied') {
-                        showAlert('تم رفض إذن الموقع الجغرافي. يرجى السماح بالوصول في إعدادات المتصفح.');
-                        return;
-                    }
-                    requestGeolocation();
-                }).catch(function() {
-                    // إذا فشل query، حاول مباشرة
-                    requestGeolocation();
-                });
-            } else {
-                requestGeolocation();
-            }
-
-            function requestGeolocation() {
-                setButtonLoading(button, true);
-
-                navigator.geolocation.getCurrentPosition(function (position) {
-                var latitude = position.coords.latitude.toFixed(8);
-                var longitude = position.coords.longitude.toFixed(8);
-                var requestUrl = window.location.pathname + window.location.search;
-
-                var formData = new URLSearchParams();
-                formData.append('action', 'update_location');
-                formData.append('customer_id', customerId);
-                formData.append('latitude', latitude);
-                formData.append('longitude', longitude);
-
-                fetch(requestUrl, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                        'X-Requested-With': 'XMLHttpRequest'
-                    },
-                    body: formData.toString()
-                })
-                    .then(function (response) {
-                        return response.json();
-                    })
-                    .then(function (data) {
-                        setButtonLoading(button, false);
-                        if (data.success) {
-                            showAlert('تم حفظ الموقع بنجاح!');
-                            // مسح الكاش قبل إعادة التحميل
-                            if (window.LocalStorageCache && typeof window.LocalStorageCache.clearAll === 'function') {
-                                window.LocalStorageCache.clearAll().then(function() {
-                                    location.reload();
-                                }).catch(function() {
-                                    location.reload();
-                                });
-                            } else {
-                                location.reload();
-                            }
-                        } else {
-                            showAlert(data.message || 'حدث خطأ أثناء حفظ الموقع.');
-                        }
-                    })
-                    .catch(function (error) {
-                        setButtonLoading(button, false);
-                        showAlert('حدث خطأ في الاتصال بالخادم.');
-                        console.error('Error:', error);
-                    });
-                }, function (error) {
-                    setButtonLoading(button, false);
-                    var errorMessage = 'تعذر الحصول على الموقع.';
-                    if (error.code === 1) {
-                        errorMessage = 'تم رفض طلب الحصول على الموقع. يرجى السماح بالوصول إلى الموقع في إعدادات المتصفح.';
-                    } else if (error.code === 2) {
-                        errorMessage = 'تعذر تحديد الموقع. يرجى المحاولة مرة أخرى.';
-                    } else if (error.code === 3) {
-                        errorMessage = 'انتهت مهلة طلب الموقع. يرجى المحاولة مرة أخرى.';
-                    }
-                    showAlert(errorMessage);
-                }, {
-                    enableHighAccuracy: true,
-                    timeout: 10000,
-                    maximumAge: 0
-                });
-            }
-        });
-    });
-
-    if (locationViewButtons && locationViewButtons.length > 0) {
-        locationViewButtons.forEach(function (button) {
-            button.addEventListener('click', function () {
-                var customerName = button.getAttribute('data-customer-name') || '-';
-                var latitude = button.getAttribute('data-latitude');
-                var longitude = button.getAttribute('data-longitude');
-
-                if (!latitude || !longitude) {
-                    return;
+    var localCustomersTable = document.getElementById('localCustomersTable');
+    if (localCustomersTable) {
+        localCustomersTable.addEventListener('click', function(e) {
+            var captureBtn = e.target.closest('.location-capture-btn');
+            if (captureBtn) {
+                e.preventDefault();
+                var customerId = captureBtn.getAttribute('data-customer-id');
+                var customerName = captureBtn.getAttribute('data-customer-name') || '';
+                if (!customerId) { showAlert('تعذر تحديد العميل.'); return; }
+                if (!navigator.geolocation) { showAlert('المتصفح الحالي لا يدعم تحديد الموقع الجغرافي.'); return; }
+                function requestGeolocation() {
+                    setButtonLoading(captureBtn, true);
+                    navigator.geolocation.getCurrentPosition(function(position) {
+                        var latitude = position.coords.latitude.toFixed(8);
+                        var longitude = position.coords.longitude.toFixed(8);
+                        var formData = new URLSearchParams();
+                        formData.append('action', 'update_location');
+                        formData.append('customer_id', customerId);
+                        formData.append('latitude', latitude);
+                        formData.append('longitude', longitude);
+                        fetch(window.location.pathname + window.location.search, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+                            body: formData.toString()
+                        }).then(function(r) { return r.json(); }).then(function(data) {
+                            setButtonLoading(captureBtn, false);
+                            if (data.success) {
+                                showAlert('تم حفظ الموقع بنجاح!');
+                                if (window.LocalStorageCache && typeof window.LocalStorageCache.clearAll === 'function') {
+                                    window.LocalStorageCache.clearAll().then(function() { location.reload(); }).catch(function() { location.reload(); });
+                                } else { location.reload(); }
+                            } else { showAlert(data.message || 'حدث خطأ أثناء حفظ الموقع.'); }
+                        }).catch(function(err) {
+                            setButtonLoading(captureBtn, false);
+                            showAlert('حدث خطأ في الاتصال بالخادم.');
+                        });
+                    }, function(error) {
+                        setButtonLoading(captureBtn, false);
+                        var msg = 'تعذر الحصول على الموقع.';
+                        if (error.code === 1) msg = 'تم رفض طلب الحصول على الموقع. يرجى السماح بالوصول في إعدادات المتصفح.';
+                        else if (error.code === 2) msg = 'تعذر تحديد الموقع. يرجى المحاولة مرة أخرى.';
+                        else if (error.code === 3) msg = 'انتهت مهلة طلب الموقع. يرجى المحاولة مرة أخرى.';
+                        showAlert(msg);
+                    }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
                 }
-
+                if (navigator.permissions && navigator.permissions.query) {
+                    navigator.permissions.query({ name: 'geolocation' }).then(function(result) {
+                        if (result.state === 'denied') {
+                            showAlert('تم رفض إذن الموقع الجغرافي. يرجى السماح بالوصول في إعدادات المتصفح.');
+                            return;
+                        }
+                        requestGeolocation();
+                    }).catch(function() { requestGeolocation(); });
+                } else {
+                    requestGeolocation();
+                }
+                return;
+            }
+            var viewBtn = e.target.closest('.location-view-btn');
+            if (viewBtn) {
+                e.preventDefault();
+                var customerName = viewBtn.getAttribute('data-customer-name') || '-';
+                var latitude = viewBtn.getAttribute('data-latitude');
+                var longitude = viewBtn.getAttribute('data-longitude');
+                if (!latitude || !longitude) return;
                 if (isMobile()) {
-                    // على الموبايل: استخدام Card
                     var locationCard = document.getElementById('viewLocationCard');
                     if (locationCard) {
-                        var locationCardCustomerName = locationCard.querySelector('.location-customer-name-card');
-                        var locationCardMapFrame = locationCard.querySelector('.location-map-frame-card');
-                        var locationCardExternalLink = locationCard.querySelector('.location-open-map-card');
-
-                        if (locationCardCustomerName) {
-                            locationCardCustomerName.textContent = customerName;
-                        }
-
-                        if (locationCardMapFrame) {
-                            var mapUrl = 'https://www.google.com/maps?q=' + encodeURIComponent(latitude + ',' + longitude) + '&hl=ar&z=16&output=embed';
-                            locationCardMapFrame.src = mapUrl;
-                        }
-
-                        if (locationCardExternalLink) {
-                            locationCardExternalLink.href = 'https://www.google.com/maps?q=' + encodeURIComponent(latitude + ',' + longitude) + '&hl=ar&z=16';
-                        }
-
+                        var cardName = locationCard.querySelector('.location-customer-name-card');
+                        var cardMap = locationCard.querySelector('.location-map-frame-card');
+                        var cardLink = locationCard.querySelector('.location-open-map-card');
+                        if (cardName) cardName.textContent = customerName;
+                        if (cardMap) cardMap.src = 'https://www.google.com/maps?q=' + encodeURIComponent(latitude + ',' + longitude) + '&hl=ar&z=16&output=embed';
+                        if (cardLink) cardLink.href = 'https://www.google.com/maps?q=' + encodeURIComponent(latitude + ',' + longitude) + '&hl=ar&z=16';
                         locationCard.style.display = 'block';
-                        setTimeout(function() {
-                            scrollToElement(locationCard);
-                        }, 50);
+                        setTimeout(function() { if (typeof scrollToElement === 'function') scrollToElement(locationCard); }, 50);
                     }
-                } else {
-                    // على الكمبيوتر: استخدام Modal
-                    if (viewLocationModal) {
-                        if (locationCustomerName) {
-                            locationCustomerName.textContent = customerName;
-                        }
-
-                        if (locationMapFrame) {
-                            var mapUrl = 'https://www.google.com/maps?q=' + encodeURIComponent(latitude + ',' + longitude) + '&hl=ar&z=16&output=embed';
-                            // استخدام data-src للـ lazy loading
-                            locationMapFrame.setAttribute('data-src', mapUrl);
-                            // تحميل الخريطة فقط عند فتح الـ modal
-                            viewLocationModal.addEventListener('shown.bs.modal', function loadMap() {
-                                if (locationMapFrame.getAttribute('data-src')) {
-                                    locationMapFrame.src = locationMapFrame.getAttribute('data-src');
-                                    locationMapFrame.removeAttribute('data-src');
-                                }
-                                viewLocationModal.removeEventListener('shown.bs.modal', loadMap);
-                            }, { once: true });
-                        }
-
-                        if (locationExternalLink) {
-                            locationExternalLink.href = 'https://www.google.com/maps?q=' + encodeURIComponent(latitude + ',' + longitude) + '&hl=ar&z=16';
-                        }
-
-                        var modal = new bootstrap.Modal(viewLocationModal);
-                        modal.show();
+                } else if (viewLocationModal) {
+                    if (locationCustomerName) locationCustomerName.textContent = customerName;
+                    if (locationMapFrame) {
+                        var mapUrl = 'https://www.google.com/maps?q=' + encodeURIComponent(latitude + ',' + longitude) + '&hl=ar&z=16&output=embed';
+                        locationMapFrame.setAttribute('data-src', mapUrl);
+                        viewLocationModal.addEventListener('shown.bs.modal', function loadMap() {
+                            if (locationMapFrame.getAttribute('data-src')) {
+                                locationMapFrame.src = locationMapFrame.getAttribute('data-src');
+                                locationMapFrame.removeAttribute('data-src');
+                            }
+                            viewLocationModal.removeEventListener('shown.bs.modal', loadMap);
+                        }, { once: true });
                     }
+                    if (locationExternalLink) locationExternalLink.href = 'https://www.google.com/maps?q=' + encodeURIComponent(latitude + ',' + longitude) + '&hl=ar&z=16';
+                    var modal = new bootstrap.Modal(viewLocationModal);
+                    modal.show();
                 }
-            });
+            }
         });
     }
 
@@ -5063,21 +5258,23 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 });
 
-// إعادة تحميل الصفحة تلقائياً بعد أي رسالة
+// إعادة تحميل الصفحة تلقائياً بعد أي رسالة (ما لم تكن رسالة تحصيل مع نص للنسخ - تبقى حتى يقوم المستخدم بطلب آخر)
 (function() {
     const successAlert = document.getElementById('successAlert');
     const errorAlert = document.getElementById('errorAlert');
-    
+    const collectionCopyableCard = document.getElementById('localCollectionCopyableCard');
+
     const alertElement = successAlert || errorAlert;
-    
-    if (alertElement && alertElement.dataset.autoRefresh === 'true') {
+    const hasCollectionCopyable = !!collectionCopyableCard;
+
+    if (alertElement && alertElement.dataset.autoRefresh === 'true' && !hasCollectionCopyable) {
         // مسح الكاش قبل إعادة التحميل لجلب البيانات المحدثة
         if (window.LocalStorageCache && typeof window.LocalStorageCache.clearAll === 'function') {
             window.LocalStorageCache.clearAll().catch(function(cacheError) {
                 console.warn('Error clearing cache:', cacheError);
             });
         }
-        
+
         setTimeout(function() {
             const currentUrl = new URL(window.location.href);
             currentUrl.searchParams.delete('success');
@@ -5093,6 +5290,10 @@ document.addEventListener('DOMContentLoaded', function () {
 var currentLocalCustomerId = null;
 var currentLocalCustomerName = null;
 var localPurchaseHistoryData = [];
+var localPaperInvoicesData = [];
+var localPaperInvoiceReturnsData = [];
+var localCollectionsData = [];
+var localPurchaseHistoryCurrentBalance = 0;
 var localSelectedItemsForReturn = [];
 var localReturnLoadedData = null; // { invoice: {}, items: [] } بعد تحميل الفاتورة برقمها
 
@@ -5813,7 +6014,10 @@ function loadLocalCustomerPurchaseHistory() {
     
     // دالة مساعدة لعرض الخطأ
     function showError(message, details) {
-        if (loadingElement) loadingElement.classList.add('d-none');
+        var loadingModal = document.getElementById('localPurchaseHistoryLoading');
+        var loadingCard = document.getElementById('localPurchaseHistoryCardLoading');
+        if (loadingModal) { loadingModal.classList.add('d-none'); loadingModal.style.display = 'none'; }
+        if (loadingCard) { loadingCard.classList.add('d-none'); loadingCard.style.display = 'none'; }
         if (contentElement) contentElement.classList.add('d-none');
         if (errorElement) {
             let errorHtml = '<div class="alert alert-danger mb-0">';
@@ -5837,37 +6041,36 @@ function loadLocalCustomerPurchaseHistory() {
     }
     
     loadingElement.classList.remove('d-none');
-    errorElement.classList.add('d-none');
-    errorElement.innerHTML = '';
-    if (isMobileDevice && contentElement) {
+    if (errorElement) { errorElement.classList.add('d-none'); errorElement.innerHTML = ''; }
+    if (contentElement) {
         contentElement.classList.remove('d-none');
         contentElement.style.display = 'block';
         contentElement.style.visibility = 'visible';
-    } else if (contentElement) {
-        contentElement.classList.add('d-none');
     }
     
-    // التحقق من معرف العميل
-    if (!currentLocalCustomerId) {
+    // التحقق من معرف العميل (استخدام customerIdToUse لضمان استخدام القيمة من window إن لزم)
+    if (!customerIdToUse) {
         showError('معرف العميل غير محدد', 'لم يتم تحديد معرف العميل');
         return;
     }
-    
-    // التأكد من أن currentLocalCustomerId رقم صحيح
-    if (isNaN(currentLocalCustomerId) || currentLocalCustomerId <= 0) {
-        showError('معرف العميل غير صالح', 'معرف العميل: ' + currentLocalCustomerId);
+    if (isNaN(customerIdToUse) || customerIdToUse <= 0) {
+        showError('معرف العميل غير صالح', 'معرف العميل: ' + customerIdToUse);
         return;
     }
     
     // جلب البيانات من API (سنستخدم نفس API مع تحديد نوع العميل)
-    const apiUrl = basePath + '/api/customer_purchase_history.php?action=get_history&customer_id=' + encodeURIComponent(currentLocalCustomerId) + '&type=local';
-    console.log('Loading purchase history for customer ID:', currentLocalCustomerId, 'URL:', apiUrl);
+    const apiUrl = basePath + '/api/customer_purchase_history.php?action=get_history&customer_id=' + encodeURIComponent(customerIdToUse) + '&type=local';
+    console.log('Loading purchase history for customer ID:', customerIdToUse, 'URL:', apiUrl);
+    
+    var abortController = new AbortController();
+    var timeoutId = setTimeout(function() {
+        abortController.abort();
+    }, 20000);
     
     fetch(apiUrl, {
         credentials: 'same-origin',
-        headers: {
-            'Accept': 'application/json'
-        }
+        headers: { 'Accept': 'application/json' },
+        signal: abortController.signal
     })
     .then(response => {
         console.log('Response status:', response.status, 'Content-Type:', response.headers.get('content-type'));
@@ -5893,22 +6096,68 @@ function loadLocalCustomerPurchaseHistory() {
         }
         return response.json();
     })
-    .then(data => {
+    .then(function(data) {
+        clearTimeout(timeoutId);
         console.log('API Response received:', data);
-        if (loadingElement) loadingElement.classList.add('d-none');
+        function hideAllLoaders() {
+            var loadingModal = document.getElementById('localPurchaseHistoryLoading');
+            var loadingCard = document.getElementById('localPurchaseHistoryCardLoading');
+            if (loadingModal) { loadingModal.classList.add('d-none'); loadingModal.style.cssText = 'display:none !important'; }
+            if (loadingCard) { loadingCard.classList.add('d-none'); loadingCard.style.cssText = 'display:none !important'; }
+        }
+        hideAllLoaders();
+        var errEl = document.getElementById('localPurchaseHistoryError');
+        if (errEl) { errEl.classList.add('d-none'); errEl.innerHTML = ''; }
+        var errCard = document.getElementById('localPurchaseHistoryCardError');
+        if (errCard) { errCard.classList.add('d-none'); errCard.innerHTML = ''; }
+        
+        // تحديث رصيد العميل في المودال والبطاقة من الاستجابة
+        var balanceFromApi = (data.customer && data.customer.balance !== undefined) ? parseFloat(data.customer.balance) : null;
+        if (balanceFromApi !== null && !isNaN(balanceFromApi)) {
+            var balanceStr = balanceFromApi.toFixed(2) + ' ج.م';
+            var balanceElModal = document.getElementById('localPurchaseHistoryCustomerBalance');
+            var balanceElCard = document.getElementById('localPurchaseHistoryCardCustomerBalance');
+            if (balanceElModal) balanceElModal.textContent = balanceStr;
+            if (balanceElCard) balanceElCard.textContent = balanceStr;
+        }
         
         if (data.success) {
             localPurchaseHistoryData = data.purchase_history || [];
-            var localPaperInvoicesData = data.paper_invoices || [];
-            var localPaperInvoiceReturnsData = data.paper_invoice_returns || [];
+            localPaperInvoicesData = data.paper_invoices || [];
+            localPaperInvoiceReturnsData = data.paper_invoice_returns || [];
+            localCollectionsData = data.collections || [];
+            localPurchaseHistoryCurrentBalance = (data.customer && data.customer.balance !== undefined) ? parseFloat(data.customer.balance) : 0;
             console.log('Purchase history data:', localPurchaseHistoryData.length, 'items; paper invoices:', localPaperInvoicesData.length, 'paper returns:', localPaperInvoiceReturnsData.length);
             
-            // عرض البيانات حتى لو كانت فارغة (ستعرض رسالة "لا توجد مشتريات")
-            displayLocalPurchaseHistory(localPurchaseHistoryData, localPaperInvoicesData, localPaperInvoiceReturnsData);
-            var cardTable = document.getElementById('localPurchaseHistoryCardTable');
-            var modalTable = document.getElementById('localPurchaseHistoryTable');
-            if (cardTable) { cardTable.classList.remove('d-none'); cardTable.style.display = 'block'; cardTable.style.visibility = 'visible'; }
-            if (modalTable) modalTable.classList.remove('d-none');
+            try {
+                displayLocalPurchaseHistory(localPurchaseHistoryData, localPaperInvoicesData, localPaperInvoiceReturnsData, localPurchaseHistoryCurrentBalance, localCollectionsData);
+            } catch (displayErr) {
+                console.error('displayLocalPurchaseHistory error:', displayErr);
+                if (typeof showError === 'function') showError('خطأ في عرض البيانات', displayErr.message || String(displayErr));
+                return;
+            }
+            
+            function showTables() {
+                var modal = document.getElementById('localCustomerPurchaseHistoryModal');
+                if (modal) {
+                    var modalLoading = modal.querySelector('#localPurchaseHistoryLoading');
+                    var modalTable = modal.querySelector('#localPurchaseHistoryTable');
+                    if (modalLoading) { modalLoading.classList.add('d-none'); modalLoading.style.cssText = 'display:none !important'; }
+                    if (modalTable) {
+                        modalTable.classList.remove('d-none');
+                        modalTable.style.cssText = 'display:block !important; visibility:visible !important; min-height:120px;';
+                        modalTable.offsetHeight;
+                        if (modalTable.scrollIntoView) modalTable.scrollIntoView({ behavior: 'auto', block: 'nearest' });
+                    }
+                }
+                var cardTable = document.getElementById('localPurchaseHistoryCardTable');
+                if (cardTable) {
+                    cardTable.classList.remove('d-none');
+                    cardTable.style.cssText = 'display:block !important; visibility:visible !important; min-height:120px;';
+                }
+            }
+            showTables();
+            setTimeout(showTables, 0);
             
             // إظهار زر الطباعة حتى لو لم تكن هناك بيانات
             const printBtn = isMobileDevice
@@ -5929,9 +6178,14 @@ function loadLocalCustomerPurchaseHistory() {
             showError(errorMsg, errorDetails);
         }
     })
-    .catch(error => {
-        const errorMessage = error.message || 'حدث خطأ في الاتصال بالخادم';
-        const errorDetails = error.stack ? error.stack.substring(0, 300) : 'لا توجد تفاصيل إضافية';
+    .catch(function(error) {
+        clearTimeout(timeoutId);
+        var loadingModal = document.getElementById('localPurchaseHistoryLoading');
+        var loadingCard = document.getElementById('localPurchaseHistoryCardLoading');
+        if (loadingModal) { loadingModal.classList.add('d-none'); loadingModal.style.display = 'none'; }
+        if (loadingCard) { loadingCard.classList.add('d-none'); loadingCard.style.display = 'none'; }
+        var errorMessage = error.name === 'AbortError' ? 'انتهت مهلة الطلب. تحقق من الاتصال أو حاول مرة أخرى.' : (error.message || 'حدث خطأ في الاتصال بالخادم');
+        var errorDetails = error.stack ? error.stack.substring(0, 300) : 'لا توجد تفاصيل إضافية';
         showError(errorMessage, errorDetails);
         console.error('Error loading purchase history:', error);
     });
@@ -5939,6 +6193,57 @@ function loadLocalCustomerPurchaseHistory() {
 
 // تعيين الدالة على window لضمان إمكانية استدعائها من أي مكان
 window.loadLocalCustomerPurchaseHistory = loadLocalCustomerPurchaseHistory;
+
+// تطبيق فلتر سجل المشتريات (بحث + فترة زمنية + ترتيب) وإعادة عرض الجدول
+function applyLocalPurchaseHistoryFilters() {
+    var searchEl = document.getElementById('localPurchaseHistorySearchInvoiceOrAmount') || document.getElementById('localPurchaseHistoryCardSearchInvoiceOrAmount');
+    var dateFromEl = document.getElementById('localPurchaseHistoryDateFrom') || document.getElementById('localPurchaseHistoryCardDateFrom');
+    var dateToEl = document.getElementById('localPurchaseHistoryDateTo') || document.getElementById('localPurchaseHistoryCardDateTo');
+    var sortEl = document.getElementById('localPurchaseHistorySortOrder') || document.getElementById('localPurchaseHistoryCardSortOrder');
+    var searchText = searchEl ? searchEl.value.trim() : '';
+    var dateFrom = dateFromEl ? dateFromEl.value.trim() : '';
+    var dateTo = dateToEl ? dateToEl.value.trim() : '';
+    var sortOrder = sortEl ? sortEl.value : 'asc';
+    var opts = { searchText: searchText, dateFrom: dateFrom, dateTo: dateTo, sortOrder: sortOrder };
+    displayLocalPurchaseHistory(
+        localPurchaseHistoryData || [],
+        localPaperInvoicesData || [],
+        localPaperInvoiceReturnsData || [],
+        localPurchaseHistoryCurrentBalance,
+        localCollectionsData || [],
+        opts
+    );
+}
+window.applyLocalPurchaseHistoryFilters = applyLocalPurchaseHistoryFilters;
+
+// إزالة الفلتر والبحث وإظهار جميع المعاملات
+function clearLocalPurchaseHistoryFilters() {
+    var searchEl = document.getElementById('localPurchaseHistorySearchInvoiceOrAmount');
+    var searchCard = document.getElementById('localPurchaseHistoryCardSearchInvoiceOrAmount');
+    var dateFromEl = document.getElementById('localPurchaseHistoryDateFrom');
+    var dateFromCard = document.getElementById('localPurchaseHistoryCardDateFrom');
+    var dateToEl = document.getElementById('localPurchaseHistoryDateTo');
+    var dateToCard = document.getElementById('localPurchaseHistoryCardDateTo');
+    var sortEl = document.getElementById('localPurchaseHistorySortOrder');
+    var sortCard = document.getElementById('localPurchaseHistoryCardSortOrder');
+    if (searchEl) searchEl.value = '';
+    if (searchCard) searchCard.value = '';
+    if (dateFromEl) dateFromEl.value = '';
+    if (dateFromCard) dateFromCard.value = '';
+    if (dateToEl) dateToEl.value = '';
+    if (dateToCard) dateToCard.value = '';
+    if (sortEl) sortEl.value = 'asc';
+    if (sortCard) sortCard.value = 'asc';
+    displayLocalPurchaseHistory(
+        localPurchaseHistoryData || [],
+        localPaperInvoicesData || [],
+        localPaperInvoiceReturnsData || [],
+        localPurchaseHistoryCurrentBalance,
+        localCollectionsData || [],
+        {}
+    );
+}
+window.clearLocalPurchaseHistoryFilters = clearLocalPurchaseHistoryFilters;
 
 // تجميع سجل المشتريات حسب الفاتورة (سطر واحد لكل فاتورة)
 function groupLocalPurchaseHistoryByInvoice(history) {
@@ -6053,14 +6358,28 @@ function localOpenReturnForInvoiceFromDetails() {
     loadLocalReturnInvoiceByNumber();
 }
 
-// دالة عرض سجل المشتريات (سطر واحد لكل فاتورة) + الفواتير الورقية + مرتجعات الفواتير الورقية
-// نملأ جدولي الكارد (موبايل) والمودال (كمبيوتر) معاً لضمان ظهور الفواتير على الهاتف
-function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns) {
+// دالة عرض سجل المشتريات (سطر واحد لكل فاتورة) + الفواتير الورقية + مرتجعات الفواتير الورقية + التحصيلات + الرصيد بعد كل معاملة
+// خيارات الفلتر (معامل سادس اختياري): { searchText, dateFrom, dateTo, sortOrder: 'asc'|'desc' }
+function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns, currentBalance, collections, filterOptions) {
+    history = Array.isArray(history) ? history : (history ? [history] : []);
     paperInvoices = paperInvoices || [];
     paperInvoiceReturns = paperInvoiceReturns || [];
-    const tableBodyCard = document.getElementById('localPurchaseHistoryCardTableBody');
-    const tableBodyModal = document.getElementById('localPurchaseHistoryTableBody');
+    collections = collections || [];
+    currentBalance = parseFloat(currentBalance) || 0;
+    var opts = filterOptions || {};
+    var searchText = String(opts.searchText || '').trim().toLowerCase();
+    var dateFrom = String(opts.dateFrom || '').trim();
+    var dateTo = String(opts.dateTo || '').trim();
+    var sortOrder = (opts.sortOrder === 'desc') ? 'desc' : 'asc';
+    let tableBodyCard = document.getElementById('localPurchaseHistoryCardTableBody');
+    let tableBodyModal = document.getElementById('localPurchaseHistoryTableBody');
     
+    // التأكد من الحصول على tbody المودال من داخل المودال نفسه (لضمان تحديث الجدول الظاهر)
+    var modal = document.getElementById('localCustomerPurchaseHistoryModal');
+    if (modal) {
+        var modalTbody = modal.querySelector('#localPurchaseHistoryTableBody');
+        if (modalTbody) tableBodyModal = modalTbody;
+    }
     if (!tableBodyCard && !tableBodyModal) {
         console.error('Purchase history table body elements not found');
         const errorElement = document.getElementById('localPurchaseHistoryCardError') || document.getElementById('localPurchaseHistoryError');
@@ -6074,53 +6393,140 @@ function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns
     if (tableBodyCard) tableBodyCard.innerHTML = '';
     if (tableBodyModal) tableBodyModal.innerHTML = '';
     
-    const invoices = (history && history.length) ? groupLocalPurchaseHistoryByInvoice(history) : [];
-    const hasInvoices = invoices.length > 0 || paperInvoices.length > 0 || paperInvoiceReturns.length > 0;
+    const invoices = history.length ? groupLocalPurchaseHistoryByInvoice(history) : [];
+    let allEntries = [];
+    function normDate(d) {
+        if (!d) return '0000-00-00';
+        var s = String(d).trim().substring(0, 10);
+        return s || '0000-00-00';
+    }
+    function formatBalance(bal) {
+        var n = parseFloat(bal) || 0;
+        return n.toFixed(2) + ' ج.م';
+    }
+    // تحويل الأرقام العربية/الفارسية إلى إنجليزية للبحث الموحد
+    function normalizeDigitsForSearch(str) {
+        if (str == null || str === '') return '';
+        var s = String(str);
+        var arabic = '\u0660\u0661\u0662\u0663\u0664\u0665\u0666\u0667\u0668\u0669';
+        var persian = '\u06f0\u06f1\u06f2\u06f3\u06f4\u06f5\u06f6\u06f7\u06f8\u06f9';
+        for (var i = 0; i <= 9; i++) {
+            s = s.replace(new RegExp(arabic[i], 'g'), i);
+            s = s.replace(new RegExp(persian[i], 'g'), i);
+        }
+        return s;
+    }
+    function buildSearchableText(labelText, amountNum, dateStr) {
+        var parts = [labelText || '', String(amountNum != null ? amountNum : ''), dateStr || ''];
+        return normalizeDigitsForSearch(parts.join(' ')).toLowerCase();
+    }
+    invoices.forEach(function(inv) {
+        const invNum = String(inv.invoice_number || '-');
+        const safeNum = invNum.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        const dateStr = (inv.invoice_date || '-').toString().substring(0, 10);
+        const amount = parseFloat(inv.total_amount || 0);
+        const safeInvNumAttr = invNum.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        const actionsCell = '<td><button type="button" class="btn btn-sm btn-outline-primary" onclick="showLocalInvoiceDetailsModal(\'' + safeInvNumAttr + '\')" title="عرض الفاتورة"><i class="bi bi-eye me-1"></i></button></td>';
+        var entry = { sortDate: normDate(inv.invoice_date), effect: amount, labelText: invNum, amountNum: amount, cells: ['<td>' + safeNum + '</td>', '<td>' + amount.toFixed(2) + ' ج.م</td>', '<td>' + dateStr + '</td>', actionsCell] };
+        entry.searchableText = buildSearchableText(invNum, amount, dateStr);
+        allEntries.push(entry);
+    });
+    paperInvoices.forEach(function(pi) {
+        const safeNum = (pi.invoice_number || 'ورقية-' + pi.id).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const dateStr = (pi.invoice_date || pi.created_at || '-').toString().substring(0, 10);
+        const amount = parseFloat(pi.total_amount || 0);
+        const viewBtn = pi.image_path
+            ? '<button type="button" class="btn btn-sm btn-outline-primary" onclick="showPaperInvoiceImage(' + parseInt(pi.id, 10) + ')" title="عرض صورة الفاتورة الورقية"><i class="bi bi-image me-1"></i></button>'
+            : '<span class="text-muted small">لا توجد صورة</span>';
+        var labelText = (pi.invoice_number || 'ورقية-' + pi.id);
+        var entry = { sortDate: normDate(pi.invoice_date || pi.created_at), effect: -amount, labelText: labelText, amountNum: amount, cells: ['<td>' + safeNum + '</td>', '<td>' + amount.toFixed(2) + ' ج.م</td>', '<td>' + dateStr + '</td>', '<td>' + viewBtn + '</td>'] };
+        entry.searchableText = buildSearchableText(labelText, amount, dateStr);
+        allEntries.push(entry);
+    });
+    paperInvoiceReturns.forEach(function(pr) {
+        const safeNum = ('مرتجع ورقية - ' + (pr.invoice_number || pr.id)).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const dateStr = (pr.return_date || pr.created_at || '-').toString().substring(0, 10);
+        const returnAmt = parseFloat(pr.return_amount || 0);
+        const viewBtn = pr.image_path
+            ? '<button type="button" class="btn btn-sm btn-outline-danger" onclick="showPaperInvoiceReturnImage(' + parseInt(pr.id, 10) + ')" title="عرض صورة المرتجع"><i class="bi bi-image me-1"></i></button>'
+            : '<span class="text-muted small">لا توجد صورة</span>';
+        var labelText = 'مرتجع ورقية - ' + (pr.invoice_number || pr.id);
+        var entry = { sortDate: normDate(pr.return_date || pr.created_at), effect: -returnAmt, labelText: labelText, amountNum: returnAmt, cells: ['<td class="text-danger">' + safeNum + '</td>', '<td class="text-danger">-' + returnAmt.toFixed(2) + ' ج.م</td>', '<td>' + dateStr + '</td>', '<td>' + viewBtn + '</td>'] };
+        entry.searchableText = buildSearchableText(labelText, returnAmt, dateStr);
+        allEntries.push(entry);
+    });
+    collections.forEach(function(col) {
+        const safeNum = ('تحصيل - ' + (col.collection_number || col.id)).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const dateStr = (col.date || col.created_at || '-').toString().substring(0, 10);
+        const amount = parseFloat(col.amount || 0);
+        var labelText = 'تحصيل - ' + (col.collection_number || col.id);
+        var entry = { sortDate: normDate(col.date || col.created_at), effect: -amount, labelText: labelText, amountNum: amount, cells: ['<td>' + safeNum + '</td>', '<td class="text-success">' + amount.toFixed(2) + ' ج.م (تحصيل)</td>', '<td>' + dateStr + '</td>', '<td><span class="text-muted small">تحصيل</span></td>'] };
+        entry.searchableText = buildSearchableText(labelText, amount, dateStr);
+        allEntries.push(entry);
+    });
+    // فلترة الفترة الزمنية: إظهار جميع المعاملات (فاتورة عادية، فاتورة ورقية، مرتجع ورقية، تحصيل) المسجلة ضمن من-إلى
+    if (dateFrom || dateTo) {
+        allEntries = allEntries.filter(function(e) {
+            var d = e.sortDate || '0000-00-00';
+            if (dateFrom && d < dateFrom) return false;
+            if (dateTo && d > dateTo) return false;
+            return true;
+        });
+    }
+    // بحث متقدم: إظهار أي سجل مطابق لمدخلات البحث (رقم الفاتورة، المبلغ، التاريخ، أو أي جزء من البيان)
+    if (searchText) {
+        var normalizedSearch = normalizeDigitsForSearch(searchText).toLowerCase().trim();
+        allEntries = allEntries.filter(function(e) {
+            return (e.searchableText || '').indexOf(normalizedSearch) >= 0;
+        });
+    }
+    // ترتيب حسب التاريخ (تصاعدي أو تنازلي)
+    allEntries.sort(function(a, b) {
+        var cmp = a.sortDate.localeCompare(b.sortDate);
+        return sortOrder === 'desc' ? -cmp : cmp;
+    });
+    var totalEffect = 0;
+    for (var i = 0; i < allEntries.length; i++) totalEffect += allEntries[i].effect;
+    var balanceAfter = currentBalance - totalEffect;
+    var rows = [];
+    for (var j = 0; j < allEntries.length; j++) {
+        balanceAfter += allEntries[j].effect;
+        var e = allEntries[j];
+        var balanceCell = '<td>' + formatBalance(balanceAfter) + '</td>';
+        rows.push(e.cells[0] + e.cells[1] + e.cells[2] + balanceCell + e.cells[3]);
+    }
+    
+    const hasInvoices = rows.length > 0;
     
     if (!hasInvoices) {
-        var emptyRow = '<tr><td colspan="4" class="text-center text-muted py-4"><i class="bi bi-info-circle me-2"></i>لا توجد مشتريات مسجلة لهذا العميل</td></tr>';
+        var emptyRow = '<tr><td colspan="5" class="text-center text-muted py-4"><i class="bi bi-info-circle me-2"></i>لا توجد مشتريات مسجلة لهذا العميل</td></tr>';
         if (tableBodyCard) tableBodyCard.innerHTML = emptyRow;
         if (tableBodyModal) tableBodyModal.innerHTML = emptyRow;
+        document.getElementById('localPurchaseHistoryPaginationWrap').style.display = 'none';
+        if (document.getElementById('localPurchaseHistoryCardPaginationWrap')) document.getElementById('localPurchaseHistoryCardPaginationWrap').style.display = 'none';
         console.log('No purchase history found for customer ID:', currentLocalCustomerId);
         return;
     }
     
-    try {
-        invoices.forEach(function(inv) {
-            const safeNum = (inv.invoice_number || '-').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            const row = document.createElement('tr');
-            row.innerHTML = '<td>' + safeNum + '</td><td>' + parseFloat(inv.total_amount || 0).toFixed(2) + ' ج.م</td><td>' + (inv.invoice_date || '-') + '</td><td><button type="button" class="btn btn-sm btn-outline-primary" onclick="showLocalInvoiceDetailsModal(\'' + String(inv.invoice_number || '').replace(/'/g, "\\'") + '\')" title="عرض الفاتورة"><i class="bi bi-eye me-1"></i>عرض الفاتورة</button></td>';
-            if (tableBodyCard) tableBodyCard.appendChild(row);
-            if (tableBodyModal) tableBodyModal.appendChild(row.cloneNode(true));
-        });
-        paperInvoices.forEach(function(pi) {
-            const safeNum = (pi.invoice_number || 'ورقية-' + pi.id).replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            const row = document.createElement('tr');
-            const dateStr = (pi.invoice_date || pi.created_at || '-').toString().substring(0, 10);
-            const viewBtn = pi.image_path
-                ? '<button type="button" class="btn btn-sm btn-outline-primary" onclick="showPaperInvoiceImage(' + parseInt(pi.id, 10) + ')" title="عرض صورة الفاتورة الورقية"><i class="bi bi-image me-1"></i>عرض الفاتورة</button>'
-                : '<span class="text-muted small">لا توجد صورة</span>';
-            row.innerHTML = '<td>' + safeNum + '</td><td>' + parseFloat(pi.total_amount || 0).toFixed(2) + ' ج.م</td><td>' + dateStr + '</td><td>' + viewBtn + '</td>';
-            if (tableBodyCard) tableBodyCard.appendChild(row);
-            if (tableBodyModal) tableBodyModal.appendChild(row.cloneNode(true));
-        });
-        paperInvoiceReturns.forEach(function(pr) {
-            const safeNum = ('مرتجع ورقية - ' + (pr.invoice_number || pr.id)).replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            const row = document.createElement('tr');
-            const dateStr = (pr.return_date || pr.created_at || '-').toString().substring(0, 10);
-            const viewBtn = pr.image_path
-                ? '<button type="button" class="btn btn-sm btn-outline-warning" onclick="showPaperInvoiceReturnImage(' + parseInt(pr.id, 10) + ')" title="عرض صورة المرتجع"><i class="bi bi-image me-1"></i>عرض المرتجع</button>'
-                : '<span class="text-muted small">لا توجد صورة</span>';
-            row.innerHTML = '<td>' + safeNum + '</td><td class="text-warning">-' + parseFloat(pr.return_amount || 0).toFixed(2) + ' ج.م</td><td>' + dateStr + '</td><td>' + viewBtn + '</td>';
-            if (tableBodyCard) tableBodyCard.appendChild(row);
-            if (tableBodyModal) tableBodyModal.appendChild(row.cloneNode(true));
-        });
-    } catch (error) {
-        console.error('Error displaying purchase history:', error);
-        var errRow = '<tr><td colspan="4" class="text-center text-danger py-4"><i class="bi bi-exclamation-triangle-fill me-2"></i>حدث خطأ أثناء عرض البيانات</td></tr>';
-        if (tableBodyCard) tableBodyCard.innerHTML = errRow;
-        if (tableBodyModal) tableBodyModal.innerHTML = errRow;
+    window._localPurchaseHistoryRows = rows;
+    if (modal && modal.querySelector('#localPurchaseHistoryTableBody')) {
+        tableBodyModal = modal.querySelector('#localPurchaseHistoryTableBody');
     }
+    function fillBody(tbody) {
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        rows.forEach(function(rowHtml) {
+            var tr = document.createElement('tr');
+            tr.innerHTML = rowHtml;
+            tbody.appendChild(tr);
+        });
+    }
+    fillBody(tableBodyCard);
+    fillBody(tableBodyModal);
+    var wrapModal = document.getElementById('localPurchaseHistoryPaginationWrap');
+    var wrapCard = document.getElementById('localPurchaseHistoryCardPaginationWrap');
+    if (wrapModal) wrapModal.style.display = 'none';
+    if (wrapCard) wrapCard.style.display = 'none';
 }
 
 // دوال مساعدة (محفوظة للتوافق - الإرجاع يتم من خلال modal إدخال رقم الفاتورة أو من تفاصيل الفاتورة)
@@ -6165,11 +6571,13 @@ document.addEventListener('DOMContentLoaded', function() {
     var addRegionFromLocalCustomerCard = document.getElementById('addRegionFromLocalCustomerCard');
     var addLocalCustomerRegionSelect = document.getElementById('addLocalCustomerRegionId');
     var editLocalCustomerRegionSelect = document.getElementById('editLocalCustomerRegionId');
+    var addCustomerCardRegionSelect = document.getElementById('addCustomerCardRegionId');
     
     console.log('Form elements:', {
         form: !!addRegionFromLocalCustomerCardForm,
         card: !!addRegionFromLocalCustomerCard,
         addSelect: !!addLocalCustomerRegionSelect,
+        addCardSelect: !!addCustomerCardRegionSelect,
         editSelect: !!editLocalCustomerRegionSelect
     });
     
@@ -6240,8 +6648,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     newOption.selected = true;
                     
                     if (addLocalCustomerRegionSelect) {
-                        addLocalCustomerRegionSelect.appendChild(newOption);
+                        addLocalCustomerRegionSelect.appendChild(newOption.cloneNode(true));
                         addLocalCustomerRegionSelect.value = data.region.id;
+                    }
+                    
+                    if (addCustomerCardRegionSelect) {
+                        var cardOption = newOption.cloneNode(true);
+                        addCustomerCardRegionSelect.appendChild(cardOption);
+                        addCustomerCardRegionSelect.value = data.region.id;
                     }
                     
                     if (editLocalCustomerRegionSelect) {
@@ -6729,9 +7143,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 <input type="hidden" name="customer_id" id="editLocalCustomerId">
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label class="form-label">اسم العميل</label>
+                        <label class="form-label">اسم العميل <?php if (in_array($currentRole, ['manager', 'developer', 'accountant', 'sales'], true)): ?><span class="text-danger">*</span><?php endif; ?></label>
+                        <?php if (in_array($currentRole, ['manager', 'developer', 'accountant', 'sales'], true)): ?>
+                        <input type="text" class="form-control" name="name" id="editLocalCustomerName" required placeholder="اسم العميل">
+                        <?php else: ?>
                         <input type="text" class="form-control" id="editLocalCustomerName" disabled>
                         <small class="text-muted">لا يمكن تعديل اسم العميل</small>
+                        <?php endif; ?>
                     </div>
                     <?php if (in_array($currentRole, ['manager', 'developer'], true)): ?>
                     <div class="mb-3">
@@ -6800,9 +7218,13 @@ document.addEventListener('DOMContentLoaded', function() {
             <input type="hidden" name="action" value="edit_customer">
             <input type="hidden" name="customer_id" id="editLocalCustomerCardId">
             <div class="mb-3">
-                <label class="form-label">اسم العميل</label>
+                <label class="form-label">اسم العميل <?php if (in_array($currentRole, ['manager', 'developer', 'accountant', 'sales'], true)): ?><span class="text-danger">*</span><?php endif; ?></label>
+                <?php if (in_array($currentRole, ['manager', 'developer', 'accountant', 'sales'], true)): ?>
+                <input type="text" class="form-control" name="name" id="editLocalCustomerCardName" required placeholder="اسم العميل">
+                <?php else: ?>
                 <input type="text" class="form-control" id="editLocalCustomerCardName" disabled>
                 <small class="text-muted">لا يمكن تعديل اسم العميل</small>
+                <?php endif; ?>
             </div>
             <?php if (in_array($currentRole, ['manager', 'developer'], true)): ?>
             <div class="mb-3">
@@ -6881,6 +7303,25 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
 </div>
 <?php endif; ?>
+
+<!-- Card هاتف العميل: نسخ الرقم / الاتصال -->
+<div class="card shadow-sm mb-4" id="localCustomerPhoneCard" style="display: none;">
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0"><i class="bi bi-telephone me-2"></i>هاتف العميل: <span id="localCustomerPhoneCardName"></span></h5>
+    </div>
+    <div class="card-body">
+        <p class="text-muted small mb-3" id="localCustomerPhoneCardNumbers"></p>
+        <div class="d-flex flex-wrap gap-2">
+            <button type="button" class="btn btn-outline-primary" id="localCustomerPhoneCardCopyBtn">
+                <i class="bi bi-clipboard me-2"></i>نسخ الرقم
+            </button>
+            <a href="#" class="btn btn-primary" id="localCustomerPhoneCardCallLink">
+                <i class="bi bi-telephone-fill me-2"></i>الاتصال بالعميل
+            </a>
+            <button type="button" class="btn btn-secondary" onclick="closeLocalCustomerPhoneCard()">إغلاق</button>
+        </div>
+    </div>
+</div>
 
 <!-- Modal تصدير العملاء المحددين - للكمبيوتر فقط -->
 <?php if (in_array($currentRole, ['manager', 'developer', 'accountant'], true)): ?>
@@ -7569,23 +8010,16 @@ function printDebtorCustomers() {
         min-width: 110px;
     }
     
-    /* رقم الهاتف: 11 حرف */
+    /* الرصيد: 7 حرف */
     .dashboard-table thead th:nth-child(3),
     .dashboard-table tbody td:nth-child(3) {
-        width: 13%;
-        min-width: 85px;
-    }
-    
-    /* الرصيد: 7 حرف */
-    .dashboard-table thead th:nth-child(4),
-    .dashboard-table tbody td:nth-child(4) {
         width: 10%;
         min-width: 65px;
     }
     
     /* العنوان: 8 حرف */
-    .dashboard-table thead th:nth-child(5),
-    .dashboard-table tbody td:nth-child(5) {
+    .dashboard-table thead th:nth-child(4),
+    .dashboard-table tbody td:nth-child(4) {
         width: 12%;
         min-width: 75px;
         word-wrap: break-word;
@@ -7593,22 +8027,15 @@ function printDebtorCustomers() {
     }
     
     /* المنطقة: 7 حرف */
-    .dashboard-table thead th:nth-child(6),
-    .dashboard-table tbody td:nth-child(6) {
+    .dashboard-table thead th:nth-child(5),
+    .dashboard-table tbody td:nth-child(5) {
         width: 10%;
         min-width: 65px;
     }
     
-    /* الموقع */
-    .dashboard-table thead th:nth-child(7),
-    .dashboard-table tbody td:nth-child(7) {
-        width: 12%;
-        min-width: 90px;
-    }
-    
     /* الإجراءات - عمود ثابت لظهور زر الإجراءات دائماً على الموبايل (LTR: يمين | RTL: يسار) */
-    .dashboard-table thead th:nth-child(8),
-    .dashboard-table tbody td:nth-child(8) {
+    .dashboard-table thead th:nth-child(6),
+    .dashboard-table tbody td:nth-child(6) {
         width: 20%;
         min-width: 140px;
         position: sticky !important;
@@ -7618,11 +8045,11 @@ function printDebtorCustomers() {
         z-index: 2;
         box-shadow: -4px 0 8px rgba(0,0,0,0.06);
     }
-    .dashboard-table thead th:nth-child(8) {
+    .dashboard-table thead th:nth-child(6) {
         z-index: 3;
     }
-    [dir="rtl"] .dashboard-table thead th:nth-child(8),
-    [dir="rtl"] .dashboard-table tbody td:nth-child(8) {
+    [dir="rtl"] .dashboard-table thead th:nth-child(6),
+    [dir="rtl"] .dashboard-table tbody td:nth-child(6) {
         right: auto !important;
         left: 0 !important;
         box-shadow: 4px 0 8px rgba(0,0,0,0.06);
@@ -7666,18 +8093,6 @@ function printDebtorCustomers() {
     .dashboard-table .badge {
         font-size: 0.65rem;
         padding: 0.2rem 0.4rem;
-    }
-    
-    /* تحسين عمود الموقع */
-    .dashboard-table tbody td:nth-child(6) .d-flex {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 0.3rem;
-    }
-    
-    .dashboard-table tbody td:nth-child(6) .btn {
-        width: 100%;
-        justify-content: center;
     }
 }
 
@@ -7744,19 +8159,9 @@ function printDebtorCustomers() {
         min-width: 70px;
     }
     
+    /* عمود الإجراءات ثابت */
     .dashboard-table thead th:nth-child(6),
     .dashboard-table tbody td:nth-child(6) {
-        min-width: 60px;
-    }
-    
-    .dashboard-table thead th:nth-child(7),
-    .dashboard-table tbody td:nth-child(7) {
-        min-width: 85px;
-    }
-    
-    /* عمود الإجراءات ثابت */
-    .dashboard-table thead th:nth-child(8),
-    .dashboard-table tbody td:nth-child(8) {
         min-width: 130px;
         position: sticky !important;
         right: 0 !important;
@@ -7765,9 +8170,9 @@ function printDebtorCustomers() {
         z-index: 2;
         box-shadow: -4px 0 8px rgba(0,0,0,0.06);
     }
-    .dashboard-table thead th:nth-child(8) { z-index: 3; }
-    [dir="rtl"] .dashboard-table thead th:nth-child(8),
-    [dir="rtl"] .dashboard-table tbody td:nth-child(8) {
+    .dashboard-table thead th:nth-child(6) { z-index: 3; }
+    [dir="rtl"] .dashboard-table thead th:nth-child(6),
+    [dir="rtl"] .dashboard-table tbody td:nth-child(6) {
         right: auto !important;
         left: 0 !important;
         box-shadow: 4px 0 8px rgba(0,0,0,0.06);

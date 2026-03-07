@@ -4,6 +4,7 @@
  */
 
 define('ACCESS_ALLOWED', true);
+define('DAILY_COLLECTION_MODAL_SCRIPT', true);
 // تعريف ثابت لمنع حذف الجلسة في sales.php
 define('SALES_PAGE_ACTIVE', true);
 
@@ -115,6 +116,14 @@ require_once __DIR__ . '/../includes/path_helper.php';
 
 requireRole(['sales', 'developer']);
 
+// منع الكاش عند التبديل بين الصفحات/الحسابات لضمان عدم رجوع أي كاش قديم
+if (!headers_sent()) {
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Cache-Control: post-check=0, pre-check=0', false);
+    header('Pragma: no-cache');
+    header('Expires: 0');
+}
+
 // تحميل $currentUser قبل header.php لضمان أنه متاح في جميع الملفات
 if (!isset($currentUser) || $currentUser === null) {
     $currentUser = getCurrentUser();
@@ -144,6 +153,20 @@ require_once __DIR__ . '/../includes/lang/' . getCurrentLanguage() . '.php';
 $lang = isset($translations) ? $translations : [];
 $pageTitle = isset($lang['sales_dashboard']) ? $lang['sales_dashboard'] : 'لوحة المبيعات';
 $pageDescription = 'لوحة تحكم المبيعات - عرض الإحصائيات والمبيعات والعملاء والمخزون - ' . APP_NAME;
+
+// معالجة طلبات AJAX لصفحة محفظة المستخدم
+if ($page === 'user_wallet' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    include __DIR__ . '/../modules/user/user_wallet.php';
+    exit;
+}
+if ($page === 'daily_collection_my_tables' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && isset($_POST['item_id']) && !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+    while (ob_get_level() > 0) ob_end_clean();
+    include __DIR__ . '/../modules/shared/daily_collection_my_tables.php';
+    exit;
+}
 
 // معالجة طلبات AJAX قبل إرسال أي HTML
 if (isset($_GET['ajax'], $_GET['action'])) {
@@ -2590,6 +2613,17 @@ if ($isAjaxNavigation) {
                 </div>
                 <?php } ?>
                 
+            <?php elseif ($page === 'user_wallet'): ?>
+                <!-- صفحة محفظة المستخدم -->
+                <?php
+                $modulePath = __DIR__ . '/../modules/user/user_wallet.php';
+                if (file_exists($modulePath)) {
+                    include $modulePath;
+                } else {
+                    echo '<div class="alert alert-warning">صفحة محفظة المستخدم غير متاحة حالياً</div>';
+                }
+                ?>
+                
             <?php elseif ($page === 'attendance'): ?>
                 <!-- صفحة تسجيل الحضور -->
                 <?php 
@@ -2636,6 +2670,16 @@ if ($isAjaxNavigation) {
                     }
                 } else {
                     echo '<div class="alert alert-warning">صفحة الراتب غير متاحة.</div>';
+                }
+                ?>
+                
+            <?php elseif ($page === 'daily_collection_my_tables'): ?>
+                <?php
+                $modulePath = __DIR__ . '/../modules/shared/daily_collection_my_tables.php';
+                if (file_exists($modulePath)) {
+                    include $modulePath;
+                } else {
+                    echo '<div class="alert alert-warning">صفحة جداول التحصيل اليومية غير متاحة حالياً</div>';
                 }
                 ?>
                 

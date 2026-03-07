@@ -5,12 +5,21 @@
  */
 
 define('ACCESS_ALLOWED', true);
+define('DAILY_COLLECTION_MODAL_SCRIPT', true);
 
 while (ob_get_level() > 0) {
     ob_end_clean();
 }
 if (!ob_get_level()) {
     ob_start();
+}
+
+// منع الكاش عند التبديل بين الصفحات/الحسابات لضمان عدم رجوع أي كاش قديم
+if (!headers_sent()) {
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Cache-Control: post-check=0, pre-check=0', false);
+    header('Pragma: no-cache');
+    header('Expires: 0');
 }
 
 require_once __DIR__ . '/../includes/config.php';
@@ -30,6 +39,17 @@ if ($page === '') {
 
 if ($page === 'attendance') {
     header('Location: ' . getRelativeUrl('attendance.php'));
+    exit;
+}
+
+if ($page === 'user_wallet' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+    while (ob_get_level() > 0) ob_end_clean();
+    include __DIR__ . '/../modules/user/user_wallet.php';
+    exit;
+}
+if ($page === 'daily_collection_my_tables' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && isset($_POST['item_id']) && !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+    while (ob_get_level() > 0) ob_end_clean();
+    include __DIR__ . '/../modules/shared/daily_collection_my_tables.php';
     exit;
 }
 
@@ -85,6 +105,15 @@ $pageDescription = 'لوحة تحكم السائق - الحضور والانصر
                     echo '<div class="alert alert-warning">صفحة المهام غير متاحة حالياً</div>';
                 }
                 ?>
+            <?php elseif ($page === 'daily_collection_my_tables'): ?>
+                <?php
+                $modulePath = __DIR__ . '/../modules/shared/daily_collection_my_tables.php';
+                if (file_exists($modulePath)) {
+                    include $modulePath;
+                } else {
+                    echo '<div class="alert alert-warning">صفحة جداول التحصيل اليومية غير متاحة حالياً</div>';
+                }
+                ?>
             <?php elseif ($page === 'dashboard'): ?>
                 <?php
                 $baseUrlDriver = rtrim(getBasePath(), '/') . '/dashboard/driver.php';
@@ -95,6 +124,8 @@ $pageDescription = 'لوحة تحكم السائق - الحضور والانصر
                 $tasksUrl = $baseUrlDriver . '?page=tasks';
                 $hasUserWallet = file_exists(__DIR__ . '/../modules/user/user_wallet.php');
                 $maintenanceUrl = $baseUrlDriver . '?page=vehicle_maintenance';
+                $dailyCollectionUrl = $baseUrlDriver . '?page=daily_collection_my_tables';
+                $hasDailyCollection = file_exists(__DIR__ . '/../modules/shared/daily_collection_my_tables.php');
                 require_once __DIR__ . '/../includes/vehicle_maintenance.php';
                 $driverVehicle = getDriverVehicle($currentUser['id']);
                 $driverOilAlert = $driverVehicle ? getVehicleOilChangeAlert($driverVehicle['id']) : null;
@@ -153,6 +184,21 @@ $pageDescription = 'لوحة تحكم السائق - الحضور والانصر
                                         </div>
                                         <h5 class="card-title text-dark">محفظة المستخدم</h5>
                                         <p class="card-text text-muted small mb-0">عرض المحفظة والرصيد</p>
+                                    </div>
+                                </div>
+                            </a>
+                        </div>
+                        <?php endif; ?>
+                        <?php if ($hasDailyCollection): ?>
+                        <div class="col-12 col-sm-6 col-lg-4">
+                            <a href="<?php echo htmlspecialchars($dailyCollectionUrl); ?>" class="text-decoration-none">
+                                <div class="card shadow-sm h-100 border-info border-2 hover-shadow">
+                                    <div class="card-body text-center py-4">
+                                        <div class="rounded-circle bg-info bg-opacity-10 d-inline-flex p-3 mb-2">
+                                            <i class="bi bi-calendar2-range fs-2 text-info"></i>
+                                        </div>
+                                        <h5 class="card-title text-dark">جداول التحصيل اليومية</h5>
+                                        <p class="card-text text-muted small mb-0">عرض الجداول المخصصة وتحديث حالة التحصيل</p>
                                     </div>
                                 </div>
                             </a>

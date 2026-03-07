@@ -46,6 +46,17 @@
         showLoading: true
     };
 
+    // صفحات لا تُخزَّن في الكاش أبداً (بيانات حية من قاعدة البيانات)
+    function isNoCachePage(url) {
+        if (!url) return false;
+        try {
+            const u = typeof url === 'string' ? url : (url.url || '');
+            return u.indexOf('page=production_tasks') !== -1 || u.indexOf('page=daily_collection_schedules') !== -1;
+        } catch (e) {
+            return false;
+        }
+    }
+
     // Cache للصفحات
     const pageCache = new Map();
     let currentUrl = window.location.href;
@@ -1077,19 +1088,28 @@
             return false;
         }
 
-        // التحقق من Cache المحلي أولاً (الأسرع)
-        if (CONFIG.cacheEnabled && pageCache.has(url)) {
+        // التحقق من Cache المحلي أولاً (الأسرع) - مع استثناء الصفحات التي يجب أن تكون دائماً محدثة
+        if (CONFIG.cacheEnabled && !isNoCachePage(url) && pageCache.has(url)) {
+            if (typeof window.showPageLoading === 'function') window.showPageLoading();
             const cachedData = pageCache.get(url);
-            // تحديث URL أولاً لتحديث حالة active بشكل صحيح
             currentUrl = url;
             updatePageContent(cachedData);
             updateHistory(url);
+            requestAnimationFrame(function() {
+                requestAnimationFrame(function() {
+                    if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
+                });
+            });
             return true;
         }
+
+        // إزالة صفحة أوردرات الإنتاج من الكاش إن وُجدت لضمان جلب بيانات جديدة
+        if (isNoCachePage(url)) {
+            pageCache.delete(url);
+        }
         
-        // في PWA، محاولة استخدام Service Worker cache فوراً قبل network
-        // هذا يسرع التحميل بشكل كبير في أول فتح PWA
-        if ('caches' in window && window.matchMedia('(display-mode: standalone)').matches) {
+        // في PWA، محاولة استخدام Service Worker cache فوراً قبل network (ما عدا صفحات no-cache)
+        if (!isNoCachePage(url) && 'caches' in window && window.matchMedia('(display-mode: standalone)').matches) {
             try {
                 const cacheNames = ['albarakah-static-v2.0.0', 'albarakah-precache-v2.0.0'];
                 
@@ -1157,13 +1177,13 @@
 
         isLoading = true;
         showLoading();
+        if (typeof window.showPageLoading === 'function') window.showPageLoading();
 
         let timeoutId = null;
         try {
-            // محاولة استخدام Service Worker cache أولاً (لتحسين الأداء في PWA)
-            // هذا مهم جداً لأول فتح PWA - يقلل وقت التحميل من دقيقة إلى ثواني
+            // محاولة استخدام Service Worker cache أولاً (لتحسين الأداء في PWA) - ما عدا صفحات no-cache
             let response = null;
-            if ('caches' in window) {
+            if (!isNoCachePage(url) && 'caches' in window) {
                 try {
                     // محاولة فتح جميع caches المحتملة
                     const cacheNames = ['albarakah-static-v2.0.0', 'albarakah-precache-v2.0.0'];
@@ -1221,7 +1241,7 @@
                         'X-Requested-With': 'XMLHttpRequest',
                         'Accept': 'text/html'
                     },
-                    cache: 'default',
+                    cache: isNoCachePage(url) ? 'no-store' : 'default',
                     signal: controller.signal,
                     redirect: 'follow'
                 });
@@ -1263,18 +1283,18 @@
             );
             
             // إذا تم redirect إلى صفحة تسجيل الدخول وكان المحتوى يؤكد ذلك، نعيد التوجيه الكامل
-            // لكن فقط إذا كان URL يشير فعلاً إلى index.php والمحتوى يؤكد أنه صفحة تسجيل دخول
             if (response.redirected && isLoginPageUrl && isLoginPageContent) {
                 hideLoading();
+                if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
                 isLoading = false;
                 window.location.href = responseUrl;
                 return false;
             }
-            
+
             // إذا كان المحتوى يشير إلى صفحة تسجيل دخول (حتى بدون redirect)، نعيد التوجيه
-            // لكن فقط إذا كان URL يشير فعلاً إلى index.php
             if (isLoginPageContent && isLoginPageUrl && !hasMainContent) {
                 hideLoading();
+                if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
                 isLoading = false;
                 window.location.href = responseUrl;
                 return false;
@@ -1290,16 +1310,16 @@
             const data = extractContent(html);
 
             if (!data) {
-                // إذا فشل استخراج المحتوى وكانت هناك redirect إلى صفحة تسجيل الدخول، نعيد التوجيه الكامل
                 if (response.redirected && isLoginPageUrl && isLoginPageContent) {
                     hideLoading();
+                    if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
                     isLoading = false;
                     window.location.href = responseUrl;
                     return false;
                 }
-                // إذا كان المحتوى لا يحتوي على <main> وURL يشير إلى index.php، قد تكون صفحة تسجيل دخول
                 if (!hasMainContent && isLoginPageUrl) {
                     hideLoading();
+                    if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
                     isLoading = false;
                     window.location.href = responseUrl;
                     return false;
@@ -1307,8 +1327,8 @@
                 throw new Error('Failed to extract content from response');
             }
 
-            // حفظ في Cache
-            if (CONFIG.cacheEnabled) {
+            // حفظ في Cache (ما عدا الصفحات التي يجب أن تبقى دائماً محدثة)
+            if (CONFIG.cacheEnabled && !isNoCachePage(url)) {
                 // تنظيف Cache إذا تجاوز الحد الأقصى
                 if (pageCache.size >= CONFIG.cacheMaxSize) {
                     const firstKey = pageCache.keys().next().value;
@@ -1323,15 +1343,22 @@
             updatePageContent(data);
             updateHistory(url);
 
+            // إخفاء شاشة التحميل العامة بعد رسم المحتوى المحدث
+            requestAnimationFrame(function() {
+                requestAnimationFrame(function() {
+                    if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
+                });
+            });
+
             return true;
         } catch (error) {
             if (timeoutId) {
                 clearTimeout(timeoutId);
             }
             console.error('AJAX navigation error:', error);
-            
-            // إخفاء loading قبل fallback
+
             hideLoading();
+            if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
             
             // إذا كان timeout، أظهر رسالة خطأ قبل fallback
             if (error.name === 'AbortError' || error.message.includes('timeout')) {
@@ -1358,6 +1385,7 @@
         } finally {
             isLoading = false;
             hideLoading();
+            // ملاحظة: hidePageLoading يُستدعى بعد رسم المحتوى في مسار النجاح، أو في catch/redirect أعلاه
         }
     }
 
@@ -1378,6 +1406,14 @@
         if (link.matches(CONFIG.excludeSelectors)) {
             return false;
         }
+
+        // صفحات تُفتح كتحميل عادي (لا AJAX) لضمان عمل النماذج والتوجيه بشكل صحيح (CSS + إنشاء البيانات)
+        try {
+            const u = (link.href || '').toString();
+            if (u.indexOf('page=production_tasks') !== -1 || u.indexOf('page=daily_collection_schedules') !== -1) {
+                return false;
+            }
+        } catch (e) {}
 
         // التحقق من أن الرابط في نفس النطاق
         try {

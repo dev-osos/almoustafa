@@ -183,3 +183,23 @@
     }
 }
 
+/* جدول التحصيل اليومي: عمودا رصيد العميل ومبلغ التحصيل اليومي بنفس الحجم والتصميم تماماً */
+#daily-collection-table-wrap .daily-collection-table-compact {
+    table-layout: fixed;
+}
+#daily-collection-table-wrap .daily-collection-table-compact th.daily-collection-num-col,
+#daily-collection-table-wrap .daily-collection-table-compact td.daily-collection-num-col {
+    width: 5.5rem !important;
+    min-width: 5.5rem !important;
+    max-width: 5.5rem !important;
+    box-sizing: border-box;
+}
+@media (min-width: 768px) {
+    #daily-collection-table-wrap .daily-collection-table-compact th.daily-collection-num-col,
+    #daily-collection-table-wrap .daily-collection-table-compact td.daily-collection-num-col {
+        width: 6rem !important;
+        min-width: 6rem !important;
+        max-width: 6rem !important;
+    }
+}
+

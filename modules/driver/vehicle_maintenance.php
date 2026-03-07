@@ -184,6 +184,10 @@ $apiBase = getRelativeUrl('api/vehicle_maintenance.php');
                                     <label class="form-label">عدد الكيلومترات <span class="text-danger">*</span></label>
                                     <input type="number" class="form-control" name="km_reading" id="kmFuelRefill" required min="0" placeholder="مثال: 50100">
                                 </div>
+                                <div class="mb-3">
+                                    <label class="form-label">مبلغ التفويل (ريال) <span class="text-danger">*</span></label>
+                                    <input type="number" class="form-control" name="fuel_amount" id="fuelAmountRefill" required min="0.01" step="0.01" placeholder="مثال: 150">
+                                </div>
                                 <button type="submit" class="btn btn-info w-100" id="submitFuelBtn" disabled>
                                     <i class="bi bi-check-circle me-1"></i>حفظ
                                 </button>
@@ -292,6 +296,7 @@ $apiBase = getRelativeUrl('api/vehicle_maintenance.php');
                                 <th>التاريخ</th>
                                 <th>الكيلومترات</th>
                                 <th>الفرق</th>
+                                <th>المبلغ</th>
                                 <th>الصورة</th>
                             </tr>
                         </thead>
@@ -313,6 +318,7 @@ $apiBase = getRelativeUrl('api/vehicle_maintenance.php');
                                     <td><?php echo function_exists('formatDate') ? formatDate($r['maintenance_date']) : $r['maintenance_date']; ?></td>
                                     <td><?php echo number_format($r['km_reading'] ?? 0); ?> كم</td>
                                     <td><?php echo isset($r['km_diff']) && $r['km_diff'] !== null ? number_format($r['km_diff']) . ' كم' : '-'; ?></td>
+                                    <td><?php echo ($r['type'] ?? '') === 'fuel_refill' && isset($r['fuel_amount']) && $r['fuel_amount'] !== null && $r['fuel_amount'] !== '' ? number_format((float)$r['fuel_amount'], 2) . ' ر.س' : '-'; ?></td>
                                     <td>
                                         <?php if (!empty($r['photo_path'])): ?>
                                             <?php $photoUrl = getRelativeUrl('api/view_maintenance_photo.php?id=' . (int) $r['id']); ?>
@@ -508,6 +514,7 @@ $apiBase = getRelativeUrl('api/vehicle_maintenance.php');
             const type = form.dataset.type;
             const kmInput = form.querySelector('input[name="km_reading"]');
             const photoInput = form.querySelector('input[name="photo_base64"]');
+            const fuelAmountInput = form.querySelector('input[name="fuel_amount"]');
             const submitBtn = form.querySelector('button[type="submit"]');
 
             if (!photoInput || !photoInput.value) {
@@ -518,17 +525,28 @@ $apiBase = getRelativeUrl('api/vehicle_maintenance.php');
                 alert('يجب إدخال عدد الكيلومترات');
                 return;
             }
+            if (type === 'fuel_refill') {
+                if (!fuelAmountInput || !fuelAmountInput.value || parseFloat(fuelAmountInput.value) <= 0) {
+                    alert('يجب إدخال مبلغ التفويل (أكبر من صفر)');
+                    return;
+                }
+            }
 
             submitBtn.disabled = true;
+
+            const payload = {
+                type: type,
+                km_reading: parseInt(kmInput.value, 10),
+                photo: photoInput.value
+            };
+            if (type === 'fuel_refill' && fuelAmountInput && fuelAmountInput.value) {
+                payload.fuel_amount = parseFloat(fuelAmountInput.value);
+            }
 
             fetch(apiUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    type: type,
-                    km_reading: parseInt(kmInput.value, 10),
-                    photo: photoInput.value
-                })
+                body: JSON.stringify(payload)
             }).then(function(r) { return r.json(); }).then(function(data) {
                 if (data.success) {
                     alert(data.message + (data.km_diff !== null ? ' - الفرق: ' + data.km_diff + ' كم' : ''));

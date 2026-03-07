@@ -233,9 +233,11 @@ function handleGetHistory($currentUser): void
         
         $paperInvoices = [];
         $paperInvoiceReturns = [];
+        $collections = [];
         if ($isLocalCustomer) {
             $paperInvoices = getLocalCustomerPaperInvoices($db, $customerId);
             $paperInvoiceReturns = getLocalCustomerPaperInvoiceReturns($db, $customerId);
+            $collections = getLocalCustomerCollections($db, $customerId);
         }
         
         returnJsonResponse([
@@ -249,7 +251,8 @@ function handleGetHistory($currentUser): void
             ],
             'purchase_history' => $result,
             'paper_invoices' => $paperInvoices,
-            'paper_invoice_returns' => $paperInvoiceReturns
+            'paper_invoice_returns' => $paperInvoiceReturns,
+            'collections' => $collections
         ]);
         
     } catch (Throwable $e) {
@@ -459,6 +462,41 @@ function getLocalCustomerPaperInvoiceReturns($db, $customerId): array
         return $out;
     } catch (Throwable $e) {
         error_log('getLocalCustomerPaperInvoiceReturns error: ' . $e->getMessage());
+        return [];
+    }
+}
+
+/**
+ * Get local customer collections (تحصيلات - جميع الحالات للعرض في كشف الحساب)
+ */
+function getLocalCustomerCollections($db, $customerId): array
+{
+    try {
+        $tableExists = $db->queryOne("SHOW TABLES LIKE 'local_collections'");
+        if (empty($tableExists)) {
+            return [];
+        }
+        $sql = "SELECT id, customer_id, collection_number, amount, date, payment_method, notes, created_at FROM local_collections WHERE customer_id = ? ORDER BY date ASC, id ASC";
+        $rows = $db->query($sql, [$customerId]);
+        if (!$rows) {
+            return [];
+        }
+        $out = [];
+        foreach ($rows as $row) {
+            $out[] = [
+                'id' => (int)$row['id'],
+                'customer_id' => (int)$row['customer_id'],
+                'collection_number' => trim($row['collection_number'] ?? ''),
+                'amount' => (float)($row['amount'] ?? 0),
+                'date' => isset($row['date']) ? date('Y-m-d', strtotime($row['date'])) : '',
+                'payment_method' => $row['payment_method'] ?? 'cash',
+                'notes' => $row['notes'] ?? '',
+                'created_at' => $row['created_at'] ?? ''
+            ];
+        }
+        return $out;
+    } catch (Throwable $e) {
+        error_log('getLocalCustomerCollections error: ' . $e->getMessage());
         return [];
     }
 }

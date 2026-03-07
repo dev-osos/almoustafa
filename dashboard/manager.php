@@ -10,6 +10,14 @@ while (ob_get_level() > 0) {
     ob_end_clean();
 }
 
+// منع الكاش عند التبديل بين الصفحات/الحسابات لضمان عدم رجوع أي كاش قديم
+if (!headers_sent()) {
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Cache-Control: post-check=0, pre-check=0', false);
+    header('Pragma: no-cache');
+    header('Expires: 0');
+}
+
 // تحديد الصفحة أولاً
 $page = $_GET['page'] ?? 'overview';
 
@@ -98,6 +106,59 @@ if ($page === 'representatives_customers' &&
     }
 }
 
+// معالجة GET لبحث العملاء في جداول التحصيل اليومية (قبل أي إخراج حتى يُرجع JSON فقط)
+if ($page === 'daily_collection_schedules' && $_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['ajax']) && $_GET['ajax'] === 'search_local_customers') {
+    require_once __DIR__ . '/../includes/config.php';
+    require_once __DIR__ . '/../includes/db.php';
+    require_once __DIR__ . '/../includes/auth.php';
+    require_once __DIR__ . '/../includes/path_helper.php';
+    if (function_exists('isLoggedIn') && isLoggedIn()) {
+        $currentUser = getCurrentUser();
+        $role = strtolower($currentUser['role'] ?? '');
+        if (in_array($role, ['manager', 'accountant', 'developer'], true)) {
+            $db = db();
+            $q = trim($_GET['q'] ?? '');
+            header('Content-Type: application/json; charset=utf-8');
+            if ($q === '') {
+                echo json_encode(['success' => true, 'customers' => []], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+            try {
+                $like = '%' . str_replace(['%', '_'], ['\\%', '\\_'], $q) . '%';
+                $list = $db->query(
+                    "SELECT id, name, phone FROM local_customers WHERE status = 'active' AND (name LIKE ? OR phone LIKE ?) ORDER BY name ASC LIMIT 25",
+                    [$like, $like]
+                );
+                echo json_encode(['success' => true, 'customers' => $list ?: []], JSON_UNESCAPED_UNICODE);
+            } catch (Throwable $e) {
+                error_log('Daily collection customer search: ' . $e->getMessage());
+                echo json_encode(['success' => false, 'customers' => []], JSON_UNESCAPED_UNICODE);
+            }
+            exit;
+        }
+    }
+}
+
+// معالجة POST لصفحة جداول التحصيل اليومية (حذف/تعديل/إنشاء) قبل أي إخراج لضمان عمل التوجيه
+if ($page === 'daily_collection_schedules' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    require_once __DIR__ . '/../includes/config.php';
+    require_once __DIR__ . '/../includes/db.php';
+    require_once __DIR__ . '/../includes/auth.php';
+    require_once __DIR__ . '/../includes/path_helper.php';
+    require_once __DIR__ . '/../includes/audit_log.php';
+    if (function_exists('isLoggedIn') && isLoggedIn()) {
+        $currentUser = getCurrentUser();
+        $role = strtolower($currentUser['role'] ?? '');
+        if (in_array($role, ['manager', 'accountant', 'developer'], true)) {
+            $modulePath = __DIR__ . '/../modules/manager/daily_collection_schedules.php';
+            if (file_exists($modulePath)) {
+                include $modulePath;
+                exit;
+            }
+        }
+    }
+}
+
 // معالجة AJAX لجلب بيانات الأوردر للتعديل - قبل أي إخراج أو headers
 if ($page === 'production_tasks' && 
     $_SERVER['REQUEST_METHOD'] === 'GET' && 
@@ -127,6 +188,54 @@ if ($page === 'production_tasks' &&
     exit;
 }
 
+// معالجة AJAX إيصال المهمة المختصر (رقم الأوردر + المنتجات والكميات) - قبل أي إخراج
+if ($page === 'production_tasks' && 
+    $_SERVER['REQUEST_METHOD'] === 'GET' && 
+    isset($_GET['action']) && 
+    trim($_GET['action']) === 'get_task_receipt' &&
+    isset($_GET['task_id'])) {
+    
+    require_once __DIR__ . '/../includes/config.php';
+    require_once __DIR__ . '/../includes/db.php';
+    require_once __DIR__ . '/../includes/auth.php';
+    require_once __DIR__ . '/../includes/notifications.php';
+    require_once __DIR__ . '/../includes/audit_log.php';
+    require_once __DIR__ . '/../includes/security.php';
+    require_once __DIR__ . '/../includes/path_helper.php';
+    require_once __DIR__ . '/../includes/table_styles.php';
+    
+    requireRole(['manager', 'accountant', 'developer']);
+    
+    $modulePath = __DIR__ . '/../modules/manager/production_tasks.php';
+    if (file_exists($modulePath)) {
+        include $modulePath;
+        exit;
+    }
+    
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['success' => false]);
+    exit;
+}
+
+// حل نهائي للكاش: إذا طُلبت أوردرات الإنتاج بدون معامل كسر كاش، نوجّه فوراً لرابط فريد لضمان عدم إرجاع استجابة مخزنة (لا نوجّه طلبات AJAX)
+if ($page === 'production_tasks' && ($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && !headers_sent()) {
+    $ajaxAction = trim($_GET['action'] ?? '');
+    $hasBust = isset($_GET['_t']) || isset($_GET['_nocache']) || isset($_GET['_v']);
+    if (!$hasBust && $ajaxAction !== 'get_task_for_edit' && $ajaxAction !== 'get_task_receipt') {
+        $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/dashboard/manager.php';
+        $params = $_GET;
+        $params['_t'] = (string) (time() * 1000);
+        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0, private');
+        header('Pragma: no-cache');
+        header('Expires: Thu, 01 Jan 1970 00:00:00 GMT');
+        header('Location: ' . $path . '?' . http_build_query($params), true, 302);
+        exit;
+    }
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0, private');
+    header('Pragma: no-cache');
+    header('Expires: Thu, 01 Jan 1970 00:00:00 GMT');
+}
+
 // معالجة AJAX لتتبع السائقين - عبر نفس الصفحة لضمان مشاركة الجلسة
 if ($page === 'driver_tracking' && $_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['ajax']) && $_GET['ajax'] === 'driver_location') {
     $apiPath = __DIR__ . '/../api/driver_location.php';
@@ -136,6 +245,22 @@ if ($page === 'driver_tracking' && $_SERVER['REQUEST_METHOD'] === 'GET' && isset
         require_once __DIR__ . '/../includes/auth.php';
         require_once __DIR__ . '/../includes/path_helper.php';
         include $apiPath;
+        exit;
+    }
+}
+
+// معالجة AJAX لمحافظ المستخدمين - قبل أي إخراج
+if ($page === 'user_wallets_control' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+    while (ob_get_level() > 0) ob_end_clean();
+    require_once __DIR__ . '/../includes/config.php';
+    require_once __DIR__ . '/../includes/db.php';
+    require_once __DIR__ . '/../includes/auth.php';
+    require_once __DIR__ . '/../includes/audit_log.php';
+    require_once __DIR__ . '/../includes/path_helper.php';
+    requireRole(['manager', 'accountant', 'developer']);
+    $modulePath = __DIR__ . '/../modules/manager/user_wallets_control.php';
+    if (file_exists($modulePath)) {
+        include $modulePath;
         exit;
     }
 }
@@ -321,6 +446,22 @@ if ($page === 'company_cash' && isset($_GET['ajax'])) {
         requireRole(['manager', 'accountant', 'developer']);
         
         $modulePath = __DIR__ . '/../modules/manager/company_cash.php';
+        if (file_exists($modulePath)) {
+            include $modulePath;
+            exit;
+        }
+    }
+}
+
+// معالجة طلبات AJAX لصفحة طلبات شركات الشحن (كشف الحساب والخصم) قبل أي إخراج لضمان استجابة JSON فقط
+if ($page === 'shipping_orders' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $isAjaxShipping = !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
+    $actionShipping = $_POST['action'] ?? '';
+    if ($isAjaxShipping && in_array($actionShipping, ['get_shipping_company_statement', 'collect_from_shipping_company', 'deduct_from_shipping_company'], true)) {
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+        $modulePath = __DIR__ . '/../modules/manager/shipping_orders.php';
         if (file_exists($modulePath)) {
             include $modulePath;
             exit;
@@ -570,7 +711,7 @@ if ($isAjaxNavigation) {
                 <?php
                 $quickLinks = [
                     [
-                        'label' => 'مهام الإنتاج',
+                        'label' => 'اوردرات الإنتاج',
                         'icon' => 'bi-list-task',
                         'url' => getRelativeUrl('dashboard/manager.php?page=production_tasks')
                     ],
@@ -2303,12 +2444,42 @@ if ($isAjaxNavigation) {
                     echo '<div class="alert alert-warning">صفحة العملاء المحليين غير متاحة حالياً</div>';
                 }
                 ?>
+
+            <?php elseif ($page === 'daily_collection_schedules'): ?>
+                <?php
+                $modulePath = __DIR__ . '/../modules/manager/daily_collection_schedules.php';
+                if (file_exists($modulePath)) {
+                    include $modulePath;
+                } else {
+                    echo '<div class="alert alert-warning">صفحة جداول التحصيل اليومية غير متاحة حالياً</div>';
+                }
+                ?>
+
+            <?php elseif ($page === 'daily_collection_my_tables'): ?>
+                <?php
+                $modulePath = __DIR__ . '/../modules/shared/daily_collection_my_tables.php';
+                if (file_exists($modulePath)) {
+                    include $modulePath;
+                } else {
+                    echo '<div class="alert alert-warning">صفحة عرض وتحديث التحصيل اليومي غير متاحة حالياً</div>';
+                }
+                ?>
+
+            <?php elseif ($page === 'custom_prices'): ?>
+                <?php
+                $modulePath = __DIR__ . '/../modules/manager/custom_prices.php';
+                if (file_exists($modulePath)) {
+                    include $modulePath;
+                } else {
+                    echo '<div class="alert alert-warning">صفحة الأسعار المخصصة غير متاحة حالياً</div>';
+                }
+                ?>
                 
             <?php endif; ?>
 
 <?php if (!$isAjaxNavigation): ?>
 <?php include __DIR__ . '/../templates/footer.php'; ?>
-<script src="<?php echo ASSETS_URL; ?>js/local_customers_search.js?v=2" defer></script>
+<script src="<?php echo ASSETS_URL; ?>js/local_customers_search.js?v=3" defer></script>
 <script src="<?php echo ASSETS_URL; ?>js/reports.js" defer></script>
 <?php else: ?>
 <?php

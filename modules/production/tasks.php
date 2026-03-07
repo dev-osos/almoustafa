@@ -7,6 +7,14 @@ if (!defined('ACCESS_ALLOWED')) {
     die('Direct access not allowed');
 }
 
+// منع الكاش عند التبديل بين تبويبات الشريط الجانبي لضمان عدم رجوع أي كاش قديم
+if (!headers_sent()) {
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Cache-Control: post-check=0, pre-check=0', false);
+    header('Pragma: no-cache');
+    header('Expires: 0');
+}
+
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../includes/db.php';
 require_once __DIR__ . '/../../includes/auth.php';
@@ -687,9 +695,7 @@ function tasksHandleAction(string $action, array $input, array $context): array
                     if (!$isProduction) {
                         throw new RuntimeException('غير مصرح لك بتنفيذ هذا الإجراء');
                     }
-                    if (!$isAssignedToProduction) {
-                        throw new RuntimeException('هذه المهمة غير مخصصة لعامل إنتاج');
-                    }
+                    /* يسمح لعامل الإنتاج بإكمال أي مهمة ظاهرة في قائمة المهام */
                 }
 
                 $statusMap = [
@@ -1126,10 +1132,10 @@ if ($unifiedTemplatesExists && $productTemplatesExists) {
 
 $customerOrdersExists = !empty($db->queryOne("SHOW TABLES LIKE 'customer_orders'"));
 $orderCustomerJoin = '';
-$customerDisplaySelect = ", t.customer_name, COALESCE(NULLIF(TRIM(IFNULL(t.customer_name,'')), ''), '') AS customer_display";
+$customerDisplaySelect = ", t.customer_name, t.customer_phone, COALESCE(NULLIF(TRIM(IFNULL(t.customer_name,'')), ''), '') AS customer_display";
 if ($customerOrdersExists) {
     $orderCustomerJoin = " LEFT JOIN customer_orders co ON t.related_type = 'customer_order' AND t.related_id = co.id LEFT JOIN customers cust ON co.customer_id = cust.id";
-    $customerDisplaySelect = ", t.customer_name, COALESCE(NULLIF(TRIM(t.customer_name), ''), cust.name) AS customer_display";
+    $customerDisplaySelect = ", t.customer_name, t.customer_phone, COALESCE(NULLIF(TRIM(t.customer_name), ''), cust.name) AS customer_display";
 }
 
 $taskSql = "SELECT t.id, t.title, t.description, t.assigned_to, t.created_by, t.priority, t.status,
@@ -1467,7 +1473,74 @@ function tasksHtml(string $value): string
     return htmlspecialchars(tasksSafeString($value), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 ?>
-
+<style>
+/* عمود الإجراءات: ثابت عند التمرير الأفقى وواضح على كل الصفوف */
+.task-actions-header,
+.task-actions-cell {
+    min-width: 120px;
+    width: 120px;
+    white-space: nowrap;
+    position: sticky;
+    inset-inline-end: 0;
+    z-index: 2;
+    box-shadow: -4px 0 8px rgba(0,0,0,0.06);
+}
+.task-actions-header {
+    background: var(--global-table-header-bg, #1d4ed8) !important;
+}
+[dir="rtl"] .task-actions-header,
+[dir="rtl"] .task-actions-cell {
+    box-shadow: 4px 0 8px rgba(0,0,0,0.06);
+}
+.dashboard-table tbody tr .task-actions-cell {
+    background: var(--global-table-row-bg, #fff);
+}
+.dashboard-table tbody tr:nth-child(even) .task-actions-cell {
+    background: var(--global-table-row-alt-bg, #f8fafc);
+}
+.dashboard-table tbody tr.table-danger .task-actions-cell {
+    background: rgba(220, 53, 69, 0.08);
+}
+.task-actions-cell .dropdown .btn {
+    background: #fff !important;
+    border: 1px solid #6c757d !important;
+    color: #495057 !important;
+    font-weight: 600;
+}
+.task-actions-cell .dropdown .btn:hover {
+    background: #e9ecef !important;
+    border-color: #6c757d !important;
+    color: #212529 !important;
+}
+@media (max-width: 768px) {
+    .task-actions-header,
+    .task-actions-cell {
+        min-width: 100px;
+        width: 100px;
+    }
+    .task-actions-cell .btn {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.875rem;
+    }
+}
+/* قائمة إجراءات المهام: قابلة للتمرير ومرئية فوق الجدول على الموبايل */
+.task-actions-dropdown-menu-inbody {
+    max-height: 70vh !important;
+    overflow-y: auto !important;
+    z-index: 1060 !important;
+    min-width: 11rem !important;
+}
+.dashboard-table-wrapper .dropdown-menu {
+    min-width: 11rem;
+}
+@media (max-width: 768px) {
+    .dashboard-table-wrapper .dropdown-menu {
+        max-height: 70vh;
+        overflow-y: auto;
+        min-width: 11rem;
+    }
+}
+</style>
 <div class="container-fluid">
     <?php foreach ($errorMessages as $message): ?>
         <div class="alert alert-danger alert-dismissible fade show" id="errorAlert" role="alert">
@@ -1484,10 +1557,10 @@ function tasksHtml(string $value): string
     <?php endforeach; ?>
 
     <div class="d-flex justify-content-between align-items-center flex-wrap mb-3">
-        <h2 class="mb-0"><i class="bi bi-list-check me-2"></i>إدارة المهام</h2>
+        <h2 class="mb-0"><i class="bi bi-list-check me-2"></i>إدارة الاوردرات</h2>
         <?php if ($isManager): ?>
             <button type="button" class="btn btn-primary" onclick="showAddTaskModal()">
-                <i class="bi bi-plus-circle me-2"></i>إضافة مهمة جديدة
+                <i class="bi bi-plus-circle me-2"></i>إضافة اوردر جديد
             </button>
         <?php endif; ?>
     </div>
@@ -1604,30 +1677,21 @@ function tasksHtml(string $value): string
                             <i class="bi bi-search me-1"></i>بحث
                         </button>
                     </div>
-                    <div class="col-auto">
-                        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#tasksAdvancedSearch" aria-expanded="false" aria-controls="tasksAdvancedSearch">
-                            <i class="bi bi-funnel me-1"></i>بحث متقدم
-                        </button>
-                    </div>
                     <?php if ($filterTaskId !== '' || $filterCustomer !== '' || $filterOrderId !== '' || $filterTaskType !== '' || $filterDueFrom !== '' || $filterDueTo !== '' || $filterSearchText !== '' || $search !== ''): ?>
                     <div class="col-auto">
                         <a href="?page=tasks<?php echo $statusFilter !== '' ? '&status=' . rawurlencode($statusFilter) : ''; ?><?php echo $priorityFilter !== '' ? '&priority=' . rawurlencode($priorityFilter) : ''; ?><?php echo $assignedFilter > 0 ? '&assigned=' . $assignedFilter : ''; ?><?php echo $overdueFilter ? '&overdue=1' : ''; ?>" class="btn btn-outline-danger btn-sm">إزالة الفلتر</a>
                     </div>
                     <?php endif; ?>
                 </div>
-                <div class="collapse <?php echo ($filterTaskId !== '' || $filterCustomer !== '' || $filterOrderId !== '' || $filterTaskType !== '' || $filterDueFrom !== '' || $filterDueTo !== '') ? 'show' : ''; ?>" id="tasksAdvancedSearch">
-                    <div class="row g-2 pt-2 border-top mt-2">
+                <div id="tasksAdvancedSearch" class="mt-2">
+                    <div class="row g-2 pt-2 border-top">
                         <div class="col-6 col-md-4 col-lg-2">
-                            <label class="form-label small mb-0">رقم الطلب</label>
+                            <label class="form-label small mb-0">رقم الاوردر</label>
                             <input type="text" name="task_id" class="form-control form-control-sm" placeholder="#" value="<?php echo tasksHtml($filterTaskId); ?>">
                         </div>
                         <div class="col-6 col-md-4 col-lg-2">
                             <label class="form-label small mb-0">اسم العميل / هاتف</label>
                             <input type="text" name="search_customer" class="form-control form-control-sm" placeholder="اسم أو رقم" value="<?php echo tasksHtml($filterCustomer); ?>">
-                        </div>
-                        <div class="col-6 col-md-4 col-lg-2">
-                            <label class="form-label small mb-0">رقم الأوردر</label>
-                            <input type="text" name="search_order_id" class="form-control form-control-sm" placeholder="رقم الأوردر" value="<?php echo tasksHtml($filterOrderId); ?>">
                         </div>
                         <div class="col-6 col-md-4 col-lg-2">
                             <label class="form-label small mb-0">نوع الاوردر</label>
@@ -1637,8 +1701,6 @@ function tasksHtml(string $value): string
                                 <option value="cash_customer" <?php echo $filterTaskType === 'cash_customer' ? 'selected' : ''; ?>>عميل نقدي</option>
                                 <option value="telegraph" <?php echo $filterTaskType === 'telegraph' ? 'selected' : ''; ?>>تليجراف</option>
                                 <option value="shipping_company" <?php echo $filterTaskType === 'shipping_company' ? 'selected' : ''; ?>>شركة شحن</option>
-                                <option value="general" <?php echo $filterTaskType === 'general' ? 'selected' : ''; ?>>مهمة عامة</option>
-                                <option value="production" <?php echo $filterTaskType === 'production' ? 'selected' : ''; ?>>إنتاج منتج</option>
                             </select>
                         </div>
                         <div class="col-6 col-md-4 col-lg-2">
@@ -1651,29 +1713,7 @@ function tasksHtml(string $value): string
                         </div>
                     </div>
                 </div>
-                <div class="row g-2 align-items-end mt-2">
-                    <div class="col-md-2 col-sm-6">
-                        <label class="form-label mb-1">الحالة</label>
-                        <select class="form-select form-select-sm" name="status" onchange="this.form.submit()">
-                            <option value="">الكل</option>
-                            <option value="pending" <?php echo $statusFilter === 'pending' ? 'selected' : ''; ?>>معلقة</option>
-                            <option value="received" <?php echo $statusFilter === 'received' ? 'selected' : ''; ?>>مستلمة</option>
-                            <option value="completed" <?php echo $statusFilter === 'completed' ? 'selected' : ''; ?>>مكتملة</option>
-                            <option value="with_delegate" <?php echo $statusFilter === 'with_delegate' ? 'selected' : ''; ?>>مع المندوب</option>
-                            <option value="delivered" <?php echo $statusFilter === 'delivered' ? 'selected' : ''; ?>>تم التوصيل</option>
-                            <option value="returned" <?php echo $statusFilter === 'returned' ? 'selected' : ''; ?>>تم الارجاع</option>
-                            <option value="cancelled" <?php echo $statusFilter === 'cancelled' ? 'selected' : ''; ?>>ملغاة</option>
-                        </select>
-                    </div>
-                    <div class="col-md-2 col-sm-6">
-                        <label class="form-label mb-1">الأولوية</label>
-                        <select class="form-select form-select-sm" name="priority">
-                            <option value="">الكل</option>
-                            <option value="urgent" <?php echo $priorityFilter === 'urgent' ? 'selected' : ''; ?>>عاجلة</option>
-                            <option value="normal" <?php echo $priorityFilter === 'normal' ? 'selected' : ''; ?>>عادية</option>
-                            <option value="low" <?php echo $priorityFilter === 'low' ? 'selected' : ''; ?>>منخفضة</option>
-                        </select>
-                    </div>
+               
                     <?php if ($isManager): ?>
                     <div class="col-md-2 col-sm-6">
                         <label class="form-label mb-1">المخصص إلى</label>
@@ -1687,16 +1727,7 @@ function tasksHtml(string $value): string
                         </select>
                     </div>
                     <?php endif; ?>
-                    <div class="col-md-2 col-sm-6">
-                        <button type="submit" class="btn btn-primary btn-sm w-100">
-                            <i class="bi bi-search me-1"></i>بحث
-                        </button>
-                    </div>
-                    <div class="col-md-1 col-sm-6">
-                        <a href="?page=tasks" class="btn btn-secondary btn-sm w-100" title="إعادة تعيين">
-                            <i class="bi bi-x"></i>
-                        </a>
-                    </div>
+                    
                 </div>
             </form>
         </div>
@@ -1704,7 +1735,7 @@ function tasksHtml(string $value): string
 
     <div class="card">
         <div class="card-header bg-transparent border-bottom d-flex flex-wrap align-items-center justify-content-between gap-2">
-            <h6 class="mb-0"><i class="bi bi-list-task me-2"></i>آخر المهام التي تم إرسالها</h6>
+            <h6 class="mb-0"><i class="bi bi-list-task me-2"></i>الاوردرات </h6>
             <?php if (($isManager || $isProduction) && !empty($tasks)): ?>
             <button type="button" class="btn btn-outline-primary btn-sm" id="printSelectedReceiptsBtn" title="طباعة إيصالات الأوردرات المحددة" disabled>
                 <i class="bi bi-printer me-1"></i>طباعة المحدد (<span id="selectedCount">0</span>)
@@ -1715,7 +1746,7 @@ function tasksHtml(string $value): string
             <?php if (empty($tasks)): ?>
                 <div class="text-center py-5">
                     <i class="bi bi-inbox display-5 text-muted"></i>
-                    <p class="text-muted mt-3 mb-0">لا توجد مهام</p>
+                    <p class="text-muted mt-3 mb-0">لا توجد اوردرات</p>
                 </div>
             <?php else: ?>
                 <div class="table-responsive dashboard-table-wrapper">
@@ -1729,15 +1760,14 @@ function tasksHtml(string $value): string
                                 <?php endif; ?>
                                 <th style="width: 60px;">#</th>
                                 <?php if (!$isDriver): ?>
-                                <th>الكمية</th>
                                 <th>اسم العميل</th>
                                 <?php else: ?>
                                 <th>اسم العميل</th>
                                 <?php endif; ?>
                                 <th>نوع الاوردر</th>
                                 <th>الحالة</th>
-                                <th>تاريخ التسليم</th>
-                                <th style="width: 180px;">الإجراءات</th>
+                                <th>التسليم</th>
+                                <th class="task-actions-header">الإجراءات</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -1798,16 +1828,7 @@ function tasksHtml(string $value): string
                                         <?php endif; ?>
                                         <strong><?php echo (int) $task['id']; ?></strong>
                                     </td>
-                                    <?php if (!$isDriver): ?>
-                                    <td><?php 
-                                        if (isset($task['quantity']) && $task['quantity'] !== null) {
-                                            $unit = !empty($task['unit']) ? $task['unit'] : 'قطعة';
-                                            echo number_format((float) $task['quantity'], 2) . ' ' . htmlspecialchars($unit);
-                                        } else {
-                                            echo '<span class="text-muted">-</span>';
-                                        }
-                                    ?></td>
-                                    <?php endif; ?>
+                                    
                                     <td><?php 
                                         $customerDisplay = isset($task['customer_display']) ? trim((string)$task['customer_display']) : '';
                                         echo $customerDisplay !== '' ? tasksHtml($customerDisplay) : '<span class="text-muted">-</span>';
@@ -1825,103 +1846,64 @@ function tasksHtml(string $value): string
                                     <td class="task-status-cell"><span class="badge bg-<?php echo $statusClass; ?>"><?php echo tasksHtml($statusLabel); ?></span></td>
                                     <td>
                                         <?php if (!empty($task['due_date'])): ?>
-                                            <?php echo tasksHtml(date('Y-m-d', strtotime((string) $task['due_date']))); ?>
+                                            <?php echo tasksHtml(date('d/m', strtotime((string) $task['due_date']))); ?>
                                         <?php else: ?>
                                             <span class="text-muted">-</span>
                                         <?php endif; ?>
                                     </td>
                                     <td class="task-actions-cell">
-                                        <div class="btn-group btn-group-sm" role="group">
-                                            <?php if ($isProduction): ?>
-                                                <?php 
-                                                // التحقق من أن المهمة مخصصة لعامل إنتاج
-                                                $taskAssignedTo = (int) ($task['assigned_to'] ?? 0);
-                                                $assignedUserRole = null;
-                                                $isTaskForProduction = false;
-                                                
-                                                // التحقق من assigned_to
-                                                if ($taskAssignedTo > 0) {
-                                                    $assignedUser = $db->queryOne('SELECT role FROM users WHERE id = ?', [$taskAssignedTo]);
-                                                    $assignedUserRole = $assignedUser['role'] ?? null;
-                                                    if ($assignedUserRole === 'production') {
-                                                        $isTaskForProduction = true;
-                                                    }
-                                                }
-                                                
-                                                // التحقق من notes للعثور على جميع العمال المخصصين
-                                                if (!$isTaskForProduction && !empty($task['notes'])) {
-                                                    if (preg_match('/\[ASSIGNED_WORKERS_IDS\]:\s*([0-9,]+)/', $task['notes'], $matches)) {
-                                                        $workerIds = array_filter(array_map('intval', explode(',', $matches[1])));
-                                                        if (!empty($workerIds)) {
-                                                            // التحقق من أن أحد العمال المخصصين هو عامل إنتاج
-                                                            $placeholders = implode(',', array_fill(0, count($workerIds), '?'));
-                                                            $workersCheck = $db->queryOne(
-                                                                "SELECT COUNT(*) as count FROM users WHERE id IN ($placeholders) AND role = 'production'",
-                                                                $workerIds
-                                                            );
-                                                            if ($workersCheck && (int)$workersCheck['count'] > 0) {
-                                                                $isTaskForProduction = true;
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                                
-                                                // السماح لأي عامل إنتاج بتغيير حالة أي مهمة مخصصة لعامل إنتاج - زر إكمال فقط
-                                                if ($isTaskForProduction && in_array($task['status'], ['pending', 'received', 'in_progress'])): 
-                                                ?>
-                                                    <button type="button" class="btn btn-outline-success" onclick="submitTaskAction('complete_task', <?php echo (int) $task['id']; ?>)">
-                                                        <i class="bi bi-check2-circle me-1"></i>إكمال
-                                                    </button>
+                                        <?php
+                                        $taskAssignedTo = (int) ($task['assigned_to'] ?? 0);
+                                        $assignedUserRole = null;
+                                        $isTaskForProduction = false;
+                                        if ($taskAssignedTo > 0) {
+                                            $assignedUser = $db->queryOne('SELECT role FROM users WHERE id = ?', [$taskAssignedTo]);
+                                            $assignedUserRole = $assignedUser['role'] ?? null;
+                                            if ($assignedUserRole === 'production') $isTaskForProduction = true;
+                                        }
+                                        if (!$isTaskForProduction && !empty($task['notes']) && preg_match('/\[ASSIGNED_WORKERS_IDS\]:\s*([0-9,]+)/', $task['notes'], $matches)) {
+                                            $workerIds = array_filter(array_map('intval', explode(',', $matches[1])));
+                                            if (!empty($workerIds)) {
+                                                $placeholders = implode(',', array_fill(0, count($workerIds), '?'));
+                                                $workersCheck = $db->queryOne("SELECT COUNT(*) as count FROM users WHERE id IN ($placeholders) AND role = 'production'", $workerIds);
+                                                if ($workersCheck && (int)$workersCheck['count'] > 0) $isTaskForProduction = true;
+                                            }
+                                        }
+                                        $canWithDelegate = ($isManager || $isProduction || $isDriver) && ($task['status'] ?? '') === 'completed';
+                                        $canDeliverReturn = ($isManager || $isProduction || $isDriver) && in_array($task['status'] ?? '', ['completed', 'with_delegate'], true);
+                                        $canDeliverReturnDriver = in_array($task['status'] ?? '', ['completed', 'with_delegate'], true);
+                                        $taskCustomerPhone = isset($task['customer_phone']) ? trim((string) $task['customer_phone']) : '';
+                                        $hasCustomerPhone = $taskCustomerPhone !== '';
+                                        $taskIdInt = (int) $task['id'];
+                                        ?>
+                                        <div class="dropdown">
+                                            <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" id="taskActionsDropdown<?php echo $taskIdInt; ?>">
+                                                <i class="bi bi-three-dots-vertical me-1"></i>إجراءات
+                                            </button>
+                                            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="taskActionsDropdown<?php echo $taskIdInt; ?>">
+                                                <?php if ($isManager || $isProduction || $isDriver): ?>
+                                                    <li><a class="dropdown-item" href="<?php echo getRelativeUrl('print_task_receipt.php?id=' . $taskIdInt); ?>" target="_blank"><i class="bi bi-printer me-2"></i>طباعة إيصال</a></li>
+                                                    <li><hr class="dropdown-divider"></li>
                                                 <?php endif; ?>
-                                                <?php
-                                                // بعد مكتملة أو مع المندوب: زر مع المندوب (فقط من مكتملة)، ثم تم التوصيل و تم الارجاع (السائق يرى تم التوصيل/تم الارجاع فقط)
-                                                $canWithDelegate = ($isManager || $isProduction) && ($task['status'] ?? '') === 'completed';
-                                                $canDeliverReturn = ($isManager || $isProduction || $isDriver) && in_array($task['status'] ?? '', ['completed', 'with_delegate'], true);
-                                                if ($canWithDelegate):
-                                                ?>
-                                                    <button type="button" class="btn btn-outline-info btn-sm" onclick="submitTaskAction('with_delegate_task', <?php echo (int) $task['id']; ?>)">
-                                                        <i class="bi bi-person-badge me-1"></i>مع المندوب
-                                                    </button>
-                                                <?php endif;
-                                                if ($canDeliverReturn):
-                                                ?>
-                                                    <button type="button" class="btn btn-outline-success btn-sm" onclick="submitTaskAction('deliver_task', <?php echo (int) $task['id']; ?>)">
-                                                        <i class="bi bi-truck me-1"></i>تم التوصيل
-                                                    </button>
-                                                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="submitTaskAction('return_task', <?php echo (int) $task['id']; ?>)">
-                                                        <i class="bi bi-arrow-return-left me-1"></i>تم الارجاع
-                                                    </button>
+                                                <?php if ($isProduction && in_array($task['status'], ['pending', 'received', 'in_progress'])): ?>
+                                                    <li><button type="button" class="dropdown-item" onclick="submitTaskAction('complete_task', <?php echo $taskIdInt; ?>)"><i class="bi bi-check2-circle me-2"></i>إكمال</button></li>
                                                 <?php endif; ?>
-                                            <?php endif; ?>
-
-                                            <?php if ($isDriver): ?>
-                                                <?php
-                                                $canDeliverReturnDriver = in_array($task['status'] ?? '', ['completed', 'with_delegate'], true);
-                                                if ($canDeliverReturnDriver):
-                                                ?>
-                                                    <button type="button" class="btn btn-outline-success btn-sm" onclick="submitTaskAction('deliver_task', <?php echo (int) $task['id']; ?>)">
-                                                        <i class="bi bi-truck me-1"></i>تم التوصيل
-                                                    </button>
-                                                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="submitTaskAction('return_task', <?php echo (int) $task['id']; ?>)">
-                                                        <i class="bi bi-arrow-return-left me-1"></i>تم الارجاع
-                                                    </button>
+                                                <?php if ($canWithDelegate): ?>
+                                                    <li><button type="button" class="dropdown-item" onclick="submitTaskAction('with_delegate_task', <?php echo $taskIdInt; ?>)"><i class="bi bi-person-badge me-2"></i>مع المندوب</button></li>
                                                 <?php endif; ?>
-                                            <?php endif; ?>
-
-                                            <?php if ($isManager): ?>
-                                                <button type="button" class="btn btn-outline-secondary" onclick="viewTask(<?php echo (int) $task['id']; ?>)">
-                                                    <i class="bi bi-eye"></i>
-                                                </button>
-                                                <button type="button" class="btn btn-outline-danger" onclick="confirmDeleteTask(<?php echo (int) $task['id']; ?>)">
-                                                    <i class="bi bi-trash"></i>
-                                                </button>
-                                            <?php endif; ?>
-                                            
-                                            <?php if ($isManager || $isProduction || $isDriver): ?>
-                                                <a href="<?php echo getRelativeUrl('print_task_receipt.php?id=' . (int) $task['id']); ?>" target="_blank" class="btn btn-outline-primary" title="طباعة إيصال المهمة">
-                                                    <i class="bi bi-printer"></i>
-                                                </a>
-                                            <?php endif; ?>
+                                                <?php if ($canDeliverReturn || ($isDriver && $canDeliverReturnDriver)): ?>
+                                                    <li><button type="button" class="dropdown-item" onclick="submitTaskAction('deliver_task', <?php echo $taskIdInt; ?>)"><i class="bi bi-truck me-2"></i>تم التوصيل</button></li>
+                                                    <li><button type="button" class="dropdown-item" onclick="submitTaskAction('return_task', <?php echo $taskIdInt; ?>)"><i class="bi bi-arrow-return-left me-2"></i>تم الارجاع</button></li>
+                                                <?php endif; ?>
+                                                <?php if ($isManager): ?>
+                                                    <li><button type="button" class="dropdown-item" onclick="viewTask(<?php echo $taskIdInt; ?>)"><i class="bi bi-eye me-2"></i>عرض</button></li>
+                                                    <li><button type="button" class="dropdown-item text-danger" onclick="confirmDeleteTask(<?php echo $taskIdInt; ?>)"><i class="bi bi-trash me-2"></i>حذف</button></li>
+                                                <?php endif; ?>
+                                                <?php if ($hasCustomerPhone): $telHref = 'tel:' . preg_replace('/[^\d+]/', '', $taskCustomerPhone); ?>
+                                                    <li><hr class="dropdown-divider"></li>
+                                                    <li><a class="dropdown-item" href="<?php echo tasksHtml($telHref); ?>"><i class="bi bi-telephone me-2"></i>الاتصال بالعميل</a></li>
+                                                <?php endif; ?>
+                                            </ul>
                                         </div>
                                     </td>
                                 </tr>
@@ -2153,7 +2135,7 @@ function tasksHtml(string $value): string
                 </div>
                 <div class="mb-3">
                     <label class="form-label">الكمية <span class="text-danger">*</span></label>
-                    <input type="number" step="0.01" min="0.01" class="form-control" name="quantity" id="quantity_card" placeholder="0.00">
+                    <input type="number" step="1" min="1" class="form-control" name="quantity" id="quantity_card" placeholder="0.00">
                 </div>
                 <div class="mb-3">
                     <label class="form-label">الوحدة</label>
@@ -2814,6 +2796,74 @@ function tasksHtml(string $value): string
 })();
 </script>
 
+<!-- نقل قائمة إجراءات المهام إلى body على الموبايل لتفادي القص داخل الجدول -->
+<script>
+(function() {
+    'use strict';
+    function initTaskActionsDropdowns() {
+        var wrapper = document.querySelector('.dashboard-table-wrapper');
+        if (!wrapper) return;
+        var dropdowns = wrapper.querySelectorAll('tbody tr .dropdown');
+        dropdowns.forEach(function(dropdownEl) {
+            if (dropdownEl._taskActionsInit) return;
+            dropdownEl._taskActionsInit = true;
+            var toggle = dropdownEl.querySelector('[data-bs-toggle="dropdown"]');
+            var menu = dropdownEl.querySelector('.dropdown-menu');
+            if (!toggle || !menu) return;
+            dropdownEl.addEventListener('show.bs.dropdown', function(ev) {
+                var el = ev.currentTarget;
+                var m = el.querySelector('.dropdown-menu');
+                var tgl = el.querySelector('[data-bs-toggle="dropdown"]');
+                if (!m || !tgl) return;
+                var rect = tgl.getBoundingClientRect();
+                m.classList.add('task-actions-dropdown-menu-inbody');
+                document.body.appendChild(m);
+                var menuFullHeight = m.scrollHeight || 400;
+                var spaceBelow = window.innerHeight - rect.bottom - 8;
+                var spaceAbove = rect.top - 8;
+                var openAbove = spaceBelow < spaceAbove;
+                var maxH = openAbove
+                    ? Math.min(menuFullHeight, window.innerHeight * 0.7, Math.max(120, spaceAbove))
+                    : Math.min(menuFullHeight, window.innerHeight * 0.7, Math.max(120, spaceBelow));
+                var style = m.style;
+                style.position = 'fixed';
+                style.display = 'block';
+                style.visibility = 'visible';
+                if (document.documentElement.dir === 'rtl') {
+                    style.right = (window.innerWidth - rect.right) + 'px';
+                    style.left = 'auto';
+                } else {
+                    style.left = rect.left + 'px';
+                }
+                var topPos = openAbove ? Math.max(8, rect.top - maxH) : rect.bottom + 2;
+                style.top = topPos + 'px';
+                style.minWidth = Math.max(rect.width, 180) + 'px';
+                style.maxHeight = maxH + 'px';
+                style.overflowY = 'auto';
+                style.zIndex = '1060';
+            });
+            dropdownEl.addEventListener('hide.bs.dropdown', function(ev) {
+                var el = ev.currentTarget;
+                var m = el.querySelector('.dropdown-menu');
+                if (!m) {
+                    m = document.body.querySelector('.task-actions-dropdown-menu-inbody');
+                }
+                if (m) {
+                    m.classList.remove('task-actions-dropdown-menu-inbody');
+                    m.removeAttribute('style');
+                    el.appendChild(m);
+                }
+            });
+        });
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initTaskActionsDropdowns);
+    } else {
+        initTaskActionsDropdowns();
+    }
+})();
+</script>
+
 <!-- تحديد أوردرات متعددة للطباعة -->
 <script>
 (function() {
@@ -2939,6 +2989,8 @@ function tasksHtml(string $value): string
     // ملاحظة: تم إزالة هذه الـ meta tags لأنها تمنع bfcache
     // يمكن استخدام Cache-Control: private في headers بدلاً منها
 })();
+// ريفريش تلقائي كل ٥ دقائق
+setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
 </script>
 
 <!-- آلية التحديث التلقائي للمهام (Auto-refresh/Polling) -->
@@ -2954,6 +3006,24 @@ function tasksHtml(string $value): string
     let autoRefreshInterval = null;
     let lastUpdateTimestamp = null;
     let isRefreshing = false;
+    
+    // طلب إذن إشعارات المتصفح فور تحميل الصفحة
+    if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission().catch(function() {});
+    }
+    
+    function showNewOrderNotification(task) {
+        if (!('Notification' in window) || Notification.permission !== 'granted') return;
+        var sender = (task.created_by_name && task.created_by_name.trim()) ? task.created_by_name.trim() : 'غير معروف';
+        var customer = (task.customer_name && task.customer_name.trim()) ? task.customer_name.trim() : '—';
+        var title = 'أوردر جديد #' + (task.id || '');
+        var body = 'مرسل الأوردر: ' + sender + ' | العميل: ' + customer;
+        try {
+            var n = new Notification(title, { body: body, dir: 'rtl', lang: 'ar' });
+            n.onclick = function() { window.focus(); n.close(); };
+            setTimeout(function() { n.close(); }, 8000);
+        } catch (e) {}
+    }
     
     // دالة جلب المهام من API
     async function fetchTasks() {
@@ -3001,12 +3071,27 @@ function tasksHtml(string $value): string
                     let hasNewTasks = false;
                     let hasChanges = false;
                     
-                    // التحقق من المهام الجديدة
-                    for (const task of newTasks) {
-                        const taskId = String(task.id);
+                    // التحقق من المهام الجديدة وإظهار إشعار متصفح فوري لكل أوردر جديد
+                    var newTaskObjects = [];
+                    for (var i = 0; i < newTasks.length; i++) {
+                        var task = newTasks[i];
+                        var taskId = String(task.id);
                         if (!currentTasksIds.has(taskId)) {
                             hasNewTasks = true;
-                            break;
+                            newTaskObjects.push(task);
+                        }
+                    }
+                    
+                    // إشعار متصفح فوري لكل أوردر جديد: مرسل الأوردر + اسم العميل
+                    if (newTaskObjects.length > 0) {
+                        if ('Notification' in window && Notification.permission === 'default') {
+                            Notification.requestPermission().then(function(p) {
+                                if (p === 'granted') {
+                                    newTaskObjects.forEach(showNewOrderNotification);
+                                }
+                            }).catch(function() {});
+                        } else if (Notification.permission === 'granted') {
+                            newTaskObjects.forEach(showNewOrderNotification);
                         }
                     }
                     
@@ -3020,13 +3105,8 @@ function tasksHtml(string $value): string
                         hasChanges = true;
                     }
                     
-                    // إذا كانت هناك مهام جديدة أو تغييرات، تحديث الصفحة بدون إعادة تحميل كاملة
-                    // تم تعطيل إعادة التوجيه التلقائية لمنع إعادة التوجيه غير المرغوب
-                    // يمكن للمستخدم تحديث الصفحة يدوياً عند الحاجة
                     if (hasNewTasks || hasChanges) {
-                        // إظهار إشعار للمستخدم بدلاً من إعادة التوجيه التلقائية
                         console.log('New tasks or changes detected. Please refresh the page manually if needed.');
-                        // يمكن إضافة إشعار بصري هنا بدلاً من إعادة التوجيه
                     }
                 }
                 

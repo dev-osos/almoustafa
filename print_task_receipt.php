@@ -12,6 +12,14 @@ require_once __DIR__ . '/includes/path_helper.php';
 
 requireRole(['production', 'accountant', 'manager', 'driver']);
 
+// منع الكاش عند التبديل بين الصفحات لضمان عدم رجوع أي كاش قديم
+if (!headers_sent()) {
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Cache-Control: post-check=0, pre-check=0', false);
+    header('Pragma: no-cache');
+    header('Expires: 0');
+}
+
 // دعم طباعة إيصال واحد (id=) أو عدة إيصالات (ids=1,2,3)
 $taskIds = [];
 if (!empty($_GET['ids'])) {
@@ -127,10 +135,27 @@ foreach ($taskIds as $taskId) {
     if (!empty($notes)) {
         $displayNotes = preg_replace('/\[ASSIGNED_WORKERS_IDS\]:\s*[0-9,]+/', '', $notes);
         $displayNotes = preg_replace('/\[PRODUCTS_JSON\]:[^\n]*/', '', $displayNotes);
+        $displayNotes = preg_replace('/\[SHIPPING_FEES\]:\s*[0-9.]+/', '', $displayNotes);
+        $displayNotes = preg_replace('/\[DISCOUNT\]:\s*[0-9.]+/', '', $displayNotes);
+        $displayNotes = preg_replace('/\[ORDER_TITLE\]:\s*[^\n]+/', '', $displayNotes);
         $displayNotes = preg_replace('/المنتج:\s*[^\n]+/', '', $displayNotes);
         $displayNotes = preg_replace('/الكمية:\s*[0-9.]+/', '', $displayNotes);
+        $displayNotes = preg_replace('/^[^\n]*العامل المخصص[^\n]*\n?/m', '', $displayNotes);
         $displayNotes = preg_replace('/\n\s*\n\s*\n+/', "\n\n", $displayNotes);
         $displayNotes = trim($displayNotes);
+    }
+
+    $shippingFees = 0;
+    if (!empty($notes) && preg_match('/\[SHIPPING_FEES\]:\s*([0-9.]+)/', $notes, $m)) {
+        $shippingFees = (float) $m[1];
+    }
+    $discount = 0;
+    if (!empty($notes) && preg_match('/\[DISCOUNT\]:\s*([0-9.]+)/', $notes, $m)) {
+        $discount = (float) $m[1];
+    }
+    $orderTitle = '';
+    if (!empty($notes) && preg_match('/\[ORDER_TITLE\]:\s*([^\n]+)/', $notes, $m)) {
+        $orderTitle = trim($m[1]);
     }
 
     $receipts[] = [
@@ -142,6 +167,9 @@ foreach ($taskIds as $taskId) {
         'products' => $products,
         'unit' => $unit,
         'displayNotes' => $displayNotes,
+        'shippingFees' => $shippingFees,
+        'discount' => $discount,
+        'orderTitle' => $orderTitle,
     ];
 }
 
@@ -160,6 +188,11 @@ $singleReceipt = count($receipts) === 1;
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo $singleReceipt ? 'إيصال مهمة - ' . (int)$receipts[0]['taskNumber'] : 'طباعة إيصالات (' . count($receipts) . ')'; ?></title>
     <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+    <?php
+    $iconsPath = file_exists(__DIR__ . '/assets/bootstrap-icons/bootstrap-icons.css') ? 'assets/bootstrap-icons/bootstrap-icons.css' : 'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css';
+    $iconsHref = (strpos($iconsPath, 'http') === 0) ? $iconsPath : (function_exists('getRelativeUrl') ? getRelativeUrl($iconsPath) : $iconsPath);
+    ?>
+    <link rel="stylesheet" href="<?php echo htmlspecialchars($iconsHref); ?>">
     <style>
         * {
             margin: 0;
@@ -483,10 +516,19 @@ $singleReceipt = count($receipts) === 1;
             <button class="btn-print" onclick="window.print()"><?php echo $singleReceipt ? 'طباعة' : 'طباعة الكل (' . count($receipts) . ')'; ?></button>
             <?php
             $receiptUserRole = $currentUser['role'] ?? 'production';
+            $backToProductionTasks = ($receiptUserRole === 'manager' || $receiptUserRole === 'accountant');
             if (function_exists('getDashboardUrl')) {
-                $backUrl = getDashboardUrl($receiptUserRole) . ($receiptUserRole === 'manager' ? '?page=production_tasks' : '?page=tasks');
+                $backUrl = getDashboardUrl($receiptUserRole) . ($backToProductionTasks ? '?page=production_tasks' : '?page=tasks');
             } else {
-                $backUrl = $receiptUserRole === 'driver' ? getRelativeUrl('dashboard/driver.php?page=tasks') : getRelativeUrl('dashboard/production.php?page=tasks');
+                if ($receiptUserRole === 'driver') {
+                    $backUrl = getRelativeUrl('dashboard/driver.php?page=tasks');
+                } elseif ($receiptUserRole === 'manager') {
+                    $backUrl = getRelativeUrl('dashboard/manager.php?page=production_tasks');
+                } elseif ($receiptUserRole === 'accountant') {
+                    $backUrl = getRelativeUrl('dashboard/accountant.php?page=production_tasks');
+                } else {
+                    $backUrl = getRelativeUrl('dashboard/production.php?page=tasks');
+                }
             }
             ?>
             <a href="<?php echo htmlspecialchars($backUrl, ENT_QUOTES, 'UTF-8'); ?>" class="btn-back" style="text-decoration: none; display: inline-block;">
@@ -518,26 +560,15 @@ $singleReceipt = count($receipts) === 1;
         <table class="info-table customer-priority-row" style="margin: 12px 0;">
             <tr>
                 <td>العميل:</td>
-                <td>
-                    <?php 
-                    echo $customerName !== '' ? htmlspecialchars($customerName) : '-';
-                    if (!empty($task['customer_phone'])) {
-                        echo '<br><span style="font-weight: normal; font-size: 13px;">' . htmlspecialchars($task['customer_phone']) . '</span>';
-                    }
-                    ?>
-                </td>
-                <td>الأولوية:</td>
-                <td><?php echo htmlspecialchars($priorityLabel); ?></td>
+                <td><?php echo $customerName !== '' ? htmlspecialchars($customerName) : '-'; ?></td>
+                <td>النوع :</td>
+                <td><?php echo htmlspecialchars($taskTypeLabel); ?></td>
             </tr>
             <tr>
                 <td>الطلب :</td>
-                <td><?php echo date('m-d', strtotime($createdAt)) . ' | ' . date('h:i A', strtotime($createdAt)); ?></td>
+                <td><?php echo date('m-d', strtotime($createdAt)) . ' | ' . date('g:i', strtotime($createdAt)); ?></td>
                 <td>تسليم:</td>
                 <td><?php echo $dueDate ? date('m-d', strtotime($dueDate)) : '-'; ?></td>
-            </tr>
-            <tr>
-                <td>نوع الاوردر:</td>
-                <td colspan="3" style="font-weight: 700;"><?php echo htmlspecialchars($taskTypeLabel); ?></td>
             </tr>
         </table>
         
@@ -546,9 +577,10 @@ $singleReceipt = count($receipts) === 1;
         <table class="products-table">
             <thead>
                 <tr>
-                    <th style="width: 45%;">المنتج</th>
-                    <th style="width: 30%; text-align: center;">الكمية</th>
-                    <th style="width: 25%; text-align: center;">اجمالي(ج.م)</th>
+                    <th style="width: 35%;">المنتج</th>
+                    <th style="width: 20%; text-align: center;">ك</th>
+                    <th style="width: 20%; text-align: center;">السعر</th>
+                    <th style="width: 25%; text-align: center;">اجمالي</th>
                 </tr>
             </thead>
             <tbody>
@@ -558,8 +590,15 @@ $singleReceipt = count($receipts) === 1;
                     $productQty = $product['quantity'] ?? null;
                     $productUnit = !empty($product['unit']) ? $product['unit'] : $unit;
                     $productPrice = isset($product['price']) && $product['price'] !== null && $product['price'] !== '' ? (float)$product['price'] : null;
-                    if ($productPrice !== null) {
-                        $grandTotal += $productPrice;
+                    // الإجمالي = القيمة المحفوظة من النموذج (line_total) أو الكمية × السعر
+                    $lineTotal = null;
+                    if (isset($product['line_total']) && $product['line_total'] !== '' && $product['line_total'] !== null && is_numeric($product['line_total'])) {
+                        $lineTotal = (float)$product['line_total'];
+                    } elseif ($productQty !== null && $productQty > 0 && $productPrice !== null) {
+                        $lineTotal = round((float)$productQty * $productPrice, 2);
+                    }
+                    if ($lineTotal !== null) {
+                        $grandTotal += $lineTotal;
                     }
                 ?>
                 <tr>
@@ -573,10 +612,19 @@ $singleReceipt = count($receipts) === 1;
                         }
                         ?>
                     </td>
-                    <td class="product-quantity" style="text-align: center; font-weight: 600;">
+                    <td class="product-quantity" style="text-align: center;">
                         <?php 
                         if ($productPrice !== null) {
                             echo number_format($productPrice, 2);
+                        } else {
+                            echo '<span style="color: #999;">-</span>';
+                        }
+                        ?>
+                    </td>
+                    <td class="product-quantity" style="text-align: center; font-weight: 600;">
+                        <?php 
+                        if ($lineTotal !== null) {
+                            echo number_format($lineTotal, 2);
                         } else {
                             echo '<span style="color: #999;">-</span>';
                         }
@@ -587,8 +635,28 @@ $singleReceipt = count($receipts) === 1;
             </tbody>
             <tfoot>
                 <tr style="border-top: 2px solid #000; font-weight: 700; background-color: #f0f0f0;">
-                    <td colspan="2" style="text-align: left; padding: 8px 5px;">الإجمالي</td>
+                    <td colspan="3" style="text-align: left; padding: 8px 5px;">الإجمالي</td>
                     <td style="text-align: center; padding: 8px 5px;"><?php echo number_format($grandTotal, 2); ?> ج.م</td>
+                </tr>
+                <?php 
+                $receiptShippingFees = isset($r['shippingFees']) ? (float)$r['shippingFees'] : 0;
+                $receiptDiscount = isset($r['discount']) ? (float)$r['discount'] : 0;
+                $finalTotal = $grandTotal + $receiptShippingFees - $receiptDiscount;
+                if ($receiptShippingFees > 0): ?>
+                <tr style="font-weight: 700; background-color: #f8f8f8;">
+                    <td colspan="3" style="text-align: left; padding: 6px 5px;">رسوم الشحن</td>
+                    <td style="text-align: center; padding: 6px 5px;"><?php echo number_format($receiptShippingFees, 2); ?> ج.م</td>
+                </tr>
+                <?php endif; ?>
+                <?php if ($receiptDiscount > 0): ?>
+                <tr style="font-weight: 700; background-color: #fff3e0;">
+                    <td colspan="3" style="text-align: left; padding: 6px 5px;">الخصم</td>
+                    <td style="text-align: center; padding: 6px 5px;">- <?php echo number_format($receiptDiscount, 2); ?> ج.م</td>
+                </tr>
+                <?php endif; ?>
+                <tr style="font-weight: 700; background-color: #e8f5e9;">
+                    <td colspan="3" style="text-align: left; padding: 8px 5px;">الإجمالي النهائي</td>
+                    <td style="text-align: center; padding: 8px 5px;"><?php echo number_format($finalTotal, 2); ?> ج.م</td>
                 </tr>
             </tfoot>
         </table>
@@ -598,23 +666,52 @@ $singleReceipt = count($receipts) === 1;
                 <td>لا توجد منتجات</td>
                 <td>-</td>
             </tr>
+            <?php 
+            $receiptShippingFeesEmpty = isset($r['shippingFees']) ? (float)$r['shippingFees'] : 0;
+            $receiptDiscountEmpty = isset($r['discount']) ? (float)$r['discount'] : 0;
+            $finalEmpty = $receiptShippingFeesEmpty - $receiptDiscountEmpty;
+            if ($receiptShippingFeesEmpty > 0 || $receiptDiscountEmpty > 0): ?>
+            <?php if ($receiptShippingFeesEmpty > 0): ?>
+            <tr style="font-weight: 700;">
+                <td>رسوم الشحن</td>
+                <td><?php echo number_format($receiptShippingFeesEmpty, 2); ?> ج.م</td>
+            </tr>
+            <?php endif; ?>
+            <?php if ($receiptDiscountEmpty > 0): ?>
+            <tr style="font-weight: 700;">
+                <td>الخصم</td>
+                <td>- <?php echo number_format($receiptDiscountEmpty, 2); ?> ج.م</td>
+            </tr>
+            <?php endif; ?>
+            <tr style="font-weight: 700; background-color: #e8f5e9;">
+                <td>الإجمالي النهائي</td>
+                <td><?php echo number_format(max(0, $finalEmpty), 2); ?> ج.م</td>
+            </tr>
+            <?php endif; ?>
         </table>
         <?php endif; ?>
-        <?php if ($displayNotes !== ''): ?>
         <div class="section-title">ملاحظات</div>
         <div class="task-details">
             <div style="font-size: 14px; line-height: 1.8; padding: 4px 0; font-weight: 500; color: #000;">
-                <?php echo nl2br(htmlspecialchars($displayNotes)); ?>
+                <?php
+                $receiptOrderTitle = isset($r['orderTitle']) ? trim($r['orderTitle']) : '';
+                if ($receiptOrderTitle !== ''): ?>
+                    <div style="margin-bottom: 8px; padding: 6px 8px; background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); border-radius: 6px; border-right: 4px solid #1976d2;">
+                        <i class="bi bi-geo-alt-fill" style="color: #1976d2; margin-left: 6px; font-size: 1.1em;"></i><strong>العنوان:</strong> <?php echo htmlspecialchars($receiptOrderTitle); ?>
+                    </div>
+                <?php endif; ?>
+                <?php if ($displayNotes !== ''): ?>
+                    <?php echo nl2br(htmlspecialchars($displayNotes)); ?>
+                <?php elseif ($receiptOrderTitle === ''): ?>
+                    <span style="color: #666; font-weight: 500;">لا توجد ملاحظات</span>
+                <?php endif; ?>
+                <?php if (!empty($task['customer_phone'])): ?>
+                    <div style="margin-top: 8px; padding-top: 6px; border-top: 1px dashed #ccc;">
+                        <i class="bi bi-telephone-fill" style="color: #0d6efd; margin-left: 4px;"></i><?php echo htmlspecialchars($task['customer_phone']); ?>
+                    </div>
+                <?php endif; ?>
             </div>
         </div>
-        <?php else: ?>
-        <div class="section-title">ملاحظات</div>
-        <div class="task-details">
-            <div style="font-size: 14px; line-height: 1.8; padding: 4px 0; font-weight: 500; color: #000;">
-                <span style="color: #666; font-weight: 500;">لا توجد ملاحظات</span>
-            </div>
-        </div>
-        <?php endif; ?>
         </div>
         </div>
         <?php endforeach; ?>

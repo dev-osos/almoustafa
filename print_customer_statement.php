@@ -13,6 +13,14 @@ require_once __DIR__ . '/includes/customer_history.php';
 
 requireRole(['accountant', 'sales', 'manager']);
 
+// منع الكاش عند التبديل بين الصفحات لضمان عدم رجوع أي كاش قديم
+if (!headers_sent()) {
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Cache-Control: post-check=0, pre-check=0', false);
+    header('Pragma: no-cache');
+    header('Expires: 0');
+}
+
 $customerId = isset($_GET['customer_id']) ? intval($_GET['customer_id']) : 0;
 $customerType = isset($_GET['type']) ? trim($_GET['type']) : 'normal'; // 'normal' or 'local'
 
@@ -332,27 +340,7 @@ function getLocalCustomerStatementData($customerId) {
         }
     }
     
-    // إذا كان إجمالي الدائن أكبر من المدين (تحصيلات/مرتجعات بدون فواتير مسجلة)، نضيف "رصيد أول المدة" لتصفير الرصيد الصافي
-    $sumDebit = 0.0;
-    $sumCredit = 0.0;
-    foreach ($movements as $m) {
-        $sumDebit += $m['debit'];
-        $sumCredit += $m['credit'];
-    }
-    if ($sumCredit > $sumDebit) {
-        $openingDebit = round($sumCredit - $sumDebit, 2);
-        $minDate = !empty($movements) ? min(array_column($movements, 'sort_date')) : date('Y-m-d');
-        array_unshift($movements, [
-            'sort_date' => $minDate,
-            'sort_id' => 0,
-            'type_order' => 0,
-            'type' => 'opening',
-            'date' => $minDate,
-            'label' => 'رصيد أول المدة / دين سابق',
-            'debit' => $openingDebit,
-            'credit' => 0.0,
-        ]);
-    }
+    // لا نضيف "رصيد أول المدة" في كشف العميل المحلي؛ المحتوى = نفس جدول سجل المشتريات فقط (فواتير، فواتير ورقية، مرتجعات، تحصيلات)
     
     // ترتيب من الأقدم للأحدث، وفي نفس اليوم: فاتورة ثم مرتجع ثم تحصيل
     usort($movements, function ($a, $b) {
@@ -720,16 +708,23 @@ function getLocalCustomerStatementData($customerId) {
             </div>
         </div>
         
-        <!-- سجل الحركات المالية (جدول واحد مرتب من الأقدم للأحدث مع الرصيد بعد كل معاملة) -->
-        <h2 class="section-title">سجل الحركات المالية للعميل</h2>
+        <!-- سجل الحركات المالية: للعميل المحلي = نفس جدول سجل المشتريات (رقم الفاتورة، السعر الإجمالي، التاريخ، الرصيد بعد المعاملة) بدون رصيد أول المدة -->
+        <h2 class="section-title"><?php echo $isLocalCustomer ? 'سجل مشتريات العميل المحلي' : 'سجل الحركات المالية للعميل'; ?></h2>
         <table class="transactions-table">
             <thead>
                 <tr>
-                    <th>التاريخ</th>
-                    <th>البيان</th>
-                    <th>مدين</th>
-                    <th>دائن</th>
-                    <th>الرصيد بعد المعاملة</th>
+                    <?php if ($isLocalCustomer): ?>
+                        <th>رقم الفاتورة / البيان</th>
+                        <th>السعر الإجمالي</th>
+                        <th>تاريخ الشراء</th>
+                        <th>الرصيد بعد المعاملة</th>
+                    <?php else: ?>
+                        <th>التاريخ</th>
+                        <th>البيان</th>
+                        <th>مدين</th>
+                        <th>دائن</th>
+                        <th>الرصيد بعد المعاملة</th>
+                    <?php endif; ?>
                 </tr>
             </thead>
             <tbody>
@@ -737,23 +732,40 @@ function getLocalCustomerStatementData($customerId) {
                 $movements = $statementData['movements'] ?? [];
                 if (empty($movements)): ?>
                     <tr>
-                        <td colspan="5" class="text-center text-muted">لا توجد حركات مالية</td>
+                        <td colspan="<?php echo $isLocalCustomer ? 4 : 5; ?>" class="text-center text-muted">لا توجد حركات مالية</td>
                     </tr>
                 <?php else: ?>
-                    <?php foreach ($movements as $m): ?>
+                    <?php foreach ($movements as $m): 
+                        if ($isLocalCustomer) {
+                            $amtLabel = $m['debit'] > 0 ? formatCurrency($m['debit']) : ('-' . formatCurrency($m['credit']));
+                            if (isset($m['type']) && $m['type'] === 'collection') {
+                                $amtLabel .= ' (تحصيل)';
+                            }
+                        }
+                    ?>
                         <tr>
-                            <td><?php echo formatDate($m['date']); ?></td>
-                            <td><?php echo htmlspecialchars($m['label']); ?></td>
-                            <td class="<?php echo $m['debit'] > 0 ? 'amount-positive' : ''; ?>">
-                                <?php echo $m['debit'] > 0 ? formatCurrency($m['debit']) : '-'; ?>
-                            </td>
-                            <td class="<?php echo $m['credit'] > 0 ? 'amount-negative' : ''; ?>">
-                                <?php echo $m['credit'] > 0 ? formatCurrency($m['credit']) : '-'; ?>
-                            </td>
-                            <td class="<?php echo $m['balance_after'] >= 0 ? 'amount-positive' : 'amount-negative'; ?>">
-                                <?php echo formatCurrency($m['balance_after']); ?>
-                                <?php echo $m['balance_after'] < 0 ? ' (دائن)' : ' (مدين)'; ?>
-                            </td>
+                            <?php if ($isLocalCustomer): ?>
+                                <td><?php echo htmlspecialchars($m['label']); ?></td>
+                                <td class="<?php echo ($m['debit'] > 0 ? 'amount-positive' : 'amount-negative'); ?>"><?php echo $amtLabel; ?></td>
+                                <td><?php echo formatDate($m['date']); ?></td>
+                                <td class="<?php echo $m['balance_after'] >= 0 ? 'amount-positive' : 'amount-negative'; ?>">
+                                    <?php echo formatCurrency($m['balance_after']); ?>
+                                    <?php echo $m['balance_after'] < 0 ? ' (دائن)' : ' (مدين)'; ?>
+                                </td>
+                            <?php else: ?>
+                                <td><?php echo formatDate($m['date']); ?></td>
+                                <td><?php echo htmlspecialchars($m['label']); ?></td>
+                                <td class="<?php echo $m['debit'] > 0 ? 'amount-positive' : ''; ?>">
+                                    <?php echo $m['debit'] > 0 ? formatCurrency($m['debit']) : '-'; ?>
+                                </td>
+                                <td class="<?php echo $m['credit'] > 0 ? 'amount-negative' : ''; ?>">
+                                    <?php echo $m['credit'] > 0 ? formatCurrency($m['credit']) : '-'; ?>
+                                </td>
+                                <td class="<?php echo $m['balance_after'] >= 0 ? 'amount-positive' : 'amount-negative'; ?>">
+                                    <?php echo formatCurrency($m['balance_after']); ?>
+                                    <?php echo $m['balance_after'] < 0 ? ' (دائن)' : ' (مدين)'; ?>
+                                </td>
+                            <?php endif; ?>
                         </tr>
                     <?php endforeach; ?>
                 <?php endif; ?>

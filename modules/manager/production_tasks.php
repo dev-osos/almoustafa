@@ -4,16 +4,38 @@
  */
 
 $isGetTaskForEdit = ($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && isset($_GET['action']) && $_GET['action'] === 'get_task_for_edit' && isset($_GET['task_id']);
+$isGetTaskReceipt = ($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && isset($_GET['action']) && $_GET['action'] === 'get_task_receipt' && isset($_GET['task_id']);
 
-// عدم إرسال headers للـ HTML عند طلب AJAX (get_task_for_edit) للحفاظ على إرجاع JSON نظيف
-if (!$isGetTaskForEdit && !headers_sent()) {
-    header('Content-Type: text/html; charset=UTF-8');
+// منع الكاش عند التبديل بين الأوردرات/الحسابات لضمان عدم رجوع أي كاش قديم
+if (!headers_sent()) {
     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0, private');
+    header('Cache-Control: post-check=0, pre-check=0', false);
     header('Pragma: no-cache');
-    header('Expires: Thu, 01 Jan 1970 00:00:00 GMT');
+    header('Expires: 0');
+}
+if (!$isGetTaskForEdit && !$isGetTaskReceipt && !headers_sent()) {
+    header('Content-Type: text/html; charset=UTF-8');
 }
 mb_internal_encoding('UTF-8');
 mb_http_output('UTF-8');
+
+// منع انقطاع التحميل على الأجهزة أو الشبكات البطيئة (timeout / memory)
+if (function_exists('set_time_limit')) {
+    @set_time_limit(120);
+}
+if (function_exists('ini_set')) {
+    $cur = @ini_get('memory_limit');
+    if ($cur !== false && $cur !== '-1') {
+        $curBytes = $cur === '' ? 0 : (int) $cur;
+        $suffix = strtolower(substr(trim($cur), -1));
+        if ($suffix === 'g') $curBytes *= 1024 * 1024 * 1024;
+        elseif ($suffix === 'm') $curBytes *= 1024 * 1024;
+        elseif ($suffix === 'k') $curBytes *= 1024;
+        if ($curBytes > 0 && $curBytes < 256 * 1024 * 1024) {
+            @ini_set('memory_limit', '256M');
+        }
+    }
+}
 
 if (!defined('ACCESS_ALLOWED')) {
     die('Direct access not allowed');
@@ -127,6 +149,11 @@ $isManager = ($currentUser['role'] ?? '') === 'manager';
 $isDeveloper = ($currentUser['role'] ?? '') === 'developer';
 $canPrintTasks = $isAccountant || $isManager || $isDeveloper;
 
+// إرسال أول بايت للمتصفح فوراً (خاصة كروم) لتفادي "This site can't be reached" بسبب تأخر الاستجابة
+if (ob_get_level() && function_exists('flush')) {
+    @flush();
+}
+
 // جلب القوالب (templates) لعرضها في القائمة المنسدلة
 $productTemplates = [];
 try {
@@ -158,55 +185,53 @@ try {
     $productTemplates = [];
 }
 
-// جلب قائمة العملاء المحليين لاستخدامها في نموذج إنشاء الأوردر (دروب داون + بحث لحظي)
+// جلب قائمة العملاء المحليين — نفس الاستعلام والطريقة تماماً كما في صفحة الأسعار المخصصة
 $localCustomersForDropdown = [];
 try {
-    $localCustomersTable = $db->queryOne("SHOW TABLES LIKE 'local_customers'");
-    if (!empty($localCustomersTable)) {
-        $rows = $db->query("
-            SELECT c.id, c.name, c.phone
-            FROM local_customers c
-            WHERE (c.status IS NULL OR c.status = '' OR c.status = 'active')
-            ORDER BY c.name ASC
-            LIMIT 1000
-        ");
-        $customerIds = !empty($rows) ? array_column($rows, 'id') : [];
-        $phonesMap = [];
-        if (!empty($customerIds)) {
-            $placeholders = implode(',', array_fill(0, count($customerIds), '?'));
-            $phonesCheck = $db->queryOne("SHOW TABLES LIKE 'local_customer_phones'");
-            if (!empty($phonesCheck)) {
-                $phonesRows = $db->query(
-                    "SELECT customer_id, phone, is_primary FROM local_customer_phones WHERE customer_id IN ($placeholders) ORDER BY customer_id, is_primary DESC, id ASC",
-                    $customerIds
-                );
-                foreach ($phonesRows as $pr) {
-                    $cid = (int)$pr['customer_id'];
-                    if (!isset($phonesMap[$cid])) {
-                        $phonesMap[$cid] = [];
-                    }
-                    $phonesMap[$cid][] = (string)($pr['phone'] ?? '');
-                }
-            }
-        }
+    $t = $db->queryOne("SHOW TABLES LIKE 'local_customers'");
+    if (!empty($t)) {
+        $hasPhone = $db->queryOne("SHOW COLUMNS FROM local_customers LIKE 'phone'");
+        $rows = $db->query("SELECT id, name" . (!empty($hasPhone) ? ", phone" : "") . " FROM local_customers WHERE status = 'active' ORDER BY name ASC");
         foreach ($rows as $r) {
-            $cid = (int)$r['id'];
-            $phones = $phonesMap[$cid] ?? [];
-            if (empty($phones) && !empty(trim((string)($r['phone'] ?? '')))) {
-                $phones = [trim((string)$r['phone'])];
-            }
-            $primaryPhone = $phones[0] ?? trim((string)($r['phone'] ?? '')) ?: '';
             $localCustomersForDropdown[] = [
-                'id' => $cid,
+                'id' => (int)$r['id'],
                 'name' => trim((string)($r['name'] ?? '')),
-                'phone' => $primaryPhone,
-                'phones' => $phones,
+                'phone' => !empty($hasPhone) ? trim((string)($r['phone'] ?? '')) : '',
+                'phones' => [],
             ];
         }
     }
-} catch (Exception $e) {
-    error_log('Error fetching local customers for dropdown: ' . $e->getMessage());
+} catch (Throwable $e) {
+    error_log('production_tasks local_customers: ' . $e->getMessage());
     $localCustomersForDropdown = [];
+}
+
+// قائمة عملاء المندوبين (مثل صفحة الأسعار المخصصة)
+$repCustomersForTask = [];
+try {
+    $repCustomersForTask = $db->query("
+        SELECT c.id, c.name, c.phone,
+               COALESCE(rep1.full_name, rep2.full_name) AS rep_name
+        FROM customers c
+        LEFT JOIN users rep1 ON c.rep_id = rep1.id AND rep1.role = 'sales'
+        LEFT JOIN users rep2 ON c.created_by = rep2.id AND rep2.role = 'sales'
+        WHERE c.status = 'active'
+          AND ((c.rep_id IS NOT NULL AND c.rep_id IN (SELECT id FROM users WHERE role = 'sales'))
+               OR (c.created_by IS NOT NULL AND c.created_by IN (SELECT id FROM users WHERE role = 'sales')))
+        ORDER BY c.name ASC
+        LIMIT 500
+    ");
+    $repCustomersForTask = array_map(function ($r) {
+        return [
+            'id' => (int)$r['id'],
+            'name' => trim((string)($r['name'] ?? '')),
+            'phone' => trim((string)($r['phone'] ?? '')),
+            'rep_name' => trim((string)($r['rep_name'] ?? '')),
+        ];
+    }, $repCustomersForTask);
+} catch (Throwable $e) {
+    error_log('production_tasks rep customers: ' . $e->getMessage());
+    $repCustomersForTask = [];
 }
 
 /**
@@ -347,13 +372,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $title = trim($_POST['title'] ?? '');
         $details = trim($_POST['details'] ?? '');
+        $orderTitle = trim($_POST['order_title'] ?? '');
         $priority = $_POST['priority'] ?? 'normal';
         $priority = in_array($priority, $allowedPriorities, true) ? $priority : 'normal';
         $dueDate = $_POST['due_date'] ?? '';
         $customerName = trim($_POST['customer_name'] ?? '');
         $customerPhone = trim($_POST['customer_phone'] ?? '');
         $assignees = $_POST['assigned_to'] ?? [];
-        
+        $shippingFees = 0;
+        if (isset($_POST['shipping_fees']) && $_POST['shipping_fees'] !== '') {
+            $shippingFees = (float) str_replace(',', '.', (string) $_POST['shipping_fees']);
+            if ($shippingFees < 0) $shippingFees = 0;
+        }
+        $discount = 0;
+        if (isset($_POST['discount']) && $_POST['discount'] !== '') {
+            $discount = (float) str_replace(',', '.', (string) $_POST['discount']);
+            if ($discount < 0) $discount = 0;
+        }
+
         // الحصول على المنتجات المتعددة
         $products = [];
         if (isset($_POST['products']) && is_array($_POST['products'])) {
@@ -367,13 +403,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 $productQuantity = null;
                 $productUnit = trim($productData['unit'] ?? 'قطعة');
-                $allowedUnits = ['قطعة', 'كرتونة', 'عبوة', 'شرينك', 'جرام', 'كيلو'];
+                $allowedUnits = ['قطعة', 'كرتونة', 'عبوة', 'شرينك', 'دسته', 'جرام', 'كيلو'];
                 if (!in_array($productUnit, $allowedUnits, true)) {
                     $productUnit = 'قطعة'; // القيمة الافتراضية
                 }
                 
                 // الوحدات التي يجب أن تكون أرقام صحيحة فقط
-                $integerUnits = ['كيلو', 'قطعة', 'جرام'];
+                $integerUnits = ['كيلو', 'قطعة', 'جرام', 'دسته'];
                 $mustBeInteger = in_array($productUnit, $integerUnits, true);
                 
                 if ($productQuantityInput !== '') {
@@ -414,11 +450,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $productPrice = null;
                     }
                 }
+                $productLineTotal = null;
+                $lineTotalInput = isset($productData['line_total']) ? trim((string)$productData['line_total']) : '';
+                if ($lineTotalInput !== '' && is_numeric(str_replace(',', '.', $lineTotalInput))) {
+                    $productLineTotal = (float)str_replace(',', '.', $lineTotalInput);
+                    if ($productLineTotal < 0) {
+                        $productLineTotal = null;
+                    }
+                }
                 $products[] = [
                     'name' => $productName,
                     'quantity' => $productQuantity,
                     'unit' => $productUnit,
-                    'price' => $productPrice
+                    'price' => $productPrice,
+                    'line_total' => $productLineTotal
                 ];
             }
         }
@@ -468,8 +513,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($error !== '') {
             // تم ضبط رسالة الخطأ أعلاه (مثل التحقق من الكمية)
-        } elseif (empty($assignees)) {
-            $error = 'يجب اختيار عامل واحد على الأقل لاستلام المهمة.';
         } elseif ($dueDate && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dueDate)) {
             $error = 'صيغة تاريخ الاستحقاق غير صحيحة.';
         } else {
@@ -538,6 +581,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 // حفظ المنتجات في notes بصيغة JSON
                 $notesParts = [];
+                if ($orderTitle !== '') {
+                    $notesParts[] = '[ORDER_TITLE]:' . $orderTitle;
+                }
                 if ($details) {
                     $notesParts[] = $details;
                 }
@@ -653,6 +699,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $notesParts[] = $assigneesInfo;
                 }
                 
+                // حفظ رسوم الشحن والخصم في notes لعرضها في الإيصال
+                if ($shippingFees > 0) {
+                    $notesParts[] = '[SHIPPING_FEES]:' . $shippingFees;
+                }
+                if ($discount > 0) {
+                    $notesParts[] = '[DISCOUNT]:' . $discount;
+                }
+
                 $notesValue = !empty($notesParts) ? implode("\n\n", $notesParts) : null;
                 if ($notesValue) {
                     $columns[] = 'notes';
@@ -723,7 +777,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $placeholders[] = '?';
                 } elseif (!empty($_POST['unit'])) {
                     $unit = trim($_POST['unit'] ?? 'قطعة');
-                    $allowedUnits = ['قطعة', 'كرتونة', 'عبوة', 'شرينك', 'جرام', 'كيلو'];
+                    $allowedUnits = ['قطعة', 'كرتونة', 'عبوة', 'شرينك', 'دسته', 'جرام', 'كيلو'];
                     if (!in_array($unit, $allowedUnits, true)) {
                         $unit = 'قطعة';
                     }
@@ -784,12 +838,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // يتم استدعاؤه بعد الالتزام لمنع أي مشاكل في المعاملة
                 enforceTasksRetentionLimit($db, $tasksRetentionLimit);
 
-                // استخدام preventDuplicateSubmission لإعادة التوجيه مع cache-busting
-                // إضافة timestamp فريد لضمان تحديث الصفحة مباشرة
-                $successMessage = 'تم إرسال المهمة بنجاح إلى ' . count($assignees) . ' من عمال الإنتاج.';
-                // تحديد role بناءً على المستخدم الحالي
+                // التوجيه إلى صفحة طباعة إيصال الأوردر مع فتح نافذة الطباعة تلقائياً (معاينة المتصفح)
+                $successMessage = count($assignees) > 0
+                    ? 'تم إرسال المهمة بنجاح إلى ' . count($assignees) . ' من عمال الإنتاج.'
+                    : 'تم إرسال المهمة بنجاح.';
                 $userRole = ($currentUser['role'] ?? '') === 'accountant' ? 'accountant' : 'manager';
-                preventDuplicateSubmission($successMessage, ['page' => 'production_tasks', '_refresh' => time()], null, $userRole);
+                $printReceiptUrl = getRelativeUrl('print_task_receipt.php?id=' . (int) $taskId . '&print=1');
+                preventDuplicateSubmission($successMessage, [], $printReceiptUrl, $userRole);
                 exit; // منع تنفيذ باقي الكود بعد إعادة التوجيه
             } catch (Exception $e) {
                 $db->rollback();
@@ -958,21 +1013,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $customerName = trim($_POST['customer_name'] ?? '') ?: null;
                     $customerPhone = trim($_POST['customer_phone'] ?? '') ?: null;
                     $details = trim($_POST['details'] ?? '') ?: null;
+                    $orderTitle = trim($_POST['order_title'] ?? '');
                     $assignees = isset($_POST['assigned_to']) && is_array($_POST['assigned_to'])
                         ? array_filter(array_map('intval', $_POST['assigned_to']))
                         : [];
+                    $shippingFees = 0;
+                    if (isset($_POST['shipping_fees']) && $_POST['shipping_fees'] !== '') {
+                        $shippingFees = (float) str_replace(',', '.', (string) $_POST['shipping_fees']);
+                        if ($shippingFees < 0) $shippingFees = 0;
+                    }
+                    $discount = 0;
+                    if (isset($_POST['discount']) && $_POST['discount'] !== '') {
+                        $discount = (float) str_replace(',', '.', (string) $_POST['discount']);
+                        if ($discount < 0) $discount = 0;
+                    }
                     $products = [];
                     if (isset($_POST['products']) && is_array($_POST['products'])) {
                         foreach ($_POST['products'] as $p) {
                             $name = trim($p['name'] ?? '');
                             if ($name === '') continue;
                             $qty = isset($p['quantity']) && $p['quantity'] !== '' ? (float)str_replace(',', '.', $p['quantity']) : null;
-                            $unit = in_array(trim($p['unit'] ?? 'قطعة'), ['قطعة','كرتونة','عبوة','شرينك','جرام','كيلو'], true) ? trim($p['unit']) : 'قطعة';
+                            $unit = in_array(trim($p['unit'] ?? 'قطعة'), ['قطعة','كرتونة','عبوة','شرينك','دسته','جرام','كيلو'], true) ? trim($p['unit']) : 'قطعة';
                             $price = isset($p['price']) && $p['price'] !== '' ? (float)str_replace(',', '.', $p['price']) : null;
-                            $products[] = ['name' => $name, 'quantity' => $qty, 'unit' => $unit, 'price' => $price];
+                            $lineTotal = isset($p['line_total']) && $p['line_total'] !== '' ? (float)str_replace(',', '.', $p['line_total']) : null;
+                            $products[] = ['name' => $name, 'quantity' => $qty, 'unit' => $unit, 'price' => $price, 'line_total' => $lineTotal];
                         }
                     }
                     $notesParts = [];
+                    if ($orderTitle !== '') {
+                        $notesParts[] = '[ORDER_TITLE]:' . $orderTitle;
+                    }
                     if ($details) $notesParts[] = $details;
                     if (!empty($products)) {
                         $notesParts[] = '[PRODUCTS_JSON]:' . json_encode($products, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -991,6 +1061,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $notesParts[] = 'العمال المخصصون: ' . implode(', ', $assigneeNames) . "\n[ASSIGNED_WORKERS_IDS]:" . implode(',', $assignees);
                     } elseif (count($assignees) === 1) {
                         $notesParts[] = 'العامل المخصص: ' . ($assigneeNames[0] ?? '') . "\n[ASSIGNED_WORKERS_IDS]:" . $assignees[0];
+                    }
+                    if ($shippingFees > 0) {
+                        $notesParts[] = '[SHIPPING_FEES]:' . $shippingFees;
+                    }
+                    if ($discount > 0) {
+                        $notesParts[] = '[DISCOUNT]:' . $discount;
                     }
                     $notesValue = !empty($notesParts) ? implode("\n\n", $notesParts) : null;
                     $firstProduct = !empty($products) ? $products[0] : null;
@@ -1063,7 +1139,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
                             'name' => trim((string)($p['name'] ?? '')),
                             'quantity' => isset($p['quantity']) ? (is_numeric($p['quantity']) ? (float)$p['quantity'] : null) : null,
                             'unit' => trim((string)($p['unit'] ?? 'قطعة')) ?: 'قطعة',
-                            'price' => isset($p['price']) && $p['price'] !== '' && $p['price'] !== null ? (is_numeric($p['price']) ? (float)$p['price'] : null) : null
+                            'price' => isset($p['price']) && $p['price'] !== '' && $p['price'] !== null ? (is_numeric($p['price']) ? (float)$p['price'] : null) : null,
+                            'line_total' => isset($p['line_total']) && $p['line_total'] !== '' && $p['line_total'] !== null && is_numeric($p['line_total']) ? (float)$p['line_total'] : null
                         ];
                     }
                 }
@@ -1075,7 +1152,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
                         'name' => trim($m[1]),
                         'quantity' => isset($m[2]) ? (float)$m[2] : null,
                         'unit' => trim((string)($task['unit'] ?? 'قطعة')) ?: 'قطعة',
-                        'price' => null
+                        'price' => null,
+                        'line_total' => null
                     ];
                 }
             }
@@ -1088,9 +1166,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
                         'name' => $pn,
                         'quantity' => $qty,
                         'unit' => trim((string)($task['unit'] ?? 'قطعة')) ?: 'قطعة',
-                        'price' => null
+                        'price' => null,
+                        'line_total' => null
                     ];
                 }
+            }
+            $shippingFees = 0;
+            if (preg_match('/\[SHIPPING_FEES\]\s*:\s*([0-9.]+)/', $notes, $m)) {
+                $shippingFees = (float)$m[1];
+            }
+            $discount = 0;
+            if (preg_match('/\[DISCOUNT\]\s*:\s*([0-9.]+)/', $notes, $m)) {
+                $discount = (float)$m[1];
+            }
+            $orderTitle = '';
+            if (preg_match('/\[ORDER_TITLE\]\s*:\s*([^\n]+)/', $notes, $m)) {
+                $orderTitle = trim($m[1]);
             }
             // استخراج العمال المخصصين
             if (preg_match('/\[ASSIGNED_WORKERS_IDS\]\s*:\s*([0-9,\s]+)/', $notes, $m)) {
@@ -1105,6 +1196,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
                 $details = preg_replace('/العمال المخصصون:[^\n]*/', '', $details);
                 $details = preg_replace('/العامل المخصص:[^\n]*/', '', $details);
                 $details = preg_replace('/المنتج:\s*[^\n]+/m', '', $details);
+                $details = preg_replace('/\[SHIPPING_FEES\]\s*:\s*[0-9.]+/', '', $details);
+                $details = preg_replace('/\[DISCOUNT\]\s*:\s*[0-9.]+/', '', $details);
+                $details = preg_replace('/\[ORDER_TITLE\]\s*:\s*[^\n]+/', '', $details);
                 $details = preg_replace('/\n\s*\n\s*\n+/', "\n\n", trim($details));
             }
             // تنسيق تاريخ الاستحقاق لـ input type="date" (YYYY-MM-DD)
@@ -1129,13 +1223,79 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
                     'customer_phone' => trim((string)($task['customer_phone'] ?? '')),
                     'details' => $details,
                     'products' => $products,
-                    'assignees' => array_values($assignees)
+                    'assignees' => array_values($assignees),
+                    'shipping_fees' => $shippingFees,
+                    'discount' => $discount,
+                    'order_title' => $orderTitle
                 ]
             ], JSON_UNESCAPED_UNICODE);
             exit;
         }
     }
     header('Content-Type: application/json; charset=UTF-8');
+    echo json_encode(['success' => false]);
+    exit;
+}
+
+// إيصال مختصر للمهمة: رقم الأوردر (إن وُجد) + المنتجات والكميات فقط
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['action'] === 'get_task_receipt' && isset($_GET['task_id'])) {
+    $tid = (int)$_GET['task_id'];
+    if ($tid > 0) {
+        $task = $db->queryOne("SELECT id, related_type, related_id, notes, product_name, quantity, unit FROM tasks WHERE id = ?", [$tid]);
+        if ($task) {
+            $orderNumber = null;
+            $items = [];
+            $hasOrder = !empty($task['related_type']) && (string)$task['related_type'] === 'customer_order' && !empty($task['related_id']);
+            $orderId = $hasOrder ? (int)$task['related_id'] : 0;
+            if ($orderId > 0) {
+                $orderTableCheck = $db->queryOne("SHOW TABLES LIKE 'customer_orders'");
+                if (!empty($orderTableCheck)) {
+                    $order = $db->queryOne("SELECT order_number FROM customer_orders WHERE id = ?", [$orderId]);
+                    if ($order) {
+                        $orderNumber = $order['order_number'] ?? (string)$orderId;
+                        $itemsTable = 'order_items';
+                        $itemsCheck = $db->queryOne("SHOW TABLES LIKE 'customer_order_items'");
+                        if (!empty($itemsCheck)) $itemsTable = 'customer_order_items';
+                        $rows = $db->query("SELECT oi.*, COALESCE(oi.product_name, p.name) AS display_name FROM {$itemsTable} oi LEFT JOIN products p ON oi.product_id = p.id WHERE oi.order_id = ? ORDER BY oi.id", [$orderId]);
+                        foreach ($rows as $row) {
+                            $items[] = ['product_name' => $row['display_name'] ?? $row['product_name'] ?? '-', 'quantity' => $row['quantity'] ?? 0, 'unit' => $row['unit'] ?? 'قطعة'];
+                        }
+                    }
+                }
+            }
+            if (empty($items)) {
+                $notes = (string)($task['notes'] ?? '');
+                $products = [];
+                if (preg_match('/\[PRODUCTS_JSON\]\s*:\s*(.+?)(?=\s*\n\s*\n|\[ASSIGNED_WORKERS_IDS\]|$)/s', $notes, $m)) {
+                    $decoded = json_decode(trim($m[1]), true);
+                    if (is_array($decoded)) {
+                        foreach ($decoded as $p) {
+                            $products[] = ['name' => trim((string)($p['name'] ?? '')), 'quantity' => isset($p['quantity']) ? (float)$p['quantity'] : null, 'unit' => trim((string)($p['unit'] ?? 'قطعة')) ?: 'قطعة'];
+                        }
+                    }
+                }
+                if (empty($products) && preg_match_all('/المنتج:\s*([^\n]+?)(?:\s*-\s*الكمية:\s*([0-9.]+))?/u', $notes, $matches, PREG_SET_ORDER)) {
+                    foreach ($matches as $m) {
+                        $products[] = ['name' => trim($m[1]), 'quantity' => isset($m[2]) ? (float)$m[2] : null, 'unit' => trim((string)($task['unit'] ?? 'قطعة')) ?: 'قطعة'];
+                    }
+                }
+                if (empty($products)) {
+                    $pn = trim((string)($task['product_name'] ?? ''));
+                    $qty = isset($task['quantity']) ? (float)$task['quantity'] : null;
+                    if ($pn !== '' || $qty !== null) {
+                        $products[] = ['name' => $pn, 'quantity' => $qty, 'unit' => trim((string)($task['unit'] ?? 'قطعة')) ?: 'قطعة'];
+                    }
+                }
+                foreach ($products as $p) {
+                    $items[] = ['product_name' => $p['name'] ?: '-', 'quantity' => $p['quantity'] ?? 0, 'unit' => $p['unit'] ?? 'قطعة'];
+                }
+            }
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['success' => true, 'order_number' => $orderNumber, 'task_id' => (int)$task['id'], 'items' => $items], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+    }
+    header('Content-Type: application/json; charset=utf-8');
     echo json_encode(['success' => false]);
     exit;
 }
@@ -1595,19 +1755,40 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
 ?>
 
 <script>
-// إجبار تحديث الصفحة عند تحميلها بعد redirect لمنع cache
+// حل نهائي لمنع الكاش القديم: الطلب الأول قد يعيد كاش، فنجبر طلباً ثانياً بعنوان فريد (_t) لضمان جلب بيانات حية دائماً
 (function() {
     'use strict';
-    
-    // التحقق من وجود معامل _refresh في URL
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.has('_refresh')) {
-        // إزالة معامل _refresh من URL بدون إعادة تحميل
-        urlParams.delete('_refresh');
-        const newUrl = window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '');
-        window.history.replaceState({}, '', newUrl);
+    var search = window.location.search || '';
+    var hasBust = /[?&]_t=|[?&]_nocache=|[?&]_v=/.test(search);
+    if (!hasBust) {
+        var sep = search.length ? '&' : '?';
+        var newUrl = window.location.pathname + search + sep + '_t=' + Date.now();
+        if (window.location.hash) newUrl += window.location.hash;
+        window.location.replace(newUrl);
+        return;
     }
+    // إزالة معاملات cache-bust من شريط العنوان بعد التحميل الناجح
+    var urlParams = new URLSearchParams(window.location.search);
+    var changed = false;
+    ['_t', '_nocache', '_v', '_refresh'].forEach(function(p) {
+        if (urlParams.has(p)) {
+            urlParams.delete(p);
+            changed = true;
+        }
+    });
+    if (changed) {
+        var qs = urlParams.toString();
+        var cleanUrl = window.location.pathname + (qs ? '?' + qs : '') + (window.location.hash || '');
+        window.history.replaceState({}, '', cleanUrl);
+    }
+    window.addEventListener('pageshow', function(event) {
+        if (event.persisted) {
+            window.location.reload();
+        }
+    });
 })();
+// ريفريش تلقائي كل ٥ دقائق
+setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
 </script>
 
 <div class="container-fluid">
@@ -1694,16 +1875,6 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                 </div>
             </a>
         </div>
-        <div class="col-4 col-sm-4 col-md-2">
-            <a href="?page=production_tasks&status=cancelled" class="text-decoration-none">
-                <div class="card <?php echo $statusFilter === 'cancelled' ? 'bg-danger text-white' : 'border-danger'; ?> h-100">
-                    <div class="card-body text-center py-2 px-2">
-                        <div class="<?php echo $statusFilter === 'cancelled' ? 'text-white-50' : 'text-muted'; ?> small mb-1">ملغاة</div>
-                        <div class="fs-5 <?php echo $statusFilter === 'cancelled' ? 'text-white' : 'text-danger'; ?> fw-semibold"><?php echo $stats['cancelled']; ?></div>
-                    </div>
-                </div>
-            </a>
-        </div>
     </div>
 
     <button class="btn btn-primary mb-3" type="button" data-bs-toggle="collapse" data-bs-target="#createTaskFormCollapse" aria-expanded="false" aria-controls="createTaskFormCollapse">
@@ -1716,7 +1887,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                 <h5 class="mb-0"><i class="bi bi-plus-circle me-2"></i>إنشاء أوردر جديد</h5>
             </div>
             <div class="card-body">
-                <form method="post" action="">
+                <form method="post" action="?page=production_tasks">
                     <input type="hidden" name="action" value="create_production_task">
                     <div class="row g-3">
                         <div class="col-md-4">
@@ -1741,45 +1912,58 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             <label class="form-label">تاريخ الاستحقاق</label>
                             <input type="date" class="form-control" name="due_date" value="">
                         </div>
-                        <div class="col-md-3">
-                            <label class="form-label">اختر العمال المستهدفين</label>
-                            <div style="max-height: 120px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 0.375rem; padding: 0.375rem;">
-                                <select class="form-select form-select-sm border-0" name="assigned_to[]" multiple required style="max-height: 100px;">
-                                    <?php foreach ($productionUsers as $worker): ?>
-                                        <option value="<?php echo (int)$worker['id']; ?>"><?php echo htmlspecialchars($worker['full_name']); ?></option>
-                                    <?php endforeach; ?>
-                                </select>
+                        <div class="col-md-4">
+                            <label class="form-label">العميل</label>
+                            <div class="customer-type-wrap d-flex flex-wrap gap-3 mb-2">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="customer_type_radio_task" id="ct_task_local" value="local" checked>
+                                    <label class="form-check-label" for="ct_task_local">عميل محلي</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="customer_type_radio_task" id="ct_task_rep" value="rep">
+                                    <label class="form-check-label" for="ct_task_rep">عميل مندوب</label>
+                                </div>
                             </div>
-                            <div class="form-text small">يمكن تحديد أكثر من عامل باستخدام زر CTRL أو SHIFT.</div>
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label">اسم العميل</label>
-                            <div class="position-relative" id="customerNameComboboxWrap">
-                                <input type="text" class="form-control" name="customer_name" id="customerNameInput" placeholder="بحث أو أدخل اسم العميل" autocomplete="off" aria-autocomplete="list" aria-expanded="false" aria-controls="customerNameDropdown">
-                                <div class="list-group position-absolute w-100 shadow-sm border rounded mt-1 d-none" id="customerNameDropdown" style="max-height: 220px; overflow-y: auto; z-index: 1050;" role="listbox"></div>
+                            <input type="hidden" name="customer_name" id="submit_customer_name" value="">
+                            <div id="customer_select_local_task" class="customer-select-block mb-2">
+                                <div class="search-wrap position-relative">
+                                    <input type="text" id="local_customer_search_task" class="form-control form-control-sm" placeholder="اكتب للبحث أو أدخل اسم عميل جديد..." autocomplete="off">
+                                    <input type="hidden" id="local_customer_id_task" value="">
+                                    <div id="local_customer_dropdown_task" class="search-dropdown-task d-none"></div>
+                                </div>
                             </div>
-                            <small class="form-text text-muted">اختر من القائمة أو اكتب اسم عميل جديد</small>
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label">رقم العميل</label>
-                            <input type="text" class="form-control" name="customer_phone" id="customerPhoneInput" placeholder="أدخل رقم العميل" dir="ltr">
+                            <div id="customer_select_rep_task" class="customer-select-block mb-2 d-none">
+                                <div class="search-wrap position-relative">
+                                    <input type="text" id="rep_customer_search_task" class="form-control form-control-sm" placeholder="اكتب للبحث أو أدخل اسم عميل جديد..." autocomplete="off">
+                                    <input type="hidden" id="rep_customer_id_task" value="">
+                                    <div id="rep_customer_dropdown_task" class="search-dropdown-task d-none"></div>
+                                </div>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small">رقم العميل</label>
+                                <input type="text" name="customer_phone" id="submit_customer_phone" class="form-control form-control-sm" placeholder="رقم الهاتف" dir="ltr" value="">
+                            </div>
+                            <small class="form-text text-muted d-block">اختر عميلاً مسجلاً أو اكتب اسماً جديداً—يُحفظ تلقائياً كعميل جديد إن لم يكن مسجلاً</small>
                         </div>
                         <div class="col-md-5">
-                            <label class="form-label">وصف وتفاصيل و ملاحظات الاوردر</label>
-                            <textarea class="form-control" name="details" rows="3" placeholder="أدخل التفاصيل والتعليمات اللازمة للعمال."></textarea>
+                            <label class="form-label">العنوان</label>
+                            <input type="text" class="form-control" name="order_title" id="createOrderTitle" placeholder="عنوان التوصيل أو عنوان مميز يظهر في الإيصال">
                         </div>
                         <div class="col-12" id="productsSection">
                             <label class="form-label fw-bold">المنتجات والكميات</label>
                             <div id="productsContainer">
                                 <div class="product-row mb-3 p-3 border rounded" data-product-index="0">
                                     <div class="row g-2">
-                                        <div class="col-md-4">
+                                        <div class="col-md-3">
                                             <label class="form-label small">اسم المنتج</label>
-                                            <input type="text" class="form-control product-name-input" name="products[0][name]" placeholder="أدخل اسم المنتج أو القالب" list="templateSuggestions" autocomplete="off">
+                                            <div class="product-name-wrap position-relative">
+                                                <input type="text" class="form-control product-name-input" name="products[0][name]" placeholder="أدخل اسم المنتج أو القالب أو اختر من القائمة" autocomplete="off" required>
+                                                <div class="product-template-dropdown d-none"></div>
+                                            </div>
                                         </div>
                                         <div class="col-md-2">
                                             <label class="form-label small">الكمية</label>
-                                            <input type="number" class="form-control product-quantity-input" name="products[0][quantity]" step="1" min="0" placeholder="مثال: 120" id="product-quantity-0">
+                                            <input type="number" class="form-control product-quantity-input" name="products[0][quantity]" step="1" min="0" placeholder="مثال: 120" id="product-quantity-0" required>
                                         </div>
                                         <div class="col-md-2">
                                             <label class="form-label small">الوحدة</label>
@@ -1789,14 +1973,22 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                                 <option value="كيلو">كيلو</option>
                                                 <option value="جرام">جرام</option>
                                                 <option value="شرينك">شرينك</option>
+                                                <option value="دسته">دسته</option>
                                                 <option value="قطعة" selected>قطعة</option>
                                             </select>
                                         </div>
                                         <div class="col-md-2">
                                             <label class="form-label small">السعر</label>
-                                            <input type="number" class="form-control" name="products[0][price]" step="0.01" min="0" placeholder="0.00" id="product-price-0">
+                                            <input type="number" class="form-control product-price-input" name="products[0][price]" step="0.01" min="0" placeholder="0.00" id="product-price-0" required>
                                         </div>
-                                        <div class="col-md-2 d-flex align-items-end">
+                                        <div class="col-md-2">
+                                            <label class="form-label small">الإجمالي</label>
+                                            <div class="input-group input-group-sm">
+                                                <input type="number" class="form-control product-line-total-input" name="products[0][line_total]" step="0.01" min="0" placeholder="0.00" id="product-line-total-0" title="الإجمالي = الكمية × السعر حسب الوحدة">
+                                                <span class="input-group-text">ج.م</span>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-1 d-flex align-items-end">
                                             <button type="button" class="btn btn-danger btn-sm w-100 remove-product-btn" style="display: none;">
                                                 <i class="bi bi-trash"></i>
                                             </button>
@@ -1812,8 +2004,52 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                 <small class="text-muted">يمكنك إضافة أكثر من منتج وكمية في نفس المهمة.</small>
                             </div>
                         </div>
+                        <div class="col-12 mt-2">
+                            <label class="form-label">وصف وتفاصيل وملاحظات الاوردر</label>
+                            <textarea class="form-control" name="details" rows="3" placeholder="أدخل التفاصيل والتعليمات اللازمة للعمال."></textarea>
+                        </div>
+                        <div class="col-12 col-md-6 col-lg-4 mt-2">
+                            <label class="form-label" for="createTaskShippingFees">رسوم الشحن (ج.م)</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" name="shipping_fees" id="createTaskShippingFees" step="0.01" min="0" placeholder="0.00" value="0">
+                                <span class="input-group-text">ج.م</span>
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-6 col-lg-4 mt-2">
+                            <label class="form-label" for="createTaskDiscount">الخصم (ج.م)</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" name="discount" id="createTaskDiscount" step="0.01" min="0" placeholder="0.00" value="0">
+                                <span class="input-group-text">ج.م</span>
+                            </div>
+                        </div>
+                        <div class="col-12 mt-3">
+                            <div class="card bg-light border-primary border-opacity-25" id="createTaskTotalSummaryCard">
+                                <div class="card-body py-3">
+                                    <h6 class="card-title mb-2"><i class="bi bi-calculator me-2"></i>ملخص الإجمالي النهائي</h6>
+                                    <div class="row g-2 small">
+                                        <div class="col-6 col-md-3">
+                                            <span class="text-muted">إجمالي المنتجات:</span>
+                                            <strong class="d-block" id="createTaskSubtotalDisplay">0.00 ج.م</strong>
+                                        </div>
+                                        <div class="col-6 col-md-3">
+                                            <span class="text-muted">رسوم الشحن:</span>
+                                            <strong class="d-block" id="createTaskShippingDisplay">0.00 ج.م</strong>
+                                        </div>
+                                        <div class="col-6 col-md-3">
+                                            <span class="text-muted">الخصم:</span>
+                                            <strong class="d-block" id="createTaskDiscountDisplay">0.00 ج.م</strong>
+                                        </div>
+                                        <div class="col-6 col-md-3">
+                                            <span class="text-muted">الإجمالي النهائي:</span>
+                                            <strong class="d-block fs-5 text-success" id="createTaskFinalTotalDisplay">0.00 ج.م</strong>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="d-flex justify-content-end mt-4 gap-2">                        <button type="submit" class="btn btn-primary"><i class="bi bi-send-check me-1"></i>إرسال المهمة</button>
+                    <div class="d-flex justify-content-end mt-4 gap-2">                        
+                        <button type="submit" class="btn btn-primary"><i class="bi bi-send-check me-1"></i>إرسال المهمة</button>
                     </div>
                 </form>
             </div>
@@ -1826,7 +2062,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                 <h5 class="mb-0"><i class="bi bi-pencil-square me-2"></i>تعديل الاوردر</h5>
             </div>
             <div class="card-body">
-                <form method="post" action="" id="editTaskForm">
+                <form method="post" action="?page=production_tasks" id="editTaskForm">
                     <input type="hidden" name="action" value="update_task">
                     <input type="hidden" name="task_id" id="editTaskId">
                     <div class="row g-3">
@@ -1842,26 +2078,13 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                         <div class="col-md-4">
                             <label class="form-label">الأولوية</label>
                             <select class="form-select" name="priority" id="editPriority">
-                                <option value="low">منخفضة</option>
                                 <option value="normal" selected>عادية</option>
-                                <option value="high">مرتفعة</option>
                                 <option value="urgent">عاجلة</option>
                             </select>
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">تاريخ الاستحقاق</label>
                             <input type="date" class="form-control" name="due_date" id="editDueDate">
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label">اختر العمال المستهدفين</label>
-                            <div style="max-height: 120px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 0.375rem; padding: 0.375rem;">
-                                <select class="form-select form-select-sm border-0" name="assigned_to[]" multiple style="max-height: 100px;" id="editAssignedTo">
-                                    <?php foreach ($productionUsers as $worker): ?>
-                                        <option value="<?php echo (int)$worker['id']; ?>"><?php echo htmlspecialchars($worker['full_name']); ?></option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </div>
-                            <div class="form-text small">يمكن تحديد أكثر من عامل باستخدام زر CTRL أو SHIFT.</div>
                         </div>
                         <div class="col-md-2">
                             <label class="form-label">اسم العميل</label>
@@ -1874,8 +2097,8 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             <input type="text" class="form-control" name="customer_phone" id="editCustomerPhone" placeholder="أدخل رقم العميل" dir="ltr">
                         </div>
                         <div class="col-md-5">
-                            <label class="form-label">وصف وتفاصيل و ملاحظات الاوردر</label>
-                            <textarea class="form-control" name="details" id="editDetails" rows="3" placeholder="أدخل التفاصيل والتعليمات اللازمة للعمال."></textarea>
+                            <label class="form-label">العنوان</label>
+                            <input type="text" class="form-control" name="order_title" id="editOrderTitle" placeholder="عنوان التوصيل أو عنوان مميز يظهر في الإيصال">
                         </div>
                         <div class="col-12" id="editProductsSection">
                             <label class="form-label fw-bold">المنتجات والكميات</label>
@@ -1883,6 +2106,49 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             <button type="button" class="btn btn-outline-primary btn-sm mt-2" id="editAddProductBtn">
                                 <i class="bi bi-plus-circle me-1"></i>إضافة منتج آخر
                             </button>
+                        </div>
+                        <div class="col-12 mt-2">
+                            <label class="form-label">وصف وتفاصيل وملاحظات الاوردر</label>
+                            <textarea class="form-control" name="details" id="editDetails" rows="3" placeholder="أدخل التفاصيل والتعليمات اللازمة للعمال."></textarea>
+                        </div>
+                        <div class="col-12 col-md-6 col-lg-4">
+                            <label class="form-label" for="editTaskShippingFees">رسوم الشحن (ج.م)</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" name="shipping_fees" id="editTaskShippingFees" step="0.01" min="0" placeholder="0.00" value="0">
+                                <span class="input-group-text">ج.م</span>
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-6 col-lg-4">
+                            <label class="form-label" for="editTaskDiscount">الخصم (ج.م)</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" name="discount" id="editTaskDiscount" step="0.01" min="0" placeholder="0.00" value="0">
+                                <span class="input-group-text">ج.م</span>
+                            </div>
+                        </div>
+                        <div class="col-12 mt-3">
+                            <div class="card bg-light border-secondary border-opacity-25" id="editTaskTotalSummaryCard">
+                                <div class="card-body py-3">
+                                    <h6 class="card-title mb-2"><i class="bi bi-calculator me-2"></i>ملخص الإجمالي النهائي</h6>
+                                    <div class="row g-2 small">
+                                        <div class="col-6 col-md-3">
+                                            <span class="text-muted">إجمالي المنتجات:</span>
+                                            <strong class="d-block" id="editTaskSubtotalDisplay">0.00 ج.م</strong>
+                                        </div>
+                                        <div class="col-6 col-md-3">
+                                            <span class="text-muted">رسوم الشحن:</span>
+                                            <strong class="d-block" id="editTaskShippingDisplay">0.00 ج.م</strong>
+                                        </div>
+                                        <div class="col-6 col-md-3">
+                                            <span class="text-muted">الخصم:</span>
+                                            <strong class="d-block" id="editTaskDiscountDisplay">0.00 ج.م</strong>
+                                        </div>
+                                        <div class="col-6 col-md-3">
+                                            <span class="text-muted">الإجمالي النهائي:</span>
+                                            <strong class="d-block fs-5 text-success" id="editTaskFinalTotalDisplay">0.00 ج.م</strong>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div class="d-flex justify-content-end mt-4 gap-2">
@@ -1924,31 +2190,23 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                 <i class="bi bi-search me-1"></i>بحث
                             </button>
                         </div>
-                        <div class="col-auto">
-                            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#recentTasksAdvancedSearch" aria-expanded="false" aria-controls="recentTasksAdvancedSearch">
-                                <i class="bi bi-funnel me-1"></i>بحث متقدم
-                            </button>
-                        </div>
                         <?php if ($filterTaskId !== '' || $filterCustomer !== '' || $filterOrderId !== '' || $filterTaskType !== '' || $filterDueFrom !== '' || $filterDueTo !== '' || $filterSearchText !== ''): ?>
                         <div class="col-auto">
                             <a href="?<?php echo $statusFilter !== '' ? 'page=production_tasks&status=' . rawurlencode($statusFilter) : 'page=production_tasks'; ?>" class="btn btn-outline-danger btn-sm">إزالة الفلتر</a>
                         </div>
                         <?php endif; ?>
                     </div>
-                    <div class="collapse <?php echo ($filterTaskId !== '' || $filterCustomer !== '' || $filterOrderId !== '' || $filterTaskType !== '' || $filterDueFrom !== '' || $filterDueTo !== '') ? 'show' : ''; ?>" id="recentTasksAdvancedSearch">
-                        <div class="row g-2 pt-2 border-top mt-2">
+                    <div class="pt-2 border-top mt-2">
+                        <div class="row g-2">
                             <div class="col-6 col-md-4 col-lg-2">
-                                <label class="form-label small mb-0">رقم الطلب</label>
+                                <label class="form-label small mb-0">رقم الاوردر</label>
                                 <input type="text" name="task_id" class="form-control form-control-sm" placeholder="#" value="<?php echo htmlspecialchars($filterTaskId, ENT_QUOTES, 'UTF-8'); ?>">
                             </div>
                             <div class="col-6 col-md-4 col-lg-2">
                                 <label class="form-label small mb-0">اسم العميل / هاتف</label>
                                 <input type="text" name="search_customer" class="form-control form-control-sm" placeholder="اسم أو رقم" value="<?php echo htmlspecialchars($filterCustomer, ENT_QUOTES, 'UTF-8'); ?>">
                             </div>
-                            <div class="col-6 col-md-4 col-lg-2">
-                                <label class="form-label small mb-0">رقم الأوردر</label>
-                                <input type="text" name="search_order_id" class="form-control form-control-sm" placeholder="رقم الأوردر" value="<?php echo htmlspecialchars($filterOrderId, ENT_QUOTES, 'UTF-8'); ?>">
-                            </div>
+                           
                             <div class="col-6 col-md-4 col-lg-2">
                                 <label class="form-label small mb-0">نوع الاوردر</label>
                                 <select name="task_type" class="form-select form-select-sm">
@@ -1957,8 +2215,6 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                     <option value="cash_customer" <?php echo $filterTaskType === 'cash_customer' ? 'selected' : ''; ?>>عميل نقدي</option>
                                     <option value="telegraph" <?php echo $filterTaskType === 'telegraph' ? 'selected' : ''; ?>>تليجراف</option>
                                     <option value="shipping_company" <?php echo $filterTaskType === 'shipping_company' ? 'selected' : ''; ?>>شركة شحن</option>
-                                    <option value="general" <?php echo $filterTaskType === 'general' ? 'selected' : ''; ?>>مهمة عامة</option>
-                                    <option value="production" <?php echo $filterTaskType === 'production' ? 'selected' : ''; ?>>إنتاج منتج</option>
                                 </select>
                             </div>
                             <div class="col-6 col-md-4 col-lg-2">
@@ -1984,10 +2240,11 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             <?php endif; ?>
                             <th>رقم الطلب</th>
                             <th>اسم العميل</th>
-                            <th>الاوردر</th>
+                            <th>من</th>
                             <th>نوع الاوردر</th>
                             <th>الحاله</th>
-                            <th>تاريخ التسليم</th>
+                            <th>التسليم</th>
+                            
                             <th>إجراءات</th>
                         </tr>
                     </thead>
@@ -2015,31 +2272,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                     </td>
                                     <td><?php 
                                         $custName = isset($task['customer_name']) ? trim((string)$task['customer_name']) : '';
-                                        $custPhone = isset($task['customer_phone']) ? trim((string)$task['customer_phone']) : '';
-                                        $custPhoneEsc = $custPhone !== '' ? 'tel:' . preg_replace('/[^\d+]/', '', $custPhone) : '';
-                                        
-                                        if ($custName !== '') {
-                                            echo '<div>' . htmlspecialchars($custName, ENT_QUOTES, 'UTF-8') . '</div>';
-                                            if ($custPhone !== '') {
-                                                echo '<div class="text-muted small d-flex align-items-center gap-1" dir="ltr">';
-                                                echo '<span>' . htmlspecialchars($custPhone, ENT_QUOTES, 'UTF-8') . '</span>';
-                                                if ($custPhoneEsc !== 'tel:') {
-                                                    echo ' <a href="' . htmlspecialchars($custPhoneEsc, ENT_QUOTES, 'UTF-8') . '" class="btn btn-sm btn-outline-success btn-icon-only p-1" title="اتصال بالعميل" aria-label="اتصال"><i class="bi bi-telephone-fill"></i></a>';
-                                                }
-                                                echo '</div>';
-                                            }
-                                        } else {
-                                            if ($custPhone !== '') {
-                                                echo '<div class="d-flex align-items-center gap-1" dir="ltr">';
-                                                echo '<span>' . htmlspecialchars($custPhone, ENT_QUOTES, 'UTF-8') . '</span>';
-                                                if ($custPhoneEsc !== 'tel:') {
-                                                    echo ' <a href="' . htmlspecialchars($custPhoneEsc, ENT_QUOTES, 'UTF-8') . '" class="btn btn-sm btn-outline-success btn-icon-only p-1" title="اتصال بالعميل" aria-label="اتصال"><i class="bi bi-telephone-fill"></i></a>';
-                                                }
-                                                echo '</div>';
-                                            } else {
-                                                echo '<span class="text-muted">-</span>';
-                                            }
-                                        }
+                                        echo $custName !== '' ? htmlspecialchars($custName, ENT_QUOTES, 'UTF-8') : '<span class="text-muted">-</span>';
                                     ?></td>
                                     <td>                                        <?php 
                                         // عرض منشئ المهمة إذا كان المحاسب أو المدير
@@ -2054,29 +2287,11 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                                 }
                                             }
                                             if ($creatorRoleLabel) {
-                                                echo '<div class="text-muted small"><i class="bi bi-person me-1"></i>من: ' . htmlspecialchars($task['creator_name']) . ' (' . $creatorRoleLabel . ')</div>';
+                                                echo '<div class="text-muted small"><i class="bi bi-person me-1"></i>' . htmlspecialchars($task['creator_name']) . '</div>';
                                             }
                                         }
-                                        // عرض اسم المنتج المستخرج من notes (تم استخراجه مسبقاً في loop)
-                                        if (!empty($task['extracted_product_name'])) {
-                                            echo '<div class="text-muted small"><i class="bi bi-box me-1"></i>المنتج: ' . htmlspecialchars($task['extracted_product_name']) . '</div>';
-                                        }
                                         ?>
-                                        <?php if ((float)($task['quantity'] ?? 0) > 0): ?>
-                                            <?php 
-                                            $unit = !empty($task['unit']) ? $task['unit'] : 'قطعة';
-                                            ?>
-                                            <div class="text-muted small">الكمية: <?php echo number_format((float)$task['quantity'], 2) . ' ' . htmlspecialchars($unit); ?></div>
-                                        <?php endif; ?>
-                                        <?php
-                                        $hasOrder = !empty($task['related_type']) && (string)$task['related_type'] === 'customer_order' && !empty($task['related_id']);
-                                        $orderIdForBtn = $hasOrder ? (int)$task['related_id'] : 0;
-                                        if ($orderIdForBtn > 0):
-                                        ?>
-                                            <button type="button" class="btn btn-outline-primary btn-sm mt-1" onclick="openOrderReceiptModal(<?php echo $orderIdForBtn; ?>)" title="عرض تفاصيل الأوردر">
-                                                <i class="bi bi-receipt me-1"></i>عرض الأوردر
-                                            </button>
-                                        <?php endif; ?>
+                                        
                                     </td>
                                     <td>
                                         <?php
@@ -2110,37 +2325,54 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                         ?>
                                     </td>
                                     <td>
-                                        <div class="d-flex flex-column gap-1">
-                                            <div class="d-flex gap-1 flex-wrap">
+                                        <div class="dropdown">
+                                            <button type="button" class="btn btn-outline-secondary btn-sm dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="إجراءات">
+                                                <i class="bi bi-three-dots-vertical"></i> إجراءات
+                                            </button>
+                                            <ul class="dropdown-menu dropdown-menu-end">
+                                                <?php
+                                                $custPhone = isset($task['customer_phone']) ? trim((string)$task['customer_phone']) : '';
+                                                $custPhoneEsc = $custPhone !== '' ? 'tel:' . preg_replace('/[^\d+]/', '', $custPhone) : '';
+                                                if ($custPhone !== '' && $custPhoneEsc !== 'tel:'):
+                                                ?>
+                                                <li>
+                                                    <a class="dropdown-item" href="<?php echo htmlspecialchars($custPhoneEsc, ENT_QUOTES, 'UTF-8'); ?>" title="اتصال بالعميل">
+                                                        <i class="bi bi-telephone-fill me-1"></i>اتصال بالعميل
+                                                    </a>
+                                                </li>
+                                                <?php endif; ?>
                                                 <?php if ($canPrintTasks): ?>
-                                                <a href="<?php echo getRelativeUrl('print_task_receipt.php?id=' . (int) $task['id']); ?>" target="_blank" class="btn btn-outline-primary btn-sm btn-icon-only" title="طباعة الاوردر">
-                                                    <i class="bi bi-printer"></i>
-                                                </a>
+                                                <li>
+                                                    <a class="dropdown-item" href="<?php echo getRelativeUrl('print_task_receipt.php?id=' . (int) $task['id']); ?>" target="_blank">
+                                                        <i class="bi bi-printer me-1"></i>طباعة الاوردر
+                                                    </a>
+                                                </li>
                                                 <?php endif; ?>
                                                 <?php if ($isAccountant || $isManager): ?>
-                                                <button type="button" class="btn btn-outline-info btn-sm btn-icon-only" onclick="openChangeStatusModal(<?php echo (int)$task['id']; ?>, '<?php echo htmlspecialchars($task['status'], ENT_QUOTES, 'UTF-8'); ?>')" title="تغيير حالة الطلب">
-                                                    <i class="bi bi-gear"></i>
-                                                </button>
-                                                <?php endif; ?>
-                                            </div>
-                                            <div class="d-flex gap-1 flex-wrap">
-                                                <?php if ($isAccountant || $isManager): ?>
-                                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="openEditTaskModal(<?php echo (int)$task['id']; ?>)" title="تعديل الاوردر">
-                                                    <i class="bi bi-pencil-square me-1"></i>تعديل
-                                                </button>
-                                                <?php endif; ?>
-                                                <?php if (in_array($task['status'] ?? '', ['completed', 'delivered', 'returned'], true)): ?>
-                                                <span class="text-muted small align-self-center">—</span>
-                                                <?php else: ?>
-                                                <form method="post" class="d-inline" onsubmit="return confirm('هل أنت متأكد من حذف هذه المهمة؟ سيتم حذفها نهائياً ولن تظهر في الجدول.');">
-                                                    <input type="hidden" name="action" value="cancel_task">
-                                                    <input type="hidden" name="task_id" value="<?php echo (int)$task['id']; ?>">
-                                                    <button type="submit" class="btn btn-outline-danger btn-sm" title="حذف المهمة">
-                                                        <i class="bi bi-trash"></i>
+                                                <li>
+                                                    <button type="button" class="dropdown-item" onclick="openChangeStatusModal(<?php echo (int)$task['id']; ?>, '<?php echo htmlspecialchars($task['status'], ENT_QUOTES, 'UTF-8'); ?>')">
+                                                        <i class="bi bi-gear me-1"></i>تغيير حالة الطلب
                                                     </button>
-                                                </form>
+                                                </li>
+                                                <li>
+                                                    <button type="button" class="dropdown-item" onclick="openEditTaskModal(<?php echo (int)$task['id']; ?>)">
+                                                        <i class="bi bi-pencil-square me-1"></i>تعديل الاوردر
+                                                    </button>
+                                                </li>
                                                 <?php endif; ?>
-                                            </div>
+                                                <?php if (!in_array($task['status'] ?? '', ['completed', 'delivered', 'returned'], true)): ?>
+                                                <li><hr class="dropdown-divider"></li>
+                                                <li>
+                                                    <form method="post" class="d-inline" onsubmit="return confirm('هل أنت متأكد من حذف هذه المهمة؟ سيتم حذفها نهائياً ولن تظهر في الجدول.');">
+                                                        <input type="hidden" name="action" value="cancel_task">
+                                                        <input type="hidden" name="task_id" value="<?php echo (int)$task['id']; ?>">
+                                                        <button type="submit" class="dropdown-item text-danger">
+                                                            <i class="bi bi-trash me-1"></i>حذف المهمة
+                                                        </button>
+                                                    </form>
+                                                </li>
+                                                <?php endif; ?>
+                                            </ul>
                                         </div>
                                     </td>
                                 </tr>
@@ -2210,7 +2442,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                     <i class="bi bi-x-lg"></i>
                 </button>
             </div>
-            <form method="POST" id="changeStatusCardForm" action="">
+            <form method="POST" id="changeStatusCardForm" action="?page=production_tasks">
                 <input type="hidden" name="action" value="update_task_status">
                 <input type="hidden" name="task_id" id="changeStatusCardTaskId">
                 <div class="card-body">
@@ -2255,7 +2487,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="إغلاق"></button>
             </div>
-            <form method="POST" id="changeStatusForm" action="">
+            <form method="POST" id="changeStatusForm" action="?page=production_tasks">
                 <input type="hidden" name="action" value="update_task_status">
                 <input type="hidden" name="task_id" id="changeStatusTaskId">
                 <div class="modal-body">
@@ -2312,31 +2544,105 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
     </div>
 </div>
 
+<!-- مودال إيصال مختصر (رقم الأوردر + المنتجات والكميات فقط) -->
+<div class="modal fade" id="taskReceiptModal" tabindex="-1" aria-labelledby="taskReceiptModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header py-2 bg-light border-bottom">
+                <h6 class="modal-title" id="taskReceiptModalLabel"><i class="bi bi-eye me-1"></i>إيصال</h6>
+                <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal" aria-label="إغلاق"></button>
+            </div>
+            <div class="modal-body p-3" id="taskReceiptContent">
+                <div class="text-center py-3 text-muted" id="taskReceiptLoading">
+                    <div class="spinner-border spinner-border-sm" role="status"></div>
+                    <p class="mt-2 mb-0 small">جاري التحميل...</p>
+                </div>
+                <div id="taskReceiptBody" style="display: none;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.search-wrap.position-relative { position: relative; }
+.search-dropdown-task { position: absolute; left: 0; right: 0; top: 100%; z-index: 1050; max-height: 220px; overflow-y: auto; background: #fff; border: 1px solid #dee2e6; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin-top: 2px; }
+.search-dropdown-task .search-dropdown-item-task { padding: 0.5rem 0.75rem; cursor: pointer; border-bottom: 1px solid #f0f0f0; }
+.search-dropdown-task .search-dropdown-item-task:hover { background: #f8f9fa; }
+.search-dropdown-task .search-dropdown-item-task:last-child { border-bottom: none; }
+.product-name-wrap.position-relative { position: relative; }
+.product-template-dropdown { position: absolute; left: 0; right: 0; top: 100%; z-index: 1050; max-height: 220px; overflow-y: auto; background: #fff; border: 1px solid #dee2e6; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin-top: 2px; }
+.product-template-dropdown .product-template-item { padding: 0.5rem 0.75rem; cursor: pointer; border-bottom: 1px solid #f0f0f0; }
+.product-template-dropdown .product-template-item:hover { background: #f8f9fa; }
+.product-template-dropdown .product-template-item:last-child { border-bottom: none; }
+/* إخفاء خانة العميل اليدوي إن وُجدت (كاش قديم) */
+#customer_manual_block_task { display: none !important; }
+input[name="customer_type_radio_task"][value="manual"] { display: none !important; }
+label[for="ct_task_manual"], .form-check:has(#ct_task_manual) { display: none !important; }
+</style>
 <script>
 var __localCustomersForTask = <?php echo json_encode($localCustomersForDropdown); ?>;
+var __repCustomersForTask = <?php echo json_encode($repCustomersForTask); ?>;
 
 var editProductIndex = 0;
 function buildEditProductRow(idx, product) {
-    var p = product || { name: '', quantity: '', unit: 'قطعة', price: '' };
+    var p = product || { name: '', quantity: '', unit: 'قطعة', price: '', line_total: '' };
     var unitVal = String(p.unit || 'قطعة').trim();
-    var opts = ['كرتونة','عبوة','كيلو','جرام','شرينك','قطعة'].map(function(u) {
+    var opts = ['كرتونة','عبوة','كيلو','جرام','شرينك','دسته','قطعة'].map(function(u) {
         return '<option value="' + u + '"' + (u === unitVal ? ' selected' : '') + '>' + u + '</option>';
     }).join('');
     var qtyVal = (p.quantity !== null && p.quantity !== undefined && p.quantity !== '') ? String(p.quantity) : '';
     var priceVal = (p.price !== null && p.price !== undefined && p.price !== '') ? String(p.price) : '';
+    var lineTotalVal = (p.line_total !== null && p.line_total !== undefined && p.line_total !== '') ? String(p.line_total) : '';
     var nameVal = String(p.name || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     return '<div class="product-row mb-3 p-3 border rounded edit-product-row" data-edit-product-index="' + idx + '">' +
         '<div class="row g-2">' +
-        '<div class="col-md-4"><label class="form-label small">اسم المنتج</label>' +
-        '<input type="text" class="form-control" name="products[' + idx + '][name]" placeholder="اسم المنتج أو القالب" list="templateSuggestions" value="' + nameVal + '"></div>' +
-        '<div class="col-md-2"><label class="form-label small">الكمية</label>' +
-        '<input type="number" class="form-control" name="products[' + idx + '][quantity]" step="0.01" min="0" placeholder="120" value="' + qtyVal + '"></div>' +
-        '<div class="col-md-2"><label class="form-label small">الوحدة</label>' +
+        '<div class="col-md-3"><label class="form-label small">اسم المنتج</label>' +
+        '<input type="text" class="form-control edit-product-name" name="products[' + idx + '][name]" placeholder="اسم المنتج أو القالب" list="templateSuggestions" value="' + nameVal + '"></div>' +
+        '<div class="col-md-1"><label class="form-label small">الكمية</label>' +
+        '<input type="number" class="form-control edit-product-qty" name="products[' + idx + '][quantity]" step="0.01" min="0" placeholder="120" value="' + qtyVal + '"></div>' +
+        '<div class="col-md-1"><label class="form-label small">الوحدة</label>' +
         '<select class="form-select form-select-sm" name="products[' + idx + '][unit]">' + opts + '</select></div>' +
-        '<div class="col-md-2"><label class="form-label small">السعر</label>' +
-        '<input type="number" class="form-control" name="products[' + idx + '][price]" step="0.01" min="0" placeholder="0.00" value="' + priceVal + '"></div>' +
-        '<div class="col-md-2 d-flex align-items-end">' +
+        '<div class="col-md-1"><label class="form-label small">السعر</label>' +
+        '<input type="number" class="form-control edit-product-price" name="products[' + idx + '][price]" step="0.01" min="0" placeholder="0.00" value="' + priceVal + '"></div>' +
+        '<div class="col-md-2"><label class="form-label small">الإجمالي</label>' +
+        '<div class="input-group input-group-sm"><input type="number" class="form-control edit-product-line-total" name="products[' + idx + '][line_total]" step="0.01" min="0" placeholder="0.00" value="' + lineTotalVal + '"><span class="input-group-text">ج.م</span></div></div>' +
+        '<div class="col-md-1 d-flex align-items-end">' +
         '<button type="button" class="btn btn-danger btn-sm w-100 edit-remove-product-btn"><i class="bi bi-trash"></i></button></div></div></div>';
+}
+function updateEditTaskSummary() {
+    var container = document.getElementById('editProductsContainer');
+    var subEl = document.getElementById('editTaskSubtotalDisplay');
+    var shipEl = document.getElementById('editTaskShippingDisplay');
+    var discountEl = document.getElementById('editTaskDiscountDisplay');
+    var finalEl = document.getElementById('editTaskFinalTotalDisplay');
+    var shipInput = document.getElementById('editTaskShippingFees');
+    var discountInput = document.getElementById('editTaskDiscount');
+    if (!container || !subEl || !shipEl || !finalEl) return;
+    var subtotal = 0;
+    container.querySelectorAll('.edit-product-line-total').forEach(function(input) {
+        var v = parseFloat(input.value);
+        if (!isNaN(v) && v >= 0) subtotal += v;
+    });
+    var shipping = (shipInput && !isNaN(parseFloat(shipInput.value))) ? Math.max(0, parseFloat(shipInput.value)) : 0;
+    var discount = (discountInput && !isNaN(parseFloat(discountInput.value))) ? Math.max(0, parseFloat(discountInput.value)) : 0;
+    var finalTotal = Math.max(0, subtotal + shipping - discount);
+    subEl.textContent = subtotal.toFixed(2) + ' ج.م';
+    shipEl.textContent = shipping.toFixed(2) + ' ج.م';
+    if (discountEl) discountEl.textContent = discount.toFixed(2) + ' ج.م';
+    finalEl.textContent = finalTotal.toFixed(2) + ' ج.م';
+}
+function delegateEditSummaryInputs() {
+    var form = document.getElementById('editTaskForm');
+    if (!form || form._editSummaryDelegated) return;
+    form._editSummaryDelegated = true;
+    form.addEventListener('input', function(e) {
+        if (e.target.matches('.edit-product-line-total, .edit-product-price, .edit-product-qty') || e.target.id === 'editTaskShippingFees' || e.target.id === 'editTaskDiscount')
+            updateEditTaskSummary();
+    });
+    form.addEventListener('change', function(e) {
+        if (e.target.matches('.edit-product-line-total, .edit-product-price, .edit-product-qty') || e.target.id === 'editTaskShippingFees' || e.target.id === 'editTaskDiscount')
+            updateEditTaskSummary();
+    });
 }
 function addEditProductRow(product) {
     var container = document.getElementById('editProductsContainer');
@@ -2348,8 +2654,10 @@ function addEditProductRow(product) {
     row.querySelector('.edit-remove-product-btn').addEventListener('click', function() {
         var rows = container.querySelectorAll('.edit-product-row');
         if (rows.length > 1) row.remove();
+        updateEditTaskSummary();
     });
     editProductIndex++;
+    updateEditTaskSummary();
 }
 window.closeEditTaskCard = function() {
     var collapse = document.getElementById('editTaskFormCollapse');
@@ -2384,19 +2692,21 @@ window.openEditTaskModal = function(taskId) {
                 document.getElementById('editCustomerName').value = t.customer_name || '';
                 document.getElementById('editCustomerPhone').value = t.customer_phone || '';
                 document.getElementById('editDetails').value = t.details || '';
-                var assignSelect = document.getElementById('editAssignedTo');
-                if (assignSelect) {
-                    var assigneeIds = (t.assignees || []).map(function(a) { return parseInt(a, 10); });
-                    for (var i = 0; i < assignSelect.options.length; i++) {
-                        assignSelect.options[i].selected = assigneeIds.indexOf(parseInt(assignSelect.options[i].value, 10)) >= 0;
-                    }
-                }
+                var orderTitleEl = document.getElementById('editOrderTitle');
+                if (orderTitleEl && t.order_title !== undefined) orderTitleEl.value = t.order_title || '';
+                var shippingEl = document.getElementById('editTaskShippingFees');
+                if (shippingEl && typeof t.shipping_fees === 'number') shippingEl.value = t.shipping_fees;
+                if (shippingEl && (typeof t.shipping_fees === 'string' && t.shipping_fees !== '')) shippingEl.value = t.shipping_fees;
+                var discountEl = document.getElementById('editTaskDiscount');
+                if (discountEl && (typeof t.discount === 'number' || (typeof t.discount === 'string' && t.discount !== ''))) discountEl.value = t.discount;
                 var products = Array.isArray(t.products) ? t.products : [];
                 if (products.length === 0) products = [{}];
                 products.forEach(function(p) {
-                    var row = { name: p.name || '', quantity: p.quantity, unit: p.unit || 'قطعة', price: p.price };
+                    var row = { name: p.name || '', quantity: p.quantity, unit: p.unit || 'قطعة', price: p.price, line_total: p.line_total };
                     addEditProductRow(row);
                 });
+                updateEditTaskSummary();
+                delegateEditSummaryInputs();
             }
         })
         .catch(function() { addEditProductRow({}); });
@@ -2409,6 +2719,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (editAddBtn) {
         editAddBtn.addEventListener('click', function() { addEditProductRow({}); });
     }
+    delegateEditSummaryInputs();
 });
 
 window.openOrderReceiptModal = function(orderId) {
@@ -2462,6 +2773,52 @@ window.openOrderReceiptModal = function(orderId) {
         });
 };
 
+window.openTaskReceiptModal = function(taskId) {
+    var modalEl = document.getElementById('taskReceiptModal');
+    var titleEl = document.getElementById('taskReceiptModalLabel');
+    var loadingEl = document.getElementById('taskReceiptLoading');
+    var bodyEl = document.getElementById('taskReceiptBody');
+    if (!modalEl || !titleEl || !loadingEl || !bodyEl) return;
+    loadingEl.style.display = 'block';
+    bodyEl.style.display = 'none';
+    bodyEl.innerHTML = '';
+    var modalInstance = bootstrap.Modal.getOrCreateInstance(modalEl);
+    modalInstance.show();
+    var params = new URLSearchParams(window.location.search);
+    params.set('action', 'get_task_receipt');
+    params.set('task_id', String(taskId));
+    fetch('?' + params.toString())
+        .then(function(r) {
+            var ct = (r.headers.get('Content-Type') || '');
+            if (!r.ok || ct.indexOf('application/json') === -1) {
+                throw new Error('غير JSON');
+            }
+            return r.json();
+        })
+        .then(function(data) {
+            loadingEl.style.display = 'none';
+            if (data.success && Array.isArray(data.items)) {
+                var title = data.order_number ? ('إيصال أوردر #' + data.order_number) : ('مهمة #' + data.task_id);
+                titleEl.innerHTML = '<i class="bi bi-eye me-1"></i>' + title;
+                var rows = data.items.map(function(it) {
+                    var qty = typeof it.quantity === 'number' ? it.quantity : parseFloat(it.quantity) || 0;
+                    var un = (it.unit || 'قطعة').trim();
+                    return '<tr><td>' + (it.product_name || '-') + '</td><td class="text-end">' + qty + ' ' + un + '</td></tr>';
+                }).join('');
+                bodyEl.innerHTML = '<table class="table table-sm table-bordered mb-0"><thead class="table-light"><tr><th>المنتج</th><th class="text-end">الكمية</th></tr></thead><tbody>' + rows + '</tbody></table>';
+                bodyEl.style.display = 'block';
+            } else {
+                bodyEl.innerHTML = '<p class="text-muted small mb-0">لا توجد بيانات للعرض.</p>';
+                bodyEl.style.display = 'block';
+            }
+        })
+        .catch(function() {
+            loadingEl.style.display = 'none';
+            bodyEl.innerHTML = '<p class="text-danger small mb-0">حدث خطأ أثناء التحميل.</p>';
+            bodyEl.style.display = 'block';
+        });
+};
+
 document.addEventListener('DOMContentLoaded', function () {
     const taskTypeSelect = document.getElementById('taskTypeSelect');
     const titleInput = document.querySelector('input[name="title"]');
@@ -2471,78 +2828,148 @@ document.addEventListener('DOMContentLoaded', function () {
     const quantityInput = document.getElementById('productQuantityInput');
     const templateSuggestions = document.getElementById('templateSuggestions');
 
-    // دروب داون اسم العميل: قائمة العملاء المحليين + بحث لحظي + تعبئة رقم الهاتف عند الاختيار
-    (function initCustomerNameCombobox() {
+    // خانة العميل: عميل محلي / عميل مندوب — اسم من البحث (أو المُدخل) ورقم العميل ظاهر دائماً ويُملأ تلقائياً عند اختيار عميل مسجل
+    (function initCustomerCardTask() {
         var localCustomers = (typeof __localCustomersForTask !== 'undefined' && Array.isArray(__localCustomersForTask)) ? __localCustomersForTask : [];
-        var customerNameInput = document.getElementById('customerNameInput');
-        var customerPhoneInput = document.getElementById('customerPhoneInput');
-        var customerNameDropdown = document.getElementById('customerNameDropdown');
-        var customerNameWrap = document.getElementById('customerNameComboboxWrap');
-        if (!customerNameInput || !customerNameDropdown) return;
+        var repCustomers = (typeof __repCustomersForTask !== 'undefined' && Array.isArray(__repCustomersForTask)) ? __repCustomersForTask : [];
+        var submitName = document.getElementById('submit_customer_name');
+        var submitPhone = document.getElementById('submit_customer_phone');
+        var localSearch = document.getElementById('local_customer_search_task');
+        var localId = document.getElementById('local_customer_id_task');
+        var localDrop = document.getElementById('local_customer_dropdown_task');
+        var repSearch = document.getElementById('rep_customer_search_task');
+        var repId = document.getElementById('rep_customer_id_task');
+        var repDrop = document.getElementById('rep_customer_dropdown_task');
+        if (!submitName || !submitPhone) return;
 
-        function normalizeForMatch(str) {
-            if (typeof str !== 'string') return '';
-            return str.replace(/\s+/g, ' ').trim().toLowerCase();
+        // نفس منطق matchSearch في صفحة الأسعار المخصصة: عند الفراغ نعرض الكل، وإلا بحث بسيط (نص يحتوي على الاستعلام)
+        function matchSearch(text, q) {
+            if (!q || !text) return true;
+            var t = (text + '').toLowerCase();
+            var k = (q + '').trim().toLowerCase();
+            return t.indexOf(k) !== -1;
+        }
+        // للعميل المحلي: نفس سلوك custom_prices — البحث في الاسم (والهاتف اختياري)
+        function matchLocalCustomer(c, query) {
+            var q = (query + '').trim();
+            if (!q) return true;
+            var name = (c.name || '') + '';
+            var extra = (c.phones && c.phones.length) ? c.phones.join(' ') : ((c.phone || '') + '');
+            var text = (name + ' ' + extra).trim();
+            return matchSearch(text, q);
+        }
+        // لعميل المندوب: البحث في الاسم + اسم المندوب + الهاتف
+        function matchRepCustomer(c, query) {
+            var q = (query + '').trim();
+            if (!q) return true;
+            var text = (c.name || '') + ' ' + (c.rep_name || '') + ' ' + (c.phone || '');
+            return matchSearch(text, q);
         }
 
-        function filterCustomers(query) {
-            var q = normalizeForMatch(query);
-            if (!q) return localCustomers.slice(0, 50);
-            return localCustomers.filter(function(c) {
-                return normalizeForMatch(c.name).indexOf(q) !== -1;
-            }).slice(0, 50);
+        function setCustomerBlocks() {
+            var v = document.querySelector('input[name="customer_type_radio_task"]:checked');
+            var val = v ? v.value : 'local';
+            document.getElementById('customer_select_local_task').classList.toggle('d-none', val !== 'local');
+            document.getElementById('customer_select_rep_task').classList.toggle('d-none', val !== 'rep');
+            if (val !== 'local') {
+                if (localSearch) localSearch.value = '';
+                if (localId) localId.value = '';
+                if (localDrop) localDrop.classList.add('d-none');
+            }
+            if (val !== 'rep') {
+                if (repSearch) repSearch.value = '';
+                if (repId) repId.value = '';
+                if (repDrop) repDrop.classList.add('d-none');
+            }
         }
 
-        function renderDropdown(items) {
-            customerNameDropdown.innerHTML = '';
-            if (items.length === 0) {
-                customerNameDropdown.classList.add('d-none');
+        document.querySelectorAll('input[name="customer_type_radio_task"]').forEach(function(r) {
+            r.addEventListener('change', setCustomerBlocks);
+        });
+        setCustomerBlocks();
+
+        // إخفاء أي بقايا لخانة العميل اليدوي (إن وُجدت من كاش قديم)
+        (function hideManualCustomerBlock() {
+            var manualBlock = document.getElementById('customer_manual_block_task');
+            if (manualBlock) { manualBlock.style.display = 'none'; manualBlock.remove(); }
+            document.querySelectorAll('input[name="customer_type_radio_task"][value="manual"]').forEach(function(r) {
+                var wrap = r.closest('.form-check');
+                if (wrap) wrap.style.display = 'none';
+            });
+        })();
+
+        function showCustomerDropdown(inputEl, hiddenIdEl, dropEl, list, getLabel, matcher, onSelect) {
+            if (!inputEl || !dropEl) return;
+            var q = (inputEl.value || '').trim();
+            var filterFn = (typeof matcher === 'function') ? function(c) { return matcher(c, q); } : function(c) { return matchSearch(getLabel(c), q); };
+            var filtered = list.filter(filterFn);
+            dropEl.innerHTML = '';
+            if (filtered.length === 0) {
+                dropEl.classList.add('d-none');
                 return;
             }
-            items.forEach(function(c) {
-                var phoneText = (c.phone || (c.phones && c.phones[0]) || '').toString();
-                var node = document.createElement('button');
-                node.type = 'button';
-                node.className = 'list-group-item list-group-item-action text-start';
-                node.setAttribute('role', 'option');
-                node.textContent = c.name + (phoneText ? ' — ' + phoneText : '');
-                node.dataset.name = c.name;
-                node.dataset.phone = phoneText;
-                node.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    customerNameInput.value = c.name;
-                    if (customerPhoneInput) customerPhoneInput.value = phoneText;
-                    customerNameDropdown.classList.add('d-none');
-                    customerNameInput.setAttribute('aria-expanded', 'false');
+            filtered.forEach(function(c) {
+                var div = document.createElement('div');
+                div.className = 'search-dropdown-item-task';
+                div.textContent = getLabel(c);
+                div.dataset.id = c.id;
+                div.dataset.name = c.name;
+                div.dataset.phone = (c.phone || '').toString();
+                div.addEventListener('click', function() {
+                    if (hiddenIdEl) hiddenIdEl.value = this.dataset.id;
+                    inputEl.value = this.dataset.name;
+                    submitName.value = this.dataset.name || '';
+                    submitPhone.value = this.dataset.phone || '';
+                    dropEl.classList.add('d-none');
+                    if (onSelect) onSelect(c);
                 });
-                customerNameDropdown.appendChild(node);
+                dropEl.appendChild(div);
             });
-            customerNameDropdown.classList.remove('d-none');
-            customerNameInput.setAttribute('aria-expanded', 'true');
+            dropEl.classList.remove('d-none');
         }
 
-        var blurTimer = null;
-        customerNameInput.addEventListener('input', function() {
-            clearTimeout(blurTimer);
-            var query = customerNameInput.value;
-            var filtered = filterCustomers(query);
-            renderDropdown(filtered);
+        function initCustomerSearch(inputEl, hiddenIdEl, dropEl, list, getLabel, matcher) {
+            if (!inputEl || !dropEl) return;
+            function show() { showCustomerDropdown(inputEl, hiddenIdEl, dropEl, list, getLabel, matcher); }
+            inputEl.addEventListener('input', function() {
+                if (hiddenIdEl) hiddenIdEl.value = '';
+                show();
+            });
+            inputEl.addEventListener('focus', function() {
+                show();
+            });
+        }
+
+        initCustomerSearch(localSearch, localId, localDrop, localCustomers, function(c) { return c.name + (c.phone ? ' — ' + c.phone : ''); }, matchLocalCustomer);
+        initCustomerSearch(repSearch, repId, repDrop, repCustomers, function(c) { return c.rep_name ? c.name + ' (' + c.rep_name + ')' : c.name; }, matchRepCustomer);
+
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.search-wrap')) {
+                document.querySelectorAll('.search-dropdown-task').forEach(function(d) { d.classList.add('d-none'); });
+            }
         });
-        customerNameInput.addEventListener('focus', function() {
-            clearTimeout(blurTimer);
-            var query = customerNameInput.value;
-            var filtered = filterCustomers(query);
-            renderDropdown(filtered);
-        });
-        customerNameInput.addEventListener('blur', function() {
-            blurTimer = setTimeout(function() {
-                customerNameDropdown.classList.add('d-none');
-                customerNameInput.setAttribute('aria-expanded', 'false');
-            }, 200);
-        });
-        customerNameDropdown.addEventListener('mousedown', function(e) {
-            e.preventDefault();
-        });
+
+        // عند الإرسال: التحقق من اسم العميل (الحقل الظاهر فقط) ثم أخذ القيمة من حقل البحث النشط
+        var form = submitName && submitName.closest('form');
+        if (form) {
+            form.addEventListener('submit', function(e) {
+                var v = document.querySelector('input[name="customer_type_radio_task"]:checked');
+                var val = v ? v.value : 'local';
+                var activeSearch = (val === 'local') ? localSearch : repSearch;
+                var activeLabel = (val === 'local') ? 'اسم العميل (عميل محلي)' : 'اسم العميل (عميل مندوب)';
+                if (activeSearch && !activeSearch.value.trim()) {
+                    e.preventDefault();
+                    alert('يرجى إدخال ' + activeLabel + ' قبل الإرسال.');
+                    activeSearch.focus();
+                    return;
+                }
+                if (val === 'local' && localSearch) {
+                    submitName.value = localSearch.value.trim();
+                } else if (val === 'rep' && repSearch) {
+                    submitName.value = repSearch.value.trim();
+                }
+            });
+        }
     })();
 
     function updateTaskTypeUI() {
@@ -2598,20 +3025,84 @@ document.addEventListener('DOMContentLoaded', function () {
             })
             .then(data => {
                 if (data.success && Array.isArray(data.templates)) {
-                    // مسح القائمة الحالية
-                    templateSuggestions.innerHTML = '';
-                    
-                    // إضافة الخيارات
-                    data.templates.forEach(templateName => {
-                        const option = document.createElement('option');
-                        option.value = templateName;
-                        templateSuggestions.appendChild(option);
-                    });
+                    window.__productTemplatesList = data.templates;
+                    if (templateSuggestions) {
+                        templateSuggestions.innerHTML = '';
+                        data.templates.forEach(templateName => {
+                            const option = document.createElement('option');
+                            option.value = templateName;
+                            templateSuggestions.appendChild(option);
+                        });
+                    }
+                    initAllProductNameDropdowns();
                 }
             })
             .catch(error => {
                 console.error('Error loading template suggestions:', error);
             });
+    }
+
+    // دروب داون اسم المنتج: يفلتر حسب المدخلات ويسمح بالإدخال اليدوي أو الاختيار من القائمة
+    function initProductNameDropdown(inputEl) {
+        if (!inputEl || inputEl.dataset.productDropdownInited === '1') return;
+        var templates = (typeof window.__productTemplatesList !== 'undefined' && Array.isArray(window.__productTemplatesList)) ? window.__productTemplatesList : [];
+        var wrap = inputEl.closest('.product-name-wrap');
+        if (!wrap) {
+            wrap = document.createElement('div');
+            wrap.className = 'product-name-wrap position-relative';
+            inputEl.parentNode.insertBefore(wrap, inputEl);
+            wrap.appendChild(inputEl);
+        }
+        var dropEl = wrap.querySelector('.product-template-dropdown');
+        if (!dropEl) {
+            dropEl = document.createElement('div');
+            dropEl.className = 'product-template-dropdown d-none';
+            wrap.appendChild(dropEl);
+        }
+        function matchTemplate(name, q) {
+            if (!q || !name) return true;
+            return (name + '').toLowerCase().indexOf((q + '').trim().toLowerCase()) !== -1;
+        }
+        function showDropdown() {
+            var q = (inputEl.value || '').trim();
+            var filtered = q ? templates.filter(function(t) { return matchTemplate(t, q); }) : templates.slice(0, 50);
+            dropEl.innerHTML = '';
+            if (filtered.length === 0) {
+                dropEl.classList.add('d-none');
+                return;
+            }
+            filtered.forEach(function(name) {
+                var div = document.createElement('div');
+                div.className = 'product-template-item';
+                div.textContent = name;
+                div.addEventListener('click', function() {
+                    inputEl.value = name;
+                    dropEl.classList.add('d-none');
+                    inputEl.focus();
+                });
+                dropEl.appendChild(div);
+            });
+            dropEl.classList.remove('d-none');
+        }
+        function hideDropdown() {
+            dropEl.classList.add('d-none');
+        }
+        inputEl.addEventListener('input', showDropdown);
+        inputEl.addEventListener('focus', showDropdown);
+        inputEl.addEventListener('blur', function() {
+            setTimeout(hideDropdown, 200);
+        });
+        inputEl.dataset.productDropdownInited = '1';
+    }
+    (function closeProductDropdownsOnOutsideClick() {
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.product-name-wrap')) {
+                document.querySelectorAll('.product-template-dropdown').forEach(function(d) { d.classList.add('d-none'); });
+            }
+        });
+    })();
+    function initAllProductNameDropdowns() {
+        document.querySelectorAll('.product-name-input').forEach(initProductNameDropdown);
     }
 
     // تحميل الاقتراحات عند تحميل الصفحة
@@ -2640,9 +3131,12 @@ document.addEventListener('DOMContentLoaded', function () {
         newRow.setAttribute('data-product-index', productIndex);
         newRow.innerHTML = `
             <div class="row g-2">
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <label class="form-label small">اسم المنتج</label>
-                    <input type="text" class="form-control product-name-input" name="products[${productIndex}][name]" placeholder="أدخل اسم المنتج أو القالب" list="templateSuggestions" autocomplete="off">
+                    <div class="product-name-wrap position-relative">
+                        <input type="text" class="form-control product-name-input" name="products[${productIndex}][name]" placeholder="أدخل اسم المنتج أو القالب أو اختر من القائمة" autocomplete="off">
+                        <div class="product-template-dropdown d-none"></div>
+                    </div>
                 </div>
                 <div class="col-md-2">
                     <label class="form-label small">الكمية</label>
@@ -2656,14 +3150,22 @@ document.addEventListener('DOMContentLoaded', function () {
                         <option value="كيلو">كيلو</option>
                         <option value="جرام">جرام</option>
                         <option value="شرينك">شرينك</option>
+                        <option value="دسته">دسته</option>
                         <option value="قطعة" selected>قطعة</option>
                     </select>
                 </div>
                 <div class="col-md-2">
                     <label class="form-label small">السعر</label>
-                    <input type="number" class="form-control" name="products[${productIndex}][price]" step="0.01" min="0" placeholder="0.00" id="product-price-${productIndex}">
+                    <input type="number" class="form-control product-price-input" name="products[${productIndex}][price]" step="0.01" min="0" placeholder="0.00" id="product-price-${productIndex}">
                 </div>
-                <div class="col-md-2 d-flex align-items-end">
+                <div class="col-md-2">
+                    <label class="form-label small">الإجمالي (قابل للتحكم)</label>
+                    <div class="input-group input-group-sm">
+                        <input type="number" class="form-control product-line-total-input" name="products[${productIndex}][line_total]" step="0.01" min="0" placeholder="0.00" id="product-line-total-${productIndex}" title="الإجمالي = الكمية × السعر حسب الوحدة">
+                        <span class="input-group-text">ج.م</span>
+                    </div>
+                </div>
+                <div class="col-md-1 d-flex align-items-end">
                     <button type="button" class="btn btn-danger btn-sm w-100 remove-product-btn">
                         <i class="bi bi-trash"></i>
                     </button>
@@ -2673,12 +3175,16 @@ document.addEventListener('DOMContentLoaded', function () {
         productsContainer.appendChild(newRow);
         productIndex++;
         updateRemoveButtons();
+        var newNameInput = newRow.querySelector('.product-name-input');
+        if (newNameInput) initProductNameDropdown(newNameInput);
         
         // إضافة مستمع الحدث لزر الحذف
         newRow.querySelector('.remove-product-btn').addEventListener('click', function() {
             newRow.remove();
             updateRemoveButtons();
+            if (typeof updateCreateTaskSummary === 'function') updateCreateTaskSummary();
         });
+        if (typeof updateCreateTaskSummary === 'function') updateCreateTaskSummary();
     }
     
     // إضافة منتج جديد
@@ -2702,6 +3208,84 @@ document.addEventListener('DOMContentLoaded', function () {
         const index = unitSelect.id.replace('product-unit-', '');
         updateQuantityStep(index);
     });
+    
+    // حساب الإجمالي تلقائياً: الإجمالي = الكمية × السعر (حسب الوحدة والكمية)
+    function updateProductLineTotal(row) {
+        const qtyInput = row.querySelector('.product-quantity-input');
+        const priceInput = row.querySelector('.product-price-input');
+        const totalInput = row.querySelector('.product-line-total-input');
+        if (!qtyInput || !priceInput || !totalInput) return;
+        const qty = parseFloat(qtyInput.value || '0');
+        const price = parseFloat(priceInput.value || '0');
+        const total = qty * price;
+        totalInput.value = total > 0 ? total.toFixed(2) : '';
+    }
+    
+    function syncPriceFromLineTotal(row) {
+        const qtyInput = row.querySelector('.product-quantity-input');
+        const priceInput = row.querySelector('.product-price-input');
+        const totalInput = row.querySelector('.product-line-total-input');
+        if (!qtyInput || !priceInput || !totalInput) return;
+        const qty = parseFloat(qtyInput.value || '0');
+        const totalVal = parseFloat(totalInput.value || '0');
+        if (qty > 0 && totalVal >= 0) {
+            priceInput.value = (totalVal / qty).toFixed(2);
+        }
+    }
+    
+    productsContainer.addEventListener('input', function(e) {
+        const row = e.target.closest('.product-row');
+        if (!row) return;
+        if (e.target.classList.contains('product-quantity-input') || e.target.classList.contains('product-price-input')) {
+            updateProductLineTotal(row);
+        } else if (e.target.classList.contains('product-line-total-input')) {
+            syncPriceFromLineTotal(row);
+        }
+        updateCreateTaskSummary();
+    });
+    
+    // تحديث الإجمالي للصفوف الموجودة عند التحميل
+    productsContainer.querySelectorAll('.product-row').forEach(updateProductLineTotal);
+    
+    // ملخص الإجمالي النهائي (إجمالي المنتجات + رسوم الشحن - الخصم)
+    function updateCreateTaskSummary() {
+        var subtotalEl = document.getElementById('createTaskSubtotalDisplay');
+        var shippingEl = document.getElementById('createTaskShippingDisplay');
+        var discountEl = document.getElementById('createTaskDiscountDisplay');
+        var finalEl = document.getElementById('createTaskFinalTotalDisplay');
+        var shippingInput = document.getElementById('createTaskShippingFees');
+        var discountInput = document.getElementById('createTaskDiscount');
+        if (!subtotalEl || !shippingEl || !finalEl) return;
+        var subtotal = 0;
+        productsContainer.querySelectorAll('.product-line-total-input').forEach(function(inp) {
+            var v = parseFloat(inp.value || '0');
+            if (!isNaN(v) && v >= 0) subtotal += v;
+        });
+        var shipping = 0;
+        if (shippingInput) {
+            var v = parseFloat(shippingInput.value || '0');
+            if (!isNaN(v) && v >= 0) shipping = v;
+        }
+        var discount = 0;
+        if (discountInput) {
+            var v = parseFloat(discountInput.value || '0');
+            if (!isNaN(v) && v >= 0) discount = v;
+        }
+        var finalTotal = Math.max(0, subtotal + shipping - discount);
+        subtotalEl.textContent = subtotal.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+        shippingEl.textContent = shipping.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+        if (discountEl) discountEl.textContent = discount.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+        finalEl.textContent = finalTotal.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+    }
+    if (document.getElementById('createTaskShippingFees')) {
+        document.getElementById('createTaskShippingFees').addEventListener('input', updateCreateTaskSummary);
+        document.getElementById('createTaskShippingFees').addEventListener('change', updateCreateTaskSummary);
+    }
+    if (document.getElementById('createTaskDiscount')) {
+        document.getElementById('createTaskDiscount').addEventListener('input', updateCreateTaskSummary);
+        document.getElementById('createTaskDiscount').addEventListener('change', updateCreateTaskSummary);
+    }
+    updateCreateTaskSummary();
 });
 
 // دالة لتحديث step حقل الكمية بناءً على الوحدة المختارة
@@ -2715,7 +3299,7 @@ function updateQuantityStep(index) {
     
     const selectedUnit = unitSelect.value;
     // الوحدات التي يجب أن تكون أرقام صحيحة فقط
-    const integerUnits = ['كيلو', 'قطعة', 'جرام'];
+    const integerUnits = ['كيلو', 'قطعة', 'جرام', 'دسته'];
     const mustBeInteger = integerUnits.includes(selectedUnit);
     
     if (mustBeInteger) {
@@ -2792,7 +3376,7 @@ window.openChangeStatusModal = function(taskId, currentStatus) {
                             <i class="bi bi-x-lg"></i>
                         </button>
                     </div>
-                    <form method="POST" id="changeStatusCardForm" action="">
+                    <form method="POST" id="changeStatusCardForm" action="?page=production_tasks">
                         <input type="hidden" name="action" value="update_task_status">
                         <input type="hidden" name="task_id" id="changeStatusCardTaskId">
                         <div class="card-body">

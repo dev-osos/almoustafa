@@ -7,6 +7,14 @@ if (!defined('ACCESS_ALLOWED')) {
     die('Direct access not allowed');
 }
 
+// منع الكاش عند التبديل بين تبويبات الشريط الجانبي لضمان عدم رجوع أي كاش قديم
+if (!headers_sent()) {
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Cache-Control: post-check=0, pre-check=0', false);
+    header('Pragma: no-cache');
+    header('Expires: 0');
+}
+
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../includes/db.php';
 require_once __DIR__ . '/../../includes/auth.php';
@@ -347,42 +355,7 @@ if ($hasNoVehicle && $currentUser['role'] === 'sales'): ?>
         </div>
         <div class="card-body">
             <div class="row g-3 mb-3">
-                <div class="col-12 col-md-6">
-                    <div class="table-responsive">
-                        <table class="table table-no-hover dashboard-table-details mb-0">
-                            <tr>
-                                <th width="40%">رقم السيارة:</th>
-                                <td><?php echo htmlspecialchars($selectedVehicle['vehicle_number']); ?></td>
-                            </tr>
-                            <tr>
-                                <th>الموديل:</th>
-                                <td><?php echo htmlspecialchars($selectedVehicle['model'] ?? '-'); ?></td>
-                            </tr>
-                            <tr>
-                                <th>المندوب:</th>
-                                <td><?php echo htmlspecialchars($selectedVehicle['driver_name'] ?? '-'); ?></td>
-                            </tr>
-                            <tr>
-                                <th>الحالة:</th>
-                                <td>
-                                    <span class="badge bg-<?php 
-                                        echo $selectedVehicle['status'] === 'active' ? 'success' : 
-                                            ($selectedVehicle['status'] === 'maintenance' ? 'warning' : 'secondary'); 
-                                    ?>">
-                                        <?php 
-                                        $statuses = [
-                                            'active' => 'نشطة',
-                                            'inactive' => 'غير نشطة',
-                                            'maintenance' => 'صيانة'
-                                        ];
-                                        echo $statuses[$selectedVehicle['status']] ?? $selectedVehicle['status'];
-                                        ?>
-                                    </span>
-                                </td>
-                            </tr>
-                        </table>
-                    </div>
-                </div>
+               
                 <div class="col-12 col-md-6">
                     <div class="card bg-light h-100">
                         <div class="card-body">

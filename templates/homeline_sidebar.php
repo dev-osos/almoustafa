@@ -99,10 +99,24 @@ switch ($role) {
                 'badge' => null
             ],
             [
+                'title' => 'جداول التحصيل اليومية',
+                'icon' => 'bi-calendar2-range',
+                'url' => $baseUrl . 'manager.php?page=daily_collection_schedules',
+                'active' => ($currentPage === 'manager.php' && $currentPageParam === 'daily_collection_schedules'),
+                'badge' => null
+            ],
+            [
                 'title' => 'عملاء المندوبين',
                 'icon' => 'bi-people-fill',
                 'url' => $baseUrl . 'manager.php?page=representatives_customers',
                 'active' => ($currentPage === 'manager.php' && $currentPageParam === 'representatives_customers'),
+                'badge' => null
+            ],
+            [
+                'title' => 'الأسعار المخصصة',
+                'icon' => 'bi-tag',
+                'url' => $baseUrl . 'manager.php?page=custom_prices',
+                'active' => ($currentPage === 'manager.php' && $currentPageParam === 'custom_prices'),
                 'badge' => null
             ],
             [
@@ -303,6 +317,13 @@ switch ($role) {
                 'active' => ($currentPage === 'manager.php' && in_array($currentPageParam, ['security', 'permissions'])),
                 'badge' => null
             ],
+            [
+                'title' => 'إعدادات النظام',
+                'icon' => 'bi-gear',
+                'url' => $baseUrl . 'manager.php?page=system_settings',
+                'active' => ($currentPage === 'manager.php' && $currentPageParam === 'system_settings'),
+                'badge' => null
+            ],
             ['divider' => true, 'title' => 'عام'],
             [
                 'title' => isset($lang['dashboard']) ? $lang['dashboard'] : 'لوحة التحكم',
@@ -332,10 +353,24 @@ switch ($role) {
                 'badge' => null
             ],
             [
+                'title' => 'جداول التحصيل اليومية',
+                'icon' => 'bi-calendar2-range',
+                'url' => $baseUrl . 'accountant.php?page=daily_collection_schedules',
+                'active' => ($currentPage === 'accountant.php' && $currentPageParam === 'daily_collection_schedules'),
+                'badge' => null
+            ],
+            [
                 'title' => 'عملاء المندوبين',
                 'icon' => 'bi-people-fill',
                 'url' => $baseUrl . 'accountant.php?page=representatives_customers',
                 'active' => ($currentPage === 'accountant.php' && $currentPageParam === 'representatives_customers'),
+                'badge' => null
+            ],
+            [
+                'title' => 'الأسعار المخصصة',
+                'icon' => 'bi-tag',
+                'url' => $baseUrl . 'accountant.php?page=custom_prices',
+                'active' => ($currentPage === 'accountant.php' && $currentPageParam === 'custom_prices'),
                 'badge' => null
             ],
             [
@@ -621,6 +656,13 @@ switch ($role) {
                 'badge' => null
             ],
             [
+                'title' => 'محفظة المستخدم',
+                'icon' => 'bi-wallet2',
+                'url' => $baseUrl . 'sales.php?page=user_wallet',
+                'active' => ($currentPage === 'sales.php' && $currentPageParam === 'user_wallet'),
+                'badge' => null
+            ],
+            [
                 'title' => 'سجلات المندوب',
                 'icon' => 'bi-journal-text',
                 'url' => $baseUrl . 'sales.php?page=my_records',
@@ -737,6 +779,13 @@ switch ($role) {
                 'icon' => 'bi-list-check',
                 'url' => $baseUrl . 'production.php?page=tasks',
                 'active' => ($currentPage === 'production.php' && $currentPageParam === 'tasks'),
+                'badge' => null
+            ],
+            [
+                'title' => 'جداول التحصيل اليومية',
+                'icon' => 'bi-calendar2-range',
+                'url' => $baseUrl . 'production.php?page=daily_collection_my_tables',
+                'active' => ($currentPage === 'production.php' && $currentPageParam === 'daily_collection_my_tables'),
                 'badge' => null
             ],
             [
@@ -857,6 +906,13 @@ switch ($role) {
                 'active' => ($currentPage === 'driver.php' && $currentPageParam === 'vehicle_maintenance'),
                 'badge' => null
             ],
+            [
+                'title' => 'جداول التحصيل اليومية',
+                'icon' => 'bi-calendar2-range',
+                'url' => $baseUrl . 'driver.php?page=daily_collection_my_tables',
+                'active' => ($currentPage === 'driver.php' && $currentPageParam === 'daily_collection_my_tables'),
+                'badge' => null
+            ],
         ];
         break;
 }
@@ -902,10 +958,24 @@ if (empty($menuItems)) {
                 'badge' => null
             ],
             [
+                'title' => 'جداول التحصيل اليومية',
+                'icon' => 'bi-calendar2-range',
+                'url' => $baseUrl . 'sales.php?page=daily_collection_my_tables',
+                'active' => ($currentPage === 'sales.php' && $currentPageParam === 'daily_collection_my_tables'),
+                'badge' => null
+            ],
+            [
                 'title' => isset($lang['sales_pos']) ? $lang['sales_pos'] : 'نقطة البيع',
                 'icon' => 'bi-shop',
                 'url' => $baseUrl . 'sales.php?page=pos',
                 'active' => ($currentPage === 'sales.php' && $currentPageParam === 'pos'),
+                'badge' => null
+            ],
+            [
+                'title' => 'محفظة المستخدم',
+                'icon' => 'bi-wallet2',
+                'url' => $baseUrl . 'sales.php?page=user_wallet',
+                'active' => ($currentPage === 'sales.php' && $currentPageParam === 'user_wallet'),
                 'badge' => null
             ],
         ];

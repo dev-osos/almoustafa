@@ -1667,6 +1667,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         }
+    } elseif ($action === 'delete_packaging_material') {
+        if (!in_array($currentUser['role'] ?? '', ['manager', 'developer', 'accountant'], true)) {
+            $error = 'غير مصرح لك بحذف أدوات التعبئة.';
+        } elseif (!$usePackagingTable) {
+            $error = 'حذف الأدوات متاح فقط عند استخدام جدول أدوات التعبئة.';
+        } else {
+            $materialId = intval($_POST['material_id'] ?? 0);
+            if ($materialId <= 0) {
+                $error = 'معرف الأداة غير صالح.';
+            } else {
+                try {
+                    $row = $db->queryOne("SELECT id, name FROM packaging_materials WHERE id = ? AND status = 'active'", [$materialId]);
+                    if (!$row) {
+                        $error = 'لم يتم العثور على أداة التعبئة أو أنها غير نشطة.';
+                    } else {
+                        $db->execute(
+                            "UPDATE packaging_materials SET status = 'inactive', updated_at = NOW() WHERE id = ?",
+                            [$materialId]
+                        );
+                        logAudit(
+                            (int)($currentUser['id'] ?? 0),
+                            'delete_packaging_material',
+                            'packaging_materials',
+                            $materialId,
+                            $row,
+                            ['status' => 'inactive']
+                        );
+                        $successMessage = 'تم حذف أداة التعبئة بنجاح.';
+                        $redirectParams = ['page' => 'packaging_warehouse'];
+                        preventDuplicateSubmission($successMessage, $redirectParams, null, $currentUser['role']);
+                    }
+                } catch (Exception $e) {
+                    $error = 'حدث خطأ أثناء حذف الأداة: ' . $e->getMessage();
+                }
+            }
+        }
     }
 }
 
@@ -2402,53 +2438,24 @@ $packagingReportGeneratedAt = $packagingReport['generated_at'] ?? date('Y-m-d H:
     </div>
 <?php endif; ?>
 
-<!-- إحصائيات -->
-<div class="row mb-4">
-    <div class="col-md-3">
-        <div class="card shadow-sm">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <div class="text-muted small">إجمالي الأدوات</div>
-                        <div class="h4 mb-0"><?php echo $stats['total_materials']; ?></div>
-                    </div>
-                    <div class="text-primary">
-                        <i class="bi bi-box-seam fs-1"></i>
-                    </div>
-                </div>
+<!-- فلترة حسب الفئة -->
+<div class="row g-2 g-md-3 mb-3 row-cols-2 row-cols-md-4" id="packaging-category-filters">
+    <div class="col">
+        <div class="card shadow-sm packaging-category-filter cursor-pointer h-100 border border-primary" data-filter-value="" role="button" tabindex="0">
+            <div class="card-body py-2 px-3 text-center">
+                <span class="small fw-semibold">الكل</span>
             </div>
         </div>
     </div>
-    <div class="col-md-3">
-        <div class="card shadow-sm">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <div class="text-muted small">أدوات مستخدمة</div>
-                        <div class="h4 mb-0"><?php echo $stats['materials_with_usage']; ?></div>
-                    </div>
-                    <div class="text-info">
-                        <i class="bi bi-check-circle fs-1"></i>
-                    </div>
-                </div>
+    <?php foreach ($filterTypeOptions as $catOpt): ?>
+    <div class="col">
+        <div class="card shadow-sm packaging-category-filter cursor-pointer h-100 border" data-filter-value="<?php echo htmlspecialchars($catOpt, ENT_QUOTES, 'UTF-8'); ?>" role="button" tabindex="0">
+            <div class="card-body py-2 px-3 text-center">
+                <span class="small fw-semibold text-truncate d-block" title="<?php echo htmlspecialchars($catOpt, ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($catOpt, ENT_QUOTES, 'UTF-8'); ?></span>
             </div>
         </div>
     </div>
-    <div class="col-md-3">
-        <div class="card shadow-sm">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <div class="text-muted small">عمليات الإنتاج</div>
-                        <div class="h4 mb-0"><?php echo $stats['total_productions']; ?></div>
-                    </div>
-                    <div class="text-success">
-                        <i class="bi bi-gear fs-1"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+    <?php endforeach; ?>
 </div>
 
 <!-- البحث والفلترة -->
@@ -2457,18 +2464,6 @@ $packagingReportGeneratedAt = $packagingReport['generated_at'] ?? date('Y-m-d H:
         <form method="GET" id="packaging-filter-form" class="row g-3">
             <input type="hidden" name="page" value="packaging_warehouse">
             <input type="hidden" name="material_id" id="filter-material-id" value="<?php echo (int)$filters['material_id']; ?>">
-            <div class="col-md-4">
-                <label class="form-label">فلتر بالنوع</label>
-                <select class="form-select" name="filter_type" id="filter-type-select">
-                    <option value="">جميع الأنواع</option>
-                    <?php foreach ($filterTypeOptions as $typeOpt): ?>
-                        <option value="<?php echo htmlspecialchars($typeOpt, ENT_QUOTES, 'UTF-8'); ?>"
-                                <?php echo $filters['filter_type'] === $typeOpt ? 'selected' : ''; ?>>
-                            <?php echo htmlspecialchars($typeOpt, ENT_QUOTES, 'UTF-8'); ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
             <div class="col-md-4">
                 <label class="form-label">أداة محددة</label>
                 <div class="position-relative" id="material-search-wrap">
@@ -2625,6 +2620,74 @@ $packagingReportGeneratedAt = $packagingReport['generated_at'] ?? date('Y-m-d H:
     }
 })();
 </script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var filterCards = document.querySelectorAll('.packaging-category-filter');
+    var tableRows = document.querySelectorAll('.packaging-table tbody tr[data-category]');
+    var mobileCards = document.querySelectorAll('.packaging-mobile-card');
+    function applyCategoryFilter(value) {
+        var showAll = value === '';
+        tableRows.forEach(function(row) {
+            var cat = (row.getAttribute('data-category') || '').trim();
+            row.style.display = (showAll || cat === value) ? '' : 'none';
+        });
+        mobileCards.forEach(function(card) {
+            var cat = (card.getAttribute('data-category') || '').trim();
+            card.style.display = (showAll || cat === value) ? '' : 'none';
+        });
+        filterCards.forEach(function(card) {
+            var cardVal = (card.getAttribute('data-filter-value') ?? '');
+            if (typeof cardVal !== 'string') cardVal = '';
+            cardVal = cardVal.trim();
+            if (cardVal === value) {
+                card.classList.add('border-primary');
+                card.classList.remove('border');
+            } else {
+                card.classList.remove('border-primary');
+                card.classList.add('border');
+            }
+        });
+    }
+    filterCards.forEach(function(card) {
+        card.addEventListener('click', function() {
+            var value = (card.getAttribute('data-filter-value') ?? '').trim();
+            applyCategoryFilter(value);
+        });
+        card.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                var value = (card.getAttribute('data-filter-value') ?? '').trim();
+                applyCategoryFilter(value);
+            }
+        });
+    });
+});
+</script>
+
+<!-- بطاقة حذف أداة التعبئة (تظهر فوق القائمة) -->
+<?php if ($usePackagingTable && in_array($currentUser['role'] ?? '', ['manager', 'developer', 'accountant'], true)): ?>
+<div class="card shadow-sm border-danger d-none mb-3" id="deleteMaterialCard">
+    <div class="card-header bg-danger text-white d-flex flex-wrap gap-2 justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="bi bi-trash me-2"></i>حذف أداة التعبئة</h5>
+        <button type="button" class="btn btn-sm btn-light btn-close-delete-card" aria-label="إغلاق">
+            <i class="bi bi-x-lg"></i>
+        </button>
+    </div>
+    <div class="card-body">
+        <form method="POST" id="deleteMaterialForm">
+            <input type="hidden" name="action" value="delete_packaging_material">
+            <input type="hidden" name="material_id" id="delete_material_id">
+            <p class="mb-3">هل أنت متأكد من حذف أداة التعبئة <strong id="delete_material_name_display"></strong>؟ سيتم إخفاؤها من القائمة (حذف منطقي).</p>
+            <div class="d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-secondary btn-close-delete-card">إلغاء</button>
+                <button type="submit" class="btn btn-danger">
+                    <i class="bi bi-trash me-2"></i>حذف الأداة
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+<?php endif; ?>
 
 <!-- قائمة أدوات التعبئة -->
 <div class="card shadow-sm">
@@ -2649,20 +2712,14 @@ $packagingReportGeneratedAt = $packagingReport['generated_at'] ?? date('Y-m-d H:
                         </tr>
                     </thead>
                     <tbody>
-                        <?php foreach ($paginatedMaterials as $index => $material): ?>
-                            <tr>
+                        <?php foreach ($paginatedMaterials as $index => $material):
+                            $rowCategory = trim((string)($material['type'] ?? $material['category'] ?? ''));
+                        ?>
+                            <tr data-category="<?php echo htmlspecialchars($rowCategory, ENT_QUOTES, 'UTF-8'); ?>">
                                 <td style="padding: 0.4rem 0.25rem;"><?php echo $offset + $index + 1; ?></td>
                                 <td style="padding: 0.4rem 0.25rem; line-height: 1.3;">
                                     <div style="font-weight: 600; font-size: 0.875rem;"><?php echo htmlspecialchars($material['name']); ?></div>
-                                    <?php 
-                                        $aliasValue = trim((string)($material['alias'] ?? ''));
-                                        $aliasDisplayText = $aliasValue !== '' ? $aliasValue : 'لا يوجد اسم مستعار';
-                                        $aliasDisplayClass = $aliasValue !== '' ? 'text-info' : 'text-muted';
-                                    ?>
-                                    <div class="alias-display <?php echo $aliasDisplayClass; ?>" data-empty-text="لا يوجد اسم مستعار" style="font-size: 0.75rem; margin-top: 2px;">
-                                        <span class="fw-semibold text-secondary">الاسم المستعار:</span>
-                                        <span class="alias-text"><?php echo htmlspecialchars($aliasDisplayText); ?></span>
-                                    </div>
+                                    <?php $aliasValue = trim((string)($material['alias'] ?? '')); ?>
                                     <?php if (!empty($material['specifications'])): ?>
                                         <div style="font-size: 0.75rem; color: #6c757d; margin-top: 2px;"><?php echo htmlspecialchars($material['specifications']); ?></div>
                                     <?php endif; ?>
@@ -2671,17 +2728,6 @@ $packagingReportGeneratedAt = $packagingReport['generated_at'] ?? date('Y-m-d H:
                                     <?php endif; ?>
                                     <?php if ($usePackagingTable): ?>
                                         <form class="alias-inline-form mt-2" data-material-id="<?php echo $material['id']; ?>">
-                                            <div class="input-group input-group-sm alias-input-group">
-                                                <input type="text"
-                                                       name="alias"
-                                                       class="form-control form-control-sm"
-                                                       placeholder="اكتب الاسم المستعار"
-                                                       value="<?php echo htmlspecialchars($aliasValue, ENT_QUOTES, 'UTF-8'); ?>"
-                                                       maxlength="255">
-                                                <button class="btn btn-outline-secondary" type="submit">
-                                                    حفظ
-                                                </button>
-                                            </div>
                                             <div class="alias-status small text-muted mt-1" role="status"></div>
                                         </form>
                                     <?php endif; ?>
@@ -2722,7 +2768,7 @@ $packagingReportGeneratedAt = $packagingReport['generated_at'] ?? date('Y-m-d H:
                                             style="padding: 0.2rem 0.4rem; font-size: 0.75rem;"
                                             <?php echo $useButtonDisabled ? ' disabled' : ''; ?>
                                             aria-label="استخدام الأداة">
-                                            <span class="visually-hidden">استخدام</span>
+                                            <span class="visually-hidden"></span>
                                             <i class="bi bi-check2-circle" aria-hidden="true"></i>
                                         </button>
                                         <button class="btn btn-success btn-sm"
@@ -2731,7 +2777,7 @@ $packagingReportGeneratedAt = $packagingReport['generated_at'] ?? date('Y-m-d H:
                                                 data-unit="<?php echo htmlspecialchars(!empty($material['unit']) ? $material['unit'] : 'وحدة', ENT_QUOTES, 'UTF-8'); ?>"
                                                 data-quantity="<?php echo number_format($materialQuantity, 4, '.', ''); ?>"
                                                 onclick="openAddQuantityModal(this)"
-                                                title="إضافة كمية"
+                                                title=""
                                                 style="padding: 0.2rem 0.4rem; font-size: 0.75rem;">
                                             <i class="bi bi-plus-circle"></i>
                                         </button>
@@ -2741,17 +2787,27 @@ $packagingReportGeneratedAt = $packagingReport['generated_at'] ?? date('Y-m-d H:
                                                 data-unit="<?php echo htmlspecialchars(!empty($material['unit']) ? $material['unit'] : 'وحدة', ENT_QUOTES, 'UTF-8'); ?>"
                                                 data-quantity="<?php echo number_format($materialQuantity, 4, '.', ''); ?>"
                                                 onclick="openRecordDamageModal(this)"
-                                                title="تسجيل تالف"
+                                                title=""
                                                 style="padding: 0.2rem 0.4rem; font-size: 0.75rem;">
                                             <i class="bi bi-exclamation-octagon"></i>
                                         </button>
                                         <?php if (in_array($currentUser['role'] ?? '', ['manager', 'developer', 'accountant'], true)): ?>
                                             <button class="btn btn-warning btn-sm" 
                                                     onclick="editMaterial(<?php echo $material['id']; ?>)"
-                                                    title="تعديل"
+                                                    title=""
                                                     style="padding: 0.2rem 0.4rem; font-size: 0.75rem;">
                                                 <i class="bi bi-pencil"></i>
                                             </button>
+                                            <?php if ($usePackagingTable): ?>
+                                                <button class="btn btn-outline-danger btn-sm btn-delete-packaging"
+                                                        type="button"
+                                                        data-material-id="<?php echo (int)$material['id']; ?>"
+                                                        data-material-name="<?php echo htmlspecialchars($material['name'], ENT_QUOTES, 'UTF-8'); ?>"
+                                                        title=""
+                                                        style="padding: 0.2rem 0.4rem; font-size: 0.75rem;">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            <?php endif; ?>
                                         <?php endif; ?>
                                     </div>
                                 </td>
@@ -2763,34 +2819,18 @@ $packagingReportGeneratedAt = $packagingReport['generated_at'] ?? date('Y-m-d H:
             
             <!-- عرض Cards على الموبايل -->
             <div class="d-md-none">
-                <?php foreach ($paginatedMaterials as $index => $material): ?>
-                    <div class="card mb-3 shadow-sm">
+                <?php foreach ($paginatedMaterials as $index => $material):
+                    $cardCategory = trim((string)($material['type'] ?? $material['category'] ?? ''));
+                ?>
+                    <div class="card mb-3 shadow-sm packaging-mobile-card" data-category="<?php echo htmlspecialchars($cardCategory, ENT_QUOTES, 'UTF-8'); ?>">
                         <div class="card-body">
                             <div class="d-flex justify-content-between align-items-start mb-2">
                                 <div class="flex-grow-1">
                                     <h6 class="mb-1"><?php echo htmlspecialchars($material['name']); ?></h6>
-                                    <?php 
-                                        $aliasValue = trim((string)($material['alias'] ?? ''));
-                                        $aliasDisplayText = $aliasValue !== '' ? $aliasValue : 'لا يوجد اسم مستعار';
-                                        $aliasDisplayClass = $aliasValue !== '' ? 'text-info' : 'text-muted';
-                                    ?>
-                                    <div class="alias-display <?php echo $aliasDisplayClass; ?> small mb-1" data-empty-text="لا يوجد اسم مستعار">
-                                        <span class="fw-semibold text-secondary">الاسم المستعار:</span>
-                                        <span class="alias-text"><?php echo htmlspecialchars($aliasDisplayText); ?></span>
-                                    </div>
+                                    <?php $aliasValue = trim((string)($material['alias'] ?? '')); ?>
                                     <?php if ($usePackagingTable): ?>
                                         <form class="alias-inline-form alias-mobile-form mt-2" data-material-id="<?php echo $material['id']; ?>">
-                                            <div class="input-group input-group-sm alias-input-group mb-1">
-                                                <input type="text"
-                                                       name="alias"
-                                                       class="form-control form-control-sm"
-                                                       placeholder="اسم مستعار"
-                                                       value="<?php echo htmlspecialchars($aliasValue, ENT_QUOTES, 'UTF-8'); ?>"
-                                                       maxlength="255">
-                                                <button class="btn btn-outline-secondary" type="submit">
-                                                    حفظ
-                                                </button>
-                                            </div>
+                                            
                                             <div class="alias-status small text-muted mb-2" role="status"></div>
                                         </form>
                                     <?php endif; ?>
@@ -2828,13 +2868,6 @@ $packagingReportGeneratedAt = $packagingReport['generated_at'] ?? date('Y-m-d H:
                                 </div>
                             </div>
                             
-                            <div class="row g-2 mb-2">
-                                <div class="col-12">
-                                    <small class="text-muted d-block">المستخدم:</small>
-                                    <strong class="text-warning"><?php echo number_format($material['usage']['total_used'] ?? 0, 2); ?></strong>
-                                </div>
-                            </div>
-                            
                             <div class="d-grid gap-2 d-flex mt-3">
                                 <button
                                     class="btn btn-sm btn-outline-primary flex-fill"
@@ -2848,7 +2881,7 @@ $packagingReportGeneratedAt = $packagingReport['generated_at'] ?? date('Y-m-d H:
                                     onclick="usePackagingMaterial(this)"
                                     <?php echo $useButtonDisabled ? ' disabled' : ''; ?>>
                                     <i class="bi bi-check2-circle me-2" aria-hidden="true"></i>
-                                    <span>استخدام</span>
+                                    <span></span>
                                 </button>
                                 <button class="btn btn-sm btn-success flex-fill"
                                         data-id="<?php echo $material['id']; ?>"
@@ -2856,7 +2889,7 @@ $packagingReportGeneratedAt = $packagingReport['generated_at'] ?? date('Y-m-d H:
                                         data-unit="<?php echo htmlspecialchars(!empty($material['unit']) ? $material['unit'] : 'وحدة', ENT_QUOTES, 'UTF-8'); ?>"
                                         data-quantity="<?php echo number_format($materialQuantity, 4, '.', ''); ?>"
                                         onclick="openAddQuantityModal(this)">
-                                    <i class="bi bi-plus-circle me-2"></i>إضافة كمية
+                                    <i class="bi bi-plus-circle me-2"></i>
                                 </button>
                                 <button class="btn btn-sm btn-danger flex-fill"
                                         data-id="<?php echo $material['id']; ?>"
@@ -2864,12 +2897,20 @@ $packagingReportGeneratedAt = $packagingReport['generated_at'] ?? date('Y-m-d H:
                                         data-unit="<?php echo htmlspecialchars(!empty($material['unit']) ? $material['unit'] : 'وحدة', ENT_QUOTES, 'UTF-8'); ?>"
                                         data-quantity="<?php echo number_format($materialQuantity, 4, '.', ''); ?>"
                                         onclick="openRecordDamageModal(this)">
-                                    <i class="bi bi-exclamation-octagon me-2"></i>تسجيل تالف
+                                    <i class="bi bi-exclamation-octagon me-2"></i>
                                 </button>
-                                <?php if ($currentUser['role'] === 'manager'): ?>
+                                <?php if (in_array($currentUser['role'] ?? '', ['manager', 'developer', 'accountant'], true)): ?>
                                     <button class="btn btn-sm btn-warning flex-fill" onclick="editMaterial(<?php echo $material['id']; ?>)">
-                                        <i class="bi bi-pencil me-2"></i>تعديل
+                                        <i class="bi bi-pencil me-2"></i>
                                     </button>
+                                    <?php if ($usePackagingTable): ?>
+                                        <button class="btn btn-sm btn-outline-danger flex-fill btn-delete-packaging"
+                                                type="button"
+                                                data-material-id="<?php echo (int)$material['id']; ?>"
+                                                data-material-name="<?php echo htmlspecialchars($material['name'], ENT_QUOTES, 'UTF-8'); ?>">
+                                            <i class="bi bi-trash me-2"></i>
+                                        </button>
+                                    <?php endif; ?>
                                 <?php endif; ?>
                             </div>
                         </div>
@@ -3374,68 +3415,65 @@ $packagingReportGeneratedAt = $packagingReport['generated_at'] ?? date('Y-m-d H:
     </div>
 </div>
 
-<!-- Modal تعديل أداة التعبئة -->
-<div class="modal fade" id="editMaterialModal" tabindex="-1">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable">
-        <div class="modal-content">
-            <form method="POST" id="editMaterialForm">
-                <div class="modal-header bg-warning">
-                    <h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>تعديل بيانات أداة التعبئة</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+<!-- بطاقة تعديل أداة التعبئة -->
+<div class="card shadow-sm mb-4" id="editMaterialCard" style="display: none;">
+    <div class="card-header bg-warning d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="bi bi-pencil-square me-2"></i>تعديل بيانات أداة التعبئة</h5>
+        <button type="button" class="btn-close" onclick="closeEditMaterialCard()" aria-label="إغلاق"></button>
+    </div>
+    <div class="card-body">
+        <form method="POST" id="editMaterialForm">
+            <input type="hidden" name="action" value="update_packaging_material">
+            <input type="hidden" name="material_id" id="edit_material_id">
+
+            <div class="mb-3">
+                <label class="form-label fw-bold">اسم الأداة <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" name="name" id="edit_material_name" required maxlength="255">
+            </div>
+
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label">الفئة / النوع</label>
+                    <input type="text" class="form-control" name="type" id="edit_material_type" maxlength="100">
                 </div>
-                <div class="modal-body">
-                    <input type="hidden" name="action" value="update_packaging_material">
-                    <input type="hidden" name="material_id" id="edit_material_id">
-
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">اسم الأداة <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" name="name" id="edit_material_name" required maxlength="255">
-                    </div>
-
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <label class="form-label">الفئة / النوع</label>
-                            <input type="text" class="form-control" name="type" id="edit_material_type" maxlength="100">
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">الوحدة</label>
-                            <input type="text" class="form-control" name="unit" id="edit_material_unit" maxlength="50">
-                        </div>
-                    </div>
-
-                    <div class="row g-3 mt-0">
-                        <div class="col-md-6">
-                            <label class="form-label">الكود الداخلي</label>
-                            <input type="text" class="form-control" name="material_code" id="edit_material_code" maxlength="100">
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">الحالة</label>
-                            <select class="form-select" name="status" id="edit_material_status">
-                                <option value="active">نشطة</option>
-                                <option value="inactive">غير نشطة</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="mb-3 mt-3">
-                        <label class="form-label">المواصفات / الوصف</label>
-                        <textarea class="form-control" name="specifications" id="edit_material_specifications" rows="3" maxlength="500"></textarea>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label">الكمية الحالية (للقراءة فقط)</label>
-                        <div class="form-control-plaintext fw-semibold" id="edit_material_quantity_display">-</div>
-                        <small class="text-muted">لتعديل الكمية يرجى استخدام أزرار "إضافة كمية" أو "تسجيل تالف".</small>
-                    </div>
+                <div class="col-md-6">
+                    <label class="form-label">الوحدة</label>
+                    <input type="text" class="form-control" name="unit" id="edit_material_unit" maxlength="50">
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
-                    <button type="submit" class="btn btn-warning text-white">
-                        <i class="bi bi-check-circle me-2"></i>تحديث الأداة
-                    </button>
+            </div>
+
+            <div class="row g-3 mt-0">
+                <div class="col-md-6">
+                    <label class="form-label">الكود الداخلي</label>
+                    <input type="text" class="form-control" name="material_code" id="edit_material_code" maxlength="100">
                 </div>
-            </form>
-        </div>
+                <div class="col-md-6">
+                    <label class="form-label">الحالة</label>
+                    <select class="form-select" name="status" id="edit_material_status">
+                        <option value="active">نشطة</option>
+                        <option value="inactive">غير نشطة</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="mb-3 mt-3">
+                <label class="form-label">المواصفات / الوصف</label>
+                <textarea class="form-control" name="specifications" id="edit_material_specifications" rows="3" maxlength="500"></textarea>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">الكمية الحالية (للقراءة فقط)</label>
+                <div class="form-control-plaintext fw-semibold" id="edit_material_quantity_display">-</div>
+                <small class="text-muted">لتعديل الكمية يرجى استخدام أزرار "إضافة كمية" أو "تسجيل تالف".</small>
+            </div>
+
+            <div class="d-flex gap-2 flex-wrap">
+                <button type="submit" class="btn btn-warning text-white">
+                    <i class="bi bi-check-circle me-2"></i>تحديث الأداة
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="closeEditMaterialCard()">إلغاء</button>
+            </div>
+        </form>
     </div>
 </div>
 
@@ -3472,6 +3510,19 @@ document.addEventListener('DOMContentLoaded', function () {
             window.print();
         });
     }
+
+    document.addEventListener('click', function (e) {
+        const btn = e.target.closest('.btn-delete-packaging');
+        if (btn) {
+            e.preventDefault();
+            openDeleteMaterialModal(btn);
+        }
+        const closeBtn = e.target.closest('.btn-close-delete-card');
+        if (closeBtn) {
+            e.preventDefault();
+            closeDeleteMaterialCard();
+        }
+    });
 
     const reportButton = document.getElementById('generatePackagingReportBtn');
     const reportModalElement = document.getElementById('packagingReportModal');
@@ -3803,11 +3854,21 @@ function scrollToElement(element) {
     }, 200);
 }
 
+function closeEditMaterialCard() {
+    const card = document.getElementById('editMaterialCard');
+    if (card) {
+        card.style.display = 'none';
+        const form = document.getElementById('editMaterialForm');
+        if (form) form.reset();
+    }
+}
+
 function closeAllForms() {
     const cards = [
         'packagingReportCard',
         'addQuantityCard',
-        'recordDamageCard'
+        'recordDamageCard',
+        'editMaterialCard'
     ];
     cards.forEach(function(cardId) {
         const card = document.getElementById(cardId);
@@ -4128,6 +4189,26 @@ function viewMaterialDetails(materialId) {
         });
 }
 
+function openDeleteMaterialModal(btn) {
+    if (!btn || !btn.dataset) return;
+    const materialId = btn.getAttribute('data-material-id');
+    const materialName = btn.getAttribute('data-material-name') || '';
+    const card = document.getElementById('deleteMaterialCard');
+    const idInput = document.getElementById('delete_material_id');
+    const nameDisplay = document.getElementById('delete_material_name_display');
+    if (card && idInput && nameDisplay && materialId) {
+        idInput.value = materialId;
+        nameDisplay.textContent = materialName;
+        card.classList.remove('d-none');
+        card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+}
+
+function closeDeleteMaterialCard() {
+    const card = document.getElementById('deleteMaterialCard');
+    if (card) card.classList.add('d-none');
+}
+
 function editMaterial(materialId) {
     const currentUrl = window.location.href;
     const urlParams = new URLSearchParams(window.location.search);
@@ -4164,10 +4245,14 @@ function editMaterial(materialId) {
 }
 
 function openEditModalFromData(material) {
-    const modalElement = document.getElementById('editMaterialModal');
+    if (typeof closeAllForms === 'function') {
+        closeAllForms();
+    }
+
+    const card = document.getElementById('editMaterialCard');
     const form = document.getElementById('editMaterialForm');
-    if (!modalElement || !form) {
-        console.warn('Edit modal not available.');
+    if (!card || !form) {
+        console.warn('Edit material card not available.');
         return;
     }
 
@@ -4210,12 +4295,14 @@ function openEditModalFromData(material) {
         }
     }
 
-    const modal = new bootstrap.Modal(modalElement);
-    modal.show();
+    card.style.display = 'block';
+    card.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
     setTimeout(() => {
-        nameInput.focus();
-        nameInput.select();
+        if (nameInput) {
+            nameInput.focus();
+            nameInput.select();
+        }
     }, 200);
 }
 </script>
@@ -4421,6 +4508,21 @@ document.addEventListener('DOMContentLoaded', function () {
     .table-sm th,
     .table-sm td {
         padding: 0.3rem 0.2rem !important;
+    }
+}
+
+/* تصغير أزرار الإجراءات على الهاتف */
+@media (max-width: 576px) {
+    .table-sm .btn-group .btn {
+        padding: 0.15rem 0.25rem !important;
+        font-size: 0.65rem !important;
+        min-width: 28px;
+    }
+    .table-sm .btn-group {
+        gap: 1px;
+    }
+    .table-sm .btn-group .btn .bi {
+        font-size: 0.85em;
     }
 }
 </style>

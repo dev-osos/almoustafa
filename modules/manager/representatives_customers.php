@@ -702,6 +702,7 @@ $representativeSummary = [
     'total_returns' => 0.0,
     'creditors' => 0,
     'total_credit' => 0.0,
+    'total_wallet' => 0.0,
 ];
 
 try {
@@ -899,6 +900,26 @@ try {
         $repRow['total_collections'] = $collectionsTotal;
         $repRow['total_returns'] = $returnsTotal;
         
+        // رصيد محفظة المستخدم للمندوب
+        $walletBalance = 0.0;
+        try {
+            $walletTableCheck = $db->queryOne("SHOW TABLES LIKE 'user_wallet_transactions'");
+            if (!empty($walletTableCheck)) {
+                $credits = $db->queryOne(
+                    "SELECT COALESCE(SUM(amount), 0) AS total FROM user_wallet_transactions WHERE user_id = ? AND type IN ('deposit', 'custody_add')",
+                    [$repId]
+                );
+                $debits = $db->queryOne(
+                    "SELECT COALESCE(SUM(amount), 0) AS total FROM user_wallet_transactions WHERE user_id = ? AND type IN ('withdrawal', 'custody_retrieve')",
+                    [$repId]
+                );
+                $walletBalance = (float)($credits['total'] ?? 0) - (float)($debits['total'] ?? 0);
+            }
+        } catch (Throwable $walletError) {
+            error_log('Wallet balance error for rep ' . $repId . ': ' . $walletError->getMessage());
+        }
+        $repRow['wallet_balance'] = $walletBalance;
+        
         // تحديث الإحصائيات الإجمالية
         $representativeSummary['total']++;
         $representativeSummary['customers'] += (int)($repRow['customer_count'] ?? 0);
@@ -908,6 +929,7 @@ try {
         $representativeSummary['total_credit'] += (float)($repRow['total_credit'] ?? 0.0);
         $representativeSummary['total_collections'] += $collectionsTotal;
         $representativeSummary['total_returns'] += $returnsTotal;
+        $representativeSummary['total_wallet'] += $walletBalance;
     }
     unset($repRow);
     
@@ -937,6 +959,7 @@ try {
                     'debtor_count' => 0,
                     'total_collections' => 0.0,
                     'total_returns' => 0.0,
+                    'wallet_balance' => 0.0,
                 ];
             }
         }
@@ -1040,6 +1063,17 @@ if ($error): ?>
                     <div class="fs-4 fw-bold text-primary mb-0"><?php echo formatCurrency($representativeSummary['total_credit']); ?></div>
                 </div>
                 <span class="text-primary display-6"><i class="bi bi-wallet2"></i></span>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="text-muted small">محفظة المستخدم</div>
+                    <div class="fs-4 fw-bold text-secondary mb-0"><?php echo formatCurrency($representativeSummary['total_wallet'] ?? 0); ?></div>
+                </div>
+                <span class="text-secondary display-6"><i class="bi bi-wallet-fill"></i></span>
             </div>
         </div>
     </div>

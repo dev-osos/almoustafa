@@ -152,6 +152,14 @@ $baseUrl = getDashboardUrl();
             </li>
             
             <li class="nav-item">
+                <a class="nav-link <?php echo (isset($_GET['page']) && $_GET['page'] === 'user_wallet') ? 'active' : ''; ?>"
+                   href="<?php echo $baseUrl; ?>sales.php?page=user_wallet">
+                    <i class="bi bi-wallet2"></i>
+                    <span>محفظة المستخدم</span>
+                </a>
+            </li>
+            
+            <li class="nav-item">
                 <a class="nav-link <?php echo (isset($_GET['page']) && $_GET['page'] === 'reports') ? 'active' : ''; ?>" 
                    href="<?php echo $baseUrl; ?>sales.php?page=reports">
                     <i class="bi bi-file-earmark-text"></i>

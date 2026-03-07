@@ -97,6 +97,16 @@ if (!function_exists('renderRepresentativeCards')) {
                                         <?php endif; ?>
                                     </div>
                                     <?php endif; ?>
+                                    <?php if (isset($rep['wallet_balance'])): ?>
+                                    <div class="row g-2">
+                                        <div class="col-6">
+                                            <div class="rep-stat-card border-secondary">
+                                                <div class="rep-stat-label text-muted small">محفظة المستخدم</div>
+                                                <div class="rep-stat-value text-secondary small fw-bold"><?php echo formatCurrency((float)($rep['wallet_balance'] ?? 0)); ?></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <?php endif; ?>
                                 </div>
                             </div>
                     </div>

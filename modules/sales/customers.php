@@ -7,6 +7,14 @@ if (!defined('ACCESS_ALLOWED')) {
     die('Direct access not allowed');
 }
 
+// منع الكاش عند التبديل بين تبويبات الشريط الجانبي لضمان عدم رجوع أي كاش قديم
+if (!headers_sent()) {
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Cache-Control: post-check=0, pre-check=0', false);
+    header('Pragma: no-cache');
+    header('Expires: 0');
+}
+
 if (!defined('CUSTOMERS_MODULE_BOOTSTRAPPED')) {
     define('CUSTOMERS_MODULE_BOOTSTRAPPED', true);
 
@@ -1726,13 +1734,13 @@ $summaryTotalCustomers = $customerStats['total_count'] ?? $totalCustomers;
         <i class="bi bi-people me-2"></i><?php echo $isSalesUser ? 'عملائي' : 'العملاء'; ?>
     </h2>
     <div class="d-flex gap-2">
-        <?php if (in_array($currentRole, ['manager', 'developer', 'accountant', 'sales'], true)): ?>
+        <?php if (in_array($currentRole, ['manager', 'developer', 'accountant'], true)): ?>
         <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#importCustomersModal">
             <i class="bi bi-file-earmark-spreadsheet me-2"></i>استيراد من CSV
         </button>
         <?php endif; ?>
         <?php if (in_array($currentRole, ['manager', 'developer', 'accountant', 'sales'], true)): ?>
-        <button class="btn btn-info" data-bs-toggle="modal" data-bs-target="#customerExportModal">
+        <button class="btn btn-info" type="button" data-bs-toggle="collapse" data-bs-target="#customerExportCard" aria-expanded="false" aria-controls="customerExportCard">
             <i class="bi bi-download me-2"></i>تصدير عملاء محددين
         </button>
         <?php endif; ?>
@@ -1742,6 +1750,92 @@ $summaryTotalCustomers = $customerStats['total_count'] ?? $totalCustomers;
         </button>
         <?php endif; ?>
     </div>
+    <!-- بطاقة تصدير العملاء (تفتح بالضغط على "تصدير عملاء محددين") -->
+    <?php if (in_array($currentRole, ['manager', 'developer', 'accountant', 'sales'], true)): ?>
+    <div class="collapse mt-3" id="customerExportCard" data-section="<?php echo htmlspecialchars($section); ?>">
+        <div class="card border-info shadow-sm">
+            <div class="card-header bg-info text-white d-flex align-items-center justify-content-between py-2">
+                <h5 class="mb-0">
+                    <i class="bi bi-download me-2"></i>تصدير عملاء محددين إلى Excel
+                </h5>
+                <button type="button" class="btn btn-sm btn-light" data-bs-toggle="collapse" data-bs-target="#customerExportCard" aria-label="إغلاق">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="customer-export-alerts mb-3"></div>
+                
+                <!-- اختيار المندوب (فقط في قسم عملاء المندوبين) -->
+                <?php if (!$isSalesUser && !empty($salesRepsList)): ?>
+                <div class="mb-4">
+                    <label class="form-label fw-semibold">اختر المندوب:</label>
+                    <select class="form-select" id="exportRepSelect" required>
+                        <option value="">-- اختر المندوب --</option>
+                        <?php foreach ($salesRepsList as $rep): ?>
+                            <option value="<?php echo (int)$rep['id']; ?>">
+                                <?php echo htmlspecialchars($rep['full_name'] ?? $rep['username'] ?? ''); ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <?php elseif ($isSalesUser): ?>
+                    <input type="hidden" id="exportRepSelect" value="<?php echo (int)((is_array($currentUser) && isset($currentUser['id'])) ? $currentUser['id'] : 0); ?>">
+                <?php else: ?>
+                    <input type="hidden" id="exportRepSelect" value="">
+                <?php endif; ?>
+                
+                <div class="mb-3" id="customersSection" style="display: none;">
+                    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-2 gap-2">
+                        <h6 class="mb-0">حدد العملاء المراد تصديرهم:</h6>
+                        <div class="d-flex gap-2 flex-wrap">
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-primary" id="selectAllCustomers">
+                                    <i class="bi bi-check-square me-1"></i>تحديد الكل
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary" id="deselectAllCustomers">
+                                    <i class="bi bi-square me-1"></i>إلغاء التحديد
+                                </button>
+                                <button type="button" class="btn btn-outline-success" id="selectAllCustomersAndGenerate">
+                                    <i class="bi bi-check-all me-1"></i>كل العملاء
+                                </button>
+                            </div>
+                            <button type="button" class="btn btn-outline-danger btn-sm" id="printDebtorCustomersBtn" onclick="printDebtorCustomers()">
+                                <i class="bi bi-people me-1"></i>العملاء المدينين
+                            </button>
+                        </div>
+                    </div>
+                    <div id="exportCustomersList" class="table-responsive">
+                    </div>
+                </div>
+                
+                <div id="selectRepMessage" class="text-center text-muted py-4">
+                    <?php if (!$isSalesUser && !$isCompanySection && !empty($salesRepsList)): ?>
+                        <i class="bi bi-info-circle me-2"></i>يرجى اختيار المندوب أولاً لعرض عملائه
+                    <?php elseif ($isCompanySection): ?>
+                        <span class="spinner-border spinner-border-sm me-2"></span>جاري تحميل قائمة عملاء الشركة...
+                    <?php else: ?>
+                        <span class="spinner-border spinner-border-sm me-2"></span>جاري تحميل قائمة العملاء...
+                    <?php endif; ?>
+                </div>
+                
+                <div id="exportActionButtons" style="display: none;" class="mt-3 p-3 bg-light rounded">
+                    <h6 class="mb-3">تم توليد ملف Excel بنجاح</h6>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <button type="button" class="btn btn-primary btn-sm" id="printExcelBtn">
+                            <i class="bi bi-printer me-2"></i>طباعة
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer d-flex flex-column flex-sm-row gap-2">
+                <button type="button" class="btn btn-secondary w-100 w-sm-auto" data-bs-toggle="collapse" data-bs-target="#customerExportCard">إغلاق</button>
+                <button type="button" class="btn btn-primary w-100 w-sm-auto" id="generateExcelBtn" disabled>
+                    <i class="bi bi-file-earmark-excel me-2"></i>توليد ملف Excel
+                </button>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
 </div>
 
 <?php if (!$isSalesUser): ?>
@@ -1776,7 +1870,7 @@ $collectionsLabel = $isSalesUser ? 'تحصيلاتي' : 'إجمالي التحص
 ?>
 
 <div class="row g-3 mb-4">
-    <div class="col-12 col-md-6 col-xl-3">
+    <div class="col-6 col-xl-3">
         <div class="card shadow-sm border-0 h-100">
             <div class="card-body d-flex align-items-center justify-content-between">
                 <div>
@@ -1787,7 +1881,7 @@ $collectionsLabel = $isSalesUser ? 'تحصيلاتي' : 'إجمالي التحص
             </div>
         </div>
     </div>
-    <div class="col-12 col-md-6 col-xl-3">
+    <div class="col-6 col-xl-3">
         <div class="card shadow-sm border-0 h-100">
             <div class="card-body d-flex align-items-center justify-content-between">
                 <div>
@@ -1798,7 +1892,7 @@ $collectionsLabel = $isSalesUser ? 'تحصيلاتي' : 'إجمالي التحص
             </div>
         </div>
     </div>
-    <div class="col-12 col-md-6 col-xl-3">
+    <div class="col-6 col-xl-3">
         <div class="card shadow-sm border-0 h-100">
             <div class="card-body d-flex align-items-center justify-content-between">
                 <div>
@@ -1809,7 +1903,7 @@ $collectionsLabel = $isSalesUser ? 'تحصيلاتي' : 'إجمالي التحص
             </div>
         </div>
     </div>
-    <div class="col-12 col-md-6 col-xl-3">
+    <div class="col-6 col-xl-3">
         <div class="card shadow-sm border-0 h-100">
             <div class="card-body d-flex align-items-center justify-content-between">
                 <div>
@@ -4466,7 +4560,6 @@ document.addEventListener('DOMContentLoaded', function () {
     #addCustomerModal,
     #editCustomerModal,
     #importCustomersModal,
-    #customerExportModal,
     #addRegionFromCustomerModal,
     #viewLocationModal,
     #customerHistoryModal,
@@ -4542,12 +4635,19 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     @media (max-width: 767.98px) {
-        /* تحسين الجدول الرئيسي للعملاء المحليين */
+        /* تحسين الجدول الرئيسي للعملاء - عرض الشاشة كاملة على الهاتف */
         .dashboard-table-wrapper {
             overflow-x: auto;
             -webkit-overflow-scrolling: touch;
-            margin: 0 -0.75rem;
+            width: 100vw;
+            max-width: 100vw;
+            position: relative;
+            left: 50%;
+            right: 50%;
+            margin-left: -50vw;
+            margin-right: -50vw;
             padding: 0 0.75rem;
+            box-sizing: border-box;
         }
         
         .dashboard-table {
@@ -5213,6 +5313,46 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    // الحصول على الموقع في بطاقة إضافة العميل (موبايل)
+    var addCustomerCardGetLocationBtn = document.getElementById('addCustomerCardGetLocationBtn');
+    var addCustomerCardLatitudeInput = document.getElementById('addCustomerCardLatitude');
+    var addCustomerCardLongitudeInput = document.getElementById('addCustomerCardLongitude');
+    if (addCustomerCardGetLocationBtn && addCustomerCardLatitudeInput && addCustomerCardLongitudeInput) {
+        addCustomerCardGetLocationBtn.addEventListener('click', function() {
+            if (!navigator.geolocation) {
+                showAlert('المتصفح لا يدعم تحديد الموقع الجغرافي.');
+                return;
+            }
+            var button = this;
+            var originalText = button.innerHTML;
+            button.disabled = true;
+            button.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>جاري الحصول على الموقع...';
+            navigator.geolocation.getCurrentPosition(
+                function(position) {
+                    addCustomerCardLatitudeInput.value = position.coords.latitude.toFixed(8);
+                    addCustomerCardLongitudeInput.value = position.coords.longitude.toFixed(8);
+                    button.disabled = false;
+                    button.innerHTML = originalText;
+                    showAlert('تم الحصول على الموقع بنجاح!');
+                },
+                function(error) {
+                    button.disabled = false;
+                    button.innerHTML = originalText;
+                    var errorMessage = 'تعذر الحصول على الموقع.';
+                    if (error.code === 1) {
+                        errorMessage = 'تم رفض طلب الحصول على الموقع. يرجى السماح بالوصول إلى الموقع.';
+                    } else if (error.code === 2) {
+                        errorMessage = 'تعذر تحديد الموقع. يرجى المحاولة مرة أخرى.';
+                    } else if (error.code === 3) {
+                        errorMessage = 'انتهت مهلة طلب الموقع. يرجى المحاولة مرة أخرى.';
+                    }
+                    showAlert(errorMessage);
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
+        });
+    }
+
     // معالج استيراد العملاء من CSV
     var importCustomersForm = document.getElementById('importCustomersForm');
     var importCustomersModal = document.getElementById('importCustomersModal');
@@ -5596,7 +5736,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 <tbody id="customersTableBody">
                     <?php if (empty($customers)): ?>
                         <tr>
-                            <td colspan="8" class="text-center text-muted">لا توجد عملاء</td>
+                            <td colspan="8" class="text-center text-muted">لا يوجد عملاء</td>
                         </tr>
                     <?php else: ?>
                         <?php foreach ($customers as $customer): ?>
@@ -6162,130 +6302,36 @@ if (!$isSalesUser && !$isCompanySection && in_array($currentRole, ['manager', 'd
     }
 }
 ?>
-<!-- للكمبيوتر فقط -->
-<div class="modal fade d-none d-md-block" id="customerExportModal" tabindex="-1" aria-hidden="true" data-section="<?php echo htmlspecialchars($section); ?>">
-    <div class="modal-dialog modal-xl modal-dialog-scrollable">
-        <div class="modal-content">
-            <div class="modal-header bg-info text-white">
-                <h5 class="modal-title">
-                    <i class="bi bi-download me-2"></i>تصدير عملاء محددين إلى Excel
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="إغلاق"></button>
-            </div>
-            <div class="modal-body">
-                <div class="customer-export-alerts mb-3"></div>
-                
-                <!-- اختيار المندوب (فقط في قسم عملاء المندوبين) -->
-                <?php if (!$isSalesUser && !$isCompanySection && !empty($salesRepsList)): ?>
-                <div class="mb-4">
-                    <label class="form-label fw-semibold">اختر المندوب:</label>
-                    <select class="form-select" id="exportRepSelect" required>
-                        <option value="">-- اختر المندوب --</option>
-                        <?php foreach ($salesRepsList as $rep): ?>
-                            <option value="<?php echo (int)$rep['id']; ?>">
-                                <?php echo htmlspecialchars($rep['full_name'] ?? $rep['username'] ?? ''); ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                <?php elseif ($isSalesUser && !$isCompanySection): ?>
-                    <input type="hidden" id="exportRepSelect" value="<?php echo (int)($currentUser['id'] ?? 0); ?>">
-                <?php else: ?>
-                    <!-- قسم عملاء الشركة - لا يوجد اختيار مندوب -->
-                    <input type="hidden" id="exportRepSelect" value="">
-                <?php endif; ?>
-                
-                <!-- قائمة العملاء -->
-                <div class="mb-3" id="customersSection" style="display: none;">
-                    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-2 gap-2">
-                        <h6 class="mb-0">حدد العملاء المراد تصديرهم:</h6>
-                        <div class="d-flex gap-2 flex-wrap">
-                            <div class="btn-group btn-group-sm">
-                                <button type="button" class="btn btn-outline-primary" id="selectAllCustomers">
-                                    <i class="bi bi-check-square me-1"></i>تحديد الكل
-                                </button>
-                                <button type="button" class="btn btn-outline-secondary" id="deselectAllCustomers">
-                                    <i class="bi bi-square me-1"></i>إلغاء التحديد
-                                </button>
-                                <button type="button" class="btn btn-outline-success" id="selectAllCustomersAndGenerate">
-                                    <i class="bi bi-check-all me-1"></i>كل العملاء
-                                </button>
-                            </div>
-                            <button type="button" class="btn btn-outline-danger btn-sm" id="printDebtorCustomersBtn" onclick="printDebtorCustomers()">
-                                <i class="bi bi-people me-1"></i>العملاء المدينين
-                            </button>
-                        </div>
-                    </div>
-                    <div id="exportCustomersList" class="table-responsive">
-                        <!-- سيتم ملؤه عبر JavaScript -->
-                    </div>
-                </div>
-                
-                <!-- رسالة اختيار المندوب أو التحميل -->
-                <div id="selectRepMessage" class="text-center text-muted py-4">
-                    <?php if (!$isSalesUser && !$isCompanySection && !empty($salesRepsList)): ?>
-                        <i class="bi bi-info-circle me-2"></i>يرجى اختيار المندوب أولاً لعرض عملائه
-                    <?php elseif ($isCompanySection): ?>
-                        <span class="spinner-border spinner-border-sm me-2"></span>جاري تحميل قائمة عملاء الشركة...
-                    <?php else: ?>
-                        <span class="spinner-border spinner-border-sm me-2"></span>جاري تحميل قائمة العملاء...
-                    <?php endif; ?>
-                </div>
-                
-                <!-- أزرار الإجراءات بعد التوليد -->
-                <div id="exportActionButtons" style="display: none;" class="mt-3 p-3 bg-light rounded">
-                    <h6 class="mb-3">تم توليد ملف Excel بنجاح</h6>
-                    <div class="d-flex gap-2 flex-wrap">
-                        <button type="button" class="btn btn-primary btn-sm" id="printExcelBtn">
-                            <i class="bi bi-printer me-2"></i>طباعة
-                        </button>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer d-flex flex-column flex-sm-row gap-2">
-                <button type="button" class="btn btn-secondary w-100 w-sm-auto" data-bs-dismiss="modal">إغلاق</button>
-                <button type="button" class="btn btn-primary w-100 w-sm-auto" id="generateExcelBtn" disabled>
-                    <i class="bi bi-file-earmark-excel me-2"></i>توليد ملف Excel
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
 
 <style>
-/* تحسينات responsive للمودال */
+/* تحسينات responsive لبطاقة التصدير */
 @media (max-width: 768px) {
-    #customerExportModal .modal-dialog {
-        margin: 0.5rem;
-        max-width: calc(100% - 1rem);
-    }
-    
-    #customerExportModal .table-responsive {
+    #customerExportCard .table-responsive {
         font-size: 0.875rem;
     }
     
-    #customerExportModal .btn-group {
+    #customerExportCard .btn-group {
         width: 100%;
     }
     
-    #customerExportModal .btn-group .btn {
+    #customerExportCard .btn-group .btn {
         flex: 1;
     }
     
-    #customerExportModal .modal-footer {
+    #customerExportCard .card-footer {
         padding: 0.75rem;
     }
     
-    #customerExportModal .modal-footer .btn {
+    #customerExportCard .card-footer .btn {
         font-size: 0.875rem;
     }
     
-    #customerExportModal table {
+    #customerExportCard table {
         font-size: 0.8rem;
     }
     
-    #customerExportModal .table th,
-    #customerExportModal .table td {
+    #customerExportCard .table th,
+    #customerExportCard .table td {
         padding: 0.5rem 0.25rem;
     }
 }
@@ -6493,6 +6539,31 @@ if (!$isSalesUser && !$isCompanySection && in_array($currentRole, ['manager', 'd
         });
     }
     
+    // لبطاقة إضافة العميل (موبايل)
+    const addCustomerCardPhoneBtn = document.getElementById('addCustomerCardPhoneBtn');
+    const addCustomerCardPhoneContainer = document.getElementById('addCustomerCardPhoneNumbersContainer');
+    if (addCustomerCardPhoneBtn && addCustomerCardPhoneContainer) {
+        addCustomerCardPhoneBtn.addEventListener('click', function() {
+            const phoneInputGroup = document.createElement('div');
+            phoneInputGroup.className = 'input-group mb-2';
+            phoneInputGroup.innerHTML = `
+                <input type="text" class="form-control phone-input" name="phones[]" placeholder="مثال: 01234567890">
+                <button type="button" class="btn btn-outline-danger remove-phone-btn">
+                    <i class="bi bi-trash"></i>
+                </button>
+            `;
+            addCustomerCardPhoneContainer.appendChild(phoneInputGroup);
+            updateRemoveButtons(addCustomerCardPhoneContainer);
+        });
+        addCustomerCardPhoneContainer.addEventListener('click', function(e) {
+            if (e.target.closest('.remove-phone-btn')) {
+                e.target.closest('.input-group').remove();
+                updateRemoveButtons(addCustomerCardPhoneContainer);
+            }
+        });
+        updateRemoveButtons(addCustomerCardPhoneContainer);
+    }
+
     // للنموذج التعديل
     const addEditPhoneBtn = document.getElementById('addEditPhoneBtn');
     const editPhoneContainer = document.getElementById('editPhoneNumbersContainer');

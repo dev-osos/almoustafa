@@ -75,13 +75,27 @@ if (isset($_GET['action']) && $_GET['action'] === 'view_image' && isset($_GET['i
         echo 'File not found';
         exit;
     }
+    $mtime = filemtime($realPath);
+    $fsize = filesize($realPath);
+    $etag = '"' . md5('shipping-paper-' . $id . '-' . $mtime . '-' . $fsize) . '"';
+    $lastModified = gmdate('D, d M Y H:i:s', $mtime) . ' GMT';
+    header('Cache-Control: private, max-age=2592000, immutable');
+    header('ETag: ' . $etag);
+    header('Last-Modified: ' . $lastModified);
+    if (isset($_SERVER['HTTP_IF_NONE_MATCH']) && trim($_SERVER['HTTP_IF_NONE_MATCH']) === $etag) {
+        http_response_code(304);
+        exit;
+    }
+    if (isset($_SERVER['HTTP_IF_MODIFIED_SINCE']) && @strtotime($_SERVER['HTTP_IF_MODIFIED_SINCE']) >= $mtime) {
+        http_response_code(304);
+        exit;
+    }
     $ext = strtolower(pathinfo($realPath, PATHINFO_EXTENSION));
     $mime = 'image/jpeg';
     if ($ext === 'png') $mime = 'image/png';
     elseif ($ext === 'gif') $mime = 'image/gif';
     elseif ($ext === 'webp') $mime = 'image/webp';
     header('Content-Type: ' . $mime);
-    header('Cache-Control: private, max-age=3600');
     header('Content-Disposition: inline; filename="shipping-paper-inv-' . $id . '.' . $ext . '"');
     readfile($realPath);
     exit;
@@ -150,9 +164,9 @@ if ($invoiceNumber === '') {
 }
 
 $totalAmount = str_replace(',', '.', $totalAmount);
-if (!is_numeric($totalAmount) || (float)$totalAmount <= 0) {
+if (!is_numeric($totalAmount) || (float)$totalAmount === 0) {
     header('Content-Type: application/json; charset=utf-8');
-    echo json_encode(['success' => false, 'message' => 'يرجى إدخال إجمالي صحيح للفاتورة'], JSON_UNESCAPED_UNICODE);
+    echo json_encode(['success' => false, 'message' => 'يرجى إدخال إجمالي صحيح (موجب لزيادة الديون، سالب لتقليل الديون)'], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
@@ -219,10 +233,13 @@ try {
         "UPDATE shipping_companies SET balance = balance + ?, updated_by = ?, updated_at = NOW() WHERE id = ?",
         [$totalAmount, $currentUser['id'], $companyId]
     );
+    $balanceMessage = $totalAmount >= 0
+        ? 'تم تسجيل الفاتورة الورقية وإضافة الإجمالي إلى ديون الشركة.'
+        : 'تم تسجيل الفاتورة الورقية وتقليل ديون الشركة بالمبلغ المدخل.';
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode([
         'success' => true,
-        'message' => 'تم تسجيل الفاتورة الورقية وإضافة الإجمالي إلى ديون الشركة.',
+        'message' => $balanceMessage,
         'paper_invoice_id' => $paperInvoiceId,
     ], JSON_UNESCAPED_UNICODE);
 } catch (Throwable $e) {

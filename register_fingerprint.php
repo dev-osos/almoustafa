@@ -150,7 +150,7 @@ $dashboardUrl = getDashboardUrl($userRole);
                     </h4>
                 </div>
                 <div class="card-body p-4">
-                    <form id="profileForm">
+                    <form id="profileForm" data-no-loading>
                         <!-- الاسم الكامل -->
                         <div class="mb-3">
                             <label for="fullName" class="form-label">
@@ -218,7 +218,7 @@ $dashboardUrl = getDashboardUrl($userRole);
                     <h5 class="mb-3">
                         <i class="bi bi-key me-2"></i>تغيير كلمة المرور
                     </h5>
-                    <form id="passwordForm">
+                    <form id="passwordForm" data-no-loading>
                         <div class="mb-3">
                             <label for="currentPassword" class="form-label">كلمة المرور الحالية</label>
                             <input type="password" 
@@ -627,6 +627,8 @@ async function updateProfile() {
     } finally {
         btn.disabled = false;
         btn.innerHTML = originalHTML;
+        // إخفاء شاشة التحميل العامة (يتم إظهارها تلقائياً عند submit من global-loading.js)
+        if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
     }
 }
 
@@ -649,6 +651,7 @@ async function changePassword() {
             alert('كلمة المرور الجديدة غير متطابقة');
             btn.disabled = false;
             btn.innerHTML = originalHTML;
+            if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
             return;
         }
         
@@ -693,6 +696,7 @@ async function changePassword() {
     } finally {
         btn.disabled = false;
         btn.innerHTML = originalHTML;
+        if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
     }
 }
 </script>
