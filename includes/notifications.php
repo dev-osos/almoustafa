@@ -64,11 +64,13 @@ function createNotification($userId, $title, $message, $type = 'info', $link = n
     try {
         $db = db();
         
-        // تنظيف Cache قبل إنشاء إشعار جديد
+        // تنظيف Cache قبل إنشاء إشعار جديد (شريط الإشعارات يطلب limit=10 فيجب مسح كل الحدود)
         if (class_exists('Cache')) {
-            Cache::forget("notifications_{$userId}_all_50");
-            Cache::forget("notifications_{$userId}_unread_50");
             Cache::forget("notification_count_{$userId}");
+            for ($limit = 10; $limit <= 100; $limit += 10) {
+                Cache::forget("notifications_{$userId}_all_{$limit}");
+                Cache::forget("notifications_{$userId}_unread_{$limit}");
+            }
         }
         
         $sql = "INSERT INTO notifications (user_id, title, message, type, link) 

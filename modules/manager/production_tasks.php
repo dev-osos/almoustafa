@@ -825,11 +825,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $notificationTitle,
                             $notificationMessage,
                             'info',
-                            getRelativeUrl('production.php?page=tasks')
+                            getDashboardUrl('production') . '?page=tasks'
                         );
                     } catch (Exception $notificationException) {
                         error_log('Manager task notification error: ' . $notificationException->getMessage());
                     }
+                }
+
+                // إرسال إشعار واحد لعمال الإنتاج والمدير والمحاسب (يظهر في شريط الإشعارات) مع اسم المنشئ
+                try {
+                    $creatorName = $currentUser['full_name'] ?? $currentUser['name'] ?? 'غير معروف';
+                    $taskSummary = $title;
+                    if (!empty($products)) {
+                        $first = $products[0];
+                        $taskSummary .= ' - ' . ($first['name'] ?? '');
+                        if (isset($first['quantity']) && $first['quantity'] !== null) {
+                            $taskSummary .= ' ' . ($first['quantity']) . ' ' . (isset($first['unit']) ? $first['unit'] : 'قطعة');
+                        }
+                    }
+                    $orderNotifTitle = 'أوردر جديد';
+                    $orderNotifMessage = $taskSummary . ' - أنشأه: ' . $creatorName;
+                    $rolesLinks = [
+                        'production' => getDashboardUrl('production') . '?page=tasks',
+                        'manager'    => getDashboardUrl('manager') . '?page=production_tasks',
+                        'accountant' => getDashboardUrl('accountant') . '?page=production_tasks',
+                    ];
+                    $notifiedIds = [];
+                    foreach (['production', 'manager', 'accountant'] as $role) {
+                        $users = $db->query("SELECT id FROM users WHERE role = ? AND status = 'active'", [$role]);
+                        foreach ($users as $u) {
+                            $uid = (int) ($u['id'] ?? 0);
+                            if ($uid > 0 && !isset($notifiedIds[$uid])) {
+                                $notifiedIds[$uid] = true;
+                                createNotification($uid, $orderNotifTitle, $orderNotifMessage, 'info', $rolesLinks[$role], true);
+                            }
+                        }
+                    }
+                } catch (Throwable $e) {
+                    error_log('Manager order notification error: ' . $e->getMessage());
                 }
 
                 $db->commit();
@@ -2609,6 +2642,31 @@ function buildEditProductRow(idx, product) {
         '<div class="col-md-1 d-flex align-items-end">' +
         '<button type="button" class="btn btn-danger btn-sm w-100 edit-remove-product-btn"><i class="bi bi-trash"></i></button></div></div></div>';
 }
+/** عند تغيير الكمية أو السعر: الإجمالي = الكمية × السعر */
+function updateEditProductLineTotal(row) {
+    if (!row) return;
+    var qtyInput = row.querySelector('.edit-product-qty');
+    var priceInput = row.querySelector('.edit-product-price');
+    var totalInput = row.querySelector('.edit-product-line-total');
+    if (!qtyInput || !priceInput || !totalInput) return;
+    var qty = parseFloat(qtyInput.value || '0');
+    var price = parseFloat(priceInput.value || '0');
+    var total = qty * price;
+    totalInput.value = total > 0 ? total.toFixed(2) : '';
+}
+/** عند تغيير الإجمالي: السعر = الإجمالي ÷ الكمية */
+function syncEditPriceFromLineTotal(row) {
+    if (!row) return;
+    var qtyInput = row.querySelector('.edit-product-qty');
+    var priceInput = row.querySelector('.edit-product-price');
+    var totalInput = row.querySelector('.edit-product-line-total');
+    if (!qtyInput || !priceInput || !totalInput) return;
+    var qty = parseFloat(qtyInput.value || '0');
+    var totalVal = parseFloat(totalInput.value || '0');
+    if (qty > 0 && totalVal >= 0) {
+        priceInput.value = (totalVal / qty).toFixed(2);
+    }
+}
 function updateEditTaskSummary() {
     var container = document.getElementById('editProductsContainer');
     var subEl = document.getElementById('editTaskSubtotalDisplay');
@@ -2635,14 +2693,21 @@ function delegateEditSummaryInputs() {
     var form = document.getElementById('editTaskForm');
     if (!form || form._editSummaryDelegated) return;
     form._editSummaryDelegated = true;
-    form.addEventListener('input', function(e) {
-        if (e.target.matches('.edit-product-line-total, .edit-product-price, .edit-product-qty') || e.target.id === 'editTaskShippingFees' || e.target.id === 'editTaskDiscount')
+    function onEditProductInput(e) {
+        var row = e.target.closest('.edit-product-row');
+        if (row) {
+            if (e.target.matches('.edit-product-qty') || e.target.matches('.edit-product-price')) {
+                updateEditProductLineTotal(row);
+            } else if (e.target.matches('.edit-product-line-total')) {
+                syncEditPriceFromLineTotal(row);
+            }
+        }
+        if (e.target.matches('.edit-product-line-total, .edit-product-price, .edit-product-qty') || e.target.id === 'editTaskShippingFees' || e.target.id === 'editTaskDiscount') {
             updateEditTaskSummary();
-    });
-    form.addEventListener('change', function(e) {
-        if (e.target.matches('.edit-product-line-total, .edit-product-price, .edit-product-qty') || e.target.id === 'editTaskShippingFees' || e.target.id === 'editTaskDiscount')
-            updateEditTaskSummary();
-    });
+        }
+    }
+    form.addEventListener('input', onEditProductInput);
+    form.addEventListener('change', onEditProductInput);
 }
 function addEditProductRow(product) {
     var container = document.getElementById('editProductsContainer');

@@ -3731,7 +3731,7 @@ if (ob_get_level() > 0) {
                                         aria-label="<?php echo isset($lang['clear_all_notifications']) ? $lang['clear_all_notifications'] : 'مسح كل الإشعارات'; ?>"
                                         style="font-size: 11px; text-decoration: none; pointer-events: auto; z-index: 1000; position: relative; cursor: pointer; border: none; background: transparent; padding: 0;">
                                     <i class="bi bi-trash" aria-hidden="true"></i> 
-                                    <span>مسح الكل</span>
+                                    <span><?php echo isset($lang['clear_all_notifications']) ? $lang['clear_all_notifications'] : 'مسح كل الإشعارات'; ?></span>
                                 </button>
                             </form>
                             <?php echo isset($lang['notifications']) ? $lang['notifications'] : 'الإشعارات'; ?>
