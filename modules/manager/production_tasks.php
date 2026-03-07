@@ -344,6 +344,53 @@ try {
     error_log('Error checking/adding receipt_print_count column: ' . $e->getMessage());
 }
 
+// عمود معرف العميل المحلي (لربط الأوردر بالعميل عند اعتماد الفاتورة)
+try {
+    $col = $db->queryOne("SHOW COLUMNS FROM tasks LIKE 'local_customer_id'");
+    if (empty($col)) {
+        $db->execute("ALTER TABLE tasks ADD COLUMN local_customer_id INT(11) NULL AFTER customer_phone");
+        error_log('Added local_customer_id column to tasks table');
+    }
+} catch (Exception $e) {
+    error_log('Error checking/adding local_customer_id column: ' . $e->getMessage());
+}
+
+// عمود الإجمالي النهائي (يُملأ عند اعتماد الفاتورة)
+try {
+    $col = $db->queryOne("SHOW COLUMNS FROM tasks LIKE 'total_amount'");
+    if (empty($col)) {
+        $db->execute("ALTER TABLE tasks ADD COLUMN total_amount DECIMAL(15,2) NULL AFTER local_customer_id");
+        error_log('Added total_amount column to tasks table');
+    }
+} catch (Exception $e) {
+    error_log('Error checking/adding total_amount column: ' . $e->getMessage());
+}
+
+// جدول سجل مشتريات الأوردرات المعتمدة (أوردر إنتاج → عميل محلي)
+try {
+    $t = $db->queryOne("SHOW TABLES LIKE 'customer_task_purchases'");
+    if (empty($t)) {
+        $db->execute("
+            CREATE TABLE IF NOT EXISTS `customer_task_purchases` (
+              `id` int(11) NOT NULL AUTO_INCREMENT,
+              `local_customer_id` int(11) NOT NULL,
+              `task_id` int(11) NOT NULL,
+              `task_number` varchar(100) NOT NULL,
+              `total_amount` decimal(15,2) NOT NULL DEFAULT 0.00,
+              `task_date` date NOT NULL,
+              `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              PRIMARY KEY (`id`),
+              UNIQUE KEY `task_id_unique` (`task_id`),
+              KEY `local_customer_id` (`local_customer_id`),
+              KEY `task_date` (`task_date`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+        error_log('Created customer_task_purchases table');
+    }
+} catch (Exception $e) {
+    error_log('Error creating customer_task_purchases table: ' . $e->getMessage());
+}
+
 /**
  * تحميل بيانات المستخدمين
  */
@@ -378,6 +425,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $dueDate = $_POST['due_date'] ?? '';
         $customerName = trim($_POST['customer_name'] ?? '');
         $customerPhone = trim($_POST['customer_phone'] ?? '');
+        $localCustomerIdForTask = isset($_POST['local_customer_id']) ? (int)$_POST['local_customer_id'] : 0;
+        if ($localCustomerIdForTask <= 0) {
+            $localCustomerIdForTask = null;
+        }
         $assignees = $_POST['assigned_to'] ?? [];
         $shippingFees = 0;
         if (isset($_POST['shipping_fees']) && $_POST['shipping_fees'] !== '') {
@@ -748,6 +799,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $placeholders[] = '?';
                 }
 
+                if ($localCustomerIdForTask !== null && $localCustomerIdForTask > 0) {
+                    $columns[] = 'local_customer_id';
+                    $values[] = $localCustomerIdForTask;
+                    $placeholders[] = '?';
+                }
+
                 // حفظ الكمية الإجمالية (من أول منتج أو مجموع الكميات)
                 $totalQuantity = null;
                 $firstUnit = 'قطعة'; // القيمة الافتراضية
@@ -955,6 +1012,80 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } catch (Exception $updateError) {
                 $db->rollBack();
                 $error = 'تعذر تحديث حالة المهمة: ' . $updateError->getMessage();
+            }
+        }
+    } elseif ($action === 'approve_task_invoice' && ($isAccountant || $isManager)) {
+        $taskId = (int)($_POST['task_id'] ?? 0);
+        $totalAmount = isset($_POST['total_amount']) ? (float)str_replace(',', '.', trim((string)$_POST['total_amount'])) : 0;
+        $localCustomerId = isset($_POST['local_customer_id']) ? (int)$_POST['local_customer_id'] : 0;
+
+        if ($taskId <= 0) {
+            $error = 'معرف المهمة غير صحيح.';
+        } elseif ($totalAmount <= 0) {
+            $error = 'يرجى إدخال الإجمالي النهائي أكبر من صفر.';
+        } else {
+            try {
+                $task = $db->queryOne(
+                    "SELECT id, customer_name, customer_phone, local_customer_id, created_at FROM tasks WHERE id = ? LIMIT 1",
+                    [$taskId]
+                );
+                if (!$task) {
+                    $error = 'المهمة غير موجودة.';
+                } else {
+                    $custId = $localCustomerId > 0 ? $localCustomerId : (int)($task['local_customer_id'] ?? 0);
+                    if ($custId <= 0) {
+                        $name = trim((string)($task['customer_name'] ?? ''));
+                        $phone = trim((string)($task['customer_phone'] ?? ''));
+                        if ($name !== '' || $phone !== '') {
+                            $match = $db->queryOne(
+                                "SELECT id FROM local_customers WHERE status = 'active' AND (name = ? OR phone = ?) LIMIT 1",
+                                [$name, $phone !== '' ? $phone : $name]
+                            );
+                            $custId = $match ? (int)$match['id'] : 0;
+                        }
+                    }
+                    if ($custId <= 0) {
+                        $error = 'لم يتم العثور على عميل محلي مطابق للاسم/الهاتف. يرجى اختيار العميل أو تسجيله أولاً.';
+                    } else {
+                        $existing = $db->queryOne("SELECT id FROM customer_task_purchases WHERE task_id = ?", [$taskId]);
+                        if ($existing) {
+                            $error = 'تم اعتماد هذا الأوردر مسبقاً في سجل المشتريات.';
+                        } else {
+                            $db->beginTransaction();
+                            $taskNumber = '#' . $taskId;
+                            $taskDate = date('Y-m-d', strtotime($task['created_at'] ?? 'now'));
+                            $db->execute(
+                                "INSERT INTO customer_task_purchases (local_customer_id, task_id, task_number, total_amount, task_date) VALUES (?, ?, ?, ?, ?)",
+                                [$custId, $taskId, $taskNumber, $totalAmount, $taskDate]
+                            );
+                            $db->execute(
+                                "UPDATE local_customers SET balance = COALESCE(balance, 0) + ? WHERE id = ?",
+                                [$totalAmount, $custId]
+                            );
+                            $db->execute(
+                                "UPDATE tasks SET total_amount = ?, local_customer_id = ? WHERE id = ?",
+                                [$totalAmount, $custId, $taskId]
+                            );
+                            $db->commit();
+                            logAudit(
+                                $currentUser['id'],
+                                'approve_task_invoice',
+                                'tasks',
+                                $taskId,
+                                null,
+                                ['local_customer_id' => $custId, 'total_amount' => $totalAmount]
+                            );
+                            $userRole = ($currentUser['role'] ?? '') === 'accountant' ? 'accountant' : 'manager';
+                            preventDuplicateSubmission('تم اعتماد الفاتورة: تمت إضافة الأوردر لسجل مشتريات العميل وإضافة المبلغ لرصيده المدين.', ['page' => 'production_tasks'], null, $userRole);
+                            exit;
+                        }
+                    }
+                }
+            } catch (Exception $e) {
+                if (isset($db) && $db->inTransaction()) {
+                    $db->rollBack();
+                }
+                $error = 'تعذر اعتماد الفاتورة: ' . $e->getMessage();
             }
         }
     } elseif ($action === 'cancel_task') {
@@ -1592,6 +1723,7 @@ try {
             $recentTasks = $db->query("
                 SELECT t.id, t.title, t.status, t.priority, t.due_date, t.created_at,
                        t.quantity, t.unit, t.customer_name, t.customer_phone, t.notes, t.product_id, t.related_type, t.related_id, t.task_type,
+                       t.local_customer_id, t.total_amount,
                        COALESCE(t.receipt_print_count, 0) AS receipt_print_count,
                        u.full_name AS assigned_name, t.assigned_to,
                        uCreator.full_name AS creator_name, t.created_by
@@ -1615,6 +1747,7 @@ try {
         $recentTasks = $db->query("
             SELECT t.id, t.title, t.status, t.priority, t.due_date, t.created_at,
                    t.quantity, t.unit, t.customer_name, t.customer_phone, t.notes, t.product_id, t.related_type, t.related_id, t.task_type,
+                   t.local_customer_id, t.total_amount,
                    COALESCE(t.receipt_print_count, 0) AS receipt_print_count,
                    u.full_name AS assigned_name, t.assigned_to
             FROM tasks t
@@ -1626,6 +1759,17 @@ try {
             ORDER BY t.created_at DESC, t.id DESC
             LIMIT ? OFFSET ?
         ", $queryParams);
+    }
+
+    // معرفات المهام المعتمدة (المضافة لسجل المشتريات) لعرض/إخفاء زر اعتماد الفاتورة
+    $approvedTaskIds = [];
+    if (!empty($recentTasks)) {
+        $taskIdsForApproved = array_values(array_filter(array_map(function($t) { return (int)($t['id'] ?? 0); }, $recentTasks)));
+        if (!empty($taskIdsForApproved)) {
+            $ph = implode(',', array_fill(0, count($taskIdsForApproved), '?'));
+            $approvedRows = $db->query("SELECT task_id FROM customer_task_purchases WHERE task_id IN ($ph)", $taskIdsForApproved);
+            $approvedTaskIds = array_column($approvedRows ?: [], 'task_id');
+        }
     }
     
     // استخراج جميع العمال من notes لكل مهمة واستخراج اسم المنتج
@@ -1961,7 +2105,7 @@ setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
                             <div id="customer_select_local_task" class="customer-select-block mb-2">
                                 <div class="search-wrap position-relative">
                                     <input type="text" id="local_customer_search_task" class="form-control form-control-sm" placeholder="اكتب للبحث أو أدخل اسم عميل جديد..." autocomplete="off">
-                                    <input type="hidden" id="local_customer_id_task" value="">
+                                    <input type="hidden" id="local_customer_id_task" name="local_customer_id" value="">
                                     <div id="local_customer_dropdown_task" class="search-dropdown-task d-none"></div>
                                 </div>
                             </div>
@@ -2392,6 +2536,17 @@ setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
                                                         <i class="bi bi-pencil-square me-1"></i>تعديل الاوردر
                                                     </button>
                                                 </li>
+                                                <?php
+                                                $taskApproved = in_array((int)$task['id'], $approvedTaskIds, true);
+                                                $hasCustomer = trim((string)($task['customer_name'] ?? '')) !== '' || trim((string)($task['customer_phone'] ?? '')) !== '';
+                                                if ($hasCustomer && !$taskApproved):
+                                                ?>
+                                                <li>
+                                                    <button type="button" class="dropdown-item text-success" onclick="openApproveInvoiceModal(<?php echo (int)$task['id']; ?>, '<?php echo htmlspecialchars(trim((string)($task['customer_name'] ?? '')), ENT_QUOTES, 'UTF-8'); ?>', <?php echo (int)($task['local_customer_id'] ?? 0); ?>)">
+                                                        <i class="bi bi-check2-circle me-1"></i>اعتماد الفاتورة
+                                                    </button>
+                                                </li>
+                                                <?php endif; ?>
                                                 <?php endif; ?>
                                                 <?php if (!in_array($task['status'] ?? '', ['completed', 'delivered', 'returned'], true)): ?>
                                                 <li><hr class="dropdown-divider"></li>
@@ -2549,6 +2704,46 @@ setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
                     <button type="submit" class="btn btn-info">
                         <i class="bi bi-check-circle me-1"></i>حفظ التغييرات
                     </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- مودال اعتماد الفاتورة (إضافة الأوردر لسجل مشتريات العميل والرصيد المدين) -->
+<div class="modal fade" id="approveInvoiceModal" tabindex="-1" aria-labelledby="approveInvoiceModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title" id="approveInvoiceModalLabel"><i class="bi bi-check2-circle me-2"></i>اعتماد الفاتورة</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="إغلاق"></button>
+            </div>
+            <form method="POST" id="approveInvoiceForm" action="?page=production_tasks">
+                <input type="hidden" name="action" value="approve_task_invoice">
+                <input type="hidden" name="task_id" id="approveInvoiceTaskId">
+                <div class="modal-body">
+                    <p class="text-muted small mb-3">سيتم إضافة الأوردر إلى سجل مشتريات العميل وإضافة الإجمالي إلى رصيده المدين. زر إجراءات في سجل المشتريات يعرض إيصال الأوردر.</p>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">العميل (الأوردر)</label>
+                        <div id="approveInvoiceCustomerName" class="text-muted"></div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="approveInvoiceTotalAmount" class="form-label fw-bold">الإجمالي النهائي (ج.م) <span class="text-danger">*</span></label>
+                        <input type="number" step="0.01" min="0.01" class="form-control" name="total_amount" id="approveInvoiceTotalAmount" required placeholder="0.00">
+                    </div>
+                    <div class="mb-3">
+                        <label for="approveInvoiceLocalCustomerId" class="form-label">العميل المحلي (اختياري — إن تركت فارغاً يُطابق حسب الاسم/الهاتف)</label>
+                        <select class="form-select" name="local_customer_id" id="approveInvoiceLocalCustomerId">
+                            <option value="">— مطابقة تلقائية —</option>
+                            <?php foreach ($localCustomersForDropdown as $lc): ?>
+                            <option value="<?php echo (int)$lc['id']; ?>"><?php echo htmlspecialchars($lc['name'], ENT_QUOTES, 'UTF-8'); ?><?php echo !empty($lc['phone']) ? ' — ' . htmlspecialchars($lc['phone'], ENT_QUOTES, 'UTF-8') : ''; ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="bi bi-x-circle me-1"></i>إلغاء</button>
+                    <button type="submit" class="btn btn-success"><i class="bi bi-check2-circle me-1"></i>اعتماد وإضافة للسجل</button>
                 </div>
             </form>
         </div>
@@ -3403,6 +3598,25 @@ function updateQuantityStep(index) {
     }
     <?php endif; ?>
 })();
+
+// فتح مودال اعتماد الفاتورة (إضافة الأوردر لسجل المشتريات ورصيد العميل المدين)
+window.openApproveInvoiceModal = function(taskId, customerName, preSelectedLocalCustomerId) {
+    var tid = document.getElementById('approveInvoiceTaskId');
+    var nameEl = document.getElementById('approveInvoiceCustomerName');
+    var totalEl = document.getElementById('approveInvoiceTotalAmount');
+    var customerSelect = document.getElementById('approveInvoiceLocalCustomerId');
+    if (tid) tid.value = taskId || '';
+    if (nameEl) nameEl.textContent = customerName || '—';
+    if (totalEl) { totalEl.value = ''; totalEl.focus(); }
+    if (customerSelect) {
+        customerSelect.value = (preSelectedLocalCustomerId && preSelectedLocalCustomerId > 0) ? String(preSelectedLocalCustomerId) : '';
+    }
+    var modal = document.getElementById('approveInvoiceModal');
+    if (modal && typeof bootstrap !== 'undefined') {
+        var m = bootstrap.Modal.getOrCreateInstance(modal);
+        m.show();
+    }
+};
 
 // دالة لفتح modal تغيير الحالة - يجب أن تكون في النطاق العام
 window.openChangeStatusModal = function(taskId, currentStatus) {

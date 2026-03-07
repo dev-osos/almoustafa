@@ -5289,7 +5289,9 @@ var localPurchaseHistoryData = [];
 var localPaperInvoicesData = [];
 var localPaperInvoiceReturnsData = [];
 var localCollectionsData = [];
+var localTaskPurchasesData = [];
 var localPurchaseHistoryCurrentBalance = 0;
+var printTaskReceiptBaseUrl = '<?php echo getRelativeUrl("print_task_receipt.php"); ?>';
 var localSelectedItemsForReturn = [];
 var localReturnLoadedData = null; // { invoice: {}, items: [] } بعد تحميل الفاتورة برقمها
 
@@ -6122,11 +6124,12 @@ function loadLocalCustomerPurchaseHistory() {
             localPaperInvoicesData = data.paper_invoices || [];
             localPaperInvoiceReturnsData = data.paper_invoice_returns || [];
             localCollectionsData = data.collections || [];
+            localTaskPurchasesData = data.task_purchases || [];
             localPurchaseHistoryCurrentBalance = (data.customer && data.customer.balance !== undefined) ? parseFloat(data.customer.balance) : 0;
-            console.log('Purchase history data:', localPurchaseHistoryData.length, 'items; paper invoices:', localPaperInvoicesData.length, 'paper returns:', localPaperInvoiceReturnsData.length);
+            console.log('Purchase history data:', localPurchaseHistoryData.length, 'items; paper invoices:', localPaperInvoicesData.length, 'paper returns:', localPaperInvoiceReturnsData.length, 'task purchases:', localTaskPurchasesData.length);
             
             try {
-                displayLocalPurchaseHistory(localPurchaseHistoryData, localPaperInvoicesData, localPaperInvoiceReturnsData, localPurchaseHistoryCurrentBalance, localCollectionsData);
+                displayLocalPurchaseHistory(localPurchaseHistoryData, localPaperInvoicesData, localPaperInvoiceReturnsData, localPurchaseHistoryCurrentBalance, localCollectionsData, localTaskPurchasesData);
             } catch (displayErr) {
                 console.error('displayLocalPurchaseHistory error:', displayErr);
                 if (typeof showError === 'function') showError('خطأ في عرض البيانات', displayErr.message || String(displayErr));
@@ -6207,6 +6210,7 @@ function applyLocalPurchaseHistoryFilters() {
         localPaperInvoiceReturnsData || [],
         localPurchaseHistoryCurrentBalance,
         localCollectionsData || [],
+        localTaskPurchasesData || [],
         opts
     );
 }
@@ -6236,6 +6240,7 @@ function clearLocalPurchaseHistoryFilters() {
         localPaperInvoiceReturnsData || [],
         localPurchaseHistoryCurrentBalance,
         localCollectionsData || [],
+        localTaskPurchasesData || [],
         {}
     );
 }
@@ -6354,14 +6359,20 @@ function localOpenReturnForInvoiceFromDetails() {
     loadLocalReturnInvoiceByNumber();
 }
 
-// دالة عرض سجل المشتريات (سطر واحد لكل فاتورة) + الفواتير الورقية + مرتجعات الفواتير الورقية + التحصيلات + الرصيد بعد كل معاملة
-// خيارات الفلتر (معامل سادس اختياري): { searchText, dateFrom, dateTo, sortOrder: 'asc'|'desc' }
-function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns, currentBalance, collections, filterOptions) {
+// دالة عرض سجل المشتريات (سطر واحد لكل فاتورة) + الفواتير الورقية + مرتجعات الفواتير الورقية + أوردرات معتمدة + التحصيلات + الرصيد بعد كل معاملة
+// معامل سادس: taskPurchases (أوردرات إنتاج معتمدة)، معامل سابع: filterOptions { searchText, dateFrom, dateTo, sortOrder }
+function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns, currentBalance, collections, taskPurchases, filterOptions) {
     history = Array.isArray(history) ? history : (history ? [history] : []);
     paperInvoices = paperInvoices || [];
     paperInvoiceReturns = paperInvoiceReturns || [];
     collections = collections || [];
+    taskPurchases = taskPurchases || [];
     currentBalance = parseFloat(currentBalance) || 0;
+    // دعم الاستدعاء القديم: إن كان المعامل السادس كائناً (filterOptions) بدون taskPurchases
+    if (taskPurchases && typeof taskPurchases === 'object' && !Array.isArray(taskPurchases) && (taskPurchases.searchText !== undefined || taskPurchases.sortOrder !== undefined)) {
+        filterOptions = taskPurchases;
+        taskPurchases = [];
+    }
     var opts = filterOptions || {};
     var searchText = String(opts.searchText || '').trim().toLowerCase();
     var dateFrom = String(opts.dateFrom || '').trim();
@@ -6451,6 +6462,21 @@ function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns
         entry.searchableText = buildSearchableText(labelText, returnAmt, dateStr);
         allEntries.push(entry);
     });
+    (function() {
+        var receiptBase = (typeof printTaskReceiptBaseUrl !== 'undefined') ? printTaskReceiptBaseUrl : '';
+        taskPurchases.forEach(function(tp) {
+            var taskNum = String(tp.task_number || '#' + (tp.task_id || ''));
+            var safeNum = taskNum.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            var dateStr = (tp.task_date || tp.created_at || '-').toString().substring(0, 10);
+            var amount = parseFloat(tp.total_amount || 0);
+            var taskId = parseInt(tp.task_id, 10) || 0;
+            var receiptUrl = receiptBase ? (receiptBase + (receiptBase.indexOf('?') >= 0 ? '&' : '?') + 'id=' + taskId) : ('print_task_receipt.php?id=' + taskId);
+            var actionsCell = '<td><a href="' + receiptUrl + '" target="_blank" class="btn btn-sm btn-outline-primary" title="إيصال الأوردر"><i class="bi bi-receipt me-1"></i>إيصال</a></td>';
+            var entry = { sortDate: normDate(tp.task_date || tp.created_at), effect: amount, labelText: taskNum, amountNum: amount, cells: ['<td>' + safeNum + '</td>', '<td>' + amount.toFixed(2) + ' ج.م</td>', '<td>' + dateStr + '</td>', actionsCell] };
+            entry.searchableText = buildSearchableText(taskNum, amount, dateStr);
+            allEntries.push(entry);
+        });
+    })();
     collections.forEach(function(col) {
         const safeNum = ('تحصيل - ' + (col.collection_number || col.id)).replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const dateStr = (col.date || col.created_at || '-').toString().substring(0, 10);

@@ -234,10 +234,12 @@ function handleGetHistory($currentUser): void
         $paperInvoices = [];
         $paperInvoiceReturns = [];
         $collections = [];
+        $taskPurchases = [];
         if ($isLocalCustomer) {
             $paperInvoices = getLocalCustomerPaperInvoices($db, $customerId);
             $paperInvoiceReturns = getLocalCustomerPaperInvoiceReturns($db, $customerId);
             $collections = getLocalCustomerCollections($db, $customerId);
+            $taskPurchases = getLocalCustomerTaskPurchases($db, $customerId);
         }
         
         returnJsonResponse([
@@ -252,7 +254,8 @@ function handleGetHistory($currentUser): void
             'purchase_history' => $result,
             'paper_invoices' => $paperInvoices,
             'paper_invoice_returns' => $paperInvoiceReturns,
-            'collections' => $collections
+            'collections' => $collections,
+            'task_purchases' => $taskPurchases
         ]);
         
     } catch (Throwable $e) {
@@ -462,6 +465,41 @@ function getLocalCustomerPaperInvoiceReturns($db, $customerId): array
         return $out;
     } catch (Throwable $e) {
         error_log('getLocalCustomerPaperInvoiceReturns error: ' . $e->getMessage());
+        return [];
+    }
+}
+
+/**
+ * Get local customer task purchases (أوردرات إنتاج معتمدة — مضافة لسجل المشتريات)
+ */
+function getLocalCustomerTaskPurchases($db, $customerId): array
+{
+    try {
+        $tableExists = $db->queryOne("SHOW TABLES LIKE 'customer_task_purchases'");
+        if (empty($tableExists)) {
+            return [];
+        }
+        $rows = $db->query(
+            "SELECT id, local_customer_id, task_id, task_number, total_amount, task_date, created_at FROM customer_task_purchases WHERE local_customer_id = ? ORDER BY task_date DESC, id DESC",
+            [$customerId]
+        );
+        if (!$rows) {
+            return [];
+        }
+        $out = [];
+        foreach ($rows as $row) {
+            $out[] = [
+                'id' => (int)$row['id'],
+                'task_id' => (int)$row['task_id'],
+                'task_number' => trim($row['task_number'] ?? ''),
+                'total_amount' => (float)($row['total_amount'] ?? 0),
+                'task_date' => $row['task_date'] ?? '',
+                'created_at' => $row['created_at'] ?? '',
+            ];
+        }
+        return $out;
+    } catch (Throwable $e) {
+        error_log('getLocalCustomerTaskPurchases error: ' . $e->getMessage());
         return [];
     }
 }
