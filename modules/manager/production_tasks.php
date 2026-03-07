@@ -392,6 +392,42 @@ try {
 }
 
 /**
+ * حساب الإجمالي النهائي للأوردر كما في إيصال الأوردر (من المنتجات + رسوم الشحن - الخصم)
+ */
+function getTaskReceiptTotalFromNotes($notes)
+{
+    $notes = (string)$notes;
+    $products = [];
+    if (preg_match('/\[PRODUCTS_JSON\]:(.+?)(?=\n|$)/s', $notes, $m)) {
+        $decoded = json_decode(trim($m[1]), true);
+        if (is_array($decoded)) {
+            $products = $decoded;
+        }
+    }
+    $grandTotal = 0.0;
+    foreach ($products as $p) {
+        $lineTotal = null;
+        if (isset($p['line_total']) && $p['line_total'] !== '' && $p['line_total'] !== null && is_numeric($p['line_total'])) {
+            $lineTotal = (float)$p['line_total'];
+        } elseif (isset($p['quantity']) && (float)$p['quantity'] > 0 && isset($p['price']) && ($p['price'] !== '' && $p['price'] !== null) && is_numeric($p['price'])) {
+            $lineTotal = round((float)$p['quantity'] * (float)$p['price'], 2);
+        }
+        if ($lineTotal !== null) {
+            $grandTotal += $lineTotal;
+        }
+    }
+    $shipping = 0.0;
+    if (preg_match('/\[SHIPPING_FEES\]:\s*([0-9.]+)/', $notes, $m)) {
+        $shipping = (float)$m[1];
+    }
+    $discount = 0.0;
+    if (preg_match('/\[DISCOUNT\]:\s*([0-9.]+)/', $notes, $m)) {
+        $discount = (float)$m[1];
+    }
+    return round($grandTotal + $shipping - $discount, 2);
+}
+
+/**
  * تحميل بيانات المستخدمين
  */
 $productionUsers = [];
@@ -1017,12 +1053,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'approve_task_invoice' && ($isAccountant || $isManager)) {
         $taskId = (int)($_POST['task_id'] ?? 0);
         $totalAmount = isset($_POST['total_amount']) ? (float)str_replace(',', '.', trim((string)$_POST['total_amount'])) : 0;
-        $localCustomerId = isset($_POST['local_customer_id']) ? (int)$_POST['local_customer_id'] : 0;
 
         if ($taskId <= 0) {
             $error = 'معرف المهمة غير صحيح.';
         } elseif ($totalAmount <= 0) {
-            $error = 'يرجى إدخال الإجمالي النهائي أكبر من صفر.';
+            $error = 'الإجمالي النهائي غير صالح.';
         } else {
             try {
                 $task = $db->queryOne(
@@ -1032,7 +1067,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!$task) {
                     $error = 'المهمة غير موجودة.';
                 } else {
-                    $custId = $localCustomerId > 0 ? $localCustomerId : (int)($task['local_customer_id'] ?? 0);
+                    // العميل هو المكتوب في الأوردر فقط (من local_customer_id أو مطابقة الاسم/الهاتف)
+                    $custId = (int)($task['local_customer_id'] ?? 0);
                     if ($custId <= 0) {
                         $name = trim((string)($task['customer_name'] ?? ''));
                         $phone = trim((string)($task['customer_phone'] ?? ''));
@@ -1045,7 +1081,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
                     }
                     if ($custId <= 0) {
-                        $error = 'لم يتم العثور على عميل محلي مطابق للاسم/الهاتف. يرجى اختيار العميل أو تسجيله أولاً.';
+                        $error = 'لم يتم العثور على عميل محلي مطابق للاسم/الهاتف المكتوب في الأوردر. يرجى تسجيل العميل في العملاء المحليين أولاً.';
                     } else {
                         $existing = $db->queryOne("SELECT id FROM customer_task_purchases WHERE task_id = ?", [$taskId]);
                         if ($existing) {
@@ -1896,6 +1932,7 @@ try {
         $task['all_workers'] = $allWorkers;
         $task['workers_count'] = count($allWorkers);
         $task['extracted_product_name'] = $extractedProductName;
+        $task['receipt_total'] = getTaskReceiptTotalFromNotes($task['notes'] ?? '');
         
         // إضافة creator_name و creator_role إذا لم يكونا موجودين
         if (!isset($task['creator_name']) && isset($task['created_by'])) {
@@ -2539,10 +2576,11 @@ setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
                                                 <?php
                                                 $taskApproved = in_array((int)$task['id'], $approvedTaskIds, true);
                                                 $hasCustomer = trim((string)($task['customer_name'] ?? '')) !== '' || trim((string)($task['customer_phone'] ?? '')) !== '';
-                                                if ($hasCustomer && !$taskApproved):
+                                                $receiptTotal = isset($task['receipt_total']) && $task['receipt_total'] > 0 ? (float)$task['receipt_total'] : 0;
+                                                if ($hasCustomer && !$taskApproved && $receiptTotal > 0):
                                                 ?>
                                                 <li>
-                                                    <button type="button" class="dropdown-item text-success" onclick="openApproveInvoiceModal(<?php echo (int)$task['id']; ?>, '<?php echo htmlspecialchars(trim((string)($task['customer_name'] ?? '')), ENT_QUOTES, 'UTF-8'); ?>', <?php echo (int)($task['local_customer_id'] ?? 0); ?>)">
+                                                    <button type="button" class="dropdown-item text-success" onclick="openApproveInvoiceCard(<?php echo (int)$task['id']; ?>, <?php echo json_encode(trim((string)($task['customer_name'] ?? '')), JSON_UNESCAPED_UNICODE); ?>, <?php echo json_encode($receiptTotal); ?>)">
                                                         <i class="bi bi-check2-circle me-1"></i>اعتماد الفاتورة
                                                     </button>
                                                 </li>
@@ -2704,46 +2742,6 @@ setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
                     <button type="submit" class="btn btn-info">
                         <i class="bi bi-check-circle me-1"></i>حفظ التغييرات
                     </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- مودال اعتماد الفاتورة (إضافة الأوردر لسجل مشتريات العميل والرصيد المدين) -->
-<div class="modal fade" id="approveInvoiceModal" tabindex="-1" aria-labelledby="approveInvoiceModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header bg-success text-white">
-                <h5 class="modal-title" id="approveInvoiceModalLabel"><i class="bi bi-check2-circle me-2"></i>اعتماد الفاتورة</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="إغلاق"></button>
-            </div>
-            <form method="POST" id="approveInvoiceForm" action="?page=production_tasks">
-                <input type="hidden" name="action" value="approve_task_invoice">
-                <input type="hidden" name="task_id" id="approveInvoiceTaskId">
-                <div class="modal-body">
-                    <p class="text-muted small mb-3">سيتم إضافة الأوردر إلى سجل مشتريات العميل وإضافة الإجمالي إلى رصيده المدين. زر إجراءات في سجل المشتريات يعرض إيصال الأوردر.</p>
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">العميل (الأوردر)</label>
-                        <div id="approveInvoiceCustomerName" class="text-muted"></div>
-                    </div>
-                    <div class="mb-3">
-                        <label for="approveInvoiceTotalAmount" class="form-label fw-bold">الإجمالي النهائي (ج.م) <span class="text-danger">*</span></label>
-                        <input type="number" step="0.01" min="0.01" class="form-control" name="total_amount" id="approveInvoiceTotalAmount" required placeholder="0.00">
-                    </div>
-                    <div class="mb-3">
-                        <label for="approveInvoiceLocalCustomerId" class="form-label">العميل المحلي (اختياري — إن تركت فارغاً يُطابق حسب الاسم/الهاتف)</label>
-                        <select class="form-select" name="local_customer_id" id="approveInvoiceLocalCustomerId">
-                            <option value="">— مطابقة تلقائية —</option>
-                            <?php foreach ($localCustomersForDropdown as $lc): ?>
-                            <option value="<?php echo (int)$lc['id']; ?>"><?php echo htmlspecialchars($lc['name'], ENT_QUOTES, 'UTF-8'); ?><?php echo !empty($lc['phone']) ? ' — ' . htmlspecialchars($lc['phone'], ENT_QUOTES, 'UTF-8') : ''; ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="bi bi-x-circle me-1"></i>إلغاء</button>
-                    <button type="submit" class="btn btn-success"><i class="bi bi-check2-circle me-1"></i>اعتماد وإضافة للسجل</button>
                 </div>
             </form>
         </div>
@@ -3599,22 +3597,67 @@ function updateQuantityStep(index) {
     <?php endif; ?>
 })();
 
-// فتح مودال اعتماد الفاتورة (إضافة الأوردر لسجل المشتريات ورصيد العميل المدين)
-window.openApproveInvoiceModal = function(taskId, customerName, preSelectedLocalCustomerId) {
-    var tid = document.getElementById('approveInvoiceTaskId');
-    var nameEl = document.getElementById('approveInvoiceCustomerName');
-    var totalEl = document.getElementById('approveInvoiceTotalAmount');
-    var customerSelect = document.getElementById('approveInvoiceLocalCustomerId');
-    if (tid) tid.value = taskId || '';
-    if (nameEl) nameEl.textContent = customerName || '—';
-    if (totalEl) { totalEl.value = ''; totalEl.focus(); }
-    if (customerSelect) {
-        customerSelect.value = (preSelectedLocalCustomerId && preSelectedLocalCustomerId > 0) ? String(preSelectedLocalCustomerId) : '';
+// بطاقة اعتماد الفاتورة (إضافة الأوردر لسجل مشتريات العميل المكتوب في الأوردر والرصيد المدين له)
+function ensureApproveInvoiceCardExists() {
+    if (document.getElementById('approveInvoiceCardCollapse')) {
+        return true;
     }
-    var modal = document.getElementById('approveInvoiceModal');
-    if (modal && typeof bootstrap !== 'undefined') {
-        var m = bootstrap.Modal.getOrCreateInstance(modal);
-        m.show();
+    var host = document.querySelector('main') || document.getElementById('main-content') || document.body;
+    if (!host) return false;
+    var wrapper = document.createElement('div');
+    wrapper.className = 'container-fluid px-0';
+    wrapper.innerHTML = '<div class="collapse" id="approveInvoiceCardCollapse">' +
+        '<div class="card shadow-sm border-success mb-3">' +
+        '<div class="card-header bg-success text-white d-flex justify-content-between align-items-center">' +
+        '<h5 class="mb-0"><i class="bi bi-check2-circle me-2"></i>اعتماد الفاتورة</h5>' +
+        '<button type="button" class="btn btn-sm btn-light" onclick="closeApproveInvoiceCard()" aria-label="إغلاق"><i class="bi bi-x-lg"></i></button>' +
+        '</div>' +
+        '<form method="POST" id="approveInvoiceCardForm" action="?page=production_tasks">' +
+        '<input type="hidden" name="action" value="approve_task_invoice">' +
+        '<input type="hidden" name="task_id" id="approveInvoiceCardTaskId">' +
+        '<input type="hidden" name="total_amount" id="approveInvoiceCardTotalAmount">' +
+        '<div class="card-body">' +
+        '<p class="text-muted small mb-3">يُضاف الأوردر إلى سجل مشتريات <strong>العميل المكتوب في الأوردر</strong> ويُضاف الإجمالي النهائي (من إيصال الأوردر) إلى رصيده المدين.</p>' +
+        '<div class="mb-3">' +
+        '<label class="form-label fw-bold">العميل (من الأوردر)</label>' +
+        '<div id="approveInvoiceCardCustomerName" class="form-control bg-light"></div>' +
+        '</div>' +
+        '<div class="mb-3">' +
+        '<label class="form-label fw-bold">الإجمالي النهائي (من إيصال الأوردر)</label>' +
+        '<div id="approveInvoiceCardTotalDisplay" class="form-control bg-light fw-bold"></div>' +
+        '</div>' +
+        '<div class="d-flex gap-2">' +
+        '<button type="button" class="btn btn-secondary w-50" onclick="closeApproveInvoiceCard()"><i class="bi bi-x-circle me-1"></i>إلغاء</button>' +
+        '<button type="submit" class="btn btn-success w-50"><i class="bi bi-check2-circle me-1"></i>اعتماد وإضافة للسجل</button>' +
+        '</div>' +
+        '</div>' +
+        '</form>' +
+        '</div>' +
+        '</div>';
+    host.appendChild(wrapper);
+    return !!document.getElementById('approveInvoiceCardCollapse');
+}
+function closeApproveInvoiceCard() {
+    var collapse = document.getElementById('approveInvoiceCardCollapse');
+    if (collapse && typeof bootstrap !== 'undefined') {
+        var c = bootstrap.Collapse.getInstance(collapse);
+        if (c) c.hide();
+    }
+}
+window.openApproveInvoiceCard = function(taskId, customerName, receiptTotal) {
+    if (!ensureApproveInvoiceCardExists()) return;
+    var collapse = document.getElementById('approveInvoiceCardCollapse');
+    var taskIdInput = collapse && collapse.querySelector('#approveInvoiceCardTaskId');
+    var totalInput = collapse && collapse.querySelector('#approveInvoiceCardTotalAmount');
+    var nameEl = collapse && collapse.querySelector('#approveInvoiceCardCustomerName');
+    var totalDisplay = collapse && collapse.querySelector('#approveInvoiceCardTotalDisplay');
+    if (taskIdInput) taskIdInput.value = taskId || '';
+    if (totalInput) totalInput.value = (receiptTotal != null && receiptTotal > 0) ? String(receiptTotal) : '';
+    if (nameEl) nameEl.textContent = (customerName != null && customerName !== '') ? customerName : '—';
+    if (totalDisplay) totalDisplay.textContent = (receiptTotal != null && receiptTotal > 0) ? parseFloat(receiptTotal).toFixed(2) + ' ج.م' : '—';
+    if (collapse && typeof bootstrap !== 'undefined') {
+        var c = bootstrap.Collapse.getOrCreateInstance(collapse, { toggle: true });
+        c.show();
     }
 };
 
