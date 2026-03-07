@@ -2580,7 +2580,7 @@ setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
                                                 if ($hasCustomer && !$taskApproved && $receiptTotal > 0):
                                                 ?>
                                                 <li>
-                                                    <button type="button" class="dropdown-item text-success" onclick="openApproveInvoiceCard(<?php echo (int)$task['id']; ?>, <?php echo json_encode(trim((string)($task['customer_name'] ?? '')), JSON_UNESCAPED_UNICODE); ?>, <?php echo json_encode($receiptTotal); ?>)">
+                                                    <button type="button" class="dropdown-item text-success approve-invoice-btn" data-task-id="<?php echo (int)$task['id']; ?>" data-customer-name="<?php echo htmlspecialchars(trim((string)($task['customer_name'] ?? '')), ENT_QUOTES, 'UTF-8'); ?>" data-receipt-total="<?php echo (float)$receiptTotal; ?>" onclick="openApproveInvoiceCardFromBtn(this)">
                                                         <i class="bi bi-check2-circle me-1"></i>اعتماد الفاتورة
                                                     </button>
                                                 </li>
@@ -3644,6 +3644,14 @@ function closeApproveInvoiceCard() {
         if (c) c.hide();
     }
 }
+window.openApproveInvoiceCardFromBtn = function(btn) {
+    if (!btn || !btn.getAttribute) return;
+    if (btn.stopPropagation) btn.stopPropagation();
+    var taskId = parseInt(btn.getAttribute('data-task-id'), 10) || 0;
+    var customerName = btn.getAttribute('data-customer-name') || '';
+    var receiptTotal = parseFloat(btn.getAttribute('data-receipt-total')) || 0;
+    openApproveInvoiceCard(taskId, customerName, receiptTotal);
+};
 window.openApproveInvoiceCard = function(taskId, customerName, receiptTotal) {
     if (!ensureApproveInvoiceCardExists()) return;
     var collapse = document.getElementById('approveInvoiceCardCollapse');
@@ -3653,11 +3661,14 @@ window.openApproveInvoiceCard = function(taskId, customerName, receiptTotal) {
     var totalDisplay = collapse && collapse.querySelector('#approveInvoiceCardTotalDisplay');
     if (taskIdInput) taskIdInput.value = taskId || '';
     if (totalInput) totalInput.value = (receiptTotal != null && receiptTotal > 0) ? String(receiptTotal) : '';
-    if (nameEl) nameEl.textContent = (customerName != null && customerName !== '') ? customerName : '—';
+    if (nameEl) nameEl.textContent = (customerName != null && String(customerName).trim() !== '') ? customerName : '—';
     if (totalDisplay) totalDisplay.textContent = (receiptTotal != null && receiptTotal > 0) ? parseFloat(receiptTotal).toFixed(2) + ' ج.م' : '—';
     if (collapse && typeof bootstrap !== 'undefined') {
         var c = bootstrap.Collapse.getOrCreateInstance(collapse, { toggle: true });
         c.show();
+        setTimeout(function() {
+            if (collapse.scrollIntoView) collapse.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }, 150);
     }
 };
 
