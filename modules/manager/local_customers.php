@@ -708,11 +708,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $currentBalance = isset($customer['balance']) ? (float)$customer['balance'] : 0.0;
 
-                if ($currentBalance <= 0) {
-                    throw new InvalidArgumentException('لا توجد ديون نشطة على هذا العميل.');
-                }
-
-                // السماح بمبلغ أكبر من الدين؛ الفرق يتحول إلى رصيد دائن للعميل
+                // السماح بالتحصيل حتى لو كان الرصيد صفر أو أقل (رصيد دائن)؛ المبلغ المحصل يخصم من الرصيد فإذا كان الرصيد صفر أو سالب يصبح المبلغ رصيداً دائناً للعميل
                 $newBalance = round($currentBalance - $amount, 2);
 
                 $db->execute(
@@ -802,8 +798,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     );
                 }
 
-                // توزيع التحصيل على الفواتير المحلية (فقط الجزء الذي يغطي الدين؛ الزيادة تصبح رصيداً دائناً)
-                $amountToDistribute = min($amount, $currentBalance);
+                // توزيع التحصيل على الفواتير المحلية (فقط الجزء الذي يغطي الدين؛ الزيادة تصبح رصيداً دائناً). إذا كان الرصيد صفر أو سالب فلا يوجد دين لتوزيع التحصيل عليه
+                $amountToDistribute = ($currentBalance > 0) ? min($amount, $currentBalance) : 0;
                 $localInvoicesTableExists = $db->queryOne("SHOW TABLES LIKE 'local_invoices'");
                 if ($amountToDistribute > 0 && !empty($localInvoicesTableExists)) {
                     try {
@@ -2200,7 +2196,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                             </li>
                                             <?php endif; ?>
                                             <li>
-                                                <button type="button" class="dropdown-item <?php echo $customerBalance <= 0 ? 'disabled' : ''; ?>" onclick="showCollectPaymentModal(this)" data-customer-id="<?php echo $custId; ?>" data-customer-name="<?php echo $custName; ?>" data-customer-balance="<?php echo $rawBalance; ?>" data-customer-balance-formatted="<?php echo htmlspecialchars($formattedBalance); ?>" <?php echo $customerBalance > 0 ? '' : 'disabled'; ?>>
+                                                <button type="button" class="dropdown-item" onclick="showCollectPaymentModal(this)" data-customer-id="<?php echo $custId; ?>" data-customer-name="<?php echo $custName; ?>" data-customer-balance="<?php echo $rawBalance; ?>" data-customer-balance-formatted="<?php echo htmlspecialchars($formattedBalance); ?>">
                                                     <i class="bi bi-cash-coin me-2"></i>تحصيل
                                                 </button>
                                             </li>
@@ -3840,7 +3836,7 @@ function showCollectPaymentModal(button) {
                 amountInput.value = '0';
                 amountInput.removeAttribute('max');
                 amountInput.setAttribute('min', '0');
-                amountInput.readOnly = debtAmount <= 0;
+                amountInput.readOnly = false;
             }
             
             // تعيين نوع التحصيل إلى "مباشر" افتراضياً
@@ -3869,7 +3865,7 @@ function showCollectPaymentModal(button) {
                 amountInput.value = '0';
                 amountInput.removeAttribute('max');
                 amountInput.setAttribute('min', '0');
-                amountInput.readOnly = debtAmount <= 0;
+                amountInput.readOnly = false;
             }
             
             // تعيين نوع التحصيل إلى "مباشر" افتراضياً
