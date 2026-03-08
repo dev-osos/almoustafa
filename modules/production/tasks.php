@@ -3150,6 +3150,8 @@ setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
     let autoRefreshInterval = null;
     let lastUpdateTimestamp = null;
     let isRefreshing = false;
+    // أقصى معرف أوردر عند تحميل الصفحة — نُشعر فقط بالأوردرات الأحدث منه لتفادي تكرار إشعارات الأوردرات القديمة
+    let initialMaxTaskId = 0;
     
     // طلب إذن إشعارات المتصفح فور تحميل الصفحة
     if ('Notification' in window && Notification.permission === 'default') {
@@ -3224,6 +3226,17 @@ setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
                 const newStats = data.data.stats || {};
                 const newTimestamp = data.data.timestamp || Date.now();
                 
+                // تعيين أقصى معرف أوردر عند أول جلب (لتفادي إشعارات الأوردرات القديمة)
+                if (initialMaxTaskId === 0 && newTasks.length > 0) {
+                    var idsInDom = Array.from(document.querySelectorAll('[data-task-id]')).map(function(el) { return parseInt(el.getAttribute('data-task-id'), 10) || 0; });
+                    initialMaxTaskId = idsInDom.length > 0 ? Math.max.apply(null, idsInDom) : 0;
+                    var idsFromApi = newTasks.map(function(t) { return parseInt(t.id, 10) || 0; }).filter(Boolean);
+                    if (idsFromApi.length > 0) {
+                        var maxFromApi = Math.max.apply(null, idsFromApi);
+                        if (maxFromApi > initialMaxTaskId) initialMaxTaskId = maxFromApi;
+                    }
+                }
+                
                 // مقارنة مع المهام الحالية
                 if (lastUpdateTimestamp && newTimestamp > lastUpdateTimestamp) {
                     // هناك تحديثات جديدة
@@ -3237,18 +3250,19 @@ setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
                     let hasNewTasks = false;
                     let hasChanges = false;
                     
-                    // التحقق من المهام الجديدة وإظهار إشعار متصفح فوري لكل أوردر جديد
+                    // أوردر "جديد" فقط إذا كان معرفه أكبر من أقصى معرف عند تحميل الصفحة (منع تكرار إشعارات الأوردرات القديمة)
                     var newTaskObjects = [];
                     for (var i = 0; i < newTasks.length; i++) {
                         var task = newTasks[i];
                         var taskId = String(task.id);
-                        if (!currentTasksIds.has(taskId)) {
+                        var taskIdNum = parseInt(task.id, 10) || 0;
+                        if (taskIdNum > initialMaxTaskId && !currentTasksIds.has(taskId)) {
                             hasNewTasks = true;
                             newTaskObjects.push(task);
                         }
                     }
                     
-                    // إشعار متصفح فوري لكل أوردر جديد: مرسل الأوردر + اسم العميل
+                    // إشعار متصفح فوري لكل أوردر جديد فعلي فقط
                     if (newTaskObjects.length > 0) {
                         if ('Notification' in window && Notification.permission === 'default') {
                             Notification.requestPermission().then(function(p) {
@@ -3259,6 +3273,9 @@ setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
                         } else if (Notification.permission === 'granted') {
                             newTaskObjects.forEach(showNewOrderNotification);
                         }
+                        // تحديث أقصى معرف حتى لا نُعيد إشعار نفس الأوردرات في الجلب القادم
+                        var newIds = newTaskObjects.map(function(t) { return parseInt(t.id, 10) || 0; }).filter(Boolean);
+                        if (newIds.length > 0) initialMaxTaskId = Math.max(initialMaxTaskId, Math.max.apply(null, newIds));
                     }
                     
                     // التحقق من التغييرات في الإحصائيات
