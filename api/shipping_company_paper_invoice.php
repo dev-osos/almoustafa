@@ -121,19 +121,30 @@ if (isset($_GET['action']) && $_GET['action'] === 'list') {
         echo json_encode(['success' => true, 'paper_invoices' => [], 'company_name' => $company['name']], JSON_UNESCAPED_UNICODE);
         exit;
     }
+    $hasTaskId = $db->queryOne("SHOW COLUMNS FROM shipping_company_paper_invoices LIKE 'task_id'");
+    $selectCols = "id, shipping_company_id, invoice_number, total_amount, image_path, created_at";
+    if (!empty($hasTaskId)) {
+        $selectCols .= ", task_id";
+    }
     $list = $db->query(
-        "SELECT id, shipping_company_id, invoice_number, total_amount, image_path, created_at FROM shipping_company_paper_invoices WHERE shipping_company_id = ? ORDER BY created_at DESC, id DESC",
+        "SELECT $selectCols FROM shipping_company_paper_invoices WHERE shipping_company_id = ? ORDER BY created_at DESC, id DESC",
         [$companyId]
     );
     $out = [];
     foreach ($list ?: [] as $row) {
-        $out[] = [
+        $item = [
             'id' => (int)$row['id'],
             'invoice_number' => $row['invoice_number'] ?? '',
             'total_amount' => (float)$row['total_amount'],
             'image_path' => $row['image_path'],
             'created_at' => $row['created_at'],
         ];
+        if (!empty($hasTaskId) && isset($row['task_id']) && (int)$row['task_id'] > 0) {
+            $item['task_id'] = (int)$row['task_id'];
+        } else {
+            $item['task_id'] = null;
+        }
+        $out[] = $item;
     }
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode(['success' => true, 'paper_invoices' => $out, 'company_name' => $company['name']], JSON_UNESCAPED_UNICODE);

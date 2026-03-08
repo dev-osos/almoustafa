@@ -5820,6 +5820,7 @@ var shippingPurchaseHistoryUrl = <?php echo json_encode(getRelativeUrl('api/cust
 var shippingPaperInvoiceUrl = <?php echo json_encode(getRelativeUrl('api/local_paper_invoice.php')); ?>;
 var shippingPaperInvoiceReturnUrl = <?php echo json_encode(getRelativeUrl('api/local_paper_invoice_return.php')); ?>;
 var companyPaperInvoiceUrl = <?php echo json_encode(getRelativeUrl('api/shipping_company_paper_invoice.php')); ?>;
+var printTaskReceiptBaseUrl = <?php echo json_encode(getRelativeUrl('print_task_receipt.php')); ?>;
 
 function showCompanyPaperInvoicesCard(button) {
     var companyId = button.getAttribute('data-company-id');
@@ -5910,12 +5911,17 @@ function goToCompanyPaperInvoicesPage(page) {
     var tbody = document.getElementById('companyPaperInvoicesTableBody');
     if (!tbody) return;
     tbody.innerHTML = '';
+    var receiptBase = (typeof printTaskReceiptBaseUrl !== 'undefined' && printTaskReceiptBaseUrl) ? printTaskReceiptBaseUrl : 'print_task_receipt.php';
     slice.forEach(function(pi) {
         var safeNum = (pi.invoice_number || 'ورقية-' + pi.id).replace(/</g, '&lt;').replace(/>/g, '&gt;');
         var dateStr = (pi.created_at || '-').toString().substring(0, 10);
         var viewBtn = pi.image_path
             ? '<button type="button" class="btn btn-sm btn-outline-primary" onclick="showCompanyPaperInvoiceImage(' + parseInt(pi.id, 10) + ')" title="عرض صورة الفاتورة"><i class="bi bi-image me-1"></i>عرض الفاتورة</button>'
             : '<span class="text-muted small">لا توجد صورة</span>';
+        if (pi.task_id && parseInt(pi.task_id, 10) > 0) {
+            var receiptUrl = receiptBase.indexOf('?') >= 0 ? (receiptBase + '&id=' + pi.task_id) : (receiptBase + '?id=' + pi.task_id);
+            viewBtn = '<a href="' + receiptUrl + '" target="_blank" class="btn btn-sm btn-outline-success me-1" title="عرض إيصال الأوردر"><i class="bi bi-receipt me-1"></i>عرض الإيصال</a>' + viewBtn;
+        }
         var tr = document.createElement('tr');
         tr.innerHTML = '<td>' + safeNum + '</td><td>' + parseFloat(pi.total_amount || 0).toFixed(2) + ' ج.م</td><td>' + dateStr + '</td><td>' + viewBtn + '</td>';
         tbody.appendChild(tr);
