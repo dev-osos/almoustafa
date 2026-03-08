@@ -2125,8 +2125,6 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
     // إخفاء شاشة التحميل العامة عند تحميل الصفحة (مهم عند الفلترة بتاريخ الطلب أو غيرها)
     if (typeof window.resetPageLoading === 'function') window.resetPageLoading();
 })();
-// ريفريش تلقائي كل ٥ دقائق
-setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
 </script>
 
 <div class="container-fluid">
