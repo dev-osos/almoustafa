@@ -234,6 +234,22 @@ try {
     $repCustomersForTask = [];
 }
 
+// قائمة شركات الشحن (لاعتماد الفاتورة عند نوع الأوردر تليجراف/شركة شحن)
+$shippingCompaniesForDropdown = [];
+try {
+    $t = $db->queryOne("SHOW TABLES LIKE 'shipping_companies'");
+    if (!empty($t)) {
+        $hasStatus = $db->queryOne("SHOW COLUMNS FROM shipping_companies LIKE 'status'");
+        $sql = "SELECT id, name FROM shipping_companies " . (!empty($hasStatus) ? "WHERE status = 'active' " : "") . "ORDER BY name ASC";
+        $rows = $db->query($sql);
+        foreach ($rows ?: [] as $r) {
+            $shippingCompaniesForDropdown[] = ['id' => (int)$r['id'], 'name' => trim((string)($r['name'] ?? ''))];
+        }
+    }
+} catch (Throwable $e) {
+    error_log('production_tasks shipping companies: ' . $e->getMessage());
+}
+
 /**
  * تأكد من وجود جدول المهام (tasks)
  */
@@ -389,6 +405,24 @@ try {
     }
 } catch (Exception $e) {
     error_log('Error creating customer_task_purchases table: ' . $e->getMessage());
+}
+
+// أعمدة إضافية لجدول الفواتير الورقية لشركات الشحن (صافي سعر الطرد + ربط الأوردر)
+try {
+    $t = $db->queryOne("SHOW TABLES LIKE 'shipping_company_paper_invoices'");
+    if (!empty($t)) {
+        $colNet = $db->queryOne("SHOW COLUMNS FROM shipping_company_paper_invoices LIKE 'net_amount'");
+        if (empty($colNet)) {
+            $db->execute("ALTER TABLE shipping_company_paper_invoices ADD COLUMN net_amount DECIMAL(15,2) NULL COMMENT 'صافي سعر الطرد (يُضاف لديون الشركة)' AFTER total_amount");
+        }
+        $colTask = $db->queryOne("SHOW COLUMNS FROM shipping_company_paper_invoices LIKE 'task_id'");
+        if (empty($colTask)) {
+            $db->execute("ALTER TABLE shipping_company_paper_invoices ADD COLUMN task_id INT(11) NULL COMMENT 'ربط بأوردر الإنتاج' AFTER net_amount");
+            $db->execute("ALTER TABLE shipping_company_paper_invoices ADD UNIQUE KEY task_id_unique (task_id)");
+        }
+    }
+} catch (Exception $e) {
+    error_log('production_tasks: shipping_company_paper_invoices columns: ' . $e->getMessage());
 }
 
 /**
@@ -1053,9 +1087,86 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'approve_task_invoice' && ($isAccountant || $isManager)) {
         $taskId = (int)($_POST['task_id'] ?? 0);
         $totalAmount = isset($_POST['total_amount']) ? (float)str_replace(',', '.', trim((string)$_POST['total_amount'])) : 0;
+        $approveForShipping = (int)($_POST['approve_for_shipping'] ?? 0) === 1;
+        $shippingCompanyId = $approveForShipping ? (int)($_POST['shipping_company_id'] ?? 0) : 0;
+        $netParcelPrice = $approveForShipping && isset($_POST['net_parcel_price']) ? (float)str_replace(',', '.', trim((string)$_POST['net_parcel_price'])) : null;
 
         if ($taskId <= 0) {
             $error = 'معرف المهمة غير صحيح.';
+        } elseif ($approveForShipping) {
+            if ($shippingCompanyId <= 0) {
+                $error = 'يرجى اختيار شركة الشحن.';
+            } elseif ($netParcelPrice === null || $netParcelPrice === '') {
+                $error = 'يرجى إدخال صافي سعر الطرد.';
+            } else {
+                try {
+                    $task = $db->queryOne("SELECT id, created_at FROM tasks WHERE id = ? LIMIT 1", [$taskId]);
+                    if (!$task) {
+                        $error = 'المهمة غير موجودة.';
+                    } else {
+                        $company = $db->queryOne("SELECT id, name FROM shipping_companies WHERE id = ?", [$shippingCompanyId]);
+                        if (!$company) {
+                            $error = 'شركة الشحن غير موجودة.';
+                        } else {
+                            $paperTable = $db->queryOne("SHOW TABLES LIKE 'shipping_company_paper_invoices'");
+                            if (empty($paperTable)) {
+                                $error = 'جدول الفواتير الورقية لشركات الشحن غير متوفر.';
+                            } else {
+                                $alreadyApproved = $db->queryOne("SELECT id FROM customer_task_purchases WHERE task_id = ?", [$taskId]);
+                                if ($alreadyApproved) {
+                                    $error = 'تم اعتماد هذا الأوردر مسبقاً كعميل محلي.';
+                                } else {
+                                    $hasTaskIdCol = $db->queryOne("SHOW COLUMNS FROM shipping_company_paper_invoices LIKE 'task_id'");
+                                    $alreadyInPaper = false;
+                                    if (!empty($hasTaskIdCol)) {
+                                        $existing = $db->queryOne("SELECT id FROM shipping_company_paper_invoices WHERE task_id = ?", [$taskId]);
+                                        $alreadyInPaper = !empty($existing);
+                                    }
+                                    if ($alreadyInPaper) {
+                                        $error = 'تم اعتماد هذا الأوردر مسبقاً في سجل الفواتير الورقية لشركة الشحن.';
+                                    } else {
+                                        $db->beginTransaction();
+                                        $invoiceNumber = 'أوردر #' . $taskId;
+                                        $hasNetCol = $db->queryOne("SHOW COLUMNS FROM shipping_company_paper_invoices LIKE 'net_amount'");
+                                        if (!empty($hasNetCol) && !empty($hasTaskIdCol)) {
+                                            $db->execute(
+                                                "INSERT INTO shipping_company_paper_invoices (shipping_company_id, invoice_number, total_amount, net_amount, task_id, created_by) VALUES (?, ?, ?, ?, ?, ?)",
+                                                [$shippingCompanyId, $invoiceNumber, $totalAmount, $netParcelPrice, $taskId, $currentUser['id']]
+                                            );
+                                        } else {
+                                            $db->execute(
+                                                "INSERT INTO shipping_company_paper_invoices (shipping_company_id, invoice_number, total_amount, created_by) VALUES (?, ?, ?, ?)",
+                                                [$shippingCompanyId, $invoiceNumber, $totalAmount, $currentUser['id']]
+                                            );
+                                        }
+                                        $paperId = (int)$db->getLastInsertId();
+                                        $balanceCol = $db->queryOne("SHOW COLUMNS FROM shipping_companies LIKE 'updated_by'");
+                                        $balanceSql = "UPDATE shipping_companies SET balance = COALESCE(balance, 0) + ?";
+                                        $balanceParams = [$netParcelPrice];
+                                        if (!empty($balanceCol)) {
+                                            $balanceSql .= ", updated_by = ?, updated_at = NOW()";
+                                            $balanceParams[] = $currentUser['id'];
+                                        }
+                                        $balanceParams[] = $shippingCompanyId;
+                                        $db->execute($balanceSql . " WHERE id = ?", $balanceParams);
+                                        $db->execute("UPDATE tasks SET total_amount = ? WHERE id = ?", [$totalAmount, $taskId]);
+                                        $db->commit();
+                                        logAudit($currentUser['id'], 'approve_task_invoice_shipping', 'tasks', $taskId, null, ['shipping_company_id' => $shippingCompanyId, 'net_parcel_price' => $netParcelPrice]);
+                                        $userRole = ($currentUser['role'] ?? '') === 'accountant' ? 'accountant' : 'manager';
+                                        preventDuplicateSubmission('تم اعتماد الفاتورة: تمت إضافة الأوردر لسجل الفواتير الورقية لشركة الشحن وإضافة صافي سعر الطرد لديونها.', ['page' => 'production_tasks'], null, $userRole);
+                                        exit;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (Exception $e) {
+                    if (isset($db) && $db->inTransaction()) {
+                        $db->rollBack();
+                    }
+                    $error = 'تعذر اعتماد الفاتورة: ' . $e->getMessage();
+                }
+            }
         } elseif ($totalAmount <= 0) {
             $error = 'الإجمالي النهائي غير صالح.';
         } else {
@@ -1067,7 +1178,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!$task) {
                     $error = 'المهمة غير موجودة.';
                 } else {
-                    // العميل هو المكتوب في الأوردر فقط (من local_customer_id أو مطابقة الاسم/الهاتف)
                     $custId = (int)($task['local_customer_id'] ?? 0);
                     if ($custId <= 0) {
                         $name = trim((string)($task['customer_name'] ?? ''));
@@ -1656,6 +1766,8 @@ $filterOrderId = isset($_GET['search_order_id']) ? trim((string)$_GET['search_or
 $filterTaskType = isset($_GET['task_type']) ? trim((string)$_GET['task_type']) : '';
 $filterDueFrom = isset($_GET['due_date_from']) ? trim((string)$_GET['due_date_from']) : '';
 $filterDueTo = isset($_GET['due_date_to']) ? trim((string)$_GET['due_date_to']) : '';
+$filterOrderDateFrom = isset($_GET['order_date_from']) ? trim((string)$_GET['order_date_from']) : '';
+$filterOrderDateTo = isset($_GET['order_date_to']) ? trim((string)$_GET['order_date_to']) : '';
 $filterSearchText = isset($_GET['search_text']) ? trim((string)$_GET['search_text']) : '';
 
 $searchConditions = '';
@@ -1693,6 +1805,14 @@ if ($filterDueFrom !== '') {
 if ($filterDueTo !== '') {
     $searchConditions .= " AND t.due_date <= ?";
     $searchParams[] = $filterDueTo;
+}
+if ($filterOrderDateFrom !== '') {
+    $searchConditions .= " AND DATE(t.created_at) >= ?";
+    $searchParams[] = $filterOrderDateFrom;
+}
+if ($filterOrderDateTo !== '') {
+    $searchConditions .= " AND DATE(t.created_at) <= ?";
+    $searchParams[] = $filterOrderDateTo;
 }
 if ($filterSearchText !== '') {
     $searchConditions .= " AND (t.title LIKE ? OR t.notes LIKE ? OR t.customer_name LIKE ? OR t.customer_phone LIKE ?)";
@@ -1963,6 +2083,8 @@ if ($filterOrderId !== '') $recentTasksQueryParams['search_order_id'] = $filterO
 if ($filterTaskType !== '') $recentTasksQueryParams['task_type'] = $filterTaskType;
 if ($filterDueFrom !== '') $recentTasksQueryParams['due_date_from'] = $filterDueFrom;
 if ($filterDueTo !== '') $recentTasksQueryParams['due_date_to'] = $filterDueTo;
+if ($filterOrderDateFrom !== '') $recentTasksQueryParams['order_date_from'] = $filterOrderDateFrom;
+if ($filterOrderDateTo !== '') $recentTasksQueryParams['order_date_to'] = $filterOrderDateTo;
 if ($filterSearchText !== '') $recentTasksQueryParams['search_text'] = $filterSearchText;
 $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP_QUERY_RFC3986);
 
@@ -2394,6 +2516,12 @@ setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
                     <?php if ($statusFilter !== ''): ?>
                     <input type="hidden" name="status" value="<?php echo htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8'); ?>">
                     <?php endif; ?>
+                    <?php if ($filterOrderDateFrom !== ''): ?>
+                    <input type="hidden" name="order_date_from" value="<?php echo htmlspecialchars($filterOrderDateFrom, ENT_QUOTES, 'UTF-8'); ?>">
+                    <?php endif; ?>
+                    <?php if ($filterOrderDateTo !== ''): ?>
+                    <input type="hidden" name="order_date_to" value="<?php echo htmlspecialchars($filterOrderDateTo, ENT_QUOTES, 'UTF-8'); ?>">
+                    <?php endif; ?>
                     <div class="row g-2 align-items-end mb-2">
                         <div class="col-12 col-md-4 col-lg-3">
                             <label class="form-label small mb-0">بحث سريع</label>
@@ -2404,7 +2532,7 @@ setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
                                 <i class="bi bi-search me-1"></i>بحث
                             </button>
                         </div>
-                        <?php if ($filterTaskId !== '' || $filterCustomer !== '' || $filterOrderId !== '' || $filterTaskType !== '' || $filterDueFrom !== '' || $filterDueTo !== '' || $filterSearchText !== ''): ?>
+                        <?php if ($filterTaskId !== '' || $filterCustomer !== '' || $filterOrderId !== '' || $filterTaskType !== '' || $filterDueFrom !== '' || $filterDueTo !== '' || $filterOrderDateFrom !== '' || $filterOrderDateTo !== '' || $filterSearchText !== ''): ?>
                         <div class="col-auto">
                             <a href="?<?php echo $statusFilter !== '' ? 'page=production_tasks&status=' . rawurlencode($statusFilter) : 'page=production_tasks'; ?>" class="btn btn-outline-danger btn-sm">إزالة الفلتر</a>
                         </div>
@@ -2438,6 +2566,14 @@ setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
                             <div class="col-6 col-md-4 col-lg-2">
                                 <label class="form-label small mb-0">تاريخ تسليم إلى</label>
                                 <input type="date" name="due_date_to" class="form-control form-control-sm" value="<?php echo htmlspecialchars($filterDueTo, ENT_QUOTES, 'UTF-8'); ?>">
+                            </div>
+                            <div class="col-6 col-md-4 col-lg-2">
+                                <label class="form-label small mb-0">تاريخ الطلب من</label>
+                                <input type="date" name="order_date_from" class="form-control form-control-sm" value="<?php echo htmlspecialchars($filterOrderDateFrom, ENT_QUOTES, 'UTF-8'); ?>">
+                            </div>
+                            <div class="col-6 col-md-4 col-lg-2">
+                                <label class="form-label small mb-0">تاريخ الطلب إلى</label>
+                                <input type="date" name="order_date_to" class="form-control form-control-sm" value="<?php echo htmlspecialchars($filterOrderDateTo, ENT_QUOTES, 'UTF-8'); ?>">
                             </div>
                         </div>
                     </div>
@@ -2483,6 +2619,15 @@ setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
                                         <span class="badge bg-info mb-1" title="عدد مرات طباعة إيصال الأوردر" style="font-size: 0.7rem;"> <?php echo $printCount; ?> <?php echo $printCount === 1 ? '' : ''; ?></span>
                                         <?php endif; ?>
                                         <strong>#<?php echo (int)$task['id']; ?></strong>
+                                        <?php
+                                        $createdAt = $task['created_at'] ?? '';
+                                        if ($createdAt !== '') {
+                                            $day = (int) date('j', strtotime($createdAt));
+                                            $monthsAr = ['', 'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+                                            $month = $monthsAr[(int) date('n', strtotime($createdAt))];
+                                            echo '<div class="text-muted small mt-1">' . $day . ' ' . $month . '</div>';
+                                        }
+                                        ?>
                                     </td>
                                     <td><?php 
                                         $custName = isset($task['customer_name']) ? trim((string)$task['customer_name']) : '';
@@ -2577,10 +2722,12 @@ setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
                                                 $taskApproved = in_array((int)$task['id'], $approvedTaskIds, true);
                                                 $hasCustomer = trim((string)($task['customer_name'] ?? '')) !== '' || trim((string)($task['customer_phone'] ?? '')) !== '';
                                                 $receiptTotal = isset($task['receipt_total']) && $task['receipt_total'] > 0 ? (float)$task['receipt_total'] : 0;
-                                                if ($hasCustomer && !$taskApproved && $receiptTotal > 0):
+                                                $isShippingOrderType = ($displayType === 'telegraph' || $displayType === 'shipping_company');
+                                                $canShowApproveBtn = !$taskApproved && $receiptTotal > 0 && ($hasCustomer || $isShippingOrderType);
+                                                if ($canShowApproveBtn):
                                                 ?>
                                                 <li>
-                                                    <button type="button" class="dropdown-item text-success approve-invoice-btn" data-task-id="<?php echo (int)$task['id']; ?>" data-customer-name="<?php echo htmlspecialchars(trim((string)($task['customer_name'] ?? '')), ENT_QUOTES, 'UTF-8'); ?>" data-receipt-total="<?php echo (float)$receiptTotal; ?>" onclick="openApproveInvoiceCardFromBtn(this)">
+                                                    <button type="button" class="dropdown-item text-success approve-invoice-btn" data-task-id="<?php echo (int)$task['id']; ?>" data-customer-name="<?php echo htmlspecialchars(trim((string)($task['customer_name'] ?? '')), ENT_QUOTES, 'UTF-8'); ?>" data-receipt-total="<?php echo (float)$receiptTotal; ?>" data-order-type="<?php echo htmlspecialchars($displayType ?? '', ENT_QUOTES, 'UTF-8'); ?>" onclick="openApproveInvoiceCardFromBtn(this)">
                                                         <i class="bi bi-check2-circle me-1"></i>اعتماد الفاتورة
                                                     </button>
                                                 </li>
@@ -2808,6 +2955,7 @@ label[for="ct_task_manual"], .form-check:has(#ct_task_manual) { display: none !i
 <script>
 var __localCustomersForTask = <?php echo json_encode($localCustomersForDropdown); ?>;
 var __repCustomersForTask = <?php echo json_encode($repCustomersForTask); ?>;
+var __shippingCompaniesForTask = <?php echo json_encode($shippingCompaniesForDropdown); ?>;
 
 var editProductIndex = 0;
 function buildEditProductRow(idx, product) {
@@ -3597,13 +3745,15 @@ function updateQuantityStep(index) {
     <?php endif; ?>
 })();
 
-// بطاقة اعتماد الفاتورة (إضافة الأوردر لسجل مشتريات العميل المكتوب في الأوردر والرصيد المدين له)
+// بطاقة اعتماد الفاتورة (عميل محلي أو شركة شحن حسب نوع الأوردر)
 function ensureApproveInvoiceCardExists() {
     if (document.getElementById('approveInvoiceCardCollapse')) {
         return true;
     }
     var host = document.querySelector('main') || document.getElementById('main-content') || document.body;
     if (!host) return false;
+    var list = (typeof __shippingCompaniesForTask !== 'undefined' && Array.isArray(__shippingCompaniesForTask)) ? __shippingCompaniesForTask : [];
+    var opts = list.map(function(c) { return '<option value="' + parseInt(c.id, 10) + '">' + (c.name || '').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</option>'; }).join('');
     var wrapper = document.createElement('div');
     wrapper.className = 'container-fluid px-0';
     wrapper.innerHTML = '<div class="collapse" id="approveInvoiceCardCollapse">' +
@@ -3616,16 +3766,19 @@ function ensureApproveInvoiceCardExists() {
         '<input type="hidden" name="action" value="approve_task_invoice">' +
         '<input type="hidden" name="task_id" id="approveInvoiceCardTaskId">' +
         '<input type="hidden" name="total_amount" id="approveInvoiceCardTotalAmount">' +
+        '<input type="hidden" name="approve_for_shipping" id="approveInvoiceCardForShipping" value="0">' +
         '<div class="card-body">' +
-        '<p class="text-muted small mb-3">يُضاف الأوردر إلى سجل مشتريات <strong>العميل المكتوب في الأوردر</strong> ويُضاف الإجمالي النهائي (من إيصال الأوردر) إلى رصيده المدين.</p>' +
-        '<div class="mb-3">' +
-        '<label class="form-label fw-bold">العميل (من الأوردر)</label>' +
-        '<div id="approveInvoiceCardCustomerName" class="form-control bg-light"></div>' +
+        '<div id="approveInvoiceCardCustomerBlock" class="approve-invoice-block">' +
+        '<p class="text-muted small mb-3">يُضاف الأوردر إلى سجل مشتريات <strong>العميل المكتوب في الأوردر</strong> ويُضاف الإجمالي النهائي إلى رصيده المدين.</p>' +
+        '<div class="mb-3"><label class="form-label fw-bold">العميل (من الأوردر)</label><div id="approveInvoiceCardCustomerName" class="form-control bg-light"></div></div>' +
         '</div>' +
-        '<div class="mb-3">' +
-        '<label class="form-label fw-bold">الإجمالي النهائي (من إيصال الأوردر)</label>' +
-        '<div id="approveInvoiceCardTotalDisplay" class="form-control bg-light fw-bold"></div>' +
+        '<div id="approveInvoiceCardShippingBlock" class="approve-invoice-block" style="display:none;">' +
+        '<p class="text-muted small mb-3">يُضاف الأوردر إلى <strong>سجل الفواتير الورقية لشركة الشحن</strong>. المبلغ الذي يُضاف لديون الشركة هو صافي سعر الطرد (أدناه).</p>' +
+        '<div class="mb-3"><label class="form-label fw-bold">شركة الشحن</label><select class="form-select" name="shipping_company_id" id="approveInvoiceCardShippingCompanyId"><option value="">— اختر الشركة —</option>' + opts + '</select></div>' +
+        '<div class="mb-3"><label class="form-label fw-bold">صافي سعر الطرد (ج.م)</label><input type="number" step="0.01" class="form-control" name="net_parcel_price" id="approveInvoiceCardNetParcelPrice" placeholder="موجب أو سالب">' +
+        '<small class="form-text text-muted">هذا المبلغ يُضاف لديون شركة الشحن (سالب = يقلل الديون)</small></div>' +
         '</div>' +
+        '<div class="mb-3"><label class="form-label fw-bold">الإجمالي النهائي (من إيصال الأوردر)</label><div id="approveInvoiceCardTotalDisplay" class="form-control bg-light fw-bold"></div></div>' +
         '<div class="d-flex gap-2">' +
         '<button type="button" class="btn btn-secondary w-50" onclick="closeApproveInvoiceCard()"><i class="bi bi-x-circle me-1"></i>إلغاء</button>' +
         '<button type="submit" class="btn btn-success w-50"><i class="bi bi-check2-circle me-1"></i>اعتماد وإضافة للسجل</button>' +
@@ -3650,19 +3803,31 @@ window.openApproveInvoiceCardFromBtn = function(btn) {
     var taskId = parseInt(btn.getAttribute('data-task-id'), 10) || 0;
     var customerName = btn.getAttribute('data-customer-name') || '';
     var receiptTotal = parseFloat(btn.getAttribute('data-receipt-total')) || 0;
-    openApproveInvoiceCard(taskId, customerName, receiptTotal);
+    var orderType = (btn.getAttribute('data-order-type') || '').trim();
+    openApproveInvoiceCard(taskId, customerName, receiptTotal, orderType);
 };
-window.openApproveInvoiceCard = function(taskId, customerName, receiptTotal) {
+window.openApproveInvoiceCard = function(taskId, customerName, receiptTotal, orderType) {
     if (!ensureApproveInvoiceCardExists()) return;
     var collapse = document.getElementById('approveInvoiceCardCollapse');
     var taskIdInput = collapse && collapse.querySelector('#approveInvoiceCardTaskId');
     var totalInput = collapse && collapse.querySelector('#approveInvoiceCardTotalAmount');
     var nameEl = collapse && collapse.querySelector('#approveInvoiceCardCustomerName');
     var totalDisplay = collapse && collapse.querySelector('#approveInvoiceCardTotalDisplay');
+    var forShippingInput = collapse && collapse.querySelector('#approveInvoiceCardForShipping');
+    var customerBlock = collapse && collapse.querySelector('#approveInvoiceCardCustomerBlock');
+    var shippingBlock = collapse && collapse.querySelector('#approveInvoiceCardShippingBlock');
+    var shippingSelect = collapse && collapse.querySelector('#approveInvoiceCardShippingCompanyId');
+    var netPriceInput = collapse && collapse.querySelector('#approveInvoiceCardNetParcelPrice');
+    var isShippingMode = (orderType === 'telegraph' || orderType === 'shipping_company');
     if (taskIdInput) taskIdInput.value = taskId || '';
     if (totalInput) totalInput.value = (receiptTotal != null && receiptTotal > 0) ? String(receiptTotal) : '';
-    if (nameEl) nameEl.textContent = (customerName != null && String(customerName).trim() !== '') ? customerName : '—';
     if (totalDisplay) totalDisplay.textContent = (receiptTotal != null && receiptTotal > 0) ? parseFloat(receiptTotal).toFixed(2) + ' ج.م' : '—';
+    if (forShippingInput) forShippingInput.value = isShippingMode ? '1' : '0';
+    if (customerBlock) customerBlock.style.display = isShippingMode ? 'none' : 'block';
+    if (shippingBlock) shippingBlock.style.display = isShippingMode ? 'block' : 'none';
+    if (nameEl) nameEl.textContent = (customerName != null && String(customerName).trim() !== '') ? customerName : '—';
+    if (shippingSelect) { shippingSelect.value = ''; shippingSelect.removeAttribute('required'); if (isShippingMode) shippingSelect.setAttribute('required', 'required'); }
+    if (netPriceInput) { netPriceInput.value = ''; netPriceInput.removeAttribute('required'); if (isShippingMode) netPriceInput.setAttribute('required', 'required'); }
     if (collapse && typeof bootstrap !== 'undefined') {
         var c = bootstrap.Collapse.getOrCreateInstance(collapse, { toggle: true });
         c.show();
