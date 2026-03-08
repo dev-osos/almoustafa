@@ -1683,6 +1683,8 @@ function tasksHtml(string $value): string
         <div class="card-body p-3">
             <form method="GET" action="" id="tasksFilterForm">
                 <input type="hidden" name="page" value="tasks">
+                <?php if ($statusFilter !== ''): ?><input type="hidden" name="status" value="<?php echo htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8'); ?>"><?php endif; ?>
+                <?php if ($priorityFilter !== ''): ?><input type="hidden" name="priority" value="<?php echo htmlspecialchars($priorityFilter, ENT_QUOTES, 'UTF-8'); ?>"><?php endif; ?>
                 <?php if ($overdueFilter): ?><input type="hidden" name="overdue" value="1"><?php endif; ?>
                 <!-- بحث متقدم ديناميكي — يفلتر الجدول فوراً مع أي مدخلات -->
                 <div id="tasksAdvancedSearch" class="mt-0">
@@ -1947,10 +1949,10 @@ function tasksHtml(string $value): string
                     $paramsNext = $_GET;
                     $paramsNext['p'] = min($totalPages, $pageNum + 1);
                     ?>
-                    <nav class="my-3" aria-label="Task pagination">
+                    <nav class="my-3" aria-label="Task pagination" id="tasksPagination">
                         <ul class="pagination justify-content-center flex-wrap">
                             <li class="page-item <?php echo $pageNum <= 1 ? 'disabled' : ''; ?>">
-                                <a class="page-link" href="<?php echo $pageNum <= 1 ? '#' : tasksHtml('?' . http_build_query($paramsPrev)); ?>" aria-label="السابق">السابق</a>
+                                <a class="page-link tasks-page-link" href="<?php echo $pageNum <= 1 ? '#' : tasksHtml('?' . http_build_query($paramsPrev)); ?>" data-page="<?php echo max(1, $pageNum - 1); ?>" aria-label="السابق">السابق</a>
                             </li>
                             <?php for ($i = $pagerStart; $i <= $pagerEnd; $i++): ?>
                                 <?php
@@ -1959,11 +1961,11 @@ function tasksHtml(string $value): string
                                 $url = '?' . http_build_query($paramsForPage);
                                 ?>
                                 <li class="page-item <?php echo $pageNum === $i ? 'active' : ''; ?>">
-                                    <a class="page-link" href="<?php echo tasksHtml($url); ?>"><?php echo $i; ?></a>
+                                    <a class="page-link tasks-page-link" href="<?php echo tasksHtml($url); ?>" data-page="<?php echo $i; ?>"><?php echo $i; ?></a>
                                 </li>
                             <?php endfor; ?>
                             <li class="page-item <?php echo $pageNum >= $totalPages ? 'disabled' : ''; ?>">
-                                <a class="page-link" href="<?php echo $pageNum >= $totalPages ? '#' : tasksHtml('?' . http_build_query($paramsNext)); ?>" aria-label="التالي">التالي</a>
+                                <a class="page-link tasks-page-link" href="<?php echo $pageNum >= $totalPages ? '#' : tasksHtml('?' . http_build_query($paramsNext)); ?>" data-page="<?php echo min($totalPages, $pageNum + 1); ?>" aria-label="التالي">التالي</a>
                             </li>
                         </ul>
                     </nav>
@@ -2916,6 +2918,25 @@ function tasksHtml(string $value): string
     }
 
     applyTasksFilter();
+
+    // الحفاظ على الفلتر عند التنقل بين الصفحات: بناء رابط التصفح من قيم النموذج الحالية
+    var paginationNav = document.getElementById('tasksPagination');
+    if (paginationNav && form) {
+        paginationNav.addEventListener('click', function(e) {
+            var link = e.target && e.target.closest ? e.target.closest('a.tasks-page-link') : null;
+            if (!link || link.getAttribute('href') === '#' || link.closest('.page-item.disabled')) return;
+            var targetPage = link.getAttribute('data-page');
+            if (!targetPage) return;
+            e.preventDefault();
+            var fd = new FormData(form);
+            fd.set('p', targetPage);
+            var params = [];
+            fd.forEach(function(value, key) {
+                if (value !== '' && value !== '0') params.push(encodeURIComponent(key) + '=' + encodeURIComponent(value));
+            });
+            window.location.href = '?' + params.join('&');
+        });
+    }
 })();
 </script>
 
