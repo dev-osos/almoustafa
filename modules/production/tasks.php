@@ -877,6 +877,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (isset($_GET['due_date_to']) && trim((string)$_GET['due_date_to']) !== '') {
             $queryParams['due_date_to'] = trim((string)$_GET['due_date_to']);
         }
+        if (isset($_GET['order_date_from']) && trim((string)$_GET['order_date_from']) !== '') {
+            $queryParams['order_date_from'] = trim((string)$_GET['order_date_from']);
+        }
+        if (isset($_GET['order_date_to']) && trim((string)$_GET['order_date_to']) !== '') {
+            $queryParams['order_date_to'] = trim((string)$_GET['order_date_to']);
+        }
         if (isset($_GET['overdue']) && $_GET['overdue'] === '1') {
             $queryParams['overdue'] = '1';
         }
@@ -988,6 +994,8 @@ $filterOrderId = isset($_GET['search_order_id']) ? trim((string)$_GET['search_or
 $filterTaskType = isset($_GET['task_type']) ? trim((string)$_GET['task_type']) : '';
 $filterDueFrom = isset($_GET['due_date_from']) ? trim((string)$_GET['due_date_from']) : '';
 $filterDueTo = isset($_GET['due_date_to']) ? trim((string)$_GET['due_date_to']) : '';
+$filterOrderDateFrom = isset($_GET['order_date_from']) ? trim((string)$_GET['order_date_from']) : '';
+$filterOrderDateTo = isset($_GET['order_date_to']) ? trim((string)$_GET['order_date_to']) : '';
 $filterSearchText = isset($_GET['search_text']) ? trim((string)$_GET['search_text']) : '';
 
 $whereConditions = [];
@@ -1073,6 +1081,14 @@ if ($filterDueFrom !== '') {
 if ($filterDueTo !== '') {
     $whereConditions[] = 't.due_date <= ?';
     $params[] = $filterDueTo;
+}
+if ($filterOrderDateFrom !== '') {
+    $whereConditions[] = 'DATE(t.created_at) >= ?';
+    $params[] = $filterOrderDateFrom;
+}
+if ($filterOrderDateTo !== '') {
+    $whereConditions[] = 'DATE(t.created_at) <= ?';
+    $params[] = $filterOrderDateTo;
 }
 
 // السماح لجميع عمال الإنتاج برؤية جميع المهام المخصصة لأي عامل إنتاج
@@ -1577,6 +1593,8 @@ function tasksHtml(string $value): string
     if ($filterTaskType !== '') { $filterBaseUrl .= '&task_type=' . rawurlencode($filterTaskType); }
     if ($filterDueFrom !== '') { $filterBaseUrl .= '&due_date_from=' . rawurlencode($filterDueFrom); }
     if ($filterDueTo !== '') { $filterBaseUrl .= '&due_date_to=' . rawurlencode($filterDueTo); }
+    if ($filterOrderDateFrom !== '') { $filterBaseUrl .= '&order_date_from=' . rawurlencode($filterOrderDateFrom); }
+    if ($filterOrderDateTo !== '') { $filterBaseUrl .= '&order_date_to=' . rawurlencode($filterOrderDateTo); }
     ?>
     <div class="row g-2 mb-3">
         <div class="col-6 col-md-3">
@@ -1677,7 +1695,7 @@ function tasksHtml(string $value): string
                             <i class="bi bi-search me-1"></i>بحث
                         </button>
                     </div>
-                    <?php if ($filterTaskId !== '' || $filterCustomer !== '' || $filterOrderId !== '' || $filterTaskType !== '' || $filterDueFrom !== '' || $filterDueTo !== '' || $filterSearchText !== '' || $search !== ''): ?>
+                    <?php if ($filterTaskId !== '' || $filterCustomer !== '' || $filterOrderId !== '' || $filterTaskType !== '' || $filterDueFrom !== '' || $filterDueTo !== '' || $filterOrderDateFrom !== '' || $filterOrderDateTo !== '' || $filterSearchText !== '' || $search !== ''): ?>
                     <div class="col-auto">
                         <a href="?page=tasks<?php echo $statusFilter !== '' ? '&status=' . rawurlencode($statusFilter) : ''; ?><?php echo $priorityFilter !== '' ? '&priority=' . rawurlencode($priorityFilter) : ''; ?><?php echo $assignedFilter > 0 ? '&assigned=' . $assignedFilter : ''; ?><?php echo $overdueFilter ? '&overdue=1' : ''; ?>" class="btn btn-outline-danger btn-sm">إزالة الفلتر</a>
                     </div>
@@ -1710,6 +1728,14 @@ function tasksHtml(string $value): string
                         <div class="col-6 col-md-4 col-lg-2">
                             <label class="form-label small mb-0">تاريخ تسليم إلى</label>
                             <input type="date" name="due_date_to" class="form-control form-control-sm" value="<?php echo tasksHtml($filterDueTo); ?>">
+                        </div>
+                        <div class="col-6 col-md-4 col-lg-2">
+                            <label class="form-label small mb-0">تاريخ الطلب من</label>
+                            <input type="date" name="order_date_from" class="form-control form-control-sm" value="<?php echo tasksHtml($filterOrderDateFrom); ?>">
+                        </div>
+                        <div class="col-6 col-md-4 col-lg-2">
+                            <label class="form-label small mb-0">تاريخ الطلب إلى</label>
+                            <input type="date" name="order_date_to" class="form-control form-control-sm" value="<?php echo tasksHtml($filterOrderDateTo); ?>">
                         </div>
                     </div>
                 </div>
