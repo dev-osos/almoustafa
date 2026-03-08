@@ -1596,6 +1596,7 @@ function tasksHtml(string $value): string
     if ($filterOrderDateFrom !== '') { $filterBaseUrl .= '&order_date_from=' . rawurlencode($filterOrderDateFrom); }
     if ($filterOrderDateTo !== '') { $filterBaseUrl .= '&order_date_to=' . rawurlencode($filterOrderDateTo); }
     ?>
+    <?php if (!defined('TASKS_PARTIAL_TABLE') || !TASKS_PARTIAL_TABLE): ?>
     <div class="row g-2 mb-3">
         <div class="col-6 col-md-3">
             <a href="<?php echo $filterBaseUrl; ?>" class="text-decoration-none">
@@ -1786,7 +1787,21 @@ function tasksHtml(string $value): string
                                 <th class="task-actions-header">الإجراءات</th>
                             </tr>
                         </thead>
+    <?php endif; ?>
+                            <?php
+                            if (empty($tasks)):
+                                if (defined('TASKS_PARTIAL_TABLE') && TASKS_PARTIAL_TABLE):
+                                    $colspan = ($isManager || $isProduction) ? 8 : 7;
+                                    echo '<tr><td colspan="' . (int)$colspan . '" class="text-center py-5 text-muted">لا توجد اوردرات</td></tr>';
+                                    exit;
+                                endif;
+                            else:
+                                if (!defined('TASKS_PARTIAL_TABLE') || !TASKS_PARTIAL_TABLE):
+                            ?>
                         <tbody id="tasksTableBody">
+                            <?php endif;
+                                ob_start();
+                            ?>
                             <?php foreach ($tasks as $index => $task): ?>
                                 <?php
                                 $rowNumber = ($pageNum - 1) * $perPage + $index + 1;
@@ -1935,8 +1950,16 @@ function tasksHtml(string $value): string
                                         </div>
                                     </td>
                                 </tr>
-                            <?php endforeach; ?>
-                        </tbody>
+                            <?php endforeach;
+                                $tbodyContent = ob_get_clean();
+                                if (defined('TASKS_PARTIAL_TABLE') && TASKS_PARTIAL_TABLE) {
+                                    echo $tbodyContent;
+                                    exit;
+                                }
+                            ?>
+                            <?php echo $tbodyContent; ?>
+                            <?php if (!defined('TASKS_PARTIAL_TABLE') || !TASKS_PARTIAL_TABLE): ?></tbody><?php endif; ?>
+                            <?php endif; /* empty($tasks) */ ?>
                     </table>
                 </div>
 
@@ -3133,8 +3156,6 @@ function tasksHtml(string $value): string
     // ملاحظة: تم إزالة هذه الـ meta tags لأنها تمنع bfcache
     // يمكن استخدام Cache-Control: private في headers بدلاً منها
 })();
-// ريفريش تلقائي كل ٥ دقائق
-setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
 </script>
 
 <!-- آلية التحديث التلقائي للمهام (Auto-refresh/Polling) -->
@@ -3193,107 +3214,37 @@ setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
         } catch (e) {}
     }
     
-    // دالة جلب المهام من API
+    // دالة جلب محتوى الجدول فقط (بدون ريفريش كامل للصفحة)
     async function fetchTasks() {
         if (isRefreshing) {
-            return; // منع طلبات متعددة في نفس الوقت
+            return;
         }
-        
+        var tbody = document.getElementById('tasksTableBody');
+        if (!tbody) {
+            return;
+        }
         try {
             isRefreshing = true;
-            
-            // بناء URL مع جميع المعاملات الحالية
-            const currentUrl = new URL(window.location.href);
-            const apiUrl = '/api/tasks.php?' + currentUrl.searchParams.toString();
-            
-            const response = await fetch(apiUrl, {
+            var currentUrl = new URL(window.location.href);
+            currentUrl.searchParams.set('partial', 'table');
+            var response = await fetch(currentUrl.toString(), {
                 method: 'GET',
                 credentials: 'same-origin',
                 headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
                     'Cache-Control': 'no-cache',
                     'Pragma': 'no-cache'
                 }
             });
-            
             if (!response.ok) {
                 throw new Error('Failed to fetch tasks');
             }
-            
-            const data = await response.json();
-            
-            if (data.success && data.data) {
-                const newTasks = data.data.tasks || [];
-                const newStats = data.data.stats || {};
-                const newTimestamp = data.data.timestamp || Date.now();
-                
-                // تعيين أقصى معرف أوردر عند أول جلب (لتفادي إشعارات الأوردرات القديمة)
-                if (initialMaxTaskId === 0 && newTasks.length > 0) {
-                    var idsInDom = Array.from(document.querySelectorAll('[data-task-id]')).map(function(el) { return parseInt(el.getAttribute('data-task-id'), 10) || 0; });
-                    initialMaxTaskId = idsInDom.length > 0 ? Math.max.apply(null, idsInDom) : 0;
-                    var idsFromApi = newTasks.map(function(t) { return parseInt(t.id, 10) || 0; }).filter(Boolean);
-                    if (idsFromApi.length > 0) {
-                        var maxFromApi = Math.max.apply(null, idsFromApi);
-                        if (maxFromApi > initialMaxTaskId) initialMaxTaskId = maxFromApi;
-                    }
+            var html = await response.text();
+            if (html && html.trim()) {
+                tbody.innerHTML = html;
+                if (typeof window.resetPageLoading === 'function') {
+                    window.resetPageLoading();
                 }
-                
-                // مقارنة مع المهام الحالية
-                if (lastUpdateTimestamp && newTimestamp > lastUpdateTimestamp) {
-                    // هناك تحديثات جديدة
-                    const currentTasksIds = new Set(
-                        Array.from(document.querySelectorAll('[data-task-id]')).map(el => el.getAttribute('data-task-id'))
-                    );
-                    
-                    const newTasksIds = new Set(newTasks.map(t => String(t.id)));
-                    
-                    // التحقق من وجود مهام جديدة أو تغييرات
-                    let hasNewTasks = false;
-                    let hasChanges = false;
-                    
-                    // أوردر "جديد" فقط إذا كان معرفه أكبر من أقصى معرف عند تحميل الصفحة (منع تكرار إشعارات الأوردرات القديمة)
-                    var newTaskObjects = [];
-                    for (var i = 0; i < newTasks.length; i++) {
-                        var task = newTasks[i];
-                        var taskId = String(task.id);
-                        var taskIdNum = parseInt(task.id, 10) || 0;
-                        if (taskIdNum > initialMaxTaskId && !currentTasksIds.has(taskId)) {
-                            hasNewTasks = true;
-                            newTaskObjects.push(task);
-                        }
-                    }
-                    
-                    // إشعار متصفح فوري لكل أوردر جديد فعلي فقط
-                    if (newTaskObjects.length > 0) {
-                        if ('Notification' in window && Notification.permission === 'default') {
-                            Notification.requestPermission().then(function(p) {
-                                if (p === 'granted') {
-                                    newTaskObjects.forEach(showNewOrderNotification);
-                                }
-                            }).catch(function() {});
-                        } else if (Notification.permission === 'granted') {
-                            newTaskObjects.forEach(showNewOrderNotification);
-                        }
-                        // تحديث أقصى معرف حتى لا نُعيد إشعار نفس الأوردرات في الجلب القادم
-                        var newIds = newTaskObjects.map(function(t) { return parseInt(t.id, 10) || 0; }).filter(Boolean);
-                        if (newIds.length > 0) initialMaxTaskId = Math.max(initialMaxTaskId, Math.max.apply(null, newIds));
-                    }
-                    
-                    // التحقق من التغييرات في الإحصائيات
-                    const totalTasksElement = document.querySelector('.card.border-primary h5');
-                    const pendingTasksElement = document.querySelector('.card.border-warning h5');
-                    
-                    if (totalTasksElement && totalTasksElement.textContent !== String(newStats.total || 0)) {
-                        hasChanges = true;
-                    } else if (pendingTasksElement && pendingTasksElement.textContent !== String(newStats.pending || 0)) {
-                        hasChanges = true;
-                    }
-                    
-                    if (hasNewTasks || hasChanges) {
-                        console.log('New tasks or changes detected. Please refresh the page manually if needed.');
-                    }
-                }
-                
-                lastUpdateTimestamp = newTimestamp;
             }
         } catch (error) {
             console.error('Error fetching tasks:', error);
@@ -3488,49 +3439,37 @@ function showAddTaskModal() {
     }
 }
 
-// تعديل دالة viewTask لدعم الموبايل
-const originalViewTask = window.viewTask;
-if (typeof originalViewTask === 'function') {
-    window.viewTask = function(taskId) {
+// تعديل دالة viewTask لدعم الموبايل (تعمل دائماً سواء وُجدت الدالة الأصلية أم لا)
+(function() {
+    function viewTaskMobile(taskId) {
         closeAllForms();
-        
-        // تحميل بيانات المهمة
-        fetch(`?ajax=1&task_id=${taskId}`)
-            .then(response => response.json())
-            .then(data => {
+        fetch('?ajax=1&task_id=' + encodeURIComponent(taskId))
+            .then(function(response) { return response.json(); })
+            .then(function(data) {
                 if (data.success && data.task) {
-                    const task = data.task;
-                    let content = `
-                        <div class="mb-3">
-                            <strong>العنوان:</strong> ${task.title || '-'}
-                        </div>
-                        <div class="mb-3">
-                            <strong>الوصف:</strong> ${task.description || '-'}
-                        </div>
-                        <div class="mb-3">
-                            <strong>الحالة:</strong> ${task.status || '-'}
-                        </div>
-                        <div class="mb-3">
-                            <strong>الأولوية:</strong> ${task.priority || '-'}
-                        </div>
-                    `;
-                    
+                    var task = data.task;
+                    var title = (task.title != null && task.title !== '') ? String(task.title) : '-';
+                    var desc = (task.description != null && task.description !== '') ? String(task.description) : '-';
+                    var status = (task.status != null && task.status !== '') ? String(task.status) : '-';
+                    var priority = (task.priority != null && task.priority !== '') ? String(task.priority) : '-';
+                    var content = '<div class="mb-3"><strong>العنوان:</strong> ' + title + '</div>' +
+                        '<div class="mb-3"><strong>الوصف:</strong> ' + desc + '</div>' +
+                        '<div class="mb-3"><strong>الحالة:</strong> ' + status + '</div>' +
+                        '<div class="mb-3"><strong>الأولوية:</strong> ' + priority + '</div>';
                     if (isMobile()) {
-                        const card = document.getElementById('viewTaskCard');
-                        const contentEl = document.getElementById('viewTaskContentCard');
+                        var card = document.getElementById('viewTaskCard');
+                        var contentEl = document.getElementById('viewTaskContentCard');
                         if (card && contentEl) {
                             contentEl.innerHTML = content;
                             card.style.display = 'block';
-                            setTimeout(function() {
-                                scrollToElement(card);
-                            }, 50);
+                            setTimeout(function() { scrollToElement(card); }, 50);
                         }
                     } else {
-                        const modal = document.getElementById('viewTaskModal');
-                        const contentEl = document.getElementById('viewTaskContent');
+                        var modal = document.getElementById('viewTaskModal');
+                        var contentEl = document.getElementById('viewTaskContent');
                         if (modal && contentEl) {
                             contentEl.innerHTML = content;
-                            const modalInstance = new bootstrap.Modal(modal);
+                            var modalInstance = bootstrap.Modal.getOrCreateInstance(modal);
                             modalInstance.show();
                         }
                     }
@@ -3538,10 +3477,11 @@ if (typeof originalViewTask === 'function') {
                     alert('حدث خطأ في تحميل بيانات المهمة');
                 }
             })
-            .catch(error => {
+            .catch(function(error) {
                 console.error('Error:', error);
                 alert('حدث خطأ في تحميل بيانات المهمة');
             });
-    };
-}
+    }
+    window.viewTask = viewTaskMobile;
+})();
 </script>

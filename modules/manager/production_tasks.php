@@ -2516,65 +2516,47 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                     <?php if ($statusFilter !== ''): ?>
                     <input type="hidden" name="status" value="<?php echo htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8'); ?>">
                     <?php endif; ?>
-                    <?php if ($filterOrderDateFrom !== ''): ?>
-                    <input type="hidden" name="order_date_from" value="<?php echo htmlspecialchars($filterOrderDateFrom, ENT_QUOTES, 'UTF-8'); ?>">
-                    <?php endif; ?>
-                    <?php if ($filterOrderDateTo !== ''): ?>
-                    <input type="hidden" name="order_date_to" value="<?php echo htmlspecialchars($filterOrderDateTo, ENT_QUOTES, 'UTF-8'); ?>">
-                    <?php endif; ?>
-                    <div class="row g-2 align-items-end mb-2">
-                        <div class="col-12 col-md-4 col-lg-3">
+                    <div class="row g-2">
+                        <div class="col-12 col-md-4 col-lg-2">
                             <label class="form-label small mb-0">بحث سريع</label>
-                            <input type="text" name="search_text" class="form-control form-control-sm" placeholder="نص في العنوان، الملاحظات، العميل..." value="<?php echo htmlspecialchars($filterSearchText, ENT_QUOTES, 'UTF-8'); ?>">
+                            <input type="text" name="search_text" id="recentTasksSearchText" class="form-control form-control-sm recent-tasks-dynamic-filter" placeholder="نص في العنوان، الملاحظات، العميل..." value="<?php echo htmlspecialchars($filterSearchText, ENT_QUOTES, 'UTF-8'); ?>">
                         </div>
-                        <div class="col-auto">
-                            <button type="submit" class="btn btn-primary btn-sm">
-                                <i class="bi bi-search me-1"></i>بحث
-                            </button>
+                        <div class="col-6 col-md-4 col-lg-2">
+                            <label class="form-label small mb-0">رقم الاوردر</label>
+                            <input type="text" name="task_id" id="recentTasksFilterTaskId" class="form-control form-control-sm recent-tasks-dynamic-filter" placeholder="#" value="<?php echo htmlspecialchars($filterTaskId, ENT_QUOTES, 'UTF-8'); ?>">
                         </div>
-                        <?php if ($filterTaskId !== '' || $filterCustomer !== '' || $filterOrderId !== '' || $filterTaskType !== '' || $filterDueFrom !== '' || $filterDueTo !== '' || $filterOrderDateFrom !== '' || $filterOrderDateTo !== '' || $filterSearchText !== ''): ?>
-                        <div class="col-auto">
+                        <div class="col-6 col-md-4 col-lg-2">
+                            <label class="form-label small mb-0">اسم العميل / هاتف</label>
+                            <input type="text" name="search_customer" id="recentTasksFilterCustomer" class="form-control form-control-sm recent-tasks-dynamic-filter" placeholder="اسم أو رقم" value="<?php echo htmlspecialchars($filterCustomer, ENT_QUOTES, 'UTF-8'); ?>">
+                        </div>
+                        <div class="col-6 col-md-4 col-lg-2">
+                            <label class="form-label small mb-0">نوع الاوردر</label>
+                            <select name="task_type" id="recentTasksFilterTaskType" class="form-select form-select-sm recent-tasks-dynamic-filter">
+                                <option value="">— الكل —</option>
+                                <option value="shop_order" <?php echo $filterTaskType === 'shop_order' ? 'selected' : ''; ?>>اوردر محل</option>
+                                <option value="cash_customer" <?php echo $filterTaskType === 'cash_customer' ? 'selected' : ''; ?>>عميل نقدي</option>
+                                <option value="telegraph" <?php echo $filterTaskType === 'telegraph' ? 'selected' : ''; ?>>تليجراف</option>
+                                <option value="shipping_company" <?php echo $filterTaskType === 'shipping_company' ? 'selected' : ''; ?>>شركة شحن</option>
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-4 col-lg-2">
+                            <label class="form-label small mb-0">تاريخ تسليم من</label>
+                            <input type="date" name="due_date_from" id="recentTasksFilterDueFrom" class="form-control form-control-sm recent-tasks-dynamic-filter" value="<?php echo htmlspecialchars($filterDueFrom, ENT_QUOTES, 'UTF-8'); ?>">
+                        </div>
+                        <div class="col-6 col-md-4 col-lg-2">
+                            <label class="form-label small mb-0">تاريخ تسليم إلى</label>
+                            <input type="date" name="due_date_to" id="recentTasksFilterDueTo" class="form-control form-control-sm recent-tasks-dynamic-filter" value="<?php echo htmlspecialchars($filterDueTo, ENT_QUOTES, 'UTF-8'); ?>">
+                        </div>
+                        <div class="col-6 col-md-4 col-lg-2">
+                            <label class="form-label small mb-0">تاريخ الطلب من</label>
+                            <input type="date" name="order_date_from" id="recentTasksFilterOrderDateFrom" class="form-control form-control-sm recent-tasks-dynamic-filter" value="<?php echo htmlspecialchars($filterOrderDateFrom, ENT_QUOTES, 'UTF-8'); ?>">
+                        </div>
+                        <div class="col-6 col-md-4 col-lg-2">
+                            <label class="form-label small mb-0">تاريخ الطلب إلى</label>
+                            <input type="date" name="order_date_to" id="recentTasksFilterOrderDateTo" class="form-control form-control-sm recent-tasks-dynamic-filter" value="<?php echo htmlspecialchars($filterOrderDateTo, ENT_QUOTES, 'UTF-8'); ?>">
+                        </div>
+                        <div class="col-auto align-self-end">
                             <a href="?<?php echo $statusFilter !== '' ? 'page=production_tasks&status=' . rawurlencode($statusFilter) : 'page=production_tasks'; ?>" class="btn btn-outline-danger btn-sm">إزالة الفلتر</a>
-                        </div>
-                        <?php endif; ?>
-                    </div>
-                    <div class="pt-2 border-top mt-2">
-                        <div class="row g-2">
-                            <div class="col-6 col-md-4 col-lg-2">
-                                <label class="form-label small mb-0">رقم الاوردر</label>
-                                <input type="text" name="task_id" class="form-control form-control-sm" placeholder="#" value="<?php echo htmlspecialchars($filterTaskId, ENT_QUOTES, 'UTF-8'); ?>">
-                            </div>
-                            <div class="col-6 col-md-4 col-lg-2">
-                                <label class="form-label small mb-0">اسم العميل / هاتف</label>
-                                <input type="text" name="search_customer" class="form-control form-control-sm" placeholder="اسم أو رقم" value="<?php echo htmlspecialchars($filterCustomer, ENT_QUOTES, 'UTF-8'); ?>">
-                            </div>
-                           
-                            <div class="col-6 col-md-4 col-lg-2">
-                                <label class="form-label small mb-0">نوع الاوردر</label>
-                                <select name="task_type" class="form-select form-select-sm">
-                                    <option value="">— الكل —</option>
-                                    <option value="shop_order" <?php echo $filterTaskType === 'shop_order' ? 'selected' : ''; ?>>اوردر محل</option>
-                                    <option value="cash_customer" <?php echo $filterTaskType === 'cash_customer' ? 'selected' : ''; ?>>عميل نقدي</option>
-                                    <option value="telegraph" <?php echo $filterTaskType === 'telegraph' ? 'selected' : ''; ?>>تليجراف</option>
-                                    <option value="shipping_company" <?php echo $filterTaskType === 'shipping_company' ? 'selected' : ''; ?>>شركة شحن</option>
-                                </select>
-                            </div>
-                            <div class="col-6 col-md-4 col-lg-2">
-                                <label class="form-label small mb-0">تاريخ تسليم من</label>
-                                <input type="date" name="due_date_from" class="form-control form-control-sm" value="<?php echo htmlspecialchars($filterDueFrom, ENT_QUOTES, 'UTF-8'); ?>">
-                            </div>
-                            <div class="col-6 col-md-4 col-lg-2">
-                                <label class="form-label small mb-0">تاريخ تسليم إلى</label>
-                                <input type="date" name="due_date_to" class="form-control form-control-sm" value="<?php echo htmlspecialchars($filterDueTo, ENT_QUOTES, 'UTF-8'); ?>">
-                            </div>
-                            <div class="col-6 col-md-4 col-lg-2">
-                                <label class="form-label small mb-0">تاريخ الطلب من</label>
-                                <input type="date" name="order_date_from" class="form-control form-control-sm" value="<?php echo htmlspecialchars($filterOrderDateFrom, ENT_QUOTES, 'UTF-8'); ?>">
-                            </div>
-                            <div class="col-6 col-md-4 col-lg-2">
-                                <label class="form-label small mb-0">تاريخ الطلب إلى</label>
-                                <input type="date" name="order_date_to" class="form-control form-control-sm" value="<?php echo htmlspecialchars($filterOrderDateTo, ENT_QUOTES, 'UTF-8'); ?>">
-                            </div>
                         </div>
                     </div>
                 </form>
@@ -2598,14 +2580,28 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             <th>إجراءات</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="recentTasksTableBody">
                         <?php if (empty($recentTasks)): ?>
                             <tr>
                                 <td colspan="<?php echo $canPrintTasks ? 8 : 7; ?>" class="text-center text-muted py-4">لم يتم إنشاء مهام بعد.</td>
                             </tr>
                         <?php else: ?>
                             <?php foreach ($recentTasks as $index => $task): ?>
-                                <tr>
+                                <?php
+                                $relatedType = $task['related_type'] ?? '';
+                                $displayType = (strpos($relatedType, 'manager_') === 0) ? substr($relatedType, 8) : ($task['task_type'] ?? 'general');
+                                $rowSearchParts = array_filter([
+                                    $task['title'] ?? '',
+                                    $task['notes'] ?? '',
+                                    $task['customer_name'] ?? '',
+                                    $task['customer_phone'] ?? '',
+                                ], function($v) { return trim((string)$v) !== ''; });
+                                $rowSearchText = implode(' ', array_map('trim', $rowSearchParts));
+                                $rowDueDate = !empty($task['due_date']) ? date('Y-m-d', strtotime((string)$task['due_date'])) : '';
+                                $rowOrderDate = !empty($task['created_at']) ? date('Y-m-d', strtotime((string)$task['created_at'])) : '';
+                                $rowCustomer = trim(($task['customer_name'] ?? '') . ' ' . ($task['customer_phone'] ?? ''));
+                                ?>
+                                <tr class="recent-tasks-filter-row" data-task-id="<?php echo (int)$task['id']; ?>" data-search="<?php echo htmlspecialchars($rowSearchText, ENT_QUOTES, 'UTF-8'); ?>" data-customer="<?php echo htmlspecialchars($rowCustomer, ENT_QUOTES, 'UTF-8'); ?>" data-task-type="<?php echo htmlspecialchars($displayType, ENT_QUOTES, 'UTF-8'); ?>" data-due-date="<?php echo htmlspecialchars($rowDueDate, ENT_QUOTES, 'UTF-8'); ?>" data-order-date="<?php echo htmlspecialchars($rowOrderDate, ENT_QUOTES, 'UTF-8'); ?>">
                                     <?php if ($canPrintTasks): ?>
                                     <td>
                                         <input type="checkbox" class="form-check-input task-print-checkbox" value="<?php echo (int)$task['id']; ?>" data-print-url="<?php echo htmlspecialchars(getRelativeUrl('print_task_receipt.php?id=' . (int)$task['id']), ENT_QUOTES, 'UTF-8'); ?>">
@@ -2759,11 +2755,11 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                 $paginateParams = $recentTasksQueryParams;
                 $paginateBase = $recentTasksQueryString;
                 ?>
-                <nav aria-label="تنقل صفحات المهام" class="p-3 pt-0">
+                <nav aria-label="تنقل صفحات المهام" class="p-3 pt-0" id="recentTasksPagination">
                     <ul class="pagination justify-content-center mb-0">
                         <li class="page-item <?php echo $tasksPageNum <= 1 ? 'disabled' : ''; ?>">
                             <?php $prevParams = $paginateParams; $prevParams['p'] = max(1, $tasksPageNum - 1); ?>
-                            <a class="page-link" href="?<?php echo http_build_query($prevParams, '', '&', PHP_QUERY_RFC3986); ?>" aria-label="السابق">
+                            <a class="page-link recent-tasks-page-link" href="?<?php echo http_build_query($prevParams, '', '&', PHP_QUERY_RFC3986); ?>" data-page="<?php echo max(1, $tasksPageNum - 1); ?>" aria-label="السابق">
                                 <i class="bi bi-chevron-right"></i>
                             </a>
                         </li>
@@ -2772,7 +2768,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                         $endPage = min($totalRecentPages, $tasksPageNum + 2);
                         if ($startPage > 1): ?>
                             <?php $p1 = $paginateParams; $p1['p'] = 1; ?>
-                            <li class="page-item"><a class="page-link" href="?<?php echo http_build_query($p1, '', '&', PHP_QUERY_RFC3986); ?>">1</a></li>
+                            <li class="page-item"><a class="page-link recent-tasks-page-link" href="?<?php echo http_build_query($p1, '', '&', PHP_QUERY_RFC3986); ?>" data-page="1">1</a></li>
                             <?php if ($startPage > 2): ?>
                                 <li class="page-item disabled"><span class="page-link">...</span></li>
                             <?php endif; ?>
@@ -2780,7 +2776,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                         <?php for ($i = $startPage; $i <= $endPage; $i++): ?>
                             <?php $pi = $paginateParams; $pi['p'] = $i; ?>
                             <li class="page-item <?php echo $i == $tasksPageNum ? 'active' : ''; ?>">
-                                <a class="page-link" href="?<?php echo http_build_query($pi, '', '&', PHP_QUERY_RFC3986); ?>"><?php echo $i; ?></a>
+                                <a class="page-link recent-tasks-page-link" href="?<?php echo http_build_query($pi, '', '&', PHP_QUERY_RFC3986); ?>" data-page="<?php echo $i; ?>"><?php echo $i; ?></a>
                             </li>
                         <?php endfor; ?>
                         <?php if ($endPage < $totalRecentPages): ?>
@@ -2788,11 +2784,11 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                 <li class="page-item disabled"><span class="page-link">...</span></li>
                             <?php endif; ?>
                             <?php $plast = $paginateParams; $plast['p'] = $totalRecentPages; ?>
-                            <li class="page-item"><a class="page-link" href="?<?php echo http_build_query($plast, '', '&', PHP_QUERY_RFC3986); ?>"><?php echo $totalRecentPages; ?></a></li>
+                            <li class="page-item"><a class="page-link recent-tasks-page-link" href="?<?php echo http_build_query($plast, '', '&', PHP_QUERY_RFC3986); ?>" data-page="<?php echo $totalRecentPages; ?>"><?php echo $totalRecentPages; ?></a></li>
                         <?php endif; ?>
                         <li class="page-item <?php echo $tasksPageNum >= $totalRecentPages ? 'disabled' : ''; ?>">
                             <?php $nextParams = $paginateParams; $nextParams['p'] = min($totalRecentPages, $tasksPageNum + 1); ?>
-                            <a class="page-link" href="?<?php echo http_build_query($nextParams, '', '&', PHP_QUERY_RFC3986); ?>" aria-label="التالي">
+                            <a class="page-link recent-tasks-page-link" href="?<?php echo http_build_query($nextParams, '', '&', PHP_QUERY_RFC3986); ?>" data-page="<?php echo min($totalRecentPages, $tasksPageNum + 1); ?>" aria-label="التالي">
                                 <i class="bi bi-chevron-left"></i>
                             </a>
                         </li>
@@ -2802,6 +2798,100 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
         </div>
     </div>
 </div>
+
+<!-- فلترة ديناميكية لجدول آخر المهام + الحفاظ على الفلتر عند التنقل بين الصفحات -->
+<script>
+(function() {
+    'use strict';
+    var tbody = document.getElementById('recentTasksTableBody');
+    if (!tbody) return;
+    var rows = tbody.querySelectorAll('tr.recent-tasks-filter-row');
+    var form = document.getElementById('recentTasksFilterForm');
+    if (!form) return;
+
+    function normalize(s) {
+        if (typeof s !== 'string') return '';
+        return s.replace(/\s+/g, ' ').trim().toLowerCase();
+    }
+
+    function applyRecentTasksFilter() {
+        var searchText = document.getElementById('recentTasksSearchText');
+        var taskId = document.getElementById('recentTasksFilterTaskId');
+        var customer = document.getElementById('recentTasksFilterCustomer');
+        var taskType = document.getElementById('recentTasksFilterTaskType');
+        var dueFrom = document.getElementById('recentTasksFilterDueFrom');
+        var dueTo = document.getElementById('recentTasksFilterDueTo');
+        var orderFrom = document.getElementById('recentTasksFilterOrderDateFrom');
+        var orderTo = document.getElementById('recentTasksFilterOrderDateTo');
+
+        var searchVal = searchText ? normalize(searchText.value) : '';
+        var taskIdVal = taskId ? String((taskId.value || '').trim()) : '';
+        var customerVal = customer ? normalize(customer.value) : '';
+        var taskTypeVal = taskType ? (taskType.value || '').trim() : '';
+        var dueFromVal = dueFrom ? (dueFrom.value || '').trim() : '';
+        var dueToVal = dueTo ? (dueTo.value || '').trim() : '';
+        var orderFromVal = orderFrom ? (orderFrom.value || '').trim() : '';
+        var orderToVal = orderTo ? (orderTo.value || '').trim() : '';
+
+        rows.forEach(function(tr) {
+            var show = true;
+            var rowTaskId = String(tr.getAttribute('data-task-id') || '');
+            var rowSearch = normalize(tr.getAttribute('data-search') || '');
+            var rowCustomer = normalize(tr.getAttribute('data-customer') || '');
+            var rowTaskType = (tr.getAttribute('data-task-type') || '').trim();
+            var rowDueDate = (tr.getAttribute('data-due-date') || '').trim();
+            var rowOrderDate = (tr.getAttribute('data-order-date') || '').trim();
+
+            if (searchVal && rowSearch.indexOf(searchVal) === -1) show = false;
+            if (taskIdVal && rowTaskId.indexOf(taskIdVal) === -1) show = false;
+            if (customerVal && rowCustomer.indexOf(customerVal) === -1) show = false;
+            if (taskTypeVal && rowTaskType !== taskTypeVal) show = false;
+            if (dueFromVal && rowDueDate && rowDueDate < dueFromVal) show = false;
+            if (dueToVal && rowDueDate && rowDueDate > dueToVal) show = false;
+            if (orderFromVal && rowOrderDate && rowOrderDate < orderFromVal) show = false;
+            if (orderToVal && rowOrderDate && rowOrderDate > orderToVal) show = false;
+
+            tr.style.display = show ? '' : 'none';
+        });
+    }
+
+    var debounceTimer;
+    function scheduleFilter() {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(applyRecentTasksFilter, 180);
+    }
+
+    form.querySelectorAll('.recent-tasks-dynamic-filter').forEach(function(el) {
+        if (el.tagName === 'SELECT' || (el.type === 'date')) {
+            el.addEventListener('change', applyRecentTasksFilter);
+        } else {
+            el.addEventListener('input', scheduleFilter);
+            el.addEventListener('keyup', scheduleFilter);
+        }
+    });
+    form.addEventListener('submit', function(e) { e.preventDefault(); applyRecentTasksFilter(); });
+
+    applyRecentTasksFilter();
+
+    var paginationNav = document.getElementById('recentTasksPagination');
+    if (paginationNav) {
+        paginationNav.addEventListener('click', function(e) {
+            var link = e.target && e.target.closest ? e.target.closest('a.recent-tasks-page-link') : null;
+            if (!link || link.getAttribute('href') === '#' || link.closest('.page-item.disabled')) return;
+            var targetPage = link.getAttribute('data-page');
+            if (!targetPage) return;
+            e.preventDefault();
+            var fd = new FormData(form);
+            fd.set('p', targetPage);
+            var params = [];
+            fd.forEach(function(value, key) {
+                if (value !== '' && value !== '0') params.push(encodeURIComponent(key) + '=' + encodeURIComponent(value));
+            });
+            window.location.href = '?' + params.join('&');
+        });
+    }
+})();
+</script>
 
 <!-- Card تغيير حالة المهمة (مخصص للموبايل) -->
 <div class="container-fluid px-0">

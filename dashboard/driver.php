@@ -37,6 +37,15 @@ if ($page === '') {
     $page = 'dashboard';
 }
 
+// طلب جزئي لتحديث جدول الاوردرات فقط (بدون ريفريش كامل للصفحة)
+if ($page === 'tasks' && isset($_GET['partial']) && $_GET['partial'] === 'table' && !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+    while (ob_get_level() > 0) ob_end_clean();
+    define('TASKS_PARTIAL_TABLE', true);
+    header('Content-Type: text/html; charset=utf-8');
+    include __DIR__ . '/../modules/production/tasks.php';
+    exit;
+}
+
 if ($page === 'attendance') {
     header('Location: ' . getRelativeUrl('attendance.php'));
     exit;
