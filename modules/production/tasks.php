@@ -1684,36 +1684,24 @@ function tasksHtml(string $value): string
             <form method="GET" action="" id="tasksFilterForm">
                 <input type="hidden" name="page" value="tasks">
                 <?php if ($overdueFilter): ?><input type="hidden" name="overdue" value="1"><?php endif; ?>
-                <!-- بحث سريع و بحث متقدم (نفس صفحة تسجيل مهام الإنتاج) -->
-                <div class="row g-2 align-items-end mb-2">
-                    <div class="col-12 col-md-4 col-lg-3">
-                        <label class="form-label small mb-0">بحث سريع</label>
-                        <input type="text" class="form-control form-control-sm" name="search_text" value="<?php echo tasksHtml($filterSearchText !== '' ? $filterSearchText : $search); ?>" placeholder="نص في العنوان، الملاحظات، العميل...">
-                    </div>
-                    <div class="col-auto">
-                        <button type="submit" class="btn btn-primary btn-sm">
-                            <i class="bi bi-search me-1"></i>بحث
-                        </button>
-                    </div>
-                    <?php if ($filterTaskId !== '' || $filterCustomer !== '' || $filterOrderId !== '' || $filterTaskType !== '' || $filterDueFrom !== '' || $filterDueTo !== '' || $filterOrderDateFrom !== '' || $filterOrderDateTo !== '' || $filterSearchText !== '' || $search !== ''): ?>
-                    <div class="col-auto">
-                        <a href="?page=tasks<?php echo $statusFilter !== '' ? '&status=' . rawurlencode($statusFilter) : ''; ?><?php echo $priorityFilter !== '' ? '&priority=' . rawurlencode($priorityFilter) : ''; ?><?php echo $assignedFilter > 0 ? '&assigned=' . $assignedFilter : ''; ?><?php echo $overdueFilter ? '&overdue=1' : ''; ?>" class="btn btn-outline-danger btn-sm">إزالة الفلتر</a>
-                    </div>
-                    <?php endif; ?>
-                </div>
-                <div id="tasksAdvancedSearch" class="mt-2">
-                    <div class="row g-2 pt-2 border-top">
+                <!-- بحث متقدم ديناميكي — يفلتر الجدول فوراً مع أي مدخلات -->
+                <div id="tasksAdvancedSearch" class="mt-0">
+                    <div class="row g-2">
+                        <div class="col-12 col-md-4 col-lg-2">
+                            <label class="form-label small mb-0">بحث سريع</label>
+                            <input type="text" class="form-control form-control-sm tasks-dynamic-filter" name="search_text" id="tasksSearchText" value="<?php echo tasksHtml($filterSearchText !== '' ? $filterSearchText : $search); ?>" placeholder="نص في العنوان، الملاحظات، العميل...">
+                        </div>
                         <div class="col-6 col-md-4 col-lg-2">
                             <label class="form-label small mb-0">رقم الاوردر</label>
-                            <input type="text" name="task_id" class="form-control form-control-sm" placeholder="#" value="<?php echo tasksHtml($filterTaskId); ?>">
+                            <input type="text" name="task_id" class="form-control form-control-sm tasks-dynamic-filter" id="tasksFilterTaskId" placeholder="#" value="<?php echo tasksHtml($filterTaskId); ?>">
                         </div>
                         <div class="col-6 col-md-4 col-lg-2">
                             <label class="form-label small mb-0">اسم العميل / هاتف</label>
-                            <input type="text" name="search_customer" class="form-control form-control-sm" placeholder="اسم أو رقم" value="<?php echo tasksHtml($filterCustomer); ?>">
+                            <input type="text" name="search_customer" class="form-control form-control-sm tasks-dynamic-filter" id="tasksFilterCustomer" placeholder="اسم أو رقم" value="<?php echo tasksHtml($filterCustomer); ?>">
                         </div>
                         <div class="col-6 col-md-4 col-lg-2">
                             <label class="form-label small mb-0">نوع الاوردر</label>
-                            <select name="task_type" class="form-select form-select-sm">
+                            <select name="task_type" class="form-select form-select-sm tasks-dynamic-filter" id="tasksFilterTaskType">
                                 <option value="">— الكل —</option>
                                 <option value="shop_order" <?php echo $filterTaskType === 'shop_order' ? 'selected' : ''; ?>>اوردر محل</option>
                                 <option value="cash_customer" <?php echo $filterTaskType === 'cash_customer' ? 'selected' : ''; ?>>عميل نقدي</option>
@@ -1723,37 +1711,37 @@ function tasksHtml(string $value): string
                         </div>
                         <div class="col-6 col-md-4 col-lg-2">
                             <label class="form-label small mb-0">تاريخ تسليم من</label>
-                            <input type="date" name="due_date_from" class="form-control form-control-sm" value="<?php echo tasksHtml($filterDueFrom); ?>">
+                            <input type="date" name="due_date_from" class="form-control form-control-sm tasks-dynamic-filter" id="tasksFilterDueFrom" value="<?php echo tasksHtml($filterDueFrom); ?>">
                         </div>
                         <div class="col-6 col-md-4 col-lg-2">
                             <label class="form-label small mb-0">تاريخ تسليم إلى</label>
-                            <input type="date" name="due_date_to" class="form-control form-control-sm" value="<?php echo tasksHtml($filterDueTo); ?>">
+                            <input type="date" name="due_date_to" class="form-control form-control-sm tasks-dynamic-filter" id="tasksFilterDueTo" value="<?php echo tasksHtml($filterDueTo); ?>">
                         </div>
                         <div class="col-6 col-md-4 col-lg-2">
                             <label class="form-label small mb-0">تاريخ الطلب من</label>
-                            <input type="date" name="order_date_from" class="form-control form-control-sm" value="<?php echo tasksHtml($filterOrderDateFrom); ?>">
+                            <input type="date" name="order_date_from" class="form-control form-control-sm tasks-dynamic-filter" id="tasksFilterOrderDateFrom" value="<?php echo tasksHtml($filterOrderDateFrom); ?>">
                         </div>
                         <div class="col-6 col-md-4 col-lg-2">
                             <label class="form-label small mb-0">تاريخ الطلب إلى</label>
-                            <input type="date" name="order_date_to" class="form-control form-control-sm" value="<?php echo tasksHtml($filterOrderDateTo); ?>">
+                            <input type="date" name="order_date_to" class="form-control form-control-sm tasks-dynamic-filter" id="tasksFilterOrderDateTo" value="<?php echo tasksHtml($filterOrderDateTo); ?>">
+                        </div>
+                        <?php if ($isManager): ?>
+                        <div class="col-6 col-md-4 col-lg-2">
+                            <label class="form-label small mb-0">المخصص إلى</label>
+                            <select class="form-select form-select-sm tasks-dynamic-filter" name="assigned" id="tasksFilterAssigned">
+                                <option value="0">الكل</option>
+                                <?php foreach ($users as $user): ?>
+                                    <option value="<?php echo (int) $user['id']; ?>" <?php echo $assignedFilter === (int) $user['id'] ? 'selected' : ''; ?>>
+                                        <?php echo tasksHtml($user['full_name']); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <?php endif; ?>
+                        <div class="col-auto align-self-end">
+                            <a href="?page=tasks<?php echo $statusFilter !== '' ? '&status=' . rawurlencode($statusFilter) : ''; ?><?php echo $priorityFilter !== '' ? '&priority=' . rawurlencode($priorityFilter) : ''; ?><?php echo $overdueFilter ? '&overdue=1' : ''; ?>" class="btn btn-outline-danger btn-sm">إزالة الفلتر</a>
                         </div>
                     </div>
-                </div>
-               
-                    <?php if ($isManager): ?>
-                    <div class="col-md-2 col-sm-6">
-                        <label class="form-label mb-1">المخصص إلى</label>
-                        <select class="form-select form-select-sm" name="assigned">
-                            <option value="0">الكل</option>
-                            <?php foreach ($users as $user): ?>
-                                <option value="<?php echo (int) $user['id']; ?>" <?php echo $assignedFilter === (int) $user['id'] ? 'selected' : ''; ?>>
-                                    <?php echo tasksHtml($user['full_name']); ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                    <?php endif; ?>
-                    
                 </div>
             </form>
         </div>
@@ -1796,7 +1784,7 @@ function tasksHtml(string $value): string
                                 <th class="task-actions-header">الإجراءات</th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody id="tasksTableBody">
                             <?php foreach ($tasks as $index => $task): ?>
                                 <?php
                                 $rowNumber = ($pageNum - 1) * $perPage + $index + 1;
@@ -1838,8 +1826,20 @@ function tasksHtml(string $value): string
                                 $overdue = !in_array($task['status'], ['completed', 'with_delegate', 'delivered', 'returned', 'cancelled'], true)
                                     && !empty($task['due_date'])
                                     && strtotime((string) $task['due_date']) < time();
+                                $searchParts = array_filter([
+                                    $task['title'] ?? '',
+                                    $task['notes'] ?? '',
+                                    $task['customer_name'] ?? '',
+                                    $task['customer_phone'] ?? '',
+                                    $task['customer_display'] ?? ''
+                                ], function($v) { return trim((string)$v) !== ''; });
+                                $rowSearchText = implode(' ', array_map('trim', $searchParts));
+                                $rowDueDate = !empty($task['due_date']) ? date('Y-m-d', strtotime((string)$task['due_date'])) : '';
+                                $rowOrderDate = !empty($task['created_at']) ? date('Y-m-d', strtotime((string)$task['created_at'])) : '';
+                                $relatedType = isset($task['related_type']) ? (string)$task['related_type'] : '';
+                                $displayType = (strpos($relatedType, 'manager_') === 0) ? substr($relatedType, 8) : ($task['task_type'] ?? 'general');
                                 ?>
-                                <tr class="<?php echo $overdue ? 'table-danger' : ''; ?>" data-task-id="<?php echo (int) $task['id']; ?>">
+                                <tr class="tasks-filter-row <?php echo $overdue ? 'table-danger' : ''; ?>" data-task-id="<?php echo (int) $task['id']; ?>" data-search="<?php echo htmlspecialchars($rowSearchText, ENT_QUOTES, 'UTF-8'); ?>" data-customer="<?php echo htmlspecialchars(trim((string)($task['customer_display'] ?? '') . ' ' . (string)($task['customer_phone'] ?? '')), ENT_QUOTES, 'UTF-8'); ?>" data-task-type="<?php echo htmlspecialchars($displayType, ENT_QUOTES, 'UTF-8'); ?>" data-due-date="<?php echo htmlspecialchars($rowDueDate, ENT_QUOTES, 'UTF-8'); ?>" data-order-date="<?php echo htmlspecialchars($rowOrderDate, ENT_QUOTES, 'UTF-8'); ?>" data-assigned="<?php echo (int)($task['assigned_to'] ?? 0); ?>">
                                     <?php if ($isManager || $isProduction): ?>
                                     <td>
                                         <input type="checkbox" class="form-check-input task-print-checkbox" value="<?php echo (int) $task['id']; ?>" data-print-url="<?php echo htmlspecialchars(getRelativeUrl('print_task_receipt.php?id=' . (int) $task['id']), ENT_QUOTES, 'UTF-8'); ?>">
@@ -2833,6 +2833,89 @@ function tasksHtml(string $value): string
     if (quantityInput) {
         quantityInput.addEventListener('input', updateProductionTitle);
     }
+})();
+</script>
+
+<!-- فلترة ديناميكية لجدول الأوردرات بدون زر بحث -->
+<script>
+(function() {
+    'use strict';
+    var tbody = document.getElementById('tasksTableBody');
+    if (!tbody) return;
+    var rows = tbody.querySelectorAll('tr.tasks-filter-row');
+    var searchTextEl = document.getElementById('tasksSearchText');
+    var taskIdEl = document.getElementById('tasksFilterTaskId');
+    var customerEl = document.getElementById('tasksFilterCustomer');
+    var taskTypeEl = document.getElementById('tasksFilterTaskType');
+    var dueFromEl = document.getElementById('tasksFilterDueFrom');
+    var dueToEl = document.getElementById('tasksFilterDueTo');
+    var orderFromEl = document.getElementById('tasksFilterOrderDateFrom');
+    var orderToEl = document.getElementById('tasksFilterOrderDateTo');
+    var assignedEl = document.getElementById('tasksFilterAssigned');
+
+    function normalize(s) {
+        if (typeof s !== 'string') return '';
+        return s.replace(/\s+/g, ' ').trim().toLowerCase();
+    }
+
+    function applyTasksFilter() {
+        var searchText = searchTextEl ? normalize(searchTextEl.value) : '';
+        var taskId = taskIdEl ? String((taskIdEl.value || '').trim()) : '';
+        var customer = customerEl ? normalize(customerEl.value) : '';
+        var taskType = taskTypeEl ? (taskTypeEl.value || '').trim() : '';
+        var dueFrom = dueFromEl ? (dueFromEl.value || '').trim() : '';
+        var dueTo = dueToEl ? (dueToEl.value || '').trim() : '';
+        var orderFrom = orderFromEl ? (orderFromEl.value || '').trim() : '';
+        var orderTo = orderToEl ? (orderToEl.value || '').trim() : '';
+        var assigned = assignedEl ? (assignedEl.value || '0') : '0';
+        var assignedNum = parseInt(assigned, 10) || 0;
+
+        rows.forEach(function(tr) {
+            var show = true;
+            var rowTaskId = String(tr.getAttribute('data-task-id') || '');
+            var rowSearch = normalize(tr.getAttribute('data-search') || '');
+            var rowCustomer = normalize(tr.getAttribute('data-customer') || '');
+            var rowTaskType = (tr.getAttribute('data-task-type') || '').trim();
+            var rowDueDate = (tr.getAttribute('data-due-date') || '').trim();
+            var rowOrderDate = (tr.getAttribute('data-order-date') || '').trim();
+            var rowAssigned = tr.getAttribute('data-assigned') || '0';
+            var rowAssignedNum = parseInt(rowAssigned, 10) || 0;
+
+            if (searchText && rowSearch.indexOf(searchText) === -1) show = false;
+            if (taskId && rowTaskId.indexOf(taskId) === -1) show = false;
+            if (customer && rowCustomer.indexOf(customer) === -1) show = false;
+            if (taskType && rowTaskType !== taskType) show = false;
+            if (dueFrom && rowDueDate && rowDueDate < dueFrom) show = false;
+            if (dueTo && rowDueDate && rowDueDate > dueTo) show = false;
+            if (orderFrom && rowOrderDate && rowOrderDate < orderFrom) show = false;
+            if (orderTo && rowOrderDate && rowOrderDate > orderTo) show = false;
+            if (assignedNum > 0 && rowAssignedNum !== assignedNum) show = false;
+
+            tr.style.display = show ? '' : 'none';
+        });
+    }
+
+    var debounceTimer;
+    function scheduleFilter() {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(applyTasksFilter, 180);
+    }
+
+    document.querySelectorAll('#tasksFilterForm .tasks-dynamic-filter').forEach(function(el) {
+        if (el.tagName === 'SELECT' || (el.type === 'date')) {
+            el.addEventListener('change', applyTasksFilter);
+        } else {
+            el.addEventListener('input', scheduleFilter);
+            el.addEventListener('keyup', scheduleFilter);
+        }
+    });
+
+    var form = document.getElementById('tasksFilterForm');
+    if (form) {
+        form.addEventListener('submit', function(e) { e.preventDefault(); applyTasksFilter(); });
+    }
+
+    applyTasksFilter();
 })();
 </script>
 
