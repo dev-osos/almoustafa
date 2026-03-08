@@ -1913,9 +1913,20 @@ function tasksHtml(string $value): string
                 </div>
 
                 <?php if ($totalPages > 1): ?>
+                    <?php
+                    $pagerStart = max(1, $pageNum - 2);
+                    $pagerEnd = min($totalPages, $pageNum + 2);
+                    $paramsPrev = $_GET;
+                    $paramsPrev['p'] = max(1, $pageNum - 1);
+                    $paramsNext = $_GET;
+                    $paramsNext['p'] = min($totalPages, $pageNum + 1);
+                    ?>
                     <nav class="my-3" aria-label="Task pagination">
-                        <ul class="pagination justify-content-center">
-                            <?php for ($i = 1; $i <= $totalPages; $i++): ?>
+                        <ul class="pagination justify-content-center flex-wrap">
+                            <li class="page-item <?php echo $pageNum <= 1 ? 'disabled' : ''; ?>">
+                                <a class="page-link" href="<?php echo $pageNum <= 1 ? '#' : tasksHtml('?' . http_build_query($paramsPrev)); ?>" aria-label="السابق">السابق</a>
+                            </li>
+                            <?php for ($i = $pagerStart; $i <= $pagerEnd; $i++): ?>
                                 <?php
                                 $paramsForPage = $_GET;
                                 $paramsForPage['p'] = $i;
@@ -1925,6 +1936,9 @@ function tasksHtml(string $value): string
                                     <a class="page-link" href="<?php echo tasksHtml($url); ?>"><?php echo $i; ?></a>
                                 </li>
                             <?php endfor; ?>
+                            <li class="page-item <?php echo $pageNum >= $totalPages ? 'disabled' : ''; ?>">
+                                <a class="page-link" href="<?php echo $pageNum >= $totalPages ? '#' : tasksHtml('?' . http_build_query($paramsNext)); ?>" aria-label="التالي">التالي</a>
+                            </li>
                         </ul>
                     </nav>
                 <?php endif; ?>
