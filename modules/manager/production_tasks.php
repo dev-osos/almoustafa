@@ -1925,6 +1925,19 @@ try {
             $ph = implode(',', array_fill(0, count($taskIdsForApproved), '?'));
             $approvedRows = $db->query("SELECT task_id FROM customer_task_purchases WHERE task_id IN ($ph)", $taskIdsForApproved);
             $approvedTaskIds = array_column($approvedRows ?: [], 'task_id');
+            $paperTable = $db->queryOne("SHOW TABLES LIKE 'shipping_company_paper_invoices'");
+            if (!empty($paperTable)) {
+                $taskIdCol = $db->queryOne("SHOW COLUMNS FROM shipping_company_paper_invoices LIKE 'task_id'");
+                if (!empty($taskIdCol)) {
+                    $shippingApproved = $db->query("SELECT task_id FROM shipping_company_paper_invoices WHERE task_id IN ($ph) AND task_id IS NOT NULL", $taskIdsForApproved);
+                    foreach ($shippingApproved ?: [] as $row) {
+                        $tid = (int)($row['task_id'] ?? 0);
+                        if ($tid > 0 && !in_array($tid, $approvedTaskIds, true)) {
+                            $approvedTaskIds[] = $tid;
+                        }
+                    }
+                }
+            }
         }
     }
     
@@ -2628,6 +2641,9 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                     <td><?php 
                                         $custName = isset($task['customer_name']) ? trim((string)$task['customer_name']) : '';
                                         echo $custName !== '' ? htmlspecialchars($custName, ENT_QUOTES, 'UTF-8') : '<span class="text-muted">-</span>';
+                                        if (in_array((int)$task['id'], $approvedTaskIds, true)) {
+                                            echo ' <i class="bi bi-patch-check-fill text-success" style="font-size: 0.75rem; vertical-align: middle;" title="تم اعتماد الفاتورة" aria-label="تم اعتماد الفاتورة"></i>';
+                                        }
                                     ?></td>
                                     <td>                                        <?php 
                                         // عرض منشئ المهمة إذا كان المحاسب أو المدير
