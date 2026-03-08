@@ -2122,6 +2122,8 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
             window.location.reload();
         }
     });
+    // إخفاء شاشة التحميل العامة عند تحميل الصفحة (مهم عند الفلترة بتاريخ الطلب أو غيرها)
+    if (typeof window.resetPageLoading === 'function') window.resetPageLoading();
 })();
 // ريفريش تلقائي كل ٥ دقائق
 setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
@@ -2511,7 +2513,7 @@ setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
         <div class="card-body p-0">
             <!-- بحث وفلترة جدول آخر المهام -->
             <div class="p-3 border-bottom bg-light">
-                <form method="get" action="" id="recentTasksFilterForm" class="recent-tasks-filter-form">
+                <form method="get" action="" id="recentTasksFilterForm" class="recent-tasks-filter-form" data-no-loading="true">
                     <input type="hidden" name="page" value="production_tasks">
                     <?php if ($statusFilter !== ''): ?>
                     <input type="hidden" name="status" value="<?php echo htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8'); ?>">

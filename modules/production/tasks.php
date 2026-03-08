@@ -3052,8 +3052,30 @@ setInterval(function() { window.location.reload(); }, 5 * 60 * 1000);
         Notification.requestPermission().catch(function() {});
     }
     
+    function playNewOrderAlertSound() {
+        try {
+            var ctx = new (window.AudioContext || window.webkitAudioContext)();
+            if (ctx.state === 'suspended') ctx.resume();
+            var playTone = function(freq, startTime, duration) {
+                var osc = ctx.createOscillator();
+                var gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.frequency.value = freq;
+                osc.type = 'sine';
+                gain.gain.setValueAtTime(0.15, startTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+                osc.start(startTime);
+                osc.stop(startTime + duration);
+            };
+            playTone(523.25, 0, 0.12);
+            playTone(659.25, 0.15, 0.2);
+        } catch (e) {}
+    }
+    
     function showNewOrderNotification(task) {
         if (!('Notification' in window) || Notification.permission !== 'granted') return;
+        playNewOrderAlertSound();
         var sender = (task.created_by_name && task.created_by_name.trim()) ? task.created_by_name.trim() : 'غير معروف';
         var customer = (task.customer_name && task.customer_name.trim()) ? task.customer_name.trim() : '—';
         var title = 'أوردر جديد #' + (task.id || '');

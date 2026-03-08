@@ -6623,6 +6623,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 .catch(function() { alert('خطأ في الاتصال'); })
                 .finally(function() {
                     if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
+                    setTimeout(function() { if (typeof window.hidePageLoading === 'function') window.hidePageLoading(); }, 100);
                 });
         });
     }
@@ -6656,6 +6657,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 .catch(function() { alert('خطأ في الاتصال'); })
                 .finally(function() {
                     if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
+                    setTimeout(function() { if (typeof window.hidePageLoading === 'function') window.hidePageLoading(); }, 100);
                 });
         });
     }
@@ -7084,7 +7086,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 </div>
                 <hr>
                 <h6 class="mb-2">إضافة سجل جديد</h6>
-                <form id="financialNotesAddForm">
+                <form id="financialNotesAddForm" data-no-loading>
                     <div class="row g-2">
                         <div class="col-md-4">
                             <input type="number" step="0.01" class="form-control" id="financialNotesAmount" placeholder="المبلغ" required>
@@ -7445,7 +7447,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 <tfoot class="table-light"><tr><th>الإجمالي</th><th id="financialNotesTotalCard">0.00</th><th></th></tr></tfoot>
             </table>
         </div>
-        <form id="financialNotesAddFormCard">
+        <form id="financialNotesAddFormCard" data-no-loading>
             <div class="mb-2">
                 <input type="number" step="0.01" class="form-control form-control-sm" id="financialNotesAmountCard" placeholder="المبلغ" required>
             </div>
