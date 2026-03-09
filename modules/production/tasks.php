@@ -2984,6 +2984,7 @@ function tasksHtml(string $value): string
                 var m = el.querySelector('.dropdown-menu');
                 var tgl = el.querySelector('[data-bs-toggle="dropdown"]');
                 if (!m || !tgl) return;
+                m._taskActionsParent = el;
                 var rect = tgl.getBoundingClientRect();
                 m.classList.add('task-actions-dropdown-menu-inbody');
                 document.body.appendChild(m);
@@ -3015,12 +3016,25 @@ function tasksHtml(string $value): string
                 var el = ev.currentTarget;
                 var m = el.querySelector('.dropdown-menu');
                 if (!m) {
-                    m = document.body.querySelector('.task-actions-dropdown-menu-inbody');
+                    var inBody = document.body.querySelectorAll('.task-actions-dropdown-menu-inbody');
+                    for (var i = 0; i < inBody.length; i++) {
+                        if (inBody[i]._taskActionsParent === el) {
+                            m = inBody[i];
+                            break;
+                        }
+                    }
+                    if (!m) m = document.body.querySelector('.task-actions-dropdown-menu-inbody');
                 }
-                if (m) {
+                if (m && el.isConnected) {
                     m.classList.remove('task-actions-dropdown-menu-inbody');
                     m.removeAttribute('style');
+                    if (m._taskActionsParent) m._taskActionsParent = null;
                     el.appendChild(m);
+                } else if (m && !el.isConnected) {
+                    m.classList.remove('task-actions-dropdown-menu-inbody');
+                    m.removeAttribute('style');
+                    if (m._taskActionsParent) m._taskActionsParent = null;
+                    if (m.parentNode === document.body) document.body.removeChild(m);
                 }
             });
         });
