@@ -3174,187 +3174,67 @@ function tasksHtml(string $value): string
 })();
 </script>
 
-<!-- آلية التحديث التلقائي للمهام (Auto-refresh/Polling) -->
+<?php // تمييز عمال الإنتاج لاستخدام ريفريش كامل للصفحة بدل التحديث الجزئي للجدول ?>
+<script>window.TASKS_IS_PRODUCTION = <?php echo $isProduction ? 'true' : 'false'; ?>;</script>
+<!-- آلية التحديث: عمال الإنتاج = ريفريش كامل للصفحة. غير الإنتاج = بدون تحديث تلقائي -->
 <script>
 (function() {
     'use strict';
     
-    // التحقق من أننا في صفحة المهام
-    if (!window.location.search.includes('page=tasks')) {
-        return;
-    }
+    if (!window.location.search.includes('page=tasks')) return;
     
-    let autoRefreshInterval = null;
-    let lastUpdateTimestamp = null;
-    let isRefreshing = false;
-    // أقصى معرف أوردر عند تحميل الصفحة — نُشعر فقط بالأوردرات الأحدث منه لتفادي تكرار إشعارات الأوردرات القديمة
-    let initialMaxTaskId = 0;
+    var isProduction = window.TASKS_IS_PRODUCTION === true;
+    var autoRefreshInterval = null;
+    var pageRefreshTimeout = null;
     
-    // طلب إذن إشعارات المتصفح فور تحميل الصفحة
     if ('Notification' in window && Notification.permission === 'default') {
         Notification.requestPermission().catch(function() {});
     }
     
-    function playNewOrderAlertSound() {
-        try {
-            var ctx = new (window.AudioContext || window.webkitAudioContext)();
-            if (ctx.state === 'suspended') ctx.resume();
-            var playTone = function(freq, startTime, duration) {
-                var osc = ctx.createOscillator();
-                var gain = ctx.createGain();
-                osc.connect(gain);
-                gain.connect(ctx.destination);
-                osc.frequency.value = freq;
-                osc.type = 'sine';
-                gain.gain.setValueAtTime(0.15, startTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
-                osc.start(startTime);
-                osc.stop(startTime + duration);
-            };
-            playTone(523.25, 0, 0.12);
-            playTone(659.25, 0.15, 0.2);
-        } catch (e) {}
-    }
-    
-    function showNewOrderNotification(task) {
-        if (!('Notification' in window) || Notification.permission !== 'granted') return;
-        playNewOrderAlertSound();
-        var sender = (task.created_by_name && task.created_by_name.trim()) ? task.created_by_name.trim() : 'غير معروف';
-        var customer = (task.customer_name && task.customer_name.trim()) ? task.customer_name.trim() : '—';
-        var title = 'أوردر جديد #' + (task.id || '');
-        var body = 'مرسل الأوردر: ' + sender + ' | العميل: ' + customer;
-        try {
-            var n = new Notification(title, { body: body, dir: 'rtl', lang: 'ar' });
-            n.onclick = function() { window.focus(); n.close(); };
-            setTimeout(function() { n.close(); }, 8000);
-        } catch (e) {}
-    }
-    
-    // دالة جلب محتوى الجدول فقط (بدون ريفريش كامل للصفحة)
-    async function fetchTasks() {
-        if (isRefreshing) {
-            return;
-        }
-        var tbody = document.getElementById('tasksTableBody');
-        if (!tbody) {
-            return;
-        }
-        try {
-            isRefreshing = true;
-            var currentUrl = new URL(window.location.href);
-            currentUrl.searchParams.set('partial', 'table');
-            var response = await fetch(currentUrl.toString(), {
-                method: 'GET',
-                credentials: 'same-origin',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Cache-Control': 'no-cache',
-                    'Pragma': 'no-cache'
-                }
-            });
-            if (!response.ok) {
-                throw new Error('Failed to fetch tasks');
+    function detectConnectionType() {
+        if ('connection' in navigator) {
+            var conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+            if (conn) {
+                var et = conn.effectiveType || '';
+                var t = conn.type || '';
+                if (conn.saveData || t === 'cellular' || et === '2g' || et === 'slow-2g') return true;
             }
-            var html = await response.text();
-            var trimmed = (html && typeof html === 'string') ? html.trim() : '';
-            // استبدال الجدول فقط إذا كان الرد محتوى جزئي (صفوف) وليس صفحة كاملة — يمنع اختفاء الأوردرات عند رجوع كاش أو صفحة كاملة بالخطأ
-            var isPartialContent = trimmed.length > 0
-                && !/^\s*<!DOCTYPE/i.test(trimmed)
-                && !/<\s*html[\s>]/i.test(trimmed);
-            if (isPartialContent) {
-                tbody.innerHTML = trimmed;
-                if (typeof window.resetPageLoading === 'function') {
-                    window.resetPageLoading();
-                }
-                window.dispatchEvent(new CustomEvent('tasks-table-updated'));
-            }
-        } catch (error) {
-            console.error('Error fetching tasks:', error);
-        } finally {
-            isRefreshing = false;
         }
+        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     }
     
-    // بدء التحديث التلقائي - تم زيادة الفترة لتقليل الاستهلاك بشكل كبير
     function startAutoRefresh() {
-        // تنظيف interval السابق إن وجد
-        if (autoRefreshInterval) {
-            clearInterval(autoRefreshInterval);
-        }
-        
-        // كشف نوع الاتصال لتحديد فترة التحديث المناسبة
-        function detectConnectionType() {
-            if ('connection' in navigator) {
-                const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
-                if (conn) {
-                    const effectiveType = conn.effectiveType || 'unknown';
-                    const type = conn.type || 'unknown';
-                    const saveData = conn.saveData || false;
-                    
-                    if (saveData || type === 'cellular' || effectiveType === '2g' || effectiveType === 'slow-2g') {
-                        return true; // بيانات هاتف
-                    }
-                }
-            }
-            const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-            return isMobileDevice;
-        }
-        
-        const isMobileData = detectConnectionType();
-        
-        // جلب المهام لأول مرة بعد تأخير حسب نوع الاتصال
-        const initialDelay = isMobileData ? 15000 : 10000; // 15 ثانية للهاتف، 10 ثواني للWiFi
-        setTimeout(function() {
-            fetchTasks();
+        if (!isProduction) return;
+        if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+        if (pageRefreshTimeout) clearTimeout(pageRefreshTimeout);
+        var isMobileData = detectConnectionType();
+        var initialDelay = isMobileData ? 15000 : 10000;
+        var refreshInterval = isMobileData ? 240000 : 120000;
+        pageRefreshTimeout = setTimeout(function() {
+            if (!document.hidden) window.location.reload();
         }, initialDelay);
-        
-        // تحديد فترة التحديث حسب نوع الاتصال
-        // WiFi: 2 دقيقة | بيانات الهاتف: 4 دقائق لتقليل استهلاك البيانات
-        const refreshInterval = isMobileData ? 240000 : 120000; // 4 دقائق للهاتف، 2 دقيقة للWiFi
-        
         autoRefreshInterval = setInterval(function() {
-            // التحقق من أن الصفحة مرئية ونشطة قبل الطلب
-            if (!document.hidden) {
-                fetchTasks();
-            }
+            if (!document.hidden) window.location.reload();
         }, refreshInterval);
     }
     
-    // إيقاف التحديث التلقائي عند مغادرة الصفحة
     function stopAutoRefresh() {
-        if (autoRefreshInterval) {
-            clearInterval(autoRefreshInterval);
-            autoRefreshInterval = null;
-        }
+        if (autoRefreshInterval) { clearInterval(autoRefreshInterval); autoRefreshInterval = null; }
+        if (pageRefreshTimeout) { clearTimeout(pageRefreshTimeout); pageRefreshTimeout = null; }
     }
     
-    // بدء التحديث التلقائي عند تحميل الصفحة
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', startAutoRefresh);
     } else {
         startAutoRefresh();
     }
-    
-    // إيقاف التحديث عند مغادرة الصفحة - استخدام pagehide لإعادة تفعيل bfcache
-    window.addEventListener('pagehide', function(event) {
-        stopAutoRefresh();
-    });
-    
-    // إيقاف التحديث عندما تكون الصفحة غير مرئية (tab inactive)
+    window.addEventListener('pagehide', stopAutoRefresh);
     document.addEventListener('visibilitychange', function() {
-        if (document.hidden) {
-            stopAutoRefresh();
-        } else {
-            startAutoRefresh();
-        }
+        if (document.hidden) stopAutoRefresh();
+        else if (isProduction) startAutoRefresh();
     });
-    
-    // دالة للتعامل مع تحديثات المهام من unified polling system (إذا تم إضافتها لاحقاً)
     window.handleTasksUpdate = function() {
-        // يمكن استدعاء fetchTasks إذا لزم الأمر
-        if (typeof fetchTasks === 'function' && !document.hidden) {
-            fetchTasks();
-        }
+        if (isProduction && !document.hidden) window.location.reload();
     };
 })();
 
