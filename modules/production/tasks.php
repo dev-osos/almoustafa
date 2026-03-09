@@ -3208,8 +3208,8 @@ function tasksHtml(string $value): string
         if (autoRefreshInterval) clearInterval(autoRefreshInterval);
         if (pageRefreshTimeout) clearTimeout(pageRefreshTimeout);
         var isMobileData = detectConnectionType();
-        var initialDelay = isMobileData ? 15000 : 10000;
-        var refreshInterval = isMobileData ? 240000 : 120000;
+        var initialDelay = 300000;   // أول ريفريش بعد 5 دقائق
+        var refreshInterval = 300000; // ريفريش كل 5 دقائق
         pageRefreshTimeout = setTimeout(function() {
             if (!document.hidden) window.location.reload();
         }, initialDelay);
