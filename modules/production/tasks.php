@@ -2867,7 +2867,6 @@ function tasksHtml(string $value): string
     'use strict';
     var tbody = document.getElementById('tasksTableBody');
     if (!tbody) return;
-    var rows = tbody.querySelectorAll('tr.tasks-filter-row');
     var searchTextEl = document.getElementById('tasksSearchText');
     var taskIdEl = document.getElementById('tasksFilterTaskId');
     var customerEl = document.getElementById('tasksFilterCustomer');
@@ -2895,6 +2894,7 @@ function tasksHtml(string $value): string
         var assigned = assignedEl ? (assignedEl.value || '0') : '0';
         var assignedNum = parseInt(assigned, 10) || 0;
 
+        var rows = tbody.querySelectorAll('tr.tasks-filter-row');
         rows.forEach(function(tr) {
             var show = true;
             var rowTaskId = String(tr.getAttribute('data-task-id') || '');
@@ -2941,6 +2941,8 @@ function tasksHtml(string $value): string
     }
 
     applyTasksFilter();
+
+    window.addEventListener('tasks-table-updated', applyTasksFilter);
 
     // الحفاظ على الفلتر عند التنقل بين الصفحات: بناء رابط التصفح من قيم النموذج الحالية
     var paginationNav = document.getElementById('tasksPagination');
@@ -3240,11 +3242,17 @@ function tasksHtml(string $value): string
                 throw new Error('Failed to fetch tasks');
             }
             var html = await response.text();
-            if (html && html.trim()) {
-                tbody.innerHTML = html;
+            var trimmed = (html && typeof html === 'string') ? html.trim() : '';
+            // استبدال الجدول فقط إذا كان الرد محتوى جزئي (صفوف) وليس صفحة كاملة — يمنع اختفاء الأوردرات عند رجوع كاش أو صفحة كاملة بالخطأ
+            var isPartialContent = trimmed.length > 0
+                && !/^\s*<!DOCTYPE/i.test(trimmed)
+                && !/<\s*html[\s>]/i.test(trimmed);
+            if (isPartialContent) {
+                tbody.innerHTML = trimmed;
                 if (typeof window.resetPageLoading === 'function') {
                     window.resetPageLoading();
                 }
+                window.dispatchEvent(new CustomEvent('tasks-table-updated'));
             }
         } catch (error) {
             console.error('Error fetching tasks:', error);
