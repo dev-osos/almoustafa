@@ -6626,9 +6626,7 @@ $lang = isset($translations) ? $translations : [];
 <div class="card shadow-sm mb-4">
     <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
         <h5 class="mb-0"><i class="bi bi-file-earmark-text me-2"></i>قوالب المنتجات - إنشاء إنتاج من قالب</h5>
-        <a href="<?php echo getDashboardUrl('production'); ?>?page=raw_materials_warehouse" class="btn btn-light btn-sm">
-            <i class="bi bi-plus-circle me-2"></i>إدارة القوالب في مخزن الخامات
-        </a>
+        
     </div>
     <?php if (!empty($templates)): ?>
     <?php
