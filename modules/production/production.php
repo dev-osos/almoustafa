@@ -6655,12 +6655,15 @@ $lang = isset($translations) ? $translations : [];
     ];
     ?>
     <div class="card-body">
-        <div class="template-cards-search-wrap mb-3">
-            <input type="text"
-                   class="form-control form-control-sm template-cards-search"
-                   placeholder="بحث في القوالب (الاسم، النوع، المورد)..."
-                   aria-label="بحث في قوالب المنتجات"
-                   autocomplete="off">
+        <div class="template-cards-search-wrap mb-4">
+            <div class="template-cards-search-inner">
+                <i class="bi bi-search template-cards-search-icon" aria-hidden="true"></i>
+                <input type="text"
+                       class="form-control template-cards-search"
+                       placeholder="بحث في القوالب (الاسم، النوع، المورد)..."
+                       aria-label="بحث في قوالب المنتجات"
+                       autocomplete="off">
+            </div>
         </div>
         <div class="template-grid">
         <?php foreach ($templates as $template): ?>
