@@ -6509,7 +6509,7 @@ $lang = isset($translations) ? $translations : [];
 </div>
 
 <?php if ($error): ?>
-    <div class="alert alert-danger alert-dismissible fade show" id="errorAlert" role="alert">
+    <div class="alert alert-danger alert-dismissible show" id="errorAlert" role="alert">
         <i class="bi bi-exclamation-triangle-fill me-2"></i>
         <strong>خطأ:</strong> <?php echo htmlspecialchars($error); ?>
         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="إغلاق"></button>
@@ -6517,7 +6517,7 @@ $lang = isset($translations) ? $translations : [];
 <?php endif; ?>
 
 <?php if ($success): ?>
-    <div class="alert alert-success alert-dismissible fade show" id="successAlert" role="alert">
+    <div class="alert alert-success alert-dismissible show" id="successAlert" role="alert">
         <i class="bi bi-check-circle-fill me-2"></i>
         <strong>نجاح:</strong> <?php echo htmlspecialchars($success); ?>
         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="إغلاق"></button>
@@ -6656,7 +6656,15 @@ $lang = isset($translations) ? $translations : [];
         'ماء' => 'bi-droplet'
     ];
     ?>
-    <div class="card-body template-grid">
+    <div class="card-body">
+        <div class="template-cards-search-wrap mb-3">
+            <input type="text"
+                   class="form-control form-control-sm template-cards-search"
+                   placeholder="بحث في القوالب (الاسم، النوع، المورد)..."
+                   aria-label="بحث في قوالب المنتجات"
+                   autocomplete="off">
+        </div>
+        <div class="template-grid">
         <?php foreach ($templates as $template): ?>
             <?php 
             $templateTypeLabels = [
@@ -6733,6 +6741,7 @@ $lang = isset($translations) ? $translations : [];
                  data-template-id="<?php echo $template['id']; ?>"
                  data-template-name="<?php echo htmlspecialchars($templateName, ENT_QUOTES, 'UTF-8'); ?>"
                  data-template-type="<?php echo htmlspecialchars($template['template_type'] ?? 'legacy', ENT_QUOTES, 'UTF-8'); ?>"
+                 data-template-type-label="<?php echo htmlspecialchars($typeLabel, ENT_QUOTES, 'UTF-8'); ?>"
                  <?php echo $cardAttributes; ?>
                  onclick="openCreateFromTemplateModal(this)">
 
@@ -6753,7 +6762,27 @@ $lang = isset($translations) ? $translations : [];
                 </div>
             </div>
         <?php endforeach; ?>
+        </div>
     </div>
+    <script>
+    (function() {
+        var searchEl = document.querySelector('.template-cards-search');
+        var gridEl = document.querySelector('.template-grid');
+        if (!searchEl || !gridEl) return;
+        searchEl.addEventListener('input', function() {
+            var q = (this.value || '').trim();
+            var cards = gridEl.querySelectorAll('.template-card-modern');
+            cards.forEach(function(card) {
+                var name = (card.getAttribute('data-template-name') || '');
+                var typeLabel = (card.getAttribute('data-template-type-label') || '');
+                var supplier = (card.getAttribute('data-template-supplier') || '');
+                var text = name + ' ' + typeLabel + ' ' + supplier;
+                var show = !q || text.indexOf(q) !== -1;
+                card.style.display = show ? '' : 'none';
+            });
+        });
+    })();
+    </script>
     <?php else: ?>
         <div class="card-body text-center py-5">
             <i class="bi bi-inbox fs-1 text-muted d-block mb-3"></i>
@@ -7405,10 +7434,10 @@ $lang = isset($translations) ? $translations : [];
             </ul>
 
             <div class="tab-content mt-3" id="damageLogTabsContent">
-                <div class="tab-pane fade show active" id="damage-log-month" role="tabpanel" aria-labelledby="damage-log-month-tab">
+                <div class="tab-pane show active" id="damage-log-month" role="tabpanel" aria-labelledby="damage-log-month-tab">
                     <?php productionPageRenderDamageLogsTable($damageMonthLogs, 'لا توجد سجلات تلفيات ضمن الفترة الشهرية المحددة.'); ?>
                 </div>
-                <div class="tab-pane fade" id="damage-log-day" role="tabpanel" aria-labelledby="damage-log-day-tab">
+                <div class="tab-pane" id="damage-log-day" role="tabpanel" aria-labelledby="damage-log-day-tab">
                     <?php if (!empty($damageDaySummaryRows)): ?>
                         <div class="production-summary-grid mb-3">
                             <?php foreach ($damageDaySummaryRows as $row): ?>
@@ -7616,7 +7645,7 @@ $lang = isset($translations) ? $translations : [];
 </div>
 
 <!-- Modal إنشاء إنتاج من قالب -->
-<div class="modal fade d-none d-md-block" id="createFromTemplateModal" tabindex="-1">
+<div class="modal d-none d-md-block" id="createFromTemplateModal" tabindex="-1">
     <div class="modal-dialog modal-xl modal-dialog-scrollable production-template-dialog" style="max-height: 90vh;">
         <div class="modal-content">
             <div class="modal-header bg-success text-white">
@@ -7716,7 +7745,7 @@ $lang = isset($translations) ? $translations : [];
 </div>
 
 <!-- Modal طباعة الباركودات -->
-<div class="modal fade d-none d-md-block" id="printBarcodesModal" tabindex="-1">
+<div class="modal d-none d-md-block" id="printBarcodesModal" tabindex="-1">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header bg-success text-white">
@@ -7759,7 +7788,7 @@ $lang = isset($translations) ? $translations : [];
 </div>
 
 <!-- Modal إضافة إنتاج -->
-<div class="modal fade d-none d-md-block" id="addProductionModal" tabindex="-1">
+<div class="modal d-none d-md-block" id="addProductionModal" tabindex="-1">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
@@ -7836,7 +7865,7 @@ $lang = isset($translations) ? $translations : [];
 </div>
 
 <!-- Modal تعديل إنتاج -->
-<div class="modal fade d-none d-md-block" id="editProductionModal" tabindex="-1">
+<div class="modal d-none d-md-block" id="editProductionModal" tabindex="-1">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
@@ -10199,7 +10228,7 @@ function printBarcodes() {
             const fallbackMessages = document.getElementById('barcodeFallbackMessages');
             if (fallbackMessages) {
                 fallbackMessages.classList.remove('d-none');
-                fallbackMessages.innerHTML = '<div class="alert alert-warning alert-dismissible fade show" role="alert">' +
+                fallbackMessages.innerHTML = '<div class="alert alert-warning alert-dismissible show" role="alert">' +
                     '<i class="bi bi-exclamation-triangle me-2"></i>' +
                     '<strong>تنبيه:</strong> ' + message +
                     '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>' +
@@ -10785,7 +10814,7 @@ function scrollToElement(element) {
         requestAnimationFrame(function() {
             window.scrollTo({
                 top: Math.max(0, elementTop - offset),
-                behavior: 'smooth'
+                behavior: 'auto'
             });
         });
     }, 200);

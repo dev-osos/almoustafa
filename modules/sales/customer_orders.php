@@ -570,7 +570,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $orderDate = $_POST['order_date'] ?? date('Y-m-d');
         $deliveryDate = !empty($_POST['delivery_date']) ? $_POST['delivery_date'] : null;
         $priority = $_POST['priority'] ?? 'normal';
-        $notes = '';
+        $notes = trim($_POST['details'] ?? '');
+        $orderTitle = trim($_POST['order_title'] ?? '');
+        $shippingFees = floatval($_POST['shipping_fees'] ?? 0);
+        $discountAmount = floatval($_POST['discount'] ?? 0);
         $createNewCustomer = isset($_POST['create_new_customer']) && $_POST['create_new_customer'] === '1';
         $newCustomerName = trim($_POST['new_customer_name'] ?? '');
         $newCustomerPhone = trim($_POST['new_customer_phone'] ?? '');
@@ -578,9 +581,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $newCustomerLatitude = isset($_POST['new_customer_latitude']) && $_POST['new_customer_latitude'] !== '' ? trim($_POST['new_customer_latitude']) : null;
         $newCustomerLongitude = isset($_POST['new_customer_longitude']) && $_POST['new_customer_longitude'] !== '' ? trim($_POST['new_customer_longitude']) : null;
         
-        // معالجة العناصر - الآن template_name بدلاً من product_id
+        // معالجة العناصر: إما products[] (نموذج موحد) أو items[] (قالب + كمية قديم)
         $items = [];
-        if (isset($_POST['items']) && is_array($_POST['items'])) {
+        if (isset($_POST['products']) && is_array($_POST['products'])) {
+            foreach ($_POST['products'] as $row) {
+                $name = trim($row['name'] ?? '');
+                $quantity = floatval($row['quantity'] ?? 0);
+                $price = floatval($row['price'] ?? 0);
+                $lineTotal = floatval($row['line_total'] ?? 0);
+                if ($name !== '' && $quantity > 0) {
+                    $unitPrice = $quantity > 0 && $lineTotal >= 0 ? (float)(($lineTotal > 0 ? $lineTotal : $quantity * $price) / $quantity) : $price;
+                    $totalPrice = $lineTotal > 0 ? $lineTotal : ($quantity * $unitPrice);
+                    $items[] = [
+                        'template_name' => $name,
+                        'quantity' => $quantity,
+                        'unit_price' => $unitPrice,
+                        'total_price' => $totalPrice
+                    ];
+                }
+            }
+        }
+        if (empty($items) && isset($_POST['items']) && is_array($_POST['items'])) {
             foreach ($_POST['items'] as $item) {
                 $templateName = trim($item['template_name'] ?? '');
                 $quantity = floatval($item['quantity'] ?? 0);
@@ -687,28 +708,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $orderNumber = sprintf("CMP-%s%s-%04d", $year, $month, $serial);
 
                 $subtotal = 0.0;
-                $discountAmount = 0.0;
-                $totalAmount = 0.0;
+                foreach ($items as $it) {
+                    $subtotal += (float)($it['total_price'] ?? 0);
+                }
+                $totalAmount = max(0, $subtotal + $shippingFees - $discountAmount);
 
-                // إنشاء طلب الشركة (بدون sales_rep_id و order_type = 'company')
-                $db->execute(
-                    "INSERT INTO customer_orders 
-                    (order_number, customer_id, sales_rep_id, order_type, order_date, delivery_date, 
-                     subtotal, discount_amount, total_amount, priority, notes, created_by, status) 
-                    VALUES (?, ?, NULL, 'company', ?, ?, ?, ?, ?, ?, ?, ?, 'pending')",
-                    [
-                        $orderNumber,
-                        $customerId,
-                        $orderDate,
-                        $deliveryDate,
-                        $subtotal,
-                        $discountAmount,
-                        $totalAmount,
-                        $priority,
-                        $notes,
-                        $currentUser['id']
-                    ]
-                );
+                // أعمدة اختيارية في customer_orders
+                try {
+                    $hasOrderTitle = !empty($db->queryOne("SHOW COLUMNS FROM customer_orders LIKE 'order_title'"));
+                    if (!$hasOrderTitle) {
+                        $db->execute("ALTER TABLE customer_orders ADD COLUMN order_title VARCHAR(255) NULL DEFAULT NULL");
+                    }
+                } catch (Throwable $e) {
+                    error_log('customer_orders order_title: ' . $e->getMessage());
+                }
+                try {
+                    $hasShippingFees = !empty($db->queryOne("SHOW COLUMNS FROM customer_orders LIKE 'shipping_fees'"));
+                    if (!$hasShippingFees) {
+                        $db->execute("ALTER TABLE customer_orders ADD COLUMN shipping_fees DECIMAL(15,2) NOT NULL DEFAULT 0");
+                    }
+                } catch (Throwable $e) {
+                    error_log('customer_orders shipping_fees: ' . $e->getMessage());
+                }
+                $hasOrderTitleCol = !empty($db->queryOne("SHOW COLUMNS FROM customer_orders LIKE 'order_title'"));
+                $hasShippingFeesCol = !empty($db->queryOne("SHOW COLUMNS FROM customer_orders LIKE 'shipping_fees'"));
+
+                if ($hasOrderTitleCol && $hasShippingFeesCol) {
+                    $db->execute(
+                        "INSERT INTO customer_orders 
+                        (order_number, customer_id, sales_rep_id, order_type, order_date, delivery_date, 
+                         subtotal, discount_amount, total_amount, priority, notes, order_title, shipping_fees, created_by, status) 
+                        VALUES (?, ?, NULL, 'company', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')",
+                        [
+                            $orderNumber,
+                            $customerId,
+                            $orderDate,
+                            $deliveryDate,
+                            $subtotal,
+                            $discountAmount,
+                            $totalAmount,
+                            $priority,
+                            $notes,
+                            $orderTitle !== '' ? $orderTitle : null,
+                            $shippingFees,
+                            $currentUser['id']
+                        ]
+                    );
+                } else {
+                    $db->execute(
+                        "INSERT INTO customer_orders 
+                        (order_number, customer_id, sales_rep_id, order_type, order_date, delivery_date, 
+                         subtotal, discount_amount, total_amount, priority, notes, created_by, status) 
+                        VALUES (?, ?, NULL, 'company', ?, ?, ?, ?, ?, ?, ?, ?, 'pending')",
+                        [
+                            $orderNumber,
+                            $customerId,
+                            $orderDate,
+                            $deliveryDate,
+                            $subtotal,
+                            $discountAmount,
+                            $totalAmount,
+                            $priority,
+                            $notes,
+                            $currentUser['id']
+                        ]
+                    );
+                }
 
                 $orderId = (int)$db->getLastInsertId();
 
@@ -1089,6 +1154,23 @@ if (!empty($productTemplatesCheck)) {
         SELECT * FROM product_templates 
         ORDER BY product_templates.product_name ASC
     ");
+}
+
+// تصنيفات من qu.json (لنموذج طلب الشركة - نفس حقول إنشاء أوردر)
+$quCategoriesForCompanyOrder = [];
+$quJsonPath = defined('ROOT_PATH') ? (rtrim(ROOT_PATH, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'qu.json') : (__DIR__ . '/../../qu.json');
+if (is_readable($quJsonPath)) {
+    $quRaw = @file_get_contents($quJsonPath);
+    if ($quRaw !== false) {
+        $decoded = @json_decode($quRaw, true);
+        if (!empty($decoded['t']) && is_array($decoded['t'])) {
+            foreach ($decoded['t'] as $item) {
+                if (!empty($item['type'])) {
+                    $quCategoriesForCompanyOrder[] = ['type' => trim((string)$item['type'])];
+                }
+            }
+        }
+    }
 }
 
 // استخدام القوالب بدلاً من المنتجات
@@ -2486,14 +2568,14 @@ if (isset($_GET['id'])) {
     <div class="modal-dialog modal-xl modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title"><i class="bi bi-building me-2"></i>إنشاء طلب عميل شركة</h5>
+                <h5 class="modal-title"><i class="bi bi-plus-circle me-1"></i>إنشاء طلب عميل شركة</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <form method="POST" id="companyOrderForm">
                 <input type="hidden" name="action" value="create_company_order">
                 <div class="modal-body">
-                    <div class="row mb-3">
-                        <div class="col-md-6">
+                    <div class="row g-3">
+                        <div class="col-md-4">
                             <div class="d-flex justify-content-between align-items-center mb-1">
                                 <label class="form-label mb-0">العميل <span class="text-danger">*</span></label>
                                 <div class="form-check form-switch">
@@ -2510,25 +2592,24 @@ if (isset($_GET['id'])) {
                                 <?php endforeach; ?>
                             </select>
                         </div>
-                        <div class="col-md-2">
-                            <label class="form-label">تاريخ الطلب <span class="text-danger">*</span></label>
-                            <input type="date" class="form-control" name="order_date" value="<?php echo date('Y-m-d'); ?>" required>
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label">تاريخ التسليم</label>
-                            <input type="date" class="form-control" name="delivery_date">
-                        </div>
-                        <div class="col-md-2">
+                        <div class="col-md-4">
                             <label class="form-label">الأولوية</label>
                             <select class="form-select" name="priority">
-                                <option value="normal">عادية</option>
                                 <option value="low">منخفضة</option>
-                                <option value="high">عالية</option>
+                                <option value="normal" selected>عادية</option>
+                                <option value="high">مرتفعة</option>
                                 <option value="urgent">عاجلة</option>
                             </select>
                         </div>
+                        <div class="col-md-4">
+                            <label class="form-label">تاريخ الاستحقاق</label>
+                            <input type="date" class="form-control" name="delivery_date" id="companyDeliveryDate">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">تاريخ الطلب <span class="text-danger">*</span></label>
+                            <input type="date" class="form-control" name="order_date" value="<?php echo date('Y-m-d'); ?>" required>
+                        </div>
                     </div>
-                    
                     <div id="newCompanyCustomerFields" class="row g-3 mb-3 d-none">
                         <div class="col-md-4">
                             <label class="form-label">اسم العميل الجديد <span class="text-danger">*</span></label>
@@ -2554,36 +2635,111 @@ if (isset($_GET['id'])) {
                             <small class="text-muted">اضغط على زر الموقع للحصول على موقعك الحالي</small>
                         </div>
                     </div>
-                    
-                    <div class="mb-3">
-                        <label class="form-label">عناصر الطلب</label>
-                        <div id="companyOrderItems">
-                            <div class="order-item row mb-2">
-                                <div class="col-md-9">
-                                    <select class="form-select template-input" 
-                                           name="items[0][template_name]" required>
-                                        <option value="">اختر قالب المنتج</option>
-                                        <?php foreach ($productTemplatesForDropdown as $template): ?>
-                                            <option value="<?php echo htmlspecialchars($template['product_name'] ?? ''); ?>">
-                                                <?php echo htmlspecialchars($template['product_name'] ?? 'قالب #' . $template['id']); ?>
-                                            </option>
-                                        <?php endforeach; ?>
-                                    </select>
+                    <div class="row g-3">
+                        <div class="col-md-5">
+                            <label class="form-label">العنوان</label>
+                            <input type="text" class="form-control" name="order_title" placeholder="عنوان التوصيل أو عنوان مميز يظهر في الإيصال">
+                        </div>
+                        <div class="col-12" id="companyProductsSection">
+                            <label class="form-label fw-bold">المنتجات والكميات</label>
+                            <div id="companyProductsContainer">
+                                <div class="company-product-row mb-3 p-3 border rounded" data-product-index="0">
+                                    <div class="row g-2">
+                                        <div class="col-12 col-md-3">
+                                            <label class="form-label small">اسم المنتج</label>
+                                            <input type="text" class="form-control company-product-name-input" name="products[0][name]" placeholder="أدخل اسم المنتج أو القالب" autocomplete="off" required>
+                                        </div>
+                                        <div class="col-6 col-md-2">
+                                            <label class="form-label small">الكمية</label>
+                                            <input type="number" class="form-control company-product-quantity-input" name="products[0][quantity]" step="1" min="0" placeholder="مثال: 120" required>
+                                        </div>
+                                        <div class="col-6 col-md-2">
+                                            <label class="form-label small">التصنيف</label>
+                                            <select class="form-select form-select-sm company-product-category-input" name="products[0][category]" id="company-product-category-0">
+                                                <option value="">— اختر التصنيف —</option>
+                                                <?php foreach ($quCategoriesForCompanyOrder as $qc): ?>
+                                                <option value="<?php echo htmlspecialchars($qc['type'], ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($qc['type'], ENT_QUOTES, 'UTF-8'); ?></option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </div>
+                                        <div class="col-6 col-md-2">
+                                            <label class="form-label small">الوحدة</label>
+                                            <select class="form-select form-select-sm company-product-unit-input" name="products[0][unit]" id="company-product-unit-0">
+                                                <option value="كرتونة">كرتونة</option>
+                                                <option value="عبوة">عبوة</option>
+                                                <option value="كيلو">كيلو</option>
+                                                <option value="جرام">جرام</option>
+                                                <option value="شرينك">شرينك</option>
+                                                <option value="دسته">دسته</option>
+                                                <option value="قطعة" selected>قطعة</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-6 col-md-2">
+                                            <label class="form-label small">السعر</label>
+                                            <input type="number" class="form-control company-product-price-input" name="products[0][price]" step="0.01" min="0" placeholder="0.00" required>
+                                        </div>
+                                        <div class="col-6 col-md-2">
+                                            <label class="form-label small">الإجمالي</label>
+                                            <div class="input-group input-group-sm">
+                                                <input type="number" class="form-control company-product-line-total-input" name="products[0][line_total]" step="0.01" min="0" placeholder="0.00">
+                                                <span class="input-group-text">ج.م</span>
+                                            </div>
+                                        </div>
+                                        <div class="col-6 col-md-1 d-flex align-items-end">
+                                            <button type="button" class="btn btn-danger btn-sm w-100 company-remove-product-btn" style="display: none;">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div class="col-md-2">
-                                    <input type="text" class="form-control quantity" 
-                                           name="items[0][quantity]" placeholder="الكمية" required>
-                                </div>
-                                <div class="col-md-1">
-                                    <button type="button" class="btn btn-danger w-100 remove-item">
-                                        <i class="bi bi-trash"></i>
-                                    </button>
+                            </div>
+                            <button type="button" class="btn btn-outline-primary btn-sm mt-2" id="companyAddProductBtn">
+                                <i class="bi bi-plus-circle me-1"></i>إضافة منتج آخر
+                            </button>
+                        </div>
+                        <div class="col-12 mt-2">
+                            <label class="form-label">وصف وتفاصيل وملاحظات الاوردر</label>
+                            <textarea class="form-control" name="details" rows="3" placeholder="أدخل التفاصيل والتعليمات اللازمة."></textarea>
+                        </div>
+                        <div class="col-12 col-md-6 col-lg-4 mt-2">
+                            <label class="form-label" for="companyShippingFees">رسوم الشحن (ج.م)</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" name="shipping_fees" id="companyShippingFees" step="0.01" min="0" placeholder="0.00" value="0">
+                                <span class="input-group-text">ج.م</span>
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-6 col-lg-4 mt-2">
+                            <label class="form-label" for="companyDiscount">الخصم (ج.م)</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" name="discount" id="companyDiscount" step="0.01" min="0" placeholder="0.00" value="0">
+                                <span class="input-group-text">ج.م</span>
+                            </div>
+                        </div>
+                        <div class="col-12 mt-3">
+                            <div class="card bg-light border-primary border-opacity-25" id="companyOrderTotalSummaryCard">
+                                <div class="card-body py-3">
+                                    <h6 class="card-title mb-2"><i class="bi bi-calculator me-2"></i>ملخص الإجمالي النهائي</h6>
+                                    <div class="row g-2 small">
+                                        <div class="col-6 col-md-3">
+                                            <span class="text-muted">إجمالي المنتجات:</span>
+                                            <strong class="d-block" id="companySubtotalDisplay">0.00 ج.م</strong>
+                                        </div>
+                                        <div class="col-6 col-md-3">
+                                            <span class="text-muted">رسوم الشحن:</span>
+                                            <strong class="d-block" id="companyShippingDisplay">0.00 ج.م</strong>
+                                        </div>
+                                        <div class="col-6 col-md-3">
+                                            <span class="text-muted">الخصم:</span>
+                                            <strong class="d-block" id="companyDiscountDisplay">0.00 ج.م</strong>
+                                        </div>
+                                        <div class="col-6 col-md-3">
+                                            <span class="text-muted">الإجمالي النهائي:</span>
+                                            <strong class="d-block fs-5 text-success" id="companyFinalTotalDisplay">0.00 ج.م</strong>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                        <button type="button" class="btn btn-sm btn-outline-primary" id="addCompanyItemBtn">
-                            <i class="bi bi-plus-circle me-2"></i>إضافة عنصر
-                        </button>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -2598,15 +2754,13 @@ if (isset($_GET['id'])) {
 <!-- Card إنشاء طلب شركة (للموبايل فقط) -->
 <div class="card shadow-sm mb-4 d-md-none" id="addCompanyOrderCard" style="display: none;">
     <div class="card-header bg-success text-white">
-        <h5 class="mb-0">
-            <i class="bi bi-building me-2"></i>إنشاء طلب عميل شركة
-        </h5>
+        <h5 class="mb-0"><i class="bi bi-plus-circle me-1"></i>إنشاء طلب عميل شركة</h5>
     </div>
     <div class="card-body">
         <form method="POST" id="companyOrderCardForm">
             <input type="hidden" name="action" value="create_company_order">
-            <div class="row mb-3">
-                <div class="col-md-12 mb-3">
+            <div class="row g-3">
+                <div class="col-12">
                     <div class="d-flex justify-content-between align-items-center mb-1">
                         <label class="form-label mb-0">العميل <span class="text-danger">*</span></label>
                         <div class="form-check form-switch">
@@ -2623,39 +2777,38 @@ if (isset($_GET['id'])) {
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div class="col-md-6 mb-3">
-                    <label class="form-label">تاريخ الطلب <span class="text-danger">*</span></label>
-                    <input type="date" class="form-control" name="order_date" value="<?php echo date('Y-m-d'); ?>" required>
-                </div>
-                <div class="col-md-6 mb-3">
-                    <label class="form-label">تاريخ التسليم</label>
-                    <input type="date" class="form-control" name="delivery_date">
-                </div>
-                <div class="col-md-12 mb-3">
+                <div class="col-6">
                     <label class="form-label">الأولوية</label>
                     <select class="form-select" name="priority">
-                        <option value="normal">عادية</option>
                         <option value="low">منخفضة</option>
-                        <option value="high">عالية</option>
+                        <option value="normal" selected>عادية</option>
+                        <option value="high">مرتفعة</option>
                         <option value="urgent">عاجلة</option>
                     </select>
                 </div>
+                <div class="col-6">
+                    <label class="form-label">تاريخ الاستحقاق</label>
+                    <input type="date" class="form-control" name="delivery_date">
+                </div>
+                <div class="col-12">
+                    <label class="form-label">تاريخ الطلب <span class="text-danger">*</span></label>
+                    <input type="date" class="form-control" name="order_date" value="<?php echo date('Y-m-d'); ?>" required>
+                </div>
             </div>
-            
             <div id="cardNewCompanyCustomerFields" class="row g-3 mb-3 d-none">
-                <div class="col-md-12 mb-3">
+                <div class="col-12">
                     <label class="form-label">اسم العميل الجديد <span class="text-danger">*</span></label>
                     <input type="text" class="form-control card-new-company-customer-required" name="new_customer_name" autocomplete="off">
                 </div>
-                <div class="col-md-12 mb-3">
+                <div class="col-12">
                     <label class="form-label">رقم الهاتف</label>
                     <input type="text" class="form-control" name="new_customer_phone" autocomplete="off" placeholder="مثال: 01234567890">
                 </div>
-                <div class="col-md-12 mb-3">
+                <div class="col-12">
                     <label class="form-label">عنوان العميل</label>
                     <textarea class="form-control" name="new_customer_address" rows="2" autocomplete="off" placeholder="اكتب العنوان بالتفصيل"></textarea>
                 </div>
-                <div class="col-12 mb-3">
+                <div class="col-12">
                     <label class="form-label">موقع العميل <span class="text-muted">(اختياري)</span></label>
                     <div class="d-flex gap-2">
                         <input type="text" class="form-control" name="new_customer_latitude" id="cardCompanyNewCustomerLatitude" placeholder="خط العرض" readonly>
@@ -2667,38 +2820,87 @@ if (isset($_GET['id'])) {
                     <small class="text-muted">اضغط على زر الموقع للحصول على موقعك الحالي</small>
                 </div>
             </div>
-            
             <div class="mb-3">
-                <label class="form-label">عناصر الطلب</label>
-                <div id="cardCompanyOrderItems">
-                    <div class="order-item row mb-2">
-                        <div class="col-md-9">
-                            <select class="form-select card-company-template-input" 
-                                   name="items[0][template_name]" required>
-                                <option value="">اختر قالب المنتج</option>
-                                <?php foreach ($productTemplatesForDropdown as $template): ?>
-                                    <option value="<?php echo htmlspecialchars($template['product_name'] ?? ''); ?>">
-                                        <?php echo htmlspecialchars($template['product_name'] ?? 'قالب #' . $template['id']); ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                        <div class="col-md-2">
-                            <input type="text" class="form-control quantity" 
-                                   name="items[0][quantity]" placeholder="الكمية" required>
-                        </div>
-                        <div class="col-md-1">
-                            <button type="button" class="btn btn-danger w-100 card-company-remove-item">
-                                <i class="bi bi-trash"></i>
-                            </button>
+                <label class="form-label">العنوان</label>
+                <input type="text" class="form-control" name="order_title" placeholder="عنوان التوصيل أو عنوان مميز يظهر في الإيصال">
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-bold">المنتجات والكميات</label>
+                <div id="cardCompanyProductsContainer">
+                    <div class="card-company-product-row mb-3 p-3 border rounded" data-product-index="0">
+                        <div class="row g-2">
+                            <div class="col-12">
+                                <label class="form-label small">اسم المنتج</label>
+                                <input type="text" class="form-control card-company-product-name-input" name="products[0][name]" placeholder="اسم المنتج أو القالب" required>
+                            </div>
+                            <div class="col-6 col-md-4">
+                                <label class="form-label small">الكمية</label>
+                                <input type="number" class="form-control card-company-product-quantity-input" name="products[0][quantity]" step="1" min="0" required>
+                            </div>
+                            <div class="col-6 col-md-4">
+                                <label class="form-label small">التصنيف</label>
+                                <select class="form-select form-select-sm card-company-product-category-input" name="products[0][category]">
+                                    <option value="">— اختر —</option>
+                                    <?php foreach ($quCategoriesForCompanyOrder as $qc): ?>
+                                    <option value="<?php echo htmlspecialchars($qc['type'], ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($qc['type'], ENT_QUOTES, 'UTF-8'); ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="col-6 col-md-4">
+                                <label class="form-label small">الوحدة</label>
+                                <select class="form-select form-select-sm card-company-product-unit-input" name="products[0][unit]">
+                                    <option value="كرتونة">كرتونة</option>
+                                    <option value="عبوة">عبوة</option>
+                                    <option value="كيلو">كيلو</option>
+                                    <option value="جرام">جرام</option>
+                                    <option value="شرينك">شرينك</option>
+                                    <option value="دسته">دسته</option>
+                                    <option value="قطعة" selected>قطعة</option>
+                                </select>
+                            </div>
+                            <div class="col-6 col-md-4">
+                                <label class="form-label small">السعر</label>
+                                <input type="number" class="form-control card-company-product-price-input" name="products[0][price]" step="0.01" min="0" required>
+                            </div>
+                            <div class="col-6 col-md-4">
+                                <label class="form-label small">الإجمالي</label>
+                                <input type="number" class="form-control card-company-product-line-total-input" name="products[0][line_total]" step="0.01" min="0" placeholder="0.00">
+                            </div>
+                            <div class="col-12 col-md-4 d-flex align-items-end">
+                                <button type="button" class="btn btn-danger btn-sm w-100 card-company-remove-product-btn" style="display: none;">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
-                <button type="button" class="btn btn-sm btn-outline-primary" id="cardAddCompanyItemBtn">
-                    <i class="bi bi-plus-circle me-2"></i>إضافة عنصر
+                <button type="button" class="btn btn-outline-primary btn-sm mt-2" id="cardCompanyAddProductBtn">
+                    <i class="bi bi-plus-circle me-1"></i>إضافة منتج آخر
                 </button>
             </div>
-            
+            <div class="mb-3">
+                <label class="form-label">وصف وتفاصيل وملاحظات</label>
+                <textarea class="form-control" name="details" rows="3" placeholder="أدخل التفاصيل والتعليمات."></textarea>
+            </div>
+            <div class="row g-2 mb-3">
+                <div class="col-6">
+                    <label class="form-label">رسوم الشحن (ج.م)</label>
+                    <input type="number" class="form-control" name="shipping_fees" id="cardCompanyShippingFees" step="0.01" min="0" value="0">
+                </div>
+                <div class="col-6">
+                    <label class="form-label">الخصم (ج.م)</label>
+                    <input type="number" class="form-control" name="discount" id="cardCompanyDiscount" step="0.01" min="0" value="0">
+                </div>
+            </div>
+            <div class="card bg-light border-primary border-opacity-25 mb-3">
+                <div class="card-body py-3 small">
+                    <strong>ملخص:</strong>
+                    <span class="text-muted">إجمالي منتجات:</span> <strong id="cardCompanySubtotalDisplay">0.00 ج.م</strong>
+                    <span class="text-muted ms-2">شحن:</span> <strong id="cardCompanyShippingDisplay">0.00 ج.م</strong>
+                    <span class="text-muted ms-2">خصم:</span> <strong id="cardCompanyDiscountDisplay">0.00 ج.م</strong>
+                    <span class="text-muted ms-2">النهائي:</span> <strong id="cardCompanyFinalTotalDisplay" class="text-success">0.00 ج.م</strong>
+                </div>
+            </div>
             <div class="d-flex gap-2">
                 <button type="submit" class="btn btn-success">إنشاء طلب شركة</button>
                 <button type="button" class="btn btn-secondary" onclick="closeAddCompanyOrderCard()">إلغاء</button>
@@ -3347,46 +3549,142 @@ function loadSalesRepCustomers(salesRepId) {
 }
 
 
-// JavaScript لمعالجة Modal طلب الشركة
+// JavaScript لمعالجة Modal طلب الشركة (نفس حقول إنشاء أوردر)
 <?php if ($isManagerOrAccountant): ?>
-let companyItemIndex = 1;
+var __quCategoriesCompany = <?php echo json_encode($quCategoriesForCompanyOrder, JSON_UNESCAPED_UNICODE); ?>;
+let companyProductIndex = 1;
 
-// إضافة عنصر جديد لطلب الشركة
-document.getElementById('addCompanyItemBtn')?.addEventListener('click', function() {
-    const itemsDiv = document.getElementById('companyOrderItems');
-    const newItem = document.createElement('div');
-    newItem.className = 'order-item row mb-2';
-    const templateOptions = <?php echo json_encode(array_map(function($t) { 
-        return ['value' => htmlspecialchars($t['product_name'] ?? '', ENT_QUOTES, 'UTF-8'), 'text' => htmlspecialchars($t['product_name'] ?? 'قالب #' . $t['id'], ENT_QUOTES, 'UTF-8')]; 
-    }, $productTemplatesForDropdown), JSON_UNESCAPED_UNICODE | JSON_HEX_QUOT | JSON_HEX_APOS); ?>;
-    let optionsHtml = '<option value="">اختر قالب المنتج</option>';
-    if (templateOptions && Array.isArray(templateOptions)) {
-        templateOptions.forEach(function(template) {
-            const value = template.value || '';
-            const text = template.text || '';
-            optionsHtml += '<option value="' + value.replace(/"/g, '&quot;').replace(/'/g, '&#39;') + '">' + text.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</option>';
+function getCompanyCategoryOptions() {
+    var quCats = (typeof __quCategoriesCompany !== 'undefined' && Array.isArray(__quCategoriesCompany)) ? __quCategoriesCompany : [];
+    return quCats.map(function(qc) {
+        var t = (qc.type || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        return '<option value="' + t + '">' + t + '</option>';
+    }).join('');
+}
+
+function updateCompanyRemoveButtons() {
+    var container = document.getElementById('companyProductsContainer');
+    if (!container) return;
+    var rows = container.querySelectorAll('.company-product-row');
+    rows.forEach(function(row) {
+        var btn = row.querySelector('.company-remove-product-btn');
+        if (btn) btn.style.display = rows.length > 1 ? 'block' : 'none';
+    });
+}
+
+function addCompanyProductRow() {
+    var container = document.getElementById('companyProductsContainer');
+    if (!container) return;
+    var idx = companyProductIndex++;
+    var catOpts = getCompanyCategoryOptions();
+    var newRow = document.createElement('div');
+    newRow.className = 'company-product-row mb-3 p-3 border rounded';
+    newRow.setAttribute('data-product-index', idx);
+    newRow.innerHTML = '<div class="row g-2">' +
+        '<div class="col-12 col-md-3"><label class="form-label small">اسم المنتج</label><input type="text" class="form-control company-product-name-input" name="products[' + idx + '][name]" placeholder="أدخل اسم المنتج أو القالب" autocomplete="off" required></div>' +
+        '<div class="col-6 col-md-2"><label class="form-label small">الكمية</label><input type="number" class="form-control company-product-quantity-input" name="products[' + idx + '][quantity]" step="1" min="0" placeholder="مثال: 120" required></div>' +
+        '<div class="col-6 col-md-2"><label class="form-label small">التصنيف</label><select class="form-select form-select-sm company-product-category-input" name="products[' + idx + '][category]" id="company-product-category-' + idx + '"><option value="">— اختر التصنيف —</option>' + catOpts + '</select></div>' +
+        '<div class="col-6 col-md-2"><label class="form-label small">الوحدة</label><select class="form-select form-select-sm company-product-unit-input" name="products[' + idx + '][unit]" id="company-product-unit-' + idx + '"><option value="كرتونة">كرتونة</option><option value="عبوة">عبوة</option><option value="كيلو">كيلو</option><option value="جرام">جرام</option><option value="شرينك">شرينك</option><option value="دسته">دسته</option><option value="قطعة" selected>قطعة</option></select></div>' +
+        '<div class="col-6 col-md-2"><label class="form-label small">السعر</label><input type="number" class="form-control company-product-price-input" name="products[' + idx + '][price]" step="0.01" min="0" placeholder="0.00" required></div>' +
+        '<div class="col-6 col-md-2"><label class="form-label small">الإجمالي</label><div class="input-group input-group-sm"><input type="number" class="form-control company-product-line-total-input" name="products[' + idx + '][line_total]" step="0.01" min="0" placeholder="0.00"><span class="input-group-text">ج.م</span></div></div>' +
+        '<div class="col-6 col-md-1 d-flex align-items-end"><button type="button" class="btn btn-danger btn-sm w-100 company-remove-product-btn"><i class="bi bi-trash"></i></button></div></div>';
+    container.appendChild(newRow);
+    var removeBtn = newRow.querySelector('.company-remove-product-btn');
+    if (removeBtn) {
+        removeBtn.addEventListener('click', function() {
+            newRow.remove();
+            updateCompanyRemoveButtons();
+            if (typeof updateCompanyOrderSummary === 'function') updateCompanyOrderSummary();
         });
     }
-    
-    newItem.innerHTML = `
-        <div class="col-md-9">
-            <select class="form-select template-input" 
-                   name="items[${companyItemIndex}][template_name]" required>
-                ${optionsHtml}
-            </select>
-        </div>
-        <div class="col-md-2">
-            <input type="text" class="form-control quantity" 
-                   name="items[${companyItemIndex}][quantity]" placeholder="الكمية" required>
-        </div>
-        <div class="col-md-1">
-            <button type="button" class="btn btn-danger w-100 remove-item">
-                <i class="bi bi-trash"></i>
-            </button>
-        </div>
-    `;
-    itemsDiv.appendChild(newItem);
-    companyItemIndex++;
+    newRow.querySelectorAll('.company-product-quantity-input, .company-product-price-input').forEach(function(inp) {
+        inp.addEventListener('input', function() { updateCompanyProductLineTotal(newRow); if (typeof updateCompanyOrderSummary === 'function') updateCompanyOrderSummary(); });
+    });
+    newRow.querySelector('.company-product-line-total-input').addEventListener('input', function() {
+        var q = newRow.querySelector('.company-product-quantity-input');
+        var p = newRow.querySelector('.company-product-price-input');
+        var t = newRow.querySelector('.company-product-line-total-input');
+        if (q && p && t) {
+            var qty = parseFloat(q.value || '0');
+            var total = parseFloat(t.value || '0');
+            if (qty > 0 && total >= 0) p.value = (total / qty).toFixed(2);
+        }
+        if (typeof updateCompanyOrderSummary === 'function') updateCompanyOrderSummary();
+    });
+    updateCompanyRemoveButtons();
+    if (typeof updateCompanyOrderSummary === 'function') updateCompanyOrderSummary();
+}
+
+function updateCompanyProductLineTotal(row) {
+    if (!row) return;
+    var q = row.querySelector('.company-product-quantity-input');
+    var p = row.querySelector('.company-product-price-input');
+    var t = row.querySelector('.company-product-line-total-input');
+    if (!q || !p || !t) return;
+    var qty = parseFloat(q.value || '0');
+    var price = parseFloat(p.value || '0');
+    t.value = (qty * price > 0) ? (qty * price).toFixed(2) : '';
+}
+
+function updateCompanyOrderSummary() {
+    var container = document.getElementById('companyProductsContainer');
+    var subtotalEl = document.getElementById('companySubtotalDisplay');
+    var shippingEl = document.getElementById('companyShippingDisplay');
+    var discountEl = document.getElementById('companyDiscountDisplay');
+    var finalEl = document.getElementById('companyFinalTotalDisplay');
+    var shippingInp = document.getElementById('companyShippingFees');
+    var discountInp = document.getElementById('companyDiscount');
+    if (!container || !subtotalEl || !finalEl) return;
+    var subtotal = 0;
+    container.querySelectorAll('.company-product-line-total-input').forEach(function(inp) {
+        var v = parseFloat(inp.value || '0');
+        if (!isNaN(v) && v >= 0) subtotal += v;
+    });
+    var shipping = shippingInp ? (parseFloat(shippingInp.value || '0') || 0) : 0;
+    var discount = discountInp ? (parseFloat(discountInp.value || '0') || 0) : 0;
+    var finalTotal = Math.max(0, subtotal + shipping - discount);
+    subtotalEl.textContent = subtotal.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+    if (shippingEl) shippingEl.textContent = shipping.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+    if (discountEl) discountEl.textContent = discount.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+    finalEl.textContent = finalTotal.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    var companyAddBtn = document.getElementById('companyAddProductBtn');
+    var companyContainer = document.getElementById('companyProductsContainer');
+    if (companyAddBtn) companyAddBtn.addEventListener('click', addCompanyProductRow);
+    if (companyContainer) {
+        companyContainer.querySelectorAll('.company-remove-product-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                this.closest('.company-product-row').remove();
+                updateCompanyRemoveButtons();
+                updateCompanyOrderSummary();
+            });
+        });
+        companyContainer.querySelectorAll('.company-product-row').forEach(function(row) {
+            row.querySelectorAll('.company-product-quantity-input, .company-product-price-input').forEach(function(inp) {
+                inp.addEventListener('input', function() { updateCompanyProductLineTotal(row); updateCompanyOrderSummary(); });
+            });
+            var lineTotalInp = row.querySelector('.company-product-line-total-input');
+            if (lineTotalInp) lineTotalInp.addEventListener('input', function() {
+                var q = row.querySelector('.company-product-quantity-input');
+                var p = row.querySelector('.company-product-price-input');
+                var t = row.querySelector('.company-product-line-total-input');
+                if (q && p && t) {
+                    var qty = parseFloat(q.value || '0');
+                    var total = parseFloat(t.value || '0');
+                    if (qty > 0 && total >= 0) p.value = (total / qty).toFixed(2);
+                }
+                updateCompanyOrderSummary();
+            });
+        });
+    }
+    var companyShipping = document.getElementById('companyShippingFees');
+    var companyDiscount = document.getElementById('companyDiscount');
+    if (companyShipping) { companyShipping.addEventListener('input', updateCompanyOrderSummary); companyShipping.addEventListener('change', updateCompanyOrderSummary); }
+    if (companyDiscount) { companyDiscount.addEventListener('input', updateCompanyOrderSummary); companyDiscount.addEventListener('change', updateCompanyOrderSummary); }
+    updateCompanyRemoveButtons();
+    updateCompanyOrderSummary();
 });
 
 // معالجة toggle عميل جديد للشركة
@@ -3491,44 +3789,136 @@ document.addEventListener('DOMContentLoaded', function() {
             if (newCustomerLongitudeInput) {
                 newCustomerLongitudeInput.value = '';
             }
-            // إعادة تعيين العناصر
-            const companyOrderItems = document.getElementById('companyOrderItems');
-            if (companyOrderItems) {
-                const templateOptions = <?php echo json_encode(array_map(function($t) { 
-                    return ['value' => htmlspecialchars($t['product_name'] ?? '', ENT_QUOTES, 'UTF-8'), 'text' => htmlspecialchars($t['product_name'] ?? 'قالب #' . $t['id'], ENT_QUOTES, 'UTF-8')]; 
-                }, $productTemplatesForDropdown), JSON_UNESCAPED_UNICODE | JSON_HEX_QUOT | JSON_HEX_APOS); ?>;
-                let optionsHtml = '<option value="">اختر قالب المنتج</option>';
-                if (templateOptions && Array.isArray(templateOptions)) {
-                    templateOptions.forEach(function(template) {
-                        const value = template.value || '';
-                        const text = template.text || '';
-                        optionsHtml += '<option value="' + value.replace(/"/g, '&quot;').replace(/'/g, '&#39;') + '">' + text.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</option>';
-                    });
-                }
-                
-                companyOrderItems.innerHTML = `
-                    <div class="order-item row mb-2">
-                        <div class="col-md-9">
-                            <select class="form-select template-input" 
-                                   name="items[0][template_name]" required>
-                                ${optionsHtml}
-                            </select>
-                        </div>
-                        <div class="col-md-2">
-                            <input type="text" class="form-control quantity" 
-                                   name="items[0][quantity]" placeholder="الكمية" required>
-                        </div>
-                        <div class="col-md-1">
-                            <button type="button" class="btn btn-danger w-100 remove-item">
-                                <i class="bi bi-trash"></i>
-                            </button>
-                        </div>
-                    </div>
-                `;
-                companyItemIndex = 1;
+            // إعادة تعيين المنتجات والعنوان والوصف والرسوم
+            const companyProductsContainer = document.getElementById('companyProductsContainer');
+            if (companyProductsContainer && typeof getCompanyCategoryOptions === 'function') {
+                const catOpts = getCompanyCategoryOptions();
+                companyProductsContainer.innerHTML = '<div class="company-product-row mb-3 p-3 border rounded" data-product-index="0">' +
+                    '<div class="row g-2"><div class="col-12 col-md-3"><label class="form-label small">اسم المنتج</label><input type="text" class="form-control company-product-name-input" name="products[0][name]" placeholder="أدخل اسم المنتج أو القالب" autocomplete="off" required></div>' +
+                    '<div class="col-6 col-md-2"><label class="form-label small">الكمية</label><input type="number" class="form-control company-product-quantity-input" name="products[0][quantity]" step="1" min="0" required></div>' +
+                    '<div class="col-6 col-md-2"><label class="form-label small">التصنيف</label><select class="form-select form-select-sm company-product-category-input" name="products[0][category]"><option value="">— اختر التصنيف —</option>' + catOpts + '</select></div>' +
+                    '<div class="col-6 col-md-2"><label class="form-label small">الوحدة</label><select class="form-select form-select-sm company-product-unit-input" name="products[0][unit]"><option value="كرتونة">كرتونة</option><option value="عبوة">عبوة</option><option value="كيلو">كيلو</option><option value="جرام">جرام</option><option value="شرينك">شرينك</option><option value="دسته">دسته</option><option value="قطعة" selected>قطعة</option></select></div>' +
+                    '<div class="col-6 col-md-2"><label class="form-label small">السعر</label><input type="number" class="form-control company-product-price-input" name="products[0][price]" step="0.01" min="0" required></div>' +
+                    '<div class="col-6 col-md-2"><label class="form-label small">الإجمالي</label><div class="input-group input-group-sm"><input type="number" class="form-control company-product-line-total-input" name="products[0][line_total]" step="0.01" min="0"><span class="input-group-text">ج.م</span></div></div>' +
+                    '<div class="col-6 col-md-1 d-flex align-items-end"><button type="button" class="btn btn-danger btn-sm w-100 company-remove-product-btn" style="display:none"><i class="bi bi-trash"></i></button></div></div></div>';
+                companyProductIndex = 1;
+                if (typeof updateCompanyOrderSummary === 'function') updateCompanyOrderSummary();
             }
+            const companyOrderTitle = document.querySelector('#addCompanyOrderModal input[name="order_title"]');
+            const companyDetails = document.querySelector('#addCompanyOrderModal textarea[name="details"]');
+            const companyShippingInp = document.getElementById('companyShippingFees');
+            const companyDiscountInp = document.getElementById('companyDiscount');
+            if (companyOrderTitle) companyOrderTitle.value = '';
+            if (companyDetails) companyDetails.value = '';
+            if (companyShippingInp) companyShippingInp.value = '0';
+            if (companyDiscountInp) companyDiscountInp.value = '0';
         });
     }
+});
+
+// طلب شركة - كارد الموبايل: منتجات وملخص
+let cardCompanyProductIndex = 1;
+function addCardCompanyProductRow() {
+    var container = document.getElementById('cardCompanyProductsContainer');
+    if (!container) return;
+    var idx = cardCompanyProductIndex++;
+    var catOpts = (typeof getCompanyCategoryOptions === 'function') ? getCompanyCategoryOptions() : '';
+    var newRow = document.createElement('div');
+    newRow.className = 'card-company-product-row mb-3 p-3 border rounded';
+    newRow.setAttribute('data-product-index', idx);
+    newRow.innerHTML = '<div class="row g-2">' +
+        '<div class="col-12"><label class="form-label small">اسم المنتج</label><input type="text" class="form-control card-company-product-name-input" name="products[' + idx + '][name]" required></div>' +
+        '<div class="col-6 col-md-4"><label class="form-label small">الكمية</label><input type="number" class="form-control card-company-product-quantity-input" name="products[' + idx + '][quantity]" step="1" min="0" required></div>' +
+        '<div class="col-6 col-md-4"><label class="form-label small">التصنيف</label><select class="form-select form-select-sm card-company-product-category-input" name="products[' + idx + '][category]"><option value="">— اختر —</option>' + catOpts + '</select></div>' +
+        '<div class="col-6 col-md-4"><label class="form-label small">الوحدة</label><select class="form-select form-select-sm card-company-product-unit-input" name="products[' + idx + '][unit]"><option value="كرتونة">كرتونة</option><option value="عبوة">عبوة</option><option value="كيلو">كيلو</option><option value="جرام">جرام</option><option value="شرينك">شرينك</option><option value="دسته">دسته</option><option value="قطعة" selected>قطعة</option></select></div>' +
+        '<div class="col-6 col-md-4"><label class="form-label small">السعر</label><input type="number" class="form-control card-company-product-price-input" name="products[' + idx + '][price]" step="0.01" min="0" required></div>' +
+        '<div class="col-6 col-md-4"><label class="form-label small">الإجمالي</label><input type="number" class="form-control card-company-product-line-total-input" name="products[' + idx + '][line_total]" step="0.01" min="0"></div>' +
+        '<div class="col-12 col-md-4 d-flex align-items-end"><button type="button" class="btn btn-danger btn-sm w-100 card-company-remove-product-btn"><i class="bi bi-trash"></i></button></div></div>';
+    container.appendChild(newRow);
+    newRow.querySelector('.card-company-remove-product-btn').addEventListener('click', function() {
+        newRow.remove();
+        updateCardCompanyRemoveButtons();
+        updateCardCompanyOrderSummary();
+    });
+    newRow.querySelectorAll('.card-company-product-quantity-input, .card-company-product-price-input').forEach(function(inp) {
+        inp.addEventListener('input', function() { updateCardCompanyLineTotal(newRow); updateCardCompanyOrderSummary(); });
+    });
+    newRow.querySelector('.card-company-product-line-total-input').addEventListener('input', function() {
+        var q = newRow.querySelector('.card-company-product-quantity-input');
+        var p = newRow.querySelector('.card-company-product-price-input');
+        var t = newRow.querySelector('.card-company-product-line-total-input');
+        if (q && p && t) { var qty = parseFloat(q.value || '0'); var tot = parseFloat(t.value || '0'); if (qty > 0 && tot >= 0) p.value = (tot / qty).toFixed(2); }
+        updateCardCompanyOrderSummary();
+    });
+    updateCardCompanyRemoveButtons();
+    updateCardCompanyOrderSummary();
+}
+function updateCardCompanyLineTotal(row) {
+    if (!row) return;
+    var q = row.querySelector('.card-company-product-quantity-input');
+    var p = row.querySelector('.card-company-product-price-input');
+    var t = row.querySelector('.card-company-product-line-total-input');
+    if (q && p && t) { var qty = parseFloat(q.value || '0'); var price = parseFloat(p.value || '0'); t.value = (qty * price > 0) ? (qty * price).toFixed(2) : ''; }
+}
+function updateCardCompanyRemoveButtons() {
+    var container = document.getElementById('cardCompanyProductsContainer');
+    if (!container) return;
+    var rows = container.querySelectorAll('.card-company-product-row');
+    rows.forEach(function(row) {
+        var btn = row.querySelector('.card-company-remove-product-btn');
+        if (btn) btn.style.display = rows.length > 1 ? 'block' : 'none';
+    });
+}
+function updateCardCompanyOrderSummary() {
+    var container = document.getElementById('cardCompanyProductsContainer');
+    var subtotalEl = document.getElementById('cardCompanySubtotalDisplay');
+    var shippingEl = document.getElementById('cardCompanyShippingDisplay');
+    var discountEl = document.getElementById('cardCompanyDiscountDisplay');
+    var finalEl = document.getElementById('cardCompanyFinalTotalDisplay');
+    var shippingInp = document.getElementById('cardCompanyShippingFees');
+    var discountInp = document.getElementById('cardCompanyDiscount');
+    if (!container || !subtotalEl || !finalEl) return;
+    var subtotal = 0;
+    container.querySelectorAll('.card-company-product-line-total-input').forEach(function(inp) {
+        var v = parseFloat(inp.value || '0');
+        if (!isNaN(v) && v >= 0) subtotal += v;
+    });
+    var shipping = shippingInp ? (parseFloat(shippingInp.value || '0') || 0) : 0;
+    var discount = discountInp ? (parseFloat(discountInp.value || '0') || 0) : 0;
+    var finalTotal = Math.max(0, subtotal + shipping - discount);
+    subtotalEl.textContent = subtotal.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+    if (shippingEl) shippingEl.textContent = shipping.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+    if (discountEl) discountEl.textContent = discount.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+    finalEl.textContent = finalTotal.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+}
+document.addEventListener('DOMContentLoaded', function() {
+    var cardCompanyAdd = document.getElementById('cardCompanyAddProductBtn');
+    var cardCompanyContainer = document.getElementById('cardCompanyProductsContainer');
+    if (cardCompanyAdd) cardCompanyAdd.addEventListener('click', addCardCompanyProductRow);
+    if (cardCompanyContainer) {
+        cardCompanyContainer.querySelectorAll('.card-company-remove-product-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() { this.closest('.card-company-product-row').remove(); updateCardCompanyRemoveButtons(); updateCardCompanyOrderSummary(); });
+        });
+        cardCompanyContainer.querySelectorAll('.card-company-product-row').forEach(function(row) {
+            row.querySelectorAll('.card-company-product-quantity-input, .card-company-product-price-input').forEach(function(inp) {
+                inp.addEventListener('input', function() { updateCardCompanyLineTotal(row); updateCardCompanyOrderSummary(); });
+            });
+            var lt = row.querySelector('.card-company-product-line-total-input');
+            if (lt) lt.addEventListener('input', function() {
+                var q = row.querySelector('.card-company-product-quantity-input');
+                var p = row.querySelector('.card-company-product-price-input');
+                var t = row.querySelector('.card-company-product-line-total-input');
+                if (q && p && t) { var qty = parseFloat(q.value || '0'); var tot = parseFloat(t.value || '0'); if (qty > 0 && tot >= 0) p.value = (tot / qty).toFixed(2); }
+                updateCardCompanyOrderSummary();
+            });
+        });
+    }
+    var cardShip = document.getElementById('cardCompanyShippingFees');
+    var cardDisc = document.getElementById('cardCompanyDiscount');
+    if (cardShip) { cardShip.addEventListener('input', updateCardCompanyOrderSummary); cardShip.addEventListener('change', updateCardCompanyOrderSummary); }
+    if (cardDisc) { cardDisc.addEventListener('input', updateCardCompanyOrderSummary); cardDisc.addEventListener('change', updateCardCompanyOrderSummary); }
+    updateCardCompanyRemoveButtons();
+    updateCardCompanyOrderSummary();
 });
 <?php endif; ?>
 

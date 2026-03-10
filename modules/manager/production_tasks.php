@@ -185,6 +185,29 @@ try {
     $productTemplates = [];
 }
 
+// تحميل تصنيفات شرينك من qu.json (لحقل التصنيف والكمية الفعلية للخصم)
+$quDataForTask = [];
+$quCategoriesForTask = [];
+$quJsonPath = defined('ROOT_PATH') ? (rtrim(ROOT_PATH, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'qu.json') : (__DIR__ . '/../../qu.json');
+if (is_readable($quJsonPath)) {
+    $quRaw = @file_get_contents($quJsonPath);
+    if ($quRaw !== false) {
+        $decoded = @json_decode($quRaw, true);
+        if (!empty($decoded['t']) && is_array($decoded['t'])) {
+            $quDataForTask = $decoded['t'];
+            foreach ($quDataForTask as $item) {
+                if (!empty($item['type'])) {
+                    $quCategoriesForTask[] = [
+                        'type' => trim((string)$item['type']),
+                        'quantity' => isset($item['quantity']) ? (float)$item['quantity'] : 1,
+                        'description' => isset($item['description']) ? trim((string)$item['description']) : '',
+                    ];
+                }
+            }
+        }
+    }
+}
+
 // جلب قائمة العملاء المحليين — نفس الاستعلام والطريقة تماماً كما في صفحة الأسعار المخصصة
 $localCustomersForDropdown = [];
 try {
@@ -511,12 +534,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($discount < 0) $discount = 0;
         }
 
+        // تحميل qu.json لحساب الكمية الفعلية للخصم عند الوحدة = شرينك
+        $quDataForDeduction = [];
+        $quJsonPathForPost = defined('ROOT_PATH') ? (rtrim(ROOT_PATH, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'qu.json') : (__DIR__ . '/../../qu.json');
+        if (is_readable($quJsonPathForPost)) {
+            $quRaw = @file_get_contents($quJsonPathForPost);
+            if ($quRaw !== false) {
+                $decoded = @json_decode($quRaw, true);
+                if (!empty($decoded['t']) && is_array($decoded['t'])) {
+                    $quDataForDeduction = $decoded['t'];
+                }
+            }
+        }
+
         // الحصول على المنتجات المتعددة
         $products = [];
         if (isset($_POST['products']) && is_array($_POST['products'])) {
             foreach ($_POST['products'] as $productData) {
                 $productName = trim($productData['name'] ?? '');
                 $productQuantityInput = isset($productData['quantity']) ? trim((string)$productData['quantity']) : '';
+                $productCategory = trim($productData['category'] ?? '');
                 
                 if ($productName === '') {
                     continue; // تخطي المنتجات الفارغة
@@ -563,6 +600,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $productQuantity = null;
                 }
                 
+                // الكمية الفعلية للخصم: إذا الوحدة = شرينك والتصنيف محدد، ضرب الكمية في quantity من qu.json
+                $effectiveQuantity = $productQuantity;
+                if ($productQuantity !== null && $productUnit === 'شرينك' && $productCategory !== '') {
+                    foreach ($quDataForDeduction as $quItem) {
+                        $qt = isset($quItem['type']) ? trim((string)$quItem['type']) : '';
+                        $qd = isset($quItem['description']) ? trim((string)$quItem['description']) : '';
+                        if ($qt === $productCategory && $qd === 'شرينك') {
+                            $multiplier = isset($quItem['quantity']) ? (float)$quItem['quantity'] : 1;
+                            $effectiveQuantity = $productQuantity * $multiplier;
+                            break;
+                        }
+                    }
+                }
+                
                 $productPrice = null;
                 $priceInput = isset($productData['price']) ? trim((string)$productData['price']) : '';
                 if ($priceInput !== '' && is_numeric(str_replace(',', '.', $priceInput))) {
@@ -583,6 +634,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'name' => $productName,
                     'quantity' => $productQuantity,
                     'unit' => $productUnit,
+                    'category' => $productCategory !== '' ? $productCategory : null,
+                    'effective_quantity' => $effectiveQuantity,
                     'price' => $productPrice,
                     'line_total' => $productLineTotal
                 ];
@@ -679,6 +732,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             break;
                         }
                     }
+                }
+
+                // خصم الكمية الفعلية من products.quantity لكل منتج مطابق لجدول المنتجات
+                foreach ($products as $product) {
+                    $effectiveQty = isset($product['effective_quantity']) ? (float)$product['effective_quantity'] : 0;
+                    if ($effectiveQty <= 0) {
+                        continue;
+                    }
+                    $templateName = trim($product['name'] ?? '');
+                    if ($templateName === '') {
+                        continue;
+                    }
+                    $resolvedProductId = null;
+                    try {
+                        $productRow = $db->queryOne(
+                            "SELECT id, quantity FROM products WHERE name = ? AND status = 'active' LIMIT 1 FOR UPDATE",
+                            [$templateName]
+                        );
+                        if ($productRow) {
+                            $resolvedProductId = (int)$productRow['id'];
+                        }
+                    } catch (Exception $e) {
+                        error_log('production_tasks deduct: error resolving product by name: ' . $e->getMessage());
+                    }
+                    if ($resolvedProductId === null || $resolvedProductId <= 0) {
+                        continue;
+                    }
+                    $currentQuantity = (float)($productRow['quantity'] ?? 0);
+                    if ($currentQuantity < $effectiveQty) {
+                        $error = 'الكمية المتاحة لـ «' . $templateName . '» غير كافية. المتاح: ' . $currentQuantity . '، المطلوب للخصم: ' . $effectiveQty . '.';
+                        throw new InvalidArgumentException($error);
+                    }
+                    $db->execute(
+                        "UPDATE products SET quantity = quantity - ? WHERE id = ?",
+                        [$effectiveQty, $resolvedProductId]
+                    );
                 }
 
                 // إنشاء مهمة واحدة فقط مع حفظ جميع العمال
@@ -1009,7 +1098,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } catch (Exception $e) {
                 $db->rollback();
                 error_log('Manager production task creation error: ' . $e->getMessage());
-                $error = 'حدث خطأ أثناء إنشاء المهام. يرجى المحاولة مرة أخرى.';
+                $error = ($e instanceof InvalidArgumentException) ? $e->getMessage() : 'حدث خطأ أثناء إنشاء المهام. يرجى المحاولة مرة أخرى.';
             }
         }
     } elseif ($action === 'update_task_status') {
@@ -2303,18 +2392,28 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             <div id="productsContainer">
                                 <div class="product-row mb-3 p-3 border rounded" data-product-index="0">
                                     <div class="row g-2">
-                                        <div class="col-md-3">
+                                        <div class="col-12 col-md-3">
                                             <label class="form-label small">اسم المنتج</label>
                                             <div class="product-name-wrap position-relative">
                                                 <input type="text" class="form-control product-name-input" name="products[0][name]" placeholder="أدخل اسم المنتج أو القالب أو اختر من القائمة" autocomplete="off" required>
                                                 <div class="product-template-dropdown d-none"></div>
                                             </div>
                                         </div>
-                                        <div class="col-md-2">
+                                        <div class="col-6 col-md-2">
                                             <label class="form-label small">الكمية</label>
                                             <input type="number" class="form-control product-quantity-input" name="products[0][quantity]" step="1" min="0" placeholder="مثال: 120" id="product-quantity-0" required>
+                                            <small class="product-effective-qty-hint text-muted d-none" id="product-effective-qty-hint-0"></small>
                                         </div>
-                                        <div class="col-md-2">
+                                        <div class="col-6 col-md-2">
+                                            <label class="form-label small">التصنيف</label>
+                                            <select class="form-select form-select-sm product-category-input" name="products[0][category]" id="product-category-0">
+                                                <option value="">— اختر التصنيف —</option>
+                                                <?php foreach ($quCategoriesForTask as $qc): ?>
+                                                <option value="<?php echo htmlspecialchars($qc['type'], ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($qc['type'], ENT_QUOTES, 'UTF-8'); ?></option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </div>
+                                        <div class="col-6 col-md-2">
                                             <label class="form-label small">الوحدة</label>
                                             <select class="form-select form-select-sm product-unit-input" name="products[0][unit]" id="product-unit-0" onchange="updateQuantityStep(0)">
                                                 <option value="كرتونة">كرتونة</option>
@@ -2326,18 +2425,18 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                                 <option value="قطعة" selected>قطعة</option>
                                             </select>
                                         </div>
-                                        <div class="col-md-2">
+                                        <div class="col-6 col-md-2">
                                             <label class="form-label small">السعر</label>
                                             <input type="number" class="form-control product-price-input" name="products[0][price]" step="0.01" min="0" placeholder="0.00" id="product-price-0" required>
                                         </div>
-                                        <div class="col-md-2">
+                                        <div class="col-6 col-md-2">
                                             <label class="form-label small">الإجمالي</label>
                                             <div class="input-group input-group-sm">
                                                 <input type="number" class="form-control product-line-total-input" name="products[0][line_total]" step="0.01" min="0" placeholder="0.00" id="product-line-total-0" title="الإجمالي = الكمية × السعر حسب الوحدة">
                                                 <span class="input-group-text">ج.م</span>
                                             </div>
                                         </div>
-                                        <div class="col-md-1 d-flex align-items-end">
+                                        <div class="col-6 col-md-1 d-flex align-items-end">
                                             <button type="button" class="btn btn-danger btn-sm w-100 remove-product-btn" style="display: none;">
                                                 <i class="bi bi-trash"></i>
                                             </button>
@@ -3062,6 +3161,8 @@ label[for="ct_task_manual"], .form-check:has(#ct_task_manual) { display: none !i
 var __localCustomersForTask = <?php echo json_encode($localCustomersForDropdown); ?>;
 var __repCustomersForTask = <?php echo json_encode($repCustomersForTask); ?>;
 var __shippingCompaniesForTask = <?php echo json_encode($shippingCompaniesForDropdown); ?>;
+var __quCategories = <?php echo json_encode($quCategoriesForTask, JSON_UNESCAPED_UNICODE); ?>;
+var __quData = <?php echo json_encode($quDataForTask, JSON_UNESCAPED_UNICODE); ?>;
 
 var editProductIndex = 0;
 function buildEditProductRow(idx, product) {
@@ -3638,23 +3739,36 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     
     function addProductRow() {
+        const quCats = (typeof __quCategories !== 'undefined' && Array.isArray(__quCategories)) ? __quCategories : [];
+        const categoryOptions = quCats.map(function(qc) {
+            const t = (qc.type || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            return '<option value="' + t + '">' + t + '</option>';
+        }).join('');
         const newRow = document.createElement('div');
         newRow.className = 'product-row mb-3 p-3 border rounded';
         newRow.setAttribute('data-product-index', productIndex);
         newRow.innerHTML = `
             <div class="row g-2">
-                <div class="col-md-3">
+                <div class="col-12 col-md-3">
                     <label class="form-label small">اسم المنتج</label>
                     <div class="product-name-wrap position-relative">
                         <input type="text" class="form-control product-name-input" name="products[${productIndex}][name]" placeholder="أدخل اسم المنتج أو القالب أو اختر من القائمة" autocomplete="off">
                         <div class="product-template-dropdown d-none"></div>
                     </div>
                 </div>
-                <div class="col-md-2">
+                <div class="col-6 col-md-2">
                     <label class="form-label small">الكمية</label>
                     <input type="number" class="form-control product-quantity-input" name="products[${productIndex}][quantity]" step="1" min="0" placeholder="مثال: 120" id="product-quantity-${productIndex}">
+                    <small class="product-effective-qty-hint text-muted d-none" id="product-effective-qty-hint-${productIndex}"></small>
                 </div>
-                <div class="col-md-2">
+                <div class="col-6 col-md-2">
+                    <label class="form-label small">التصنيف</label>
+                    <select class="form-select form-select-sm product-category-input" name="products[${productIndex}][category]" id="product-category-${productIndex}">
+                        <option value="">— اختر التصنيف —</option>
+                        ${categoryOptions}
+                    </select>
+                </div>
+                <div class="col-6 col-md-2">
                     <label class="form-label small">الوحدة</label>
                     <select class="form-select form-select-sm product-unit-input" name="products[${productIndex}][unit]" id="product-unit-${productIndex}" onchange="updateQuantityStep(${productIndex})">
                         <option value="كرتونة">كرتونة</option>
@@ -3666,18 +3780,18 @@ document.addEventListener('DOMContentLoaded', function () {
                         <option value="قطعة" selected>قطعة</option>
                     </select>
                 </div>
-                <div class="col-md-2">
+                <div class="col-6 col-md-2">
                     <label class="form-label small">السعر</label>
                     <input type="number" class="form-control product-price-input" name="products[${productIndex}][price]" step="0.01" min="0" placeholder="0.00" id="product-price-${productIndex}">
                 </div>
-                <div class="col-md-2">
+                <div class="col-6 col-md-2">
                     <label class="form-label small">الإجمالي (قابل للتحكم)</label>
                     <div class="input-group input-group-sm">
                         <input type="number" class="form-control product-line-total-input" name="products[${productIndex}][line_total]" step="0.01" min="0" placeholder="0.00" id="product-line-total-${productIndex}" title="الإجمالي = الكمية × السعر حسب الوحدة">
                         <span class="input-group-text">ج.م</span>
                     </div>
                 </div>
-                <div class="col-md-1 d-flex align-items-end">
+                <div class="col-6 col-md-1 d-flex align-items-end">
                     <button type="button" class="btn btn-danger btn-sm w-100 remove-product-btn">
                         <i class="bi bi-trash"></i>
                     </button>
@@ -3720,6 +3834,52 @@ document.addEventListener('DOMContentLoaded', function () {
         const index = unitSelect.id.replace('product-unit-', '');
         updateQuantityStep(index);
     });
+    
+    // تحديث تلميح "الكمية الفعلية للخصم" عند الوحدة = شرينك واختيار التصنيف
+    function updateEffectiveQtyHintForRow(row) {
+        if (!row) return;
+        const unitSelect = row.querySelector('.product-unit-input');
+        const categorySelect = row.querySelector('.product-category-input');
+        const qtyInput = row.querySelector('.product-quantity-input');
+        const hintEl = row.querySelector('.product-effective-qty-hint');
+        if (!hintEl || !unitSelect || !categorySelect || !qtyInput) return;
+        const quData = (typeof __quData !== 'undefined' && Array.isArray(__quData)) ? __quData : [];
+        if (unitSelect.value === 'شرينك' && categorySelect.value && quData.length > 0) {
+            let multiplier = 1;
+            for (let i = 0; i < quData.length; i++) {
+                const it = quData[i];
+                if ((it.type || '').trim() === (categorySelect.value || '').trim() && (it.description || '').trim() === 'شرينك') {
+                    multiplier = (it.quantity != null) ? parseFloat(it.quantity) : 1;
+                    break;
+                }
+            }
+            const qty = parseFloat(qtyInput.value) || 0;
+            const effective = qty * multiplier;
+            if (effective > 0) {
+                hintEl.textContent = 'الكمية الفعلية للخصم: ' + effective;
+                hintEl.classList.remove('d-none');
+            } else {
+                hintEl.classList.add('d-none');
+            }
+        } else {
+            hintEl.classList.add('d-none');
+        }
+    }
+    function updateAllEffectiveQtyHints() {
+        if (!productsContainer) return;
+        productsContainer.querySelectorAll('.product-row').forEach(updateEffectiveQtyHintForRow);
+    }
+    productsContainer.addEventListener('change', function(e) {
+        if (e.target.classList.contains('product-unit-input') || e.target.classList.contains('product-category-input')) {
+            updateEffectiveQtyHintForRow(e.target.closest('.product-row'));
+        }
+    });
+    productsContainer.addEventListener('input', function(e) {
+        if (e.target.classList.contains('product-quantity-input')) {
+            updateEffectiveQtyHintForRow(e.target.closest('.product-row'));
+        }
+    });
+    updateAllEffectiveQtyHints();
     
     // حساب الإجمالي تلقائياً: الإجمالي = الكمية × السعر (حسب الوحدة والكمية)
     function updateProductLineTotal(row) {
