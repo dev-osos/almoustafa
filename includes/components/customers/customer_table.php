@@ -304,7 +304,6 @@ if (!function_exists('renderCustomerListSection')) {
                                                         data-customer-name="<?php echo htmlspecialchars($customer['name'] ?? '-'); ?>"
                                                         data-customer-balance="<?php echo $rawBalance; ?>"
                                                         data-customer-balance-formatted="<?php echo htmlspecialchars($formattedBalance); ?>"
-                                                        <?php echo $customerBalanceValue > 0 ? '' : 'disabled'; ?>
                                                     >
                                                         <i class="bi bi-cash-coin me-1"></i>تحصيل
                                                     </button>

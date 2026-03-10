@@ -5851,7 +5851,6 @@ document.addEventListener('DOMContentLoaded', function () {
                                             data-customer-name="<?php echo htmlspecialchars($customer['name']); ?>"
                                             data-customer-balance="<?php echo $rawBalance; ?>"
                                             data-customer-balance-formatted="<?php echo htmlspecialchars($formattedBalance); ?>"
-                                            <?php echo $customerBalance > 0 ? '' : 'disabled'; ?>
                                         >
                                             <i class="bi bi-cash-coin me-1"></i>تحصيل
                                         </button>
@@ -6735,7 +6734,7 @@ function showCollectPaymentModal(button) {
                 amountInput.value = '0';
                 amountInput.removeAttribute('max');
                 amountInput.setAttribute('min', '0');
-                amountInput.readOnly = debtAmount <= 0;
+                amountInput.readOnly = false;
             }
             
             card.style.display = 'block';
@@ -6758,7 +6757,7 @@ function showCollectPaymentModal(button) {
                 amountInput.value = '0';
                 amountInput.removeAttribute('max');
                 amountInput.setAttribute('min', '0');
-                amountInput.readOnly = debtAmount <= 0;
+                amountInput.readOnly = false;
             }
             
             const modalInstance = new bootstrap.Modal(modal);
