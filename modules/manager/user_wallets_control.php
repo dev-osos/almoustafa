@@ -578,9 +578,12 @@ $roleLabels = ['driver' => 'سائق', 'production' => 'عامل إنتاج'];
         <div class="col-12 col-lg-8 mb-4">
             <?php if ($selectedUser): ?>
                 <div class="card shadow-sm mb-4">
-                    <div class="card-header bg-light fw-bold">
-                        <i class="bi bi-cash-stack me-2"></i>سحب من محفظة <?php echo htmlspecialchars($selectedUser['full_name'] ?: $selectedUser['username']); ?>
-                        <span class="badge bg-primary ms-2" id="wallets-control-selected-balance">الرصيد: <?php echo formatCurrency($userBalances[$selectedUser['id']] ?? 0); ?></span>
+                    <div class="card-header bg-light fw-bold d-flex flex-wrap align-items-center justify-content-between gap-2">
+                        <span><i class="bi bi-cash-stack me-2"></i>سحب من محفظة <?php echo htmlspecialchars($selectedUser['full_name'] ?: $selectedUser['username']); ?>
+                        <span class="badge bg-primary ms-2" id="wallets-control-selected-balance">الرصيد: <?php echo formatCurrency($userBalances[$selectedUser['id']] ?? 0); ?></span></span>
+                        <a href="?<?php echo http_build_query(array_merge($_GET, ['page' => 'user_wallet', 'user_id' => $selectedUser['id']])); ?>" class="btn btn-outline-primary btn-sm">
+                            <i class="bi bi-wallet2 me-1"></i>عرض محفظة المستخدم
+                        </a>
                     </div>
                     <div class="card-body">
                         <form method="POST" class="row g-3" id="wallets-control-withdraw-form" data-wallets-control-ajax>

@@ -286,6 +286,16 @@ if ($page === 'user_wallets_control' && $_SERVER['REQUEST_METHOD'] === 'POST' &&
     }
 }
 
+// معالجة AJAX لصفحة محفظة مستخدم (الموافقة على كل الطلبات)
+if ($page === 'user_wallet' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+    while (ob_get_level() > 0) ob_end_clean();
+    $modulePath = __DIR__ . '/../modules/user/user_wallet.php';
+    if (file_exists($modulePath)) {
+        include $modulePath;
+        exit;
+    }
+}
+
 // معالجة طلبات AJAX لصفحة طلبات شركات الشحن (كشف الحساب والخصم) قبل أي إخراج لضمان استجابة JSON فقط
 if ($page === 'shipping_orders' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $isAjaxShipping = !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
@@ -2303,7 +2313,7 @@ if ($isAjaxNavigation) {
                 
             <?php elseif ($page === 'user_wallets_control'): ?>
                 <!-- صفحة التحكم في محافظ المستخدمين -->
-                <?php 
+                <?php
                 $modulePath = __DIR__ . '/../modules/manager/user_wallets_control.php';
                 if (file_exists($modulePath)) {
                     include $modulePath;
@@ -2311,7 +2321,18 @@ if ($isAjaxNavigation) {
                     echo '<div class="alert alert-warning">صفحة التحكم في محافظ المستخدمين غير متاحة حالياً</div>';
                 }
                 ?>
-                
+
+            <?php elseif ($page === 'user_wallet'): ?>
+                <!-- عرض محفظة مستخدم (للمحاسب مع user_id) -->
+                <?php
+                $modulePath = __DIR__ . '/../modules/user/user_wallet.php';
+                if (file_exists($modulePath)) {
+                    include $modulePath;
+                } else {
+                    echo '<div class="alert alert-warning">صفحة المحفظة غير متاحة حالياً</div>';
+                }
+                ?>
+
             <?php elseif ($page === 'suppliers'): ?>
                 <!-- صفحة الموردين -->
                 <?php 

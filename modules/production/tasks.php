@@ -1198,6 +1198,30 @@ if (is_dir($debugLogDir) && is_writable($debugLogDir)) {
 // #endregion
 $tasks = $db->query($taskSql, $queryParams);
 
+// معرفات المهام التي تم اعتماد فاتورتها (للعرض في جدول عمال الإنتاج والسائق)
+$approvedTaskIds = [];
+if (($isProduction || $isDriver) && !empty($tasks)) {
+    $taskIdsForApproved = array_values(array_filter(array_map(function ($t) { return (int)($t['id'] ?? 0); }, $tasks)));
+    if (!empty($taskIdsForApproved)) {
+        $ph = implode(',', array_fill(0, count($taskIdsForApproved), '?'));
+        $approvedRows = $db->query("SELECT task_id FROM customer_task_purchases WHERE task_id IN ($ph)", $taskIdsForApproved);
+        $approvedTaskIds = array_column($approvedRows ?: [], 'task_id');
+        $paperTable = $db->queryOne("SHOW TABLES LIKE 'shipping_company_paper_invoices'");
+        if (!empty($paperTable)) {
+            $taskIdCol = $db->queryOne("SHOW COLUMNS FROM shipping_company_paper_invoices LIKE 'task_id'");
+            if (!empty($taskIdCol)) {
+                $shippingApproved = $db->query("SELECT task_id FROM shipping_company_paper_invoices WHERE task_id IN ($ph) AND task_id IS NOT NULL", $taskIdsForApproved);
+                foreach ($shippingApproved ?: [] as $row) {
+                    $tid = (int)($row['task_id'] ?? 0);
+                    if ($tid > 0 && !in_array($tid, $approvedTaskIds, true)) {
+                        $approvedTaskIds[] = $tid;
+                    }
+                }
+            }
+        }
+    }
+}
+
 // استخراج جميع العمال من notes لكل مهمة واستخراج اسم المنتج من notes إذا لم يكن موجوداً
 foreach ($tasks as &$task) {
     // #region agent log
@@ -1784,6 +1808,9 @@ function tasksHtml(string $value): string
                                 <th>نوع الاوردر</th>
                                 <th>الحالة</th>
                                 <th>التسليم</th>
+                                <?php if ($isProduction || $isDriver): ?>
+                                <th style="width: 50px;" class="text-center" title="اعتماد الفاتورة"><i class="bi bi-receipt-cutoff"></i></th>
+                                <?php endif; ?>
                                 <th class="task-actions-header">الإجراءات</th>
                             </tr>
                         </thead>
@@ -1792,6 +1819,7 @@ function tasksHtml(string $value): string
                             if (empty($tasks)):
                                 if (defined('TASKS_PARTIAL_TABLE') && TASKS_PARTIAL_TABLE):
                                     $colspan = ($isManager || $isProduction) ? 8 : 7;
+                                    if ($isProduction || $isDriver) $colspan++;
                                     echo '<tr><td colspan="' . (int)$colspan . '" class="text-center py-5 text-muted">لا توجد اوردرات</td></tr>';
                                     exit;
                                 endif;
@@ -1894,6 +1922,16 @@ function tasksHtml(string $value): string
                                             <span class="text-muted">-</span>
                                         <?php endif; ?>
                                     </td>
+                                    <?php if ($isProduction || $isDriver): ?>
+                                    <td class="text-center">
+                                        <?php $taskInvoiceApproved = in_array((int)$task['id'], $approvedTaskIds, true); ?>
+                                        <?php if ($taskInvoiceApproved): ?>
+                                        <i class="bi bi-check2-circle text-success" title="تم اعتماد الفاتورة" aria-label="تم اعتماد الفاتورة"></i>
+                                        <?php else: ?>
+                                        <span class="text-muted" title="لم تُعتمد الفاتورة">—</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <?php endif; ?>
                                     <td class="task-actions-cell">
                                         <?php
                                         $taskAssignedTo = (int) ($task['assigned_to'] ?? 0);
