@@ -510,12 +510,21 @@ if (!empty($collectionRequestsTableExists)) {
     ) ?: [];
 }
 $pendingCountForSelectedUser = 0;
-if ($selectedUserId > 0 && !empty($pendingLocalCollectionRequests)) {
+$usersWithPendingRequests = []; // [ ['user_id'=>x, 'user_name'=>y, 'pending_count'=>z], ... ]
+if (!empty($pendingLocalCollectionRequests)) {
+    $byUser = [];
     foreach ($pendingLocalCollectionRequests as $r) {
-        if ((int)$r['user_id'] === (int)$selectedUserId) {
+        $uid = (int)$r['user_id'];
+        $name = trim($r['user_full_name'] ?? '') ?: trim($r['user_username'] ?? '') ?: ('#' . $uid);
+        if (!isset($byUser[$uid])) {
+            $byUser[$uid] = ['user_id' => $uid, 'user_name' => $name, 'pending_count' => 0];
+        }
+        $byUser[$uid]['pending_count']++;
+        if ($uid === (int)$selectedUserId) {
             $pendingCountForSelectedUser++;
         }
     }
+    $usersWithPendingRequests = array_values($byUser);
 }
 
 // جلب قائمة المستخدمين (سائق، عامل إنتاج) مع أرصدتهم
@@ -580,11 +589,33 @@ $roleLabels = ['driver' => 'سائق', 'production' => 'عامل إنتاج'];
     <div class="card shadow-sm mb-4 border-warning" id="wallets-control-pending-card">
         <div class="card-header bg-warning bg-opacity-25 fw-bold d-flex flex-wrap align-items-center justify-content-between gap-2">
             <span><i class="bi bi-hourglass-split me-2"></i>طلبات التحصيل من العملاء المحليين (في انتظار الموافقة)</span>
-            <?php if ($selectedUserId > 0 && $pendingCountForSelectedUser > 0): ?>
-            <button type="button" class="btn btn-success btn-sm" id="wallets-control-approve-all-user-btn" data-user-id="<?php echo (int)$selectedUserId; ?>">
-                <i class="bi bi-check-all me-1"></i>الموافقة على كل تحصيلات المستخدم المعلقة
+            <button type="button" class="btn btn-success btn-sm" id="wallets-control-open-approve-all-card-btn">
+                <i class="bi bi-check-all me-1"></i>الموافقة على طلبات مستخدم
             </button>
-            <?php endif; ?>
+        </div>
+        <div class="collapse" id="wallets-control-approve-all-user-card">
+            <div class="card-body border-top bg-light">
+                <p class="mb-2 small text-muted">اختر المستخدم للموافقة على جميع طلبات التحصيل المعلقة الخاصة به.</p>
+                <div class="row g-2 align-items-end">
+                    <div class="col-12 col-md-6 col-lg-4">
+                        <label for="wallets-control-approve-all-user-select" class="form-label small">المستخدم</label>
+                        <select class="form-select form-select-sm" id="wallets-control-approve-all-user-select">
+                            <option value="">— اختر المستخدم —</option>
+                            <?php foreach ($usersWithPendingRequests as $u): ?>
+                            <option value="<?php echo (int)$u['user_id']; ?>" data-count="<?php echo (int)$u['pending_count']; ?>">
+                                <?php echo htmlspecialchars($u['user_name']); ?> (<?php echo (int)$u['pending_count']; ?> طلب)
+                            </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-6 col-lg-4">
+                        <button type="button" class="btn btn-success btn-sm" id="wallets-control-approve-all-user-btn">
+                            <i class="bi bi-check-all me-1"></i>الموافقة على كل الطلبات المعلقة له
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm ms-1" data-bs-toggle="collapse" data-bs-target="#wallets-control-approve-all-user-card" aria-expanded="false">إلغاء</button>
+                    </div>
+                </div>
+            </div>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
@@ -981,11 +1012,26 @@ $roleLabels = ['driver' => 'سائق', 'production' => 'عامل إنتاج'];
     });
     bindWalletsControlForms();
 
+    var openApproveAllCardBtn = document.getElementById('wallets-control-open-approve-all-card-btn');
+    var approveAllUserCard = document.getElementById('wallets-control-approve-all-user-card');
+    var approveAllUserSelect = document.getElementById('wallets-control-approve-all-user-select');
     var approveAllUserBtn = document.getElementById('wallets-control-approve-all-user-btn');
-    if (approveAllUserBtn) {
+
+    if (openApproveAllCardBtn && approveAllUserCard) {
+        openApproveAllCardBtn.addEventListener('click', function() {
+            var bsCollapse = typeof window.bootstrap !== 'undefined' && window.bootstrap.Collapse ? new bootstrap.Collapse(approveAllUserCard, { toggle: true }) : null;
+            if (!bsCollapse) approveAllUserCard.classList.toggle('show');
+        });
+    }
+
+    if (approveAllUserBtn && approveAllUserSelect) {
         approveAllUserBtn.addEventListener('click', function() {
+            var userId = approveAllUserSelect.value || '';
+            if (!userId) {
+                showAlert('يرجى اختيار المستخدم أولاً.', false);
+                return;
+            }
             if (!confirm('الموافقة على جميع طلبات التحصيل المعلقة لهذا المستخدم؟ سيتم خصم المبالغ من رصيد العملاء وإضافتها لخزنة الشركة ومحفظة المستخدم.')) return;
-            var userId = approveAllUserBtn.getAttribute('data-user-id') || '';
             var fd = new FormData();
             fd.append('action', 'approve_all_pending_for_user');
             fd.append('user_id', userId);
@@ -999,6 +1045,15 @@ $roleLabels = ['driver' => 'سائق', 'production' => 'عامل إنتاج'];
                     showAlert(d.message || (d.success ? 'تمت العملية بنجاح.' : 'حدث خطأ.'), d.success);
                     if (d.success) {
                         applyResponse(d);
+                        var opt = approveAllUserSelect.querySelector('option[value="' + userId + '"]');
+                        if (opt) opt.remove();
+                        approveAllUserSelect.value = '';
+                        if (approveAllUserSelect.options.length <= 1) {
+                            if (typeof window.bootstrap !== 'undefined' && window.bootstrap.Collapse && approveAllUserCard) {
+                                var c = bootstrap.Collapse.getInstance(approveAllUserCard);
+                                if (c) c.hide();
+                            } else if (approveAllUserCard) approveAllUserCard.classList.remove('show');
+                        }
                         var pendingCard = document.getElementById('wallets-control-pending-card');
                         if (pendingCard && d.pending_requests && d.pending_requests.length === 0) pendingCard.classList.add('d-none');
                         if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
