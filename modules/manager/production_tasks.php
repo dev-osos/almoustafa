@@ -485,6 +485,91 @@ function getTaskReceiptTotalFromNotes($notes)
 }
 
 /**
+ * خصم كميات منتجات الأوردر من المخزون (يُستدعى عند اعتماد الفاتورة فقط).
+ * يقرأ [PRODUCTS_JSON] من notes ويخصم effective_quantity من products.quantity لكل منتج مطابق بالاسم.
+ * @param object $db
+ * @param string $notes محتوى notes للمهمة
+ * @throws InvalidArgumentException عند عدم كفاية الكمية المتاحة
+ */
+function deductTaskProductsFromStock($db, $notes)
+{
+    $notes = (string)$notes;
+    if ($notes === '') {
+        return;
+    }
+    if (!preg_match('/\[PRODUCTS_JSON\]:\s*(.+)(?=\n\n\[|\z)/s', $notes, $m)) {
+        return;
+    }
+    $products = json_decode(trim($m[1]), true);
+    if (!is_array($products)) {
+        return;
+    }
+    $quJsonPath = defined('ROOT_PATH') ? (rtrim(ROOT_PATH, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'qu.json') : (__DIR__ . '/../../qu.json');
+    $quData = [];
+    if (is_readable($quJsonPath)) {
+        $quRaw = @file_get_contents($quJsonPath);
+        if ($quRaw !== false) {
+            $decoded = @json_decode($quRaw, true);
+            if (!empty($decoded['t']) && is_array($decoded['t'])) {
+                $quData = $decoded['t'];
+            }
+        }
+    }
+    foreach ($products as $product) {
+        $effectiveQty = isset($product['effective_quantity']) ? (float)$product['effective_quantity'] : null;
+        if ($effectiveQty === null && isset($product['quantity'])) {
+            $qty = (float)$product['quantity'];
+            $unit = trim($product['unit'] ?? 'قطعة');
+            $category = trim($product['category'] ?? '');
+            if ($unit === 'شرينك' && $category !== '' && !empty($quData)) {
+                foreach ($quData as $it) {
+                    $qt = isset($it['type']) ? trim((string)$it['type']) : '';
+                    $qd = isset($it['description']) ? trim((string)$it['description']) : '';
+                    if ($qt === $category && $qd === 'شرينك') {
+                        $multiplier = isset($it['quantity']) ? (float)$it['quantity'] : 1;
+                        $effectiveQty = $qty * $multiplier;
+                        break;
+                    }
+                }
+            }
+            if ($effectiveQty === null) {
+                $effectiveQty = $qty;
+            }
+        }
+        if ($effectiveQty === null || $effectiveQty <= 0) {
+            continue;
+        }
+        $templateName = trim($product['name'] ?? '');
+        if ($templateName === '') {
+            continue;
+        }
+        try {
+            $productRow = $db->queryOne(
+                "SELECT id, quantity FROM products WHERE name = ? AND status = 'active' LIMIT 1 FOR UPDATE",
+                [$templateName]
+            );
+        } catch (Exception $e) {
+            error_log('production_tasks deductTaskProductsFromStock: ' . $e->getMessage());
+            continue;
+        }
+        if (!$productRow) {
+            continue;
+        }
+        $resolvedProductId = (int)$productRow['id'];
+        $currentQuantity = (float)($productRow['quantity'] ?? 0);
+        if ($currentQuantity < $effectiveQty) {
+            throw new InvalidArgumentException(
+                'الكمية المتاحة لـ «' . $templateName . '» غير كافية. المتاح: ' . $currentQuantity . '، المطلوب للخصم: ' . $effectiveQty . '.'
+            );
+        }
+        $db->execute(
+            "UPDATE products SET quantity = quantity - ? WHERE id = ?",
+            [$effectiveQty, $resolvedProductId]
+        );
+    }
+}
+
+/**
  * تحميل بيانات المستخدمين
  */
 $productionUsers = [];
@@ -734,41 +819,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
 
-                // خصم الكمية الفعلية من products.quantity لكل منتج مطابق لجدول المنتجات
-                foreach ($products as $product) {
-                    $effectiveQty = isset($product['effective_quantity']) ? (float)$product['effective_quantity'] : 0;
-                    if ($effectiveQty <= 0) {
-                        continue;
-                    }
-                    $templateName = trim($product['name'] ?? '');
-                    if ($templateName === '') {
-                        continue;
-                    }
-                    $resolvedProductId = null;
-                    try {
-                        $productRow = $db->queryOne(
-                            "SELECT id, quantity FROM products WHERE name = ? AND status = 'active' LIMIT 1 FOR UPDATE",
-                            [$templateName]
-                        );
-                        if ($productRow) {
-                            $resolvedProductId = (int)$productRow['id'];
-                        }
-                    } catch (Exception $e) {
-                        error_log('production_tasks deduct: error resolving product by name: ' . $e->getMessage());
-                    }
-                    if ($resolvedProductId === null || $resolvedProductId <= 0) {
-                        continue;
-                    }
-                    $currentQuantity = (float)($productRow['quantity'] ?? 0);
-                    if ($currentQuantity < $effectiveQty) {
-                        $error = 'الكمية المتاحة لـ «' . $templateName . '» غير كافية. المتاح: ' . $currentQuantity . '، المطلوب للخصم: ' . $effectiveQty . '.';
-                        throw new InvalidArgumentException($error);
-                    }
-                    $db->execute(
-                        "UPDATE products SET quantity = quantity - ? WHERE id = ?",
-                        [$effectiveQty, $resolvedProductId]
-                    );
-                }
+                // لا يتم خصم الكمية من المخزون هنا — يتم الخصم عند اعتماد الفاتورة فقط
 
                 // إنشاء مهمة واحدة فقط مع حفظ جميع العمال
                 $columns = ['title', 'description', 'created_by', 'priority', 'status', 'related_type'];
@@ -1215,6 +1266,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                         $error = 'تم اعتماد هذا الأوردر مسبقاً في سجل الفواتير الورقية لشركة الشحن.';
                                     } else {
                                         $db->beginTransaction();
+                                        $taskNotesRow = $db->queryOne("SELECT notes FROM tasks WHERE id = ? LIMIT 1", [$taskId]);
+                                        deductTaskProductsFromStock($db, $taskNotesRow['notes'] ?? '');
                                         $invoiceNumber = 'أوردر #' . $taskId;
                                         $hasNetCol = $db->queryOne("SHOW COLUMNS FROM shipping_company_paper_invoices LIKE 'net_amount'");
                                         if (!empty($hasNetCol) && !empty($hasTaskIdCol)) {
@@ -1253,7 +1306,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (isset($db) && $db->inTransaction()) {
                         $db->rollBack();
                     }
-                    $error = 'تعذر اعتماد الفاتورة: ' . $e->getMessage();
+                    $error = ($e instanceof InvalidArgumentException) ? $e->getMessage() : 'تعذر اعتماد الفاتورة: ' . $e->getMessage();
                 }
             }
         } elseif ($totalAmount <= 0) {
@@ -1287,6 +1340,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $error = 'تم اعتماد هذا الأوردر مسبقاً في سجل المشتريات.';
                         } else {
                             $db->beginTransaction();
+                            $taskNotesRow = $db->queryOne("SELECT notes FROM tasks WHERE id = ? LIMIT 1", [$taskId]);
+                            deductTaskProductsFromStock($db, $taskNotesRow['notes'] ?? '');
                             $taskNumber = '#' . $taskId;
                             $taskDate = date('Y-m-d', strtotime($task['created_at'] ?? 'now'));
                             $db->execute(
@@ -1320,7 +1375,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (isset($db) && $db->inTransaction()) {
                     $db->rollBack();
                 }
-                $error = 'تعذر اعتماد الفاتورة: ' . $e->getMessage();
+                $error = ($e instanceof InvalidArgumentException) ? $e->getMessage() : 'تعذر اعتماد الفاتورة: ' . $e->getMessage();
             }
         }
     } elseif ($action === 'cancel_task') {

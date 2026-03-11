@@ -1848,13 +1848,13 @@ if (isset($_GET['id'])) {
 </style>
 <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
     <h2 class="mb-0"><i class="bi bi-cart-check me-2"></i>إدارة طلبات العملاء</h2>
-    <div class="d-flex flex-wrap gap-2">
-        <button class="btn btn-primary" onclick="showAddOrderModal()">
-            <i class="bi bi-plus-circle me-2"></i>طلب عميل مندوب
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+        <button class="btn btn-primary mb-0" type="button" data-bs-toggle="collapse" data-bs-target="#addOrderFormCollapse" aria-expanded="false" aria-controls="addOrderFormCollapse">
+            <i class="bi bi-plus-circle me-1"></i>طلب عميل مندوب
         </button>
         <?php if ($isManagerOrAccountant): ?>
-            <button class="btn btn-success" onclick="showAddCompanyOrderModal()">
-                <i class="bi bi-building me-2"></i>طلب عميل شركة
+            <button class="btn btn-success mb-0" type="button" data-bs-toggle="collapse" data-bs-target="#addCompanyOrderFormCollapse" aria-expanded="false" aria-controls="addCompanyOrderFormCollapse">
+                <i class="bi bi-plus-circle me-1"></i>طلب عميل شركة
             </button>
         <?php endif; ?>
     </div>
@@ -2284,21 +2284,19 @@ if (isset($_GET['id'])) {
     </div>
 </div>
 
-<!-- Modal إنشاء طلب (للكمبيوتر فقط) -->
-<div class="modal fade d-none d-md-block" id="addOrderModal" tabindex="-1">
-    <div class="modal-dialog modal-xl modal-dialog-scrollable">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">إنشاء طلب جديد</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
+<!-- بطاقة إنشاء طلب مندوب (تفتح بالزر مثل إنشاء أوردر جديد) -->
+<div class="collapse mb-3" id="addOrderFormCollapse">
+    <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0"><i class="bi bi-plus-circle me-2"></i>إنشاء طلب جديد</h5>
+        </div>
+        <div class="card-body">
             <form method="POST" id="orderForm">
                 <input type="hidden" name="action" value="create_order">
                 <?php if ($isSalesUser): ?>
                     <input type="hidden" name="sales_rep_id" value="<?php echo $currentUser['id']; ?>">
                 <?php endif; ?>
-                <div class="modal-body">
-                    <div class="row mb-3">
+                <div class="row mb-3">
                         <?php if (!$isSalesUser): ?>
                         <div class="col-md-3">
                             <label class="form-label">مندوب المبيعات <span class="text-danger">*</span></label>
@@ -2414,166 +2412,26 @@ if (isset($_GET['id'])) {
                             <i class="bi bi-plus-circle me-2"></i>إضافة عنصر
                         </button>
                     </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
-                    <button type="submit" class="btn btn-primary">إنشاء طلب</button>
+                <div class="d-flex justify-content-end mt-4 gap-2">
+                    <button type="button" class="btn btn-secondary" data-bs-toggle="collapse" data-bs-target="#addOrderFormCollapse" aria-expanded="false">إلغاء</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-send-check me-1"></i>إنشاء طلب</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
 
-<!-- Card إنشاء طلب (للموبايل فقط) -->
-<div class="card shadow-sm mb-4 d-md-none" id="addOrderCard" style="display: none;">
-    <div class="card-header bg-primary text-white">
-        <h5 class="mb-0">
-            <i class="bi bi-plus-circle me-2"></i>إنشاء طلب جديد
-        </h5>
-    </div>
-    <div class="card-body">
-        <form method="POST" id="orderCardForm">
-            <input type="hidden" name="action" value="create_order">
-            <?php if ($isSalesUser): ?>
-                <input type="hidden" name="sales_rep_id" value="<?php echo $currentUser['id']; ?>">
-            <?php endif; ?>
-            <div class="row mb-3">
-                <?php if (!$isSalesUser): ?>
-                <div class="col-md-3 mb-3">
-                    <label class="form-label">مندوب المبيعات <span class="text-danger">*</span></label>
-                    <select class="form-select" name="sales_rep_id" id="cardSalesRepSelect" required>
-                        <option value="">اختر مندوب</option>
-                        <?php foreach ($salesReps as $rep): ?>
-                            <option value="<?php echo $rep['id']; ?>" <?php echo $rep['id'] == $currentUser['id'] ? 'selected' : ''; ?>>
-                                <?php echo htmlspecialchars($rep['full_name'] ?? $rep['username']); ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                <?php endif; ?>
-                <div class="col-md-<?php echo $isSalesUser ? '12' : '9'; ?> mb-3">
-                    <div class="d-flex justify-content-between align-items-center mb-1">
-                        <label class="form-label mb-0">العميل <span class="text-danger">*</span></label>
-                        <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" id="cardToggleNewCustomer" name="create_new_customer" value="1">
-                            <label class="form-check-label small" for="cardToggleNewCustomer">عميل جديد</label>
-                        </div>
-                    </div>
-                    <select class="form-select" name="customer_id" id="cardExistingCustomerSelect" <?php echo $isSalesUser ? '' : 'disabled'; ?> required>
-                        <?php if ($isSalesUser): ?>
-                            <option value="">اختر العميل</option>
-                            <?php 
-                            // جلب عملاء المندوب الحالي مباشرة
-                            $currentUserCustomers = $db->query(
-                                "SELECT id, name FROM customers WHERE (created_by = ? OR rep_id = ?) AND status = 'active' ORDER BY name ASC",
-                                [$currentUser['id'], $currentUser['id']]
-                            );
-                            foreach ($currentUserCustomers as $customer): ?>
-                                <option value="<?php echo $customer['id']; ?>">
-                                    <?php echo htmlspecialchars($customer['name']); ?>
-                                </option>
-                            <?php endforeach; ?>
-                        <?php else: ?>
-                            <option value="">اختر المندوب أولاً</option>
-                        <?php endif; ?>
-                    </select>
-                </div>
-                <div class="col-md-6 mb-3">
-                    <label class="form-label">تاريخ الطلب <span class="text-danger">*</span></label>
-                    <input type="date" class="form-control" name="order_date" value="<?php echo date('Y-m-d'); ?>" required>
-                </div>
-                <div class="col-md-6 mb-3">
-                    <label class="form-label">تاريخ التسليم</label>
-                    <input type="date" class="form-control" name="delivery_date">
-                </div>
-                <div class="col-md-12 mb-3">
-                    <label class="form-label">الأولوية</label>
-                    <select class="form-select" name="priority">
-                        <option value="normal">عادية</option>
-                        <option value="low">منخفضة</option>
-                        <option value="high">عالية</option>
-                        <option value="urgent">عاجلة</option>
-                    </select>
-                </div>
-            </div>
-            
-            <div id="cardNewCustomerFields" class="row g-3 mb-3 d-none">
-                <div class="col-md-12 mb-3">
-                    <label class="form-label">اسم العميل الجديد <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control card-new-customer-required" name="new_customer_name" autocomplete="off">
-                </div>
-                <div class="col-md-12 mb-3">
-                    <label class="form-label">رقم الهاتف</label>
-                    <input type="text" class="form-control" name="new_customer_phone" autocomplete="off" placeholder="مثال: 01234567890">
-                </div>
-                <div class="col-md-12 mb-3">
-                    <label class="form-label">عنوان العميل</label>
-                    <textarea class="form-control" name="new_customer_address" rows="2" autocomplete="off" placeholder="اكتب العنوان بالتفصيل"></textarea>
-                </div>
-                <div class="col-12 mb-3">
-                    <label class="form-label">موقع العميل <span class="text-muted">(اختياري)</span></label>
-                    <div class="d-flex gap-2">
-                        <input type="text" class="form-control" name="new_customer_latitude" id="cardNewCustomerLatitude" placeholder="خط العرض" readonly>
-                        <input type="text" class="form-control" name="new_customer_longitude" id="cardNewCustomerLongitude" placeholder="خط الطول" readonly>
-                        <button type="button" class="btn btn-outline-primary" id="cardGetLocationBtn" title="الحصول على الموقع الحالي">
-                            <i class="bi bi-geo-alt"></i>
-                        </button>
-                    </div>
-                    <small class="text-muted">اضغط على زر الموقع للحصول على موقعك الحالي</small>
-                </div>
-            </div>
-            
-            <div class="mb-3">
-                <label class="form-label">عناصر الطلب</label>
-                <div id="cardOrderItems">
-                    <div class="order-item row mb-2">
-                        <div class="col-md-9">
-                            <select class="form-select card-template-input" 
-                                   name="items[0][template_name]" required>
-                                <option value="">اختر قالب المنتج</option>
-                                <?php foreach ($productTemplatesForDropdown as $template): ?>
-                                    <option value="<?php echo htmlspecialchars($template['product_name'] ?? ''); ?>">
-                                        <?php echo htmlspecialchars($template['product_name'] ?? 'قالب #' . $template['id']); ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                        <div class="col-md-2">
-                            <input type="text" class="form-control quantity" 
-                                   name="items[0][quantity]" placeholder="الكمية" required>
-                        </div>
-                        <div class="col-md-1">
-                            <button type="button" class="btn btn-danger w-100 card-remove-item">
-                                <i class="bi bi-trash"></i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-                <button type="button" class="btn btn-sm btn-outline-primary" id="cardAddItemBtn">
-                    <i class="bi bi-plus-circle me-2"></i>إضافة عنصر
-                </button>
-            </div>
-            
-            <div class="d-flex gap-2">
-                <button type="submit" class="btn btn-primary">إنشاء طلب</button>
-                <button type="button" class="btn btn-secondary" onclick="closeAddOrderCard()">إلغاء</button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<!-- Modal إنشاء طلب شركة (للكمبيوتر فقط) -->
+<!-- Modal إنشاء طلب شركة → أصبح بطاقة داخل collapse -->
 <?php if ($isManagerOrAccountant): ?>
-<div class="modal fade d-none d-md-block" id="addCompanyOrderModal" tabindex="-1">
-    <div class="modal-dialog modal-xl modal-dialog-scrollable">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title"><i class="bi bi-plus-circle me-1"></i>إنشاء طلب عميل شركة</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
+<div class="collapse mb-3" id="addCompanyOrderFormCollapse">
+    <div class="card shadow-sm">
+        <div class="card-header bg-success text-white">
+            <h5 class="mb-0"><i class="bi bi-plus-circle me-2"></i>إنشاء طلب عميل شركة</h5>
+        </div>
+        <div class="card-body">
             <form method="POST" id="companyOrderForm">
                 <input type="hidden" name="action" value="create_company_order">
-                <div class="modal-body">
+                <div class="row g-3">
                     <div class="row g-3">
                         <div class="col-md-4">
                             <div class="d-flex justify-content-between align-items-center mb-1">
@@ -2742,172 +2600,15 @@ if (isset($_GET['id'])) {
                         </div>
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
-                    <button type="submit" class="btn btn-success">إنشاء طلب شركة</button>
+                <div class="d-flex justify-content-end mt-4 gap-2">
+                    <button type="button" class="btn btn-secondary" data-bs-toggle="collapse" data-bs-target="#addCompanyOrderFormCollapse" aria-expanded="false">إلغاء</button>
+                    <button type="submit" class="btn btn-success"><i class="bi bi-send-check me-1"></i>إنشاء طلب شركة</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
 
-<!-- Card إنشاء طلب شركة (للموبايل فقط) -->
-<div class="card shadow-sm mb-4 d-md-none" id="addCompanyOrderCard" style="display: none;">
-    <div class="card-header bg-success text-white">
-        <h5 class="mb-0"><i class="bi bi-plus-circle me-1"></i>إنشاء طلب عميل شركة</h5>
-    </div>
-    <div class="card-body">
-        <form method="POST" id="companyOrderCardForm">
-            <input type="hidden" name="action" value="create_company_order">
-            <div class="row g-3">
-                <div class="col-12">
-                    <div class="d-flex justify-content-between align-items-center mb-1">
-                        <label class="form-label mb-0">العميل <span class="text-danger">*</span></label>
-                        <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" id="cardToggleNewCompanyCustomer" name="create_new_customer" value="1">
-                            <label class="form-check-label small" for="cardToggleNewCompanyCustomer">عميل جديد</label>
-                        </div>
-                    </div>
-                    <select class="form-select" name="customer_id" id="cardCompanyCustomerSelect" required>
-                        <option value="">اختر العميل</option>
-                        <?php foreach ($companyCustomers as $customer): ?>
-                            <option value="<?php echo $customer['id']; ?>">
-                                <?php echo htmlspecialchars($customer['name']); ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                <div class="col-6">
-                    <label class="form-label">الأولوية</label>
-                    <select class="form-select" name="priority">
-                        <option value="low">منخفضة</option>
-                        <option value="normal" selected>عادية</option>
-                        <option value="high">مرتفعة</option>
-                        <option value="urgent">عاجلة</option>
-                    </select>
-                </div>
-                <div class="col-6">
-                    <label class="form-label">تاريخ الاستحقاق</label>
-                    <input type="date" class="form-control" name="delivery_date">
-                </div>
-                <div class="col-12">
-                    <label class="form-label">تاريخ الطلب <span class="text-danger">*</span></label>
-                    <input type="date" class="form-control" name="order_date" value="<?php echo date('Y-m-d'); ?>" required>
-                </div>
-            </div>
-            <div id="cardNewCompanyCustomerFields" class="row g-3 mb-3 d-none">
-                <div class="col-12">
-                    <label class="form-label">اسم العميل الجديد <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control card-new-company-customer-required" name="new_customer_name" autocomplete="off">
-                </div>
-                <div class="col-12">
-                    <label class="form-label">رقم الهاتف</label>
-                    <input type="text" class="form-control" name="new_customer_phone" autocomplete="off" placeholder="مثال: 01234567890">
-                </div>
-                <div class="col-12">
-                    <label class="form-label">عنوان العميل</label>
-                    <textarea class="form-control" name="new_customer_address" rows="2" autocomplete="off" placeholder="اكتب العنوان بالتفصيل"></textarea>
-                </div>
-                <div class="col-12">
-                    <label class="form-label">موقع العميل <span class="text-muted">(اختياري)</span></label>
-                    <div class="d-flex gap-2">
-                        <input type="text" class="form-control" name="new_customer_latitude" id="cardCompanyNewCustomerLatitude" placeholder="خط العرض" readonly>
-                        <input type="text" class="form-control" name="new_customer_longitude" id="cardCompanyNewCustomerLongitude" placeholder="خط الطول" readonly>
-                        <button type="button" class="btn btn-outline-primary" id="cardCompanyGetLocationBtn" title="الحصول على الموقع الحالي">
-                            <i class="bi bi-geo-alt"></i>
-                        </button>
-                    </div>
-                    <small class="text-muted">اضغط على زر الموقع للحصول على موقعك الحالي</small>
-                </div>
-            </div>
-            <div class="mb-3">
-                <label class="form-label">العنوان</label>
-                <input type="text" class="form-control" name="order_title" placeholder="عنوان التوصيل أو عنوان مميز يظهر في الإيصال">
-            </div>
-            <div class="mb-3">
-                <label class="form-label fw-bold">المنتجات والكميات</label>
-                <div id="cardCompanyProductsContainer">
-                    <div class="card-company-product-row mb-3 p-3 border rounded" data-product-index="0">
-                        <div class="row g-2">
-                            <div class="col-12">
-                                <label class="form-label small">اسم المنتج</label>
-                                <input type="text" class="form-control card-company-product-name-input" name="products[0][name]" placeholder="اسم المنتج أو القالب" required>
-                            </div>
-                            <div class="col-6 col-md-4">
-                                <label class="form-label small">الكمية</label>
-                                <input type="number" class="form-control card-company-product-quantity-input" name="products[0][quantity]" step="1" min="0" required>
-                            </div>
-                            <div class="col-6 col-md-4">
-                                <label class="form-label small">التصنيف</label>
-                                <select class="form-select form-select-sm card-company-product-category-input" name="products[0][category]">
-                                    <option value="">— اختر —</option>
-                                    <?php foreach ($quCategoriesForCompanyOrder as $qc): ?>
-                                    <option value="<?php echo htmlspecialchars($qc['type'], ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($qc['type'], ENT_QUOTES, 'UTF-8'); ?></option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </div>
-                            <div class="col-6 col-md-4">
-                                <label class="form-label small">الوحدة</label>
-                                <select class="form-select form-select-sm card-company-product-unit-input" name="products[0][unit]">
-                                    <option value="كرتونة">كرتونة</option>
-                                    <option value="عبوة">عبوة</option>
-                                    <option value="كيلو">كيلو</option>
-                                    <option value="جرام">جرام</option>
-                                    <option value="شرينك">شرينك</option>
-                                    <option value="دسته">دسته</option>
-                                    <option value="قطعة" selected>قطعة</option>
-                                </select>
-                            </div>
-                            <div class="col-6 col-md-4">
-                                <label class="form-label small">السعر</label>
-                                <input type="number" class="form-control card-company-product-price-input" name="products[0][price]" step="0.01" min="0" required>
-                            </div>
-                            <div class="col-6 col-md-4">
-                                <label class="form-label small">الإجمالي</label>
-                                <input type="number" class="form-control card-company-product-line-total-input" name="products[0][line_total]" step="0.01" min="0" placeholder="0.00">
-                            </div>
-                            <div class="col-12 col-md-4 d-flex align-items-end">
-                                <button type="button" class="btn btn-danger btn-sm w-100 card-company-remove-product-btn" style="display: none;">
-                                    <i class="bi bi-trash"></i>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <button type="button" class="btn btn-outline-primary btn-sm mt-2" id="cardCompanyAddProductBtn">
-                    <i class="bi bi-plus-circle me-1"></i>إضافة منتج آخر
-                </button>
-            </div>
-            <div class="mb-3">
-                <label class="form-label">وصف وتفاصيل وملاحظات</label>
-                <textarea class="form-control" name="details" rows="3" placeholder="أدخل التفاصيل والتعليمات."></textarea>
-            </div>
-            <div class="row g-2 mb-3">
-                <div class="col-6">
-                    <label class="form-label">رسوم الشحن (ج.م)</label>
-                    <input type="number" class="form-control" name="shipping_fees" id="cardCompanyShippingFees" step="0.01" min="0" value="0">
-                </div>
-                <div class="col-6">
-                    <label class="form-label">الخصم (ج.م)</label>
-                    <input type="number" class="form-control" name="discount" id="cardCompanyDiscount" step="0.01" min="0" value="0">
-                </div>
-            </div>
-            <div class="card bg-light border-primary border-opacity-25 mb-3">
-                <div class="card-body py-3 small">
-                    <strong>ملخص:</strong>
-                    <span class="text-muted">إجمالي منتجات:</span> <strong id="cardCompanySubtotalDisplay">0.00 ج.م</strong>
-                    <span class="text-muted ms-2">شحن:</span> <strong id="cardCompanyShippingDisplay">0.00 ج.م</strong>
-                    <span class="text-muted ms-2">خصم:</span> <strong id="cardCompanyDiscountDisplay">0.00 ج.م</strong>
-                    <span class="text-muted ms-2">النهائي:</span> <strong id="cardCompanyFinalTotalDisplay" class="text-success">0.00 ج.م</strong>
-                </div>
-            </div>
-            <div class="d-flex gap-2">
-                <button type="submit" class="btn btn-success">إنشاء طلب شركة</button>
-                <button type="button" class="btn btn-secondary" onclick="closeAddCompanyOrderCard()">إلغاء</button>
-            </div>
-        </form>
-    </div>
-</div>
 <?php endif; ?>
 
 <!-- Modal تغيير الحالة (للكمبيوتر فقط) -->
