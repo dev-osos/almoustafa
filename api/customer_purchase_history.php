@@ -805,8 +805,6 @@ function handleTransferLocalTaskPurchase(array $currentUser): void
         ], 500);
     }
 }
-    }
-}
 
 /**
  * Get local customer paper invoice returns (مرتجعات فواتير ورقية)
