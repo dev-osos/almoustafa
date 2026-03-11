@@ -182,6 +182,83 @@ if ($isWalletControlAjax) {
                 $ajaxError = 'الطلب غير موجود أو تمت معالجته مسبقاً.';
             }
         }
+    } elseif ($action === 'approve_all_pending_for_user' && !empty($collectionRequestsTableExistsForAjax)) {
+        $targetUserId = isset($_POST['user_id']) ? (int)$_POST['user_id'] : 0;
+        if ($targetUserId <= 0) {
+            $ajaxError = 'يرجى اختيار المستخدم أولاً.';
+        } else {
+            $pendingList = $db->query(
+                "SELECT * FROM user_wallet_local_collection_requests WHERE user_id = ? AND status = 'pending' ORDER BY id ASC",
+                [$targetUserId]
+            ) ?: [];
+            $approvedCount = 0;
+            $failMsg = '';
+            foreach ($pendingList as $req) {
+                $requestId = (int)$req['id'];
+                $customerId = (int)$req['local_customer_id'];
+                $amount = (float)$req['amount'];
+                $userId = (int)$req['user_id'];
+                $customerName = $req['customer_name'] ?? '';
+                try {
+                    $db->beginTransaction();
+                    $customer = $db->queryOne("SELECT id, name, balance FROM local_customers WHERE id = ? FOR UPDATE", [$customerId]);
+                    if (!$customer) {
+                        throw new InvalidArgumentException('العميل غير موجود.');
+                    }
+                    $currentBalance = (float)($customer['balance'] ?? 0);
+                    $newBalance = round($currentBalance - $amount, 2);
+                    $db->execute("UPDATE local_customers SET balance = ? WHERE id = ?", [$newBalance, $customerId]);
+                    if (function_exists('logAudit')) {
+                        logAudit($currentUser['id'], 'approve_wallet_local_collection', 'local_customer', $customerId, null, ['request_id' => $requestId, 'amount' => $amount, 'previous_balance' => $currentBalance, 'new_balance' => $newBalance]);
+                    }
+                    $localCollectionsExists = $db->queryOne("SHOW TABLES LIKE 'local_collections'");
+                    if (!empty($localCollectionsExists)) {
+                        $cols = $db->queryOne("SHOW COLUMNS FROM local_collections LIKE 'status'");
+                        $collColumns = ['customer_id', 'amount', 'date', 'payment_method', 'collected_by'];
+                        $collValues = [$customerId, $amount, date('Y-m-d'), 'cash', $currentUser['id']];
+                        if (!empty($cols)) {
+                            $collColumns[] = 'status';
+                            $collValues[] = 'approved';
+                        }
+                        $ph = implode(',', array_fill(0, count($collColumns), '?'));
+                        $db->execute("INSERT INTO local_collections (" . implode(',', $collColumns) . ") VALUES ($ph)", $collValues);
+                    }
+                    $accountantTableExists = $db->queryOne("SHOW TABLES LIKE 'accountant_transactions'");
+                    if (!empty($accountantTableExists)) {
+                        $desc = 'تحصيل من عميل محلي (محفظة مستخدم): ' . $customerName;
+                        $ref = $requestId . '-' . date('Ymd');
+                        $db->execute(
+                            "INSERT INTO accountant_transactions (transaction_type, amount, description, reference_number, payment_method, status, created_by, approved_by, approved_at) VALUES ('income', ?, ?, ?, 'cash', 'approved', ?, ?, NOW())",
+                            [$amount, $desc, $ref, $currentUser['id'], $currentUser['id']]
+                        );
+                    }
+                    $db->execute(
+                        "INSERT INTO user_wallet_transactions (user_id, type, amount, reason, created_by) VALUES (?, 'deposit', ?, ?, ?)",
+                        [$userId, $amount, 'تحصيل من عميل محلي: ' . $customerName . ' (تمت الموافقة)', $currentUser['id']]
+                    );
+                    $db->execute(
+                        "UPDATE user_wallet_local_collection_requests SET status = 'approved', approved_by = ?, approved_at = NOW() WHERE id = ?",
+                        [$currentUser['id'], $requestId]
+                    );
+                    $db->commit();
+                    $approvedCount++;
+                } catch (Throwable $e) {
+                    if ($db->inTransaction()) {
+                        $db->rollBack();
+                    }
+                    error_log('approve_all_pending_for_user item ' . $requestId . ': ' . $e->getMessage());
+                    $failMsg = $e->getMessage();
+                    break;
+                }
+            }
+            if ($failMsg !== '') {
+                $ajaxError = 'حدث خطأ أثناء الموافقة. تمت الموافقة على ' . $approvedCount . ' طلب/طلبات.';
+            } elseif ($approvedCount > 0) {
+                $ajaxSuccess = 'تمت الموافقة على جميع طلبات التحصيل للمستخدم (' . $approvedCount . ' طلب) بنجاح.';
+            } else {
+                $ajaxSuccess = 'لا توجد طلبات معلقة لهذا المستخدم.';
+            }
+        }
     } else {
         $ajaxError = 'إجراء غير صحيح.';
     }
@@ -432,6 +509,14 @@ if (!empty($collectionRequestsTableExists)) {
         "SELECT r.*, u.full_name AS user_full_name, u.username AS user_username FROM user_wallet_local_collection_requests r LEFT JOIN users u ON u.id = r.user_id WHERE r.status = 'pending' ORDER BY r.created_at ASC"
     ) ?: [];
 }
+$pendingCountForSelectedUser = 0;
+if ($selectedUserId > 0 && !empty($pendingLocalCollectionRequests)) {
+    foreach ($pendingLocalCollectionRequests as $r) {
+        if ((int)$r['user_id'] === (int)$selectedUserId) {
+            $pendingCountForSelectedUser++;
+        }
+    }
+}
 
 // جلب قائمة المستخدمين (سائق، عامل إنتاج) مع أرصدتهم
 $walletUsers = $db->query(
@@ -492,9 +577,14 @@ $roleLabels = ['driver' => 'سائق', 'production' => 'عامل إنتاج'];
     <?php endif; ?>
 
     <?php if (!empty($collectionRequestsTableExists) && !empty($pendingLocalCollectionRequests)): ?>
-    <div class="card shadow-sm mb-4 border-warning">
-        <div class="card-header bg-warning bg-opacity-25 fw-bold">
-            <i class="bi bi-hourglass-split me-2"></i>طلبات التحصيل من العملاء المحليين (في انتظار الموافقة)
+    <div class="card shadow-sm mb-4 border-warning" id="wallets-control-pending-card">
+        <div class="card-header bg-warning bg-opacity-25 fw-bold d-flex flex-wrap align-items-center justify-content-between gap-2">
+            <span><i class="bi bi-hourglass-split me-2"></i>طلبات التحصيل من العملاء المحليين (في انتظار الموافقة)</span>
+            <?php if ($selectedUserId > 0 && $pendingCountForSelectedUser > 0): ?>
+            <button type="button" class="btn btn-success btn-sm" id="wallets-control-approve-all-user-btn" data-user-id="<?php echo (int)$selectedUserId; ?>">
+                <i class="bi bi-check-all me-1"></i>الموافقة على كل تحصيلات المستخدم المعلقة
+            </button>
+            <?php endif; ?>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
@@ -890,5 +980,38 @@ $roleLabels = ['driver' => 'سائق', 'production' => 'عامل إنتاج'];
         }
     });
     bindWalletsControlForms();
+
+    var approveAllUserBtn = document.getElementById('wallets-control-approve-all-user-btn');
+    if (approveAllUserBtn) {
+        approveAllUserBtn.addEventListener('click', function() {
+            if (!confirm('الموافقة على جميع طلبات التحصيل المعلقة لهذا المستخدم؟ سيتم خصم المبالغ من رصيد العملاء وإضافتها لخزنة الشركة ومحفظة المستخدم.')) return;
+            var userId = approveAllUserBtn.getAttribute('data-user-id') || '';
+            var fd = new FormData();
+            fd.append('action', 'approve_all_pending_for_user');
+            fd.append('user_id', userId);
+            var origHtml = approveAllUserBtn.innerHTML;
+            approveAllUserBtn.disabled = true;
+            approveAllUserBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>جاري الموافقة...';
+            fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: fd, credentials: 'same-origin' })
+                .then(function(r) { return r.json().then(function(j) { return { ok: r.ok, json: j }; }); })
+                .then(function(res) {
+                    var d = res.json;
+                    showAlert(d.message || (d.success ? 'تمت العملية بنجاح.' : 'حدث خطأ.'), d.success);
+                    if (d.success) {
+                        applyResponse(d);
+                        var pendingCard = document.getElementById('wallets-control-pending-card');
+                        if (pendingCard && d.pending_requests && d.pending_requests.length === 0) pendingCard.classList.add('d-none');
+                        if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
+                    }
+                })
+                .catch(function() {
+                    showAlert('حدث خطأ في الاتصال. يرجى المحاولة مرة أخرى.', false);
+                })
+                .finally(function() {
+                    approveAllUserBtn.disabled = false;
+                    approveAllUserBtn.innerHTML = origHtml;
+                });
+        });
+    }
 })();
 </script>

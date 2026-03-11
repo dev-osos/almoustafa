@@ -1794,56 +1794,32 @@ if (isset($_GET['id'])) {
     padding: 0 !important;
 }
 
-/* ===== CSS للـ Modal/Card Dual System ===== */
+/* ===== CSS للنماذج ===== */
 
-/* إخفاء Modal على الموبايل */
+/* إخفاء Modal تغيير الحالة على الموبايل */
 @media (max-width: 768px) {
-    #addOrderModal,
-    #addCompanyOrderModal,
     #statusModal {
         display: none !important;
     }
 }
 
-/* إخفاء Card على الكمبيوتر */
+/* إخفاء Card تغيير الحالة على الكمبيوتر */
 @media (min-width: 769px) {
-    #addOrderCard,
-    #addCompanyOrderCard,
     #statusCard {
         display: none !important;
     }
 }
 
-/* منع الملفات العامة من التأثير على Modals */
-#addOrderModal,
-#addCompanyOrderModal,
+/* منع الملفات العامة من التأثير على Modal الحالة */
 #statusModal {
     height: auto !important;
     max-height: none !important;
 }
-
-#addOrderModal .modal-dialog,
-#addCompanyOrderModal .modal-dialog,
-#statusModal .modal-dialog {
-    display: block !important;
-    height: auto !important;
-    max-height: none !important;
-    margin: 1.75rem auto !important;
-}
-
-#addOrderModal .modal-content,
-#addCompanyOrderModal .modal-content,
-#statusModal .modal-content {
-    height: auto !important;
-    max-height: none !important;
-}
-
-#addOrderModal .modal-body,
-#addCompanyOrderModal .modal-body,
+#statusModal .modal-dialog,
+#statusModal .modal-content,
 #statusModal .modal-body {
     height: auto !important;
     max-height: none !important;
-    overflow-y: visible !important;
 }
 </style>
 <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
@@ -2432,43 +2408,42 @@ if (isset($_GET['id'])) {
             <form method="POST" id="companyOrderForm">
                 <input type="hidden" name="action" value="create_company_order">
                 <div class="row g-3">
-                    <div class="row g-3">
-                        <div class="col-md-4">
-                            <div class="d-flex justify-content-between align-items-center mb-1">
-                                <label class="form-label mb-0">العميل <span class="text-danger">*</span></label>
-                                <div class="form-check form-switch">
-                                    <input class="form-check-input" type="checkbox" id="toggleNewCompanyCustomer" name="create_new_customer" value="1">
-                                    <label class="form-check-label small" for="toggleNewCompanyCustomer">عميل جديد</label>
-                                </div>
+                    <div class="col-md-4">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label class="form-label mb-0">العميل <span class="text-danger">*</span></label>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="toggleNewCompanyCustomer" name="create_new_customer" value="1">
+                                <label class="form-check-label small" for="toggleNewCompanyCustomer">عميل جديد</label>
                             </div>
-                            <select class="form-select" name="customer_id" id="companyCustomerSelect" required>
-                                <option value="">اختر العميل</option>
-                                <?php foreach ($companyCustomers as $customer): ?>
-                                    <option value="<?php echo $customer['id']; ?>">
-                                        <?php echo htmlspecialchars($customer['name']); ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
                         </div>
-                        <div class="col-md-4">
-                            <label class="form-label">الأولوية</label>
-                            <select class="form-select" name="priority">
-                                <option value="low">منخفضة</option>
-                                <option value="normal" selected>عادية</option>
-                                <option value="high">مرتفعة</option>
-                                <option value="urgent">عاجلة</option>
-                            </select>
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label">تاريخ الاستحقاق</label>
-                            <input type="date" class="form-control" name="delivery_date" id="companyDeliveryDate">
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label">تاريخ الطلب <span class="text-danger">*</span></label>
-                            <input type="date" class="form-control" name="order_date" value="<?php echo date('Y-m-d'); ?>" required>
-                        </div>
+                        <select class="form-select" name="customer_id" id="companyCustomerSelect" required>
+                            <option value="">اختر العميل</option>
+                            <?php foreach ($companyCustomers as $customer): ?>
+                                <option value="<?php echo $customer['id']; ?>">
+                                    <?php echo htmlspecialchars($customer['name']); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
                     </div>
-                    <div id="newCompanyCustomerFields" class="row g-3 mb-3 d-none">
+                    <div class="col-md-4">
+                        <label class="form-label">الأولوية</label>
+                        <select class="form-select" name="priority">
+                            <option value="low">منخفضة</option>
+                            <option value="normal" selected>عادية</option>
+                            <option value="high">مرتفعة</option>
+                            <option value="urgent">عاجلة</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">تاريخ الاستحقاق</label>
+                        <input type="date" class="form-control" name="delivery_date" id="companyDeliveryDate">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">تاريخ الطلب <span class="text-danger">*</span></label>
+                        <input type="date" class="form-control" name="order_date" value="<?php echo date('Y-m-d'); ?>" required>
+                    </div>
+                </div>
+                <div id="newCompanyCustomerFields" class="row g-3 mb-3 d-none">
                         <div class="col-md-4">
                             <label class="form-label">اسم العميل الجديد <span class="text-danger">*</span></label>
                             <input type="text" class="form-control new-company-customer-required" name="new_customer_name" autocomplete="off">
@@ -2791,114 +2766,51 @@ function updateNewCustomerState() {
     }
 }
 
-// تهيئة جميع الأحداث بعد تحميل DOM
+// تهيئة أحداث بطاقة إضافة طلب (الـ collapse)
 document.addEventListener('DOMContentLoaded', function() {
-    const addOrderModalElement = document.getElementById('addOrderModal');
+    const addOrderCollapse = document.getElementById('addOrderFormCollapse');
+    if (!addOrderCollapse) return;
     
-    if (!addOrderModalElement) {
-        console.error('addOrderModal not found');
-        return;
-    }
-    
-    // ربط أحداث toggle للعميل الجديد - استخدام event delegation
-    addOrderModalElement.addEventListener('change', function(e) {
+    addOrderCollapse.addEventListener('change', function(e) {
         if (e.target && e.target.id === 'toggleNewCustomer') {
-            setTimeout(function() {
-                updateNewCustomerState();
-            }, 10);
+            setTimeout(function() { updateNewCustomerState(); }, 10);
         }
     });
     
-    // معالجة النقر على label أيضاً (لـ Bootstrap form-switch)
-    addOrderModalElement.addEventListener('click', function(e) {
-        let toggle = null;
-        
-        // إذا تم النقر مباشرة على checkbox
-        if (e.target.id === 'toggleNewCustomer') {
-            toggle = e.target;
-        }
-        // إذا تم النقر على label
-        else if (e.target.tagName === 'LABEL' && e.target.getAttribute('for') === 'toggleNewCustomer') {
-            toggle = document.getElementById('toggleNewCustomer');
-        }
-        // إذا تم النقر على عنصر داخل label
-        else if (e.target.closest('label[for="toggleNewCustomer"]')) {
-            toggle = document.getElementById('toggleNewCustomer');
-        }
-        
-        if (toggle) {
-            setTimeout(function() {
-                updateNewCustomerState();
-            }, 50);
+    addOrderCollapse.addEventListener('click', function(e) {
+        var toggle = (e.target.id === 'toggleNewCustomer') ? e.target : (e.target.tagName === 'LABEL' && e.target.getAttribute('for') === 'toggleNewCustomer') ? document.getElementById('toggleNewCustomer') : (e.target.closest('label[for="toggleNewCustomer"]')) ? document.getElementById('toggleNewCustomer') : null;
+        if (toggle) setTimeout(function() { updateNewCustomerState(); }, 50);
+    });
+    
+    addOrderCollapse.addEventListener('shown.bs.collapse', function() {
+        updateNewCustomerState();
+        var salesRepSelect = document.getElementById('salesRepSelect');
+        var existingCustomerSelect = document.getElementById('existingCustomerSelect');
+        if (salesRepSelect && existingCustomerSelect) {
+            var currentValue = salesRepSelect.value;
+            var newSelect = salesRepSelect.cloneNode(true);
+            salesRepSelect.parentNode.replaceChild(newSelect, salesRepSelect);
+            var freshSelect = document.getElementById('salesRepSelect');
+            if (freshSelect) {
+                if (currentValue) freshSelect.value = currentValue;
+                freshSelect.addEventListener('change', function() { loadSalesRepCustomers(this.value); });
+                if (freshSelect.value) loadSalesRepCustomers(freshSelect.value);
+            }
         }
     });
     
-    // عند فتح Modal
-    if (typeof bootstrap !== 'undefined') {
-        addOrderModalElement.addEventListener('shown.bs.modal', function() {
-            // تحديث الحالة الأولية
-            updateNewCustomerState();
-            
-            // ربط حدث المندوب
-            const salesRepSelect = document.getElementById('salesRepSelect');
-            const existingCustomerSelect = document.getElementById('existingCustomerSelect');
-            
-            if (salesRepSelect && existingCustomerSelect) {
-                // حفظ القيمة الحالية قبل إعادة الربط
-                const currentValue = salesRepSelect.value;
-                
-                // إزالة أي listeners سابقة لتجنب التكرار
-                const newSelect = salesRepSelect.cloneNode(true);
-                salesRepSelect.parentNode.replaceChild(newSelect, salesRepSelect);
-                
-                const freshSelect = document.getElementById('salesRepSelect');
-                if (freshSelect) {
-                    // استعادة القيمة
-                    if (currentValue) {
-                        freshSelect.value = currentValue;
-                    }
-                    
-                    freshSelect.addEventListener('change', function() {
-                        loadSalesRepCustomers(this.value);
-                    });
-                    
-                    // إذا كان هناك مندوب محدد، تحميل عملاءه
-                    if (freshSelect.value) {
-                        loadSalesRepCustomers(freshSelect.value);
-                    }
-                }
-            }
-        });
-        
-        // إعادة تعيين النموذج عند إغلاق Modal
-        addOrderModalElement.addEventListener('hidden.bs.modal', function() {
-            const newCustomerToggle = document.getElementById('toggleNewCustomer');
-            if (newCustomerToggle) {
-                newCustomerToggle.checked = false;
-                updateNewCustomerState();
-            }
-            const newCustomerRequiredInputs = Array.from(document.querySelectorAll('#addOrderModal .new-customer-required'));
-            newCustomerRequiredInputs.forEach(function(input) {
-                input.value = '';
-            });
-            const newCustomerPhoneInput = document.querySelector('#addOrderModal input[name="new_customer_phone"]');
-            const newCustomerAddressInput = document.querySelector('#addOrderModal textarea[name="new_customer_address"]');
-            const newCustomerLatitudeInput = document.querySelector('#addOrderModal input[name="new_customer_latitude"]');
-            const newCustomerLongitudeInput = document.querySelector('#addOrderModal input[name="new_customer_longitude"]');
-            if (newCustomerPhoneInput) {
-                newCustomerPhoneInput.value = '';
-            }
-            if (newCustomerAddressInput) {
-                newCustomerAddressInput.value = '';
-            }
-            if (newCustomerLatitudeInput) {
-                newCustomerLatitudeInput.value = '';
-            }
-            if (newCustomerLongitudeInput) {
-                newCustomerLongitudeInput.value = '';
-            }
-        });
-    }
+    addOrderCollapse.addEventListener('hidden.bs.collapse', function() {
+        var newCustomerToggle = document.getElementById('toggleNewCustomer');
+        if (newCustomerToggle) { newCustomerToggle.checked = false; updateNewCustomerState(); }
+        var scope = document.getElementById('addOrderFormCollapse');
+        if (scope) {
+            scope.querySelectorAll('.new-customer-required').forEach(function(input) { input.value = ''; });
+            var ph = scope.querySelector('input[name="new_customer_phone"]'); if (ph) ph.value = '';
+            var ad = scope.querySelector('textarea[name="new_customer_address"]'); if (ad) ad.value = '';
+            var lat = scope.querySelector('input[name="new_customer_latitude"]'); if (lat) lat.value = '';
+            var lng = scope.querySelector('input[name="new_customer_longitude"]'); if (lng) lng.value = '';
+        }
+    });
 });
 
 
@@ -2948,14 +2860,15 @@ function setupLocationButton() {
     }
 }
 
-// ربط الأحداث عند فتح Modal لزر الموقع
+// ربط زر الموقع عند فتح بطاقة الطلب
 document.addEventListener('DOMContentLoaded', function() {
-    const addOrderModalElement = document.getElementById('addOrderModal');
-    if (addOrderModalElement && typeof bootstrap !== 'undefined') {
-        addOrderModalElement.addEventListener('shown.bs.modal', function() {
+    var addOrderCollapse = document.getElementById('addOrderFormCollapse');
+    if (addOrderCollapse) {
+        addOrderCollapse.addEventListener('shown.bs.collapse', function() {
             setupLocationButton();
         });
     }
+    setupLocationButton();
 });
 
 // أيضاً محاولة الربط مباشرة عند تحميل الصفحة
@@ -3036,71 +2949,47 @@ function scrollToElement(element) {
     }, 200);
 }
 
-// دالة إغلاق جميع النماذج
+// دالة إغلاق جميع النماذج (طي البطاقات + إغلاق مودال الحالة)
 function closeAllForms() {
-    // إغلاق جميع Cards على الموبايل
-    const cards = ['addOrderCard', 'addCompanyOrderCard', 'statusCard'];
-    cards.forEach(function(cardId) {
-        const card = document.getElementById(cardId);
-        if (card && card.style.display !== 'none') {
-            card.style.display = 'none';
-            const form = card.querySelector('form');
-            if (form) form.reset();
-        }
-    });
-    
-    // إغلاق جميع Modals على الكمبيوتر
-    const modals = ['addOrderModal', 'addCompanyOrderModal', 'statusModal'];
-    modals.forEach(function(modalId) {
-        const modal = document.getElementById(modalId);
-        if (modal) {
-            const modalInstance = bootstrap.Modal.getInstance(modal);
-            if (modalInstance) modalInstance.hide();
+    const statusCard = document.getElementById('statusCard');
+    if (statusCard && statusCard.style.display !== 'none') {
+        statusCard.style.display = 'none';
+        const form = statusCard.querySelector('form');
+        if (form) form.reset();
+    }
+    const statusModal = document.getElementById('statusModal');
+    if (statusModal && typeof bootstrap !== 'undefined') {
+        const modalInstance = bootstrap.Modal.getInstance(statusModal);
+        if (modalInstance) modalInstance.hide();
+    }
+    [ 'addOrderFormCollapse', 'addCompanyOrderFormCollapse' ].forEach(function(id) {
+        const el = document.getElementById(id);
+        if (el && typeof bootstrap !== 'undefined') {
+            const collapseInstance = bootstrap.Collapse.getInstance(el);
+            if (collapseInstance) collapseInstance.hide();
         }
     });
 }
 
 // ===== دوال فتح النماذج =====
 
-// دالة فتح نموذج إضافة طلب
+// دالة فتح بطاقة إضافة طلب (توسيع الـ collapse)
 function showAddOrderModal() {
-    closeAllForms();
-    
-    if (isMobile()) {
-        const card = document.getElementById('addOrderCard');
-        if (card) {
-            card.style.display = 'block';
-            setTimeout(function() {
-                scrollToElement(card);
-            }, 50);
-        }
-    } else {
-        const modal = document.getElementById('addOrderModal');
-        if (modal) {
-            const modalInstance = new bootstrap.Modal(modal);
-            modalInstance.show();
-        }
+    const collapseEl = document.getElementById('addOrderFormCollapse');
+    if (collapseEl && typeof bootstrap !== 'undefined') {
+        const c = bootstrap.Collapse.getOrCreateInstance(collapseEl);
+        c.show();
+        setTimeout(function() { scrollToElement(collapseEl); }, 100);
     }
 }
 
-// دالة فتح نموذج إضافة طلب شركة
+// دالة فتح بطاقة إضافة طلب شركة (توسيع الـ collapse)
 function showAddCompanyOrderModal() {
-    closeAllForms();
-    
-    if (isMobile()) {
-        const card = document.getElementById('addCompanyOrderCard');
-        if (card) {
-            card.style.display = 'block';
-            setTimeout(function() {
-                scrollToElement(card);
-            }, 50);
-        }
-    } else {
-        const modal = document.getElementById('addCompanyOrderModal');
-        if (modal) {
-            const modalInstance = new bootstrap.Modal(modal);
-            modalInstance.show();
-        }
+    const collapseEl = document.getElementById('addCompanyOrderFormCollapse');
+    if (collapseEl && typeof bootstrap !== 'undefined') {
+        const c = bootstrap.Collapse.getOrCreateInstance(collapseEl);
+        c.show();
+        setTimeout(function() { scrollToElement(collapseEl); }, 100);
     }
 }
 
@@ -3133,24 +3022,26 @@ function showStatusModal(orderId, currentStatus) {
     }
 }
 
-// ===== دوال إغلاق Cards =====
+// ===== دوال إغلاق البطاقات (طي الـ collapse) =====
 
 function closeAddOrderCard() {
-    const card = document.getElementById('addOrderCard');
-    if (card) {
-        card.style.display = 'none';
-        const form = card.querySelector('form');
-        if (form) form.reset();
+    const collapseEl = document.getElementById('addOrderFormCollapse');
+    if (collapseEl && typeof bootstrap !== 'undefined') {
+        const c = bootstrap.Collapse.getInstance(collapseEl);
+        if (c) c.hide();
     }
+    const form = document.getElementById('orderForm');
+    if (form) form.reset();
 }
 
 function closeAddCompanyOrderCard() {
-    const card = document.getElementById('addCompanyOrderCard');
-    if (card) {
-        card.style.display = 'none';
-        const form = card.querySelector('form');
-        if (form) form.reset();
+    const collapseEl = document.getElementById('addCompanyOrderFormCollapse');
+    if (collapseEl && typeof bootstrap !== 'undefined') {
+        const c = bootstrap.Collapse.getInstance(collapseEl);
+        if (c) c.hide();
     }
+    const form = document.getElementById('companyOrderForm');
+    if (form) form.reset();
 }
 
 function closeStatusCard() {
@@ -3421,100 +3312,64 @@ function updateNewCompanyCustomerState() {
     }
 }
 
-// إعداد Modal طلب الشركة
+// إعداد بطاقة طلب الشركة (الـ collapse)
 document.addEventListener('DOMContentLoaded', function() {
-    const addCompanyOrderModalElement = document.getElementById('addCompanyOrderModal');
+    var addCompanyCollapse = document.getElementById('addCompanyOrderFormCollapse');
+    if (!addCompanyCollapse) return;
     
-    if (addCompanyOrderModalElement && typeof bootstrap !== 'undefined') {
-        // ربط أحداث toggle للعميل الجديد للشركة
-        addCompanyOrderModalElement.addEventListener('change', function(e) {
-            if (e.target && e.target.id === 'toggleNewCompanyCustomer') {
-                setTimeout(function() {
-                    updateNewCompanyCustomerState();
-                }, 10);
-            }
-        });
-        
-        // معالجة النقر على label أيضاً
-        addCompanyOrderModalElement.addEventListener('click', function(e) {
-            let toggle = null;
-            
-            if (e.target.id === 'toggleNewCompanyCustomer') {
-                toggle = e.target;
-            } else if (e.target.tagName === 'LABEL' && e.target.getAttribute('for') === 'toggleNewCompanyCustomer') {
-                toggle = document.getElementById('toggleNewCompanyCustomer');
-            } else if (e.target.closest('label[for="toggleNewCompanyCustomer"]')) {
-                toggle = document.getElementById('toggleNewCompanyCustomer');
-            }
-            
-            if (toggle) {
-                setTimeout(function() {
-                    updateNewCompanyCustomerState();
-                }, 50);
-            }
-        });
-        
-        // عند فتح الـ modal، تأكد من تحديث الحالة
-        addCompanyOrderModalElement.addEventListener('shown.bs.modal', function() {
-            updateNewCompanyCustomerState();
-            setupCompanyLocationButton();
-        });
-        
-        addCompanyOrderModalElement.addEventListener('hidden.bs.modal', function() {
-            const toggleNewCompanyCustomer = document.getElementById('toggleNewCompanyCustomer');
-            if (toggleNewCompanyCustomer) {
-                toggleNewCompanyCustomer.checked = false;
-                updateNewCompanyCustomerState();
-            }
-            // مسح حقول العميل الجديد
-            const newCompanyCustomerFields = document.getElementById('newCompanyCustomerFields');
-            if (newCompanyCustomerFields) {
-                const requiredInputs = newCompanyCustomerFields.querySelectorAll('.new-company-customer-required');
-                requiredInputs.forEach(function(input) {
-                    input.value = '';
-                });
-            }
-            const newCustomerPhoneInput = document.querySelector('#addCompanyOrderModal input[name="new_customer_phone"]');
-            const newCustomerAddressInput = document.querySelector('#addCompanyOrderModal textarea[name="new_customer_address"]');
-            const newCustomerLatitudeInput = document.querySelector('#addCompanyOrderModal input[name="new_customer_latitude"]');
-            const newCustomerLongitudeInput = document.querySelector('#addCompanyOrderModal input[name="new_customer_longitude"]');
-            if (newCustomerPhoneInput) {
-                newCustomerPhoneInput.value = '';
-            }
-            if (newCustomerAddressInput) {
-                newCustomerAddressInput.value = '';
-            }
-            if (newCustomerLatitudeInput) {
-                newCustomerLatitudeInput.value = '';
-            }
-            if (newCustomerLongitudeInput) {
-                newCustomerLongitudeInput.value = '';
-            }
-            // إعادة تعيين المنتجات والعنوان والوصف والرسوم
-            const companyProductsContainer = document.getElementById('companyProductsContainer');
-            if (companyProductsContainer && typeof getCompanyCategoryOptions === 'function') {
-                const catOpts = getCompanyCategoryOptions();
-                companyProductsContainer.innerHTML = '<div class="company-product-row mb-3 p-3 border rounded" data-product-index="0">' +
-                    '<div class="row g-2"><div class="col-12 col-md-3"><label class="form-label small">اسم المنتج</label><input type="text" class="form-control company-product-name-input" name="products[0][name]" placeholder="أدخل اسم المنتج أو القالب" autocomplete="off" required></div>' +
-                    '<div class="col-6 col-md-2"><label class="form-label small">الكمية</label><input type="number" class="form-control company-product-quantity-input" name="products[0][quantity]" step="1" min="0" required></div>' +
-                    '<div class="col-6 col-md-2"><label class="form-label small">التصنيف</label><select class="form-select form-select-sm company-product-category-input" name="products[0][category]"><option value="">— اختر التصنيف —</option>' + catOpts + '</select></div>' +
-                    '<div class="col-6 col-md-2"><label class="form-label small">الوحدة</label><select class="form-select form-select-sm company-product-unit-input" name="products[0][unit]"><option value="كرتونة">كرتونة</option><option value="عبوة">عبوة</option><option value="كيلو">كيلو</option><option value="جرام">جرام</option><option value="شرينك">شرينك</option><option value="دسته">دسته</option><option value="قطعة" selected>قطعة</option></select></div>' +
-                    '<div class="col-6 col-md-2"><label class="form-label small">السعر</label><input type="number" class="form-control company-product-price-input" name="products[0][price]" step="0.01" min="0" required></div>' +
-                    '<div class="col-6 col-md-2"><label class="form-label small">الإجمالي</label><div class="input-group input-group-sm"><input type="number" class="form-control company-product-line-total-input" name="products[0][line_total]" step="0.01" min="0"><span class="input-group-text">ج.م</span></div></div>' +
-                    '<div class="col-6 col-md-1 d-flex align-items-end"><button type="button" class="btn btn-danger btn-sm w-100 company-remove-product-btn" style="display:none"><i class="bi bi-trash"></i></button></div></div></div>';
-                companyProductIndex = 1;
-                if (typeof updateCompanyOrderSummary === 'function') updateCompanyOrderSummary();
-            }
-            const companyOrderTitle = document.querySelector('#addCompanyOrderModal input[name="order_title"]');
-            const companyDetails = document.querySelector('#addCompanyOrderModal textarea[name="details"]');
-            const companyShippingInp = document.getElementById('companyShippingFees');
-            const companyDiscountInp = document.getElementById('companyDiscount');
-            if (companyOrderTitle) companyOrderTitle.value = '';
-            if (companyDetails) companyDetails.value = '';
-            if (companyShippingInp) companyShippingInp.value = '0';
-            if (companyDiscountInp) companyDiscountInp.value = '0';
-        });
-    }
+    addCompanyCollapse.addEventListener('change', function(e) {
+        if (e.target && e.target.id === 'toggleNewCompanyCustomer') {
+            setTimeout(function() { updateNewCompanyCustomerState(); }, 10);
+        }
+    });
+    
+    addCompanyCollapse.addEventListener('click', function(e) {
+        var toggle = (e.target.id === 'toggleNewCompanyCustomer') ? e.target : (e.target.tagName === 'LABEL' && e.target.getAttribute('for') === 'toggleNewCompanyCustomer') ? document.getElementById('toggleNewCompanyCustomer') : (e.target.closest('label[for="toggleNewCompanyCustomer"]')) ? document.getElementById('toggleNewCompanyCustomer') : null;
+        if (toggle) setTimeout(function() { updateNewCompanyCustomerState(); }, 50);
+    });
+    
+    addCompanyCollapse.addEventListener('shown.bs.collapse', function() {
+        updateNewCompanyCustomerState();
+        setupCompanyLocationButton();
+    });
+    
+    addCompanyCollapse.addEventListener('hidden.bs.collapse', function() {
+        var toggleNewCompanyCustomer = document.getElementById('toggleNewCompanyCustomer');
+        if (toggleNewCompanyCustomer) { toggleNewCompanyCustomer.checked = false; updateNewCompanyCustomerState(); }
+        var newCompanyCustomerFields = document.getElementById('newCompanyCustomerFields');
+        if (newCompanyCustomerFields) {
+            newCompanyCustomerFields.querySelectorAll('.new-company-customer-required').forEach(function(input) { input.value = ''; });
+        }
+        var scope = document.getElementById('addCompanyOrderFormCollapse');
+        if (scope) {
+            var ph = scope.querySelector('input[name="new_customer_phone"]'); if (ph) ph.value = '';
+            var ad = scope.querySelector('textarea[name="new_customer_address"]'); if (ad) ad.value = '';
+            var lat = scope.querySelector('input[name="new_customer_latitude"]'); if (lat) lat.value = '';
+            var lng = scope.querySelector('input[name="new_customer_longitude"]'); if (lng) lng.value = '';
+        }
+        var companyProductsContainer = document.getElementById('companyProductsContainer');
+        if (companyProductsContainer && typeof getCompanyCategoryOptions === 'function') {
+            var catOpts = getCompanyCategoryOptions();
+            companyProductsContainer.innerHTML = '<div class="company-product-row mb-3 p-3 border rounded" data-product-index="0">' +
+                '<div class="row g-2"><div class="col-12 col-md-3"><label class="form-label small">اسم المنتج</label><input type="text" class="form-control company-product-name-input" name="products[0][name]" placeholder="أدخل اسم المنتج أو القالب" autocomplete="off" required></div>' +
+                '<div class="col-6 col-md-2"><label class="form-label small">الكمية</label><input type="number" class="form-control company-product-quantity-input" name="products[0][quantity]" step="1" min="0" required></div>' +
+                '<div class="col-6 col-md-2"><label class="form-label small">التصنيف</label><select class="form-select form-select-sm company-product-category-input" name="products[0][category]"><option value="">— اختر التصنيف —</option>' + catOpts + '</select></div>' +
+                '<div class="col-6 col-md-2"><label class="form-label small">الوحدة</label><select class="form-select form-select-sm company-product-unit-input" name="products[0][unit]"><option value="كرتونة">كرتونة</option><option value="عبوة">عبوة</option><option value="كيلو">كيلو</option><option value="جرام">جرام</option><option value="شرينك">شرينك</option><option value="دسته">دسته</option><option value="قطعة" selected>قطعة</option></select></div>' +
+                '<div class="col-6 col-md-2"><label class="form-label small">السعر</label><input type="number" class="form-control company-product-price-input" name="products[0][price]" step="0.01" min="0" required></div>' +
+                '<div class="col-6 col-md-2"><label class="form-label small">الإجمالي</label><div class="input-group input-group-sm"><input type="number" class="form-control company-product-line-total-input" name="products[0][line_total]" step="0.01" min="0"><span class="input-group-text">ج.م</span></div></div>' +
+                '<div class="col-6 col-md-1 d-flex align-items-end"><button type="button" class="btn btn-danger btn-sm w-100 company-remove-product-btn" style="display:none"><i class="bi bi-trash"></i></button></div></div></div>';
+            companyProductIndex = 1;
+            if (typeof updateCompanyOrderSummary === 'function') updateCompanyOrderSummary();
+        }
+        var companyOrderTitle = document.querySelector('#addCompanyOrderFormCollapse input[name="order_title"]');
+        var companyDetails = document.querySelector('#addCompanyOrderFormCollapse textarea[name="details"]');
+        var companyShippingInp = document.getElementById('companyShippingFees');
+        var companyDiscountInp = document.getElementById('companyDiscount');
+        if (companyOrderTitle) companyOrderTitle.value = '';
+        if (companyDetails) companyDetails.value = '';
+        if (companyShippingInp) companyShippingInp.value = '0';
+        if (companyDiscountInp) companyDiscountInp.value = '0';
+    });
 });
 
 // طلب شركة - كارد الموبايل: منتجات وملخص
