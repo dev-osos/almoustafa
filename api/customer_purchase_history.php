@@ -95,6 +95,9 @@ try {
     require_once __DIR__ . '/../includes/db.php';
     require_once __DIR__ . '/../includes/auth.php';
     require_once __DIR__ . '/../includes/path_helper.php';
+    if (file_exists(__DIR__ . '/../includes/audit_log.php')) {
+        require_once __DIR__ . '/../includes/audit_log.php';
+    }
     
     // تحميل product_name_helper إذا كان موجوداً
     if (file_exists(__DIR__ . '/../includes/product_name_helper.php')) {
@@ -161,6 +164,13 @@ try {
                 returnJsonResponse(['success' => false, 'message' => 'يجب استخدام طلب GET'], 405);
             }
             handleGetInvoiceByNumber($currentUser);
+            break;
+
+        case 'transfer_local_invoice':
+            if ($method !== 'POST') {
+                returnJsonResponse(['success' => false, 'message' => 'يجب استخدام طلب POST'], 405);
+            }
+            handleTransferLocalInvoice($currentUser);
             break;
             
         default:
@@ -430,6 +440,185 @@ function getLocalCustomerPaperInvoices($db, $customerId): array
     } catch (Throwable $e) {
         error_log('getLocalCustomerPaperInvoices error: ' . $e->getMessage());
         return [];
+    }
+}
+
+/**
+ * نقل فاتورة عميل محلي من عميل إلى عميل آخر مع تعديل الأرصدة
+ */
+function handleTransferLocalInvoice(array $currentUser): void
+{
+    try {
+        $db = db();
+
+        $fromCustomerId = isset($_POST['from_customer_id']) ? (int)$_POST['from_customer_id'] : 0;
+        $toCustomerId   = isset($_POST['to_customer_id']) ? (int)$_POST['to_customer_id'] : 0;
+        $invoiceId      = isset($_POST['invoice_id']) ? (int)$_POST['invoice_id'] : 0;
+
+        if ($fromCustomerId <= 0 || $toCustomerId <= 0 || $invoiceId <= 0) {
+            returnJsonResponse([
+                'success' => false,
+                'message' => 'بيانات غير صحيحة. يرجى اختيار عميلين صحيحين وفاتورة صحيحة.'
+            ], 422);
+        }
+
+        if ($fromCustomerId === $toCustomerId) {
+            returnJsonResponse([
+                'success' => false,
+                'message' => 'لا يمكن نقل الفاتورة إلى نفس العميل.'
+            ], 422);
+        }
+
+        // السماح فقط للمدير والمحاسب
+        if (!in_array($currentUser['role'] ?? '', ['manager', 'accountant'], true)) {
+            returnJsonResponse([
+                'success' => false,
+                'message' => 'ليست لديك صلاحية نقل الفواتير بين العملاء.'
+            ], 403);
+        }
+
+        $db->beginTransaction();
+
+        // قفل الفاتورة
+        $invoice = $db->queryOne(
+            "SELECT id, customer_id, invoice_number, total_amount 
+             FROM local_invoices 
+             WHERE id = ? FOR UPDATE",
+            [$invoiceId]
+        );
+
+        if (!$invoice) {
+            $db->rollBack();
+            returnJsonResponse([
+                'success' => false,
+                'message' => 'لم يتم العثور على الفاتورة المطلوبة.'
+            ], 404);
+        }
+
+        $invoiceCustomerId = (int)($invoice['customer_id'] ?? 0);
+        if ($invoiceCustomerId !== $fromCustomerId) {
+            $db->rollBack();
+            returnJsonResponse([
+                'success' => false,
+                'message' => 'هذه الفاتورة لا تخص العميل المحدد لنقلها منه.'
+            ], 422);
+        }
+
+        $totalAmount = (float)($invoice['total_amount'] ?? 0);
+        if ($totalAmount <= 0) {
+            $db->rollBack();
+            returnJsonResponse([
+                'success' => false,
+                'message' => 'قيمة الفاتورة غير صحيحة أو تساوي صفراً.'
+            ], 422);
+        }
+
+        // قفل العميلين
+        $fromCustomer = $db->queryOne(
+            "SELECT id, name, balance FROM local_customers WHERE id = ? FOR UPDATE",
+            [$fromCustomerId]
+        );
+        $toCustomer = $db->queryOne(
+            "SELECT id, name, balance FROM local_customers WHERE id = ? FOR UPDATE",
+            [$toCustomerId]
+        );
+
+        if (!$fromCustomer || !$toCustomer) {
+            $db->rollBack();
+            returnJsonResponse([
+                'success' => false,
+                'message' => 'أحد العميلين غير موجود.'
+            ], 404);
+        }
+
+        $fromBalanceOld = (float)($fromCustomer['balance'] ?? 0);
+        $toBalanceOld   = (float)($toCustomer['balance'] ?? 0);
+
+        // خصم إجمالي الفاتورة من رصيد العميل المنقول منه
+        $fromBalanceNew = round($fromBalanceOld - $totalAmount, 2);
+        // إضافة إجمالي الفاتورة لرصيد العميل المنقول إليه
+        $toBalanceNew   = round($toBalanceOld + $totalAmount, 2);
+
+        // تحديث مالك الفاتورة
+        $db->execute(
+            "UPDATE local_invoices SET customer_id = ? WHERE id = ?",
+            [$toCustomerId, $invoiceId]
+        );
+
+        // تحديث أرصدة العميلين
+        $db->execute(
+            "UPDATE local_customers SET balance = ?, balance_updated_at = NOW() WHERE id = ?",
+            [$fromBalanceNew, $fromCustomerId]
+        );
+        $db->execute(
+            "UPDATE local_customers SET balance = ?, balance_updated_at = NOW() WHERE id = ?",
+            [$toBalanceNew, $toCustomerId]
+        );
+
+        // تسجيل في سجل التدقيق إن توفر
+        if (function_exists('logAudit')) {
+            $details = [
+                'invoice_id'        => $invoiceId,
+                'invoice_number'    => $invoice['invoice_number'] ?? null,
+                'amount'            => $totalAmount,
+                'from_customer_id'  => $fromCustomerId,
+                'from_customer'     => $fromCustomer['name'] ?? null,
+                'from_balance_old'  => $fromBalanceOld,
+                'from_balance_new'  => $fromBalanceNew,
+                'to_customer_id'    => $toCustomerId,
+                'to_customer'       => $toCustomer['name'] ?? null,
+                'to_balance_old'    => $toBalanceOld,
+                'to_balance_new'    => $toBalanceNew,
+            ];
+            logAudit(
+                $currentUser['id'] ?? null,
+                'transfer_local_invoice',
+                'local_invoices',
+                $invoiceId,
+                null,
+                $details
+            );
+        }
+
+        $db->commit();
+
+        returnJsonResponse([
+            'success' => true,
+            'message' => 'تم نقل الفاتورة بنجاح بين العملاء وتحديث الأرصدة.',
+            'invoice' => [
+                'id'             => (int)$invoice['id'],
+                'invoice_number' => $invoice['invoice_number'] ?? null,
+                'amount'         => $totalAmount,
+            ],
+            'from_customer' => [
+                'id'           => $fromCustomerId,
+                'name'         => $fromCustomer['name'] ?? '',
+                'balance_old'  => $fromBalanceOld,
+                'balance_new'  => $fromBalanceNew,
+            ],
+            'to_customer' => [
+                'id'           => $toCustomerId,
+                'name'         => $toCustomer['name'] ?? '',
+                'balance_old'  => $toBalanceOld,
+                'balance_new'  => $toBalanceNew,
+            ],
+        ]);
+    } catch (Throwable $e) {
+        if (function_exists('db')) {
+            try {
+                $db = db();
+                if ($db->inTransaction()) {
+                    $db->rollBack();
+                }
+            } catch (Throwable $inner) {
+                // تجاهل
+            }
+        }
+        error_log('handleTransferLocalInvoice error: ' . $e->getMessage());
+        returnJsonResponse([
+            'success' => false,
+            'message' => 'حدث خطأ أثناء نقل الفاتورة. يرجى المحاولة مرة أخرى.'
+        ], 500);
     }
 }
 

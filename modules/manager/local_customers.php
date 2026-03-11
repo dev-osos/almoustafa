@@ -2910,10 +2910,43 @@ document.addEventListener('DOMContentLoaded', function() {
                         </tbody>
                     </table>
                 </div>
-                <div class="mt-3">
+                <div class="mt-3 d-flex flex-wrap gap-2">
                     <button type="button" class="btn btn-success btn-sm" id="localInvoiceDetailsReturnBtn" onclick="localOpenReturnForInvoiceFromDetails()">
                         <i class="bi bi-arrow-return-left me-1"></i>إرجاع من هذه الفاتورة
                     </button>
+                </div>
+                <div class="mt-3 border-top pt-3">
+                    <h6 class="mb-2">نقل هذه الفاتورة إلى عميل محلي آخر</h6>
+                    <div class="row g-2 align-items-end">
+                        <div class="col-12 col-md-7">
+                            <label class="form-label small mb-1">العميل المنقول إليه</label>
+                            <select class="form-select form-select-sm" id="localInvoiceTransferTargetSelect">
+                                <option value="">— اختر العميل —</option>
+                                <?php
+                                $transferCustomers = $db->query("SELECT id, name, phone FROM local_customers ORDER BY name ASC");
+                                foreach ($transferCustomers as $tc):
+                                ?>
+                                    <option value="<?php echo (int)$tc['id']; ?>">
+                                        <?php echo htmlspecialchars($tc['name']); ?>
+                                        <?php if (!empty($tc['phone'])): ?>
+                                            (<?php echo htmlspecialchars($tc['phone']); ?>)
+                                        <?php endif; ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-5 d-flex gap-2 flex-wrap">
+                            <button type="button" class="btn btn-outline-secondary btn-sm flex-grow-1" onclick="localResetInvoiceTransferTarget()">
+                                مسح الاختيار
+                            </button>
+                            <button type="button" class="btn btn-warning btn-sm flex-grow-1" id="localInvoiceTransferSubmitBtn" onclick="submitLocalInvoiceTransfer()">
+                                <i class="bi bi-arrow-left-right me-1"></i>نقل الفاتورة
+                            </button>
+                        </div>
+                    </div>
+                    <small class="text-muted d-block mt-1">
+                        سيتم خصم الإجمالي النهائي للفاتورة من رصيد العميل الحالي وإضافته إلى رصيد العميل المنقول إليه.
+                    </small>
                 </div>
             </div>
         </div>
@@ -2948,10 +2981,36 @@ document.addEventListener('DOMContentLoaded', function() {
                 <tbody id="localInvoiceDetailsCardTableBody"></tbody>
             </table>
         </div>
-        <div class="mt-3">
+        <div class="mt-3 d-flex flex-wrap gap-2">
             <button type="button" class="btn btn-success btn-sm" id="localInvoiceDetailsCardReturnBtn" onclick="localOpenReturnForInvoiceFromDetails()">
                 <i class="bi bi-arrow-return-left me-1"></i>إرجاع من هذه الفاتورة
             </button>
+        </div>
+        <div class="mt-3 border-top pt-3">
+            <h6 class="mb-2">نقل هذه الفاتورة إلى عميل محلي آخر</h6>
+            <div class="mb-2">
+                <label class="form-label small mb-1">العميل المنقول إليه</label>
+                <select class="form-select form-select-sm" id="localInvoiceTransferTargetSelectCard">
+                    <option value="">— اختر العميل —</option>
+                    <?php
+                    $transferCustomersCard = $db->query("SELECT id, name, phone FROM local_customers ORDER BY name ASC");
+                    foreach ($transferCustomersCard as $tc):
+                    ?>
+                        <option value="<?php echo (int)$tc['id']; ?>">
+                            <?php echo htmlspecialchars($tc['name']); ?>
+                            <?php if (!empty($tc['phone'])): ?>
+                                (<?php echo htmlspecialchars($tc['phone']); ?>)
+                            <?php endif; ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <button type="button" class="btn btn-warning btn-sm w-100" id="localInvoiceTransferSubmitBtnCard" onclick="submitLocalInvoiceTransfer()">
+                <i class="bi bi-arrow-left-right me-1"></i>نقل الفاتورة
+            </button>
+            <small class="text-muted d-block mt-1">
+                سيتم خصم الإجمالي النهائي للفاتورة من رصيد العميل الحالي وإضافته إلى رصيد العميل المنقول إليه.
+            </small>
         </div>
     </div>
 </div>
@@ -6273,6 +6332,8 @@ function groupLocalPurchaseHistoryByInvoice(history) {
 
 // عرض تفاصيل فاتورة العميل المحلي: بطاقة على الموبايل، مودال على الكمبيوتر
 var currentLocalDetailInvoiceNumber = null;
+var currentLocalDetailInvoiceId = null;
+var currentLocalDetailInvoiceTotal = 0;
 
 function closeLocalInvoiceDetailsCard() {
     var card = document.getElementById('localInvoiceDetailsCard');
@@ -6292,6 +6353,8 @@ function showLocalInvoiceDetailsModal(invoiceNumber) {
     const total = items.reduce(function(sum, it) { return sum + parseFloat(it.total_price || 0); }, 0);
     const date = first.invoice_date || '-';
     currentLocalDetailInvoiceNumber = invoiceNumber;
+    currentLocalDetailInvoiceId = first.invoice_id || null;
+    currentLocalDetailInvoiceTotal = total;
 
     var isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
 
@@ -6357,6 +6420,132 @@ function localOpenReturnForInvoiceFromDetails() {
     // فتح نموذج الإرجاع أولاً ثم تحميل الفاتورة حتى تظهر قائمة المنتجات عند الانتهاء
     openLocalCustomerReturnModal();
     loadLocalReturnInvoiceByNumber();
+}
+
+// إعادة تعيين اختيار العميل المستهدف لنقل الفاتورة
+function localResetInvoiceTransferTarget() {
+    var sel = document.getElementById('localInvoiceTransferTargetSelect');
+    if (sel) sel.value = '';
+    var selCard = document.getElementById('localInvoiceTransferTargetSelectCard');
+    if (selCard) selCard.value = '';
+}
+
+// إرسال طلب نقل الفاتورة بين عميلين محليين
+function submitLocalInvoiceTransfer() {
+    var fromCustomerId = typeof currentLocalCustomerId !== 'undefined' && currentLocalCustomerId
+        ? currentLocalCustomerId
+        : (typeof window.currentLocalCustomerId !== 'undefined' ? window.currentLocalCustomerId : null);
+
+    if (!fromCustomerId || !currentLocalDetailInvoiceId) {
+        alert('تعذر تحديد العميل أو الفاتورة لنقلها.');
+        return;
+    }
+
+    var selectDesktop = document.getElementById('localInvoiceTransferTargetSelect');
+    var selectCard = document.getElementById('localInvoiceTransferTargetSelectCard');
+    var targetSelect = null;
+
+    if (selectDesktop && selectDesktop.offsetParent !== null) {
+        targetSelect = selectDesktop;
+    } else if (selectCard && selectCard.offsetParent !== null) {
+        targetSelect = selectCard;
+    } else if (selectDesktop) {
+        targetSelect = selectDesktop;
+    } else if (selectCard) {
+        targetSelect = selectCard;
+    }
+
+    if (!targetSelect) {
+        alert('تعذر العثور على حقل اختيار العميل المنقول إليه.');
+        return;
+    }
+
+    var toCustomerId = parseInt(targetSelect.value || '0', 10);
+    if (!toCustomerId || isNaN(toCustomerId)) {
+        alert('يرجى اختيار العميل المراد نقل الفاتورة إليه.');
+        return;
+    }
+
+    if (parseInt(fromCustomerId, 10) === toCustomerId) {
+        alert('لا يمكن نقل الفاتورة إلى نفس العميل.');
+        return;
+    }
+
+    var confirmMsg = 'سيتم نقل هذه الفاتورة إلى العميل المحدد، مع خصم إجمالي الفاتورة من رصيد العميل الحالي وإضافته إلى رصيد العميل الجديد.\n\nهل أنت متأكد من المتابعة؟';
+    if (!confirm(confirmMsg)) {
+        return;
+    }
+
+    var btn = document.getElementById('localInvoiceTransferSubmitBtn');
+    var btnCard = document.getElementById('localInvoiceTransferSubmitBtnCard');
+    var activeBtn = null;
+    if (btn && btn.offsetParent !== null) {
+        activeBtn = btn;
+    } else if (btnCard && btnCard.offsetParent !== null) {
+        activeBtn = btnCard;
+    } else if (btn) {
+        activeBtn = btn;
+    } else if (btnCard) {
+        activeBtn = btnCard;
+    }
+
+    var originalHtml = activeBtn ? activeBtn.innerHTML : '';
+    if (activeBtn) {
+        activeBtn.disabled = true;
+        activeBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>جاري النقل...';
+    }
+
+    var basePath = '<?php echo getBasePath(); ?>';
+    var fd = new FormData();
+    fd.append('action', 'transfer_local_invoice');
+    fd.append('invoice_id', currentLocalDetailInvoiceId);
+    fd.append('from_customer_id', fromCustomerId);
+    fd.append('to_customer_id', toCustomerId);
+
+    fetch(basePath + '/api/customer_purchase_history.php', {
+        method: 'POST',
+        credentials: 'same-origin',
+        body: fd
+    })
+        .then(function(response) {
+            return response.json().catch(function() {
+                throw new Error('استجابة غير صالحة من الخادم.');
+            });
+        })
+        .then(function(data) {
+            if (!data || typeof data.success === 'undefined') {
+                throw new Error('استجابة غير صالحة من الخادم.');
+            }
+            alert(data.message || (data.success ? 'تم نقل الفاتورة بنجاح.' : 'حدث خطأ أثناء نقل الفاتورة.'));
+
+            if (data.success) {
+                // إعادة تحميل سجل المشتريات للعميل الحالي لتحديث القائمة والرصيد
+                if (typeof loadLocalCustomerPurchaseHistory === 'function') {
+                    loadLocalCustomerPurchaseHistory();
+                }
+                // يمكن إغلاق تفاصيل الفاتورة بعد نجاح النقل
+                try {
+                    closeLocalInvoiceDetailsCard();
+                    var modalEl = document.getElementById('localInvoiceDetailsModal');
+                    if (modalEl && typeof bootstrap !== 'undefined') {
+                        var m = bootstrap.Modal.getInstance(modalEl);
+                        if (m) m.hide();
+                    }
+                } catch (e) {
+                    console.error('Error closing invoice details after transfer:', e);
+                }
+            }
+        })
+        .catch(function(error) {
+            console.error('Error transferring local invoice:', error);
+            alert(error.message || 'حدث خطأ أثناء الاتصال بالخادم.');
+        })
+        .finally(function() {
+            if (activeBtn) {
+                activeBtn.disabled = false;
+                activeBtn.innerHTML = originalHtml;
+            }
+        });
 }
 
 // دالة عرض سجل المشتريات (سطر واحد لكل فاتورة) + الفواتير الورقية + مرتجعات الفواتير الورقية + أوردرات معتمدة + التحصيلات + الرصيد بعد كل معاملة
