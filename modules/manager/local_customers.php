@@ -6548,6 +6548,140 @@ function submitLocalInvoiceTransfer() {
         });
 }
 
+// ---- task transfer helpers ----
+var currentLocalTaskId = null;
+var currentLocalTaskNumber = '';
+var currentLocalTaskAmount = 0;
+
+function localResetTaskTransferTarget() {
+    var sel = document.getElementById('localTaskTransferTargetSelect');
+    var selCard = document.getElementById('localTaskTransferTargetSelectCard');
+    if (sel) sel.value = '';
+    if (selCard) selCard.value = '';
+}
+
+function showLocalTaskTransferModal(taskId, taskNumber, amount) {
+    currentLocalTaskId = taskId;
+    currentLocalTaskNumber = taskNumber || '';
+    currentLocalTaskAmount = parseFloat(amount) || 0;
+
+    localResetTaskTransferTarget();
+
+    var modal = document.getElementById('localTaskTransferModal');
+    var isMobile = window.innerWidth <= 768;
+    if (isMobile) {
+        var card = document.getElementById('localTaskTransferCard');
+        if (card) {
+            var header = card.querySelector('.card-header h5');
+            if (header) header.textContent = 'نقل إيصال الأوردر - ' + currentLocalTaskNumber;
+            card.style.display = 'block';
+            card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    } else {
+        if (modal && typeof bootstrap !== 'undefined') {
+            var h = modal.querySelector('.modal-title span');
+            if (h) h.textContent = currentLocalTaskNumber;
+            var m = bootstrap.Modal.getOrCreateInstance(modal);
+            m.show();
+        }
+    }
+}
+
+function submitLocalTaskTransfer() {
+    var fromCustomerId = typeof currentLocalCustomerId !== 'undefined' && currentLocalCustomerId
+        ? currentLocalCustomerId
+        : (typeof window.currentLocalCustomerId !== 'undefined' ? window.currentLocalCustomerId : null);
+
+    if (!fromCustomerId || !currentLocalTaskId) {
+        alert('تعذر تحديد العميل أو الإيصال لنقله.');
+        return;
+    }
+
+    var selectDesktop = document.getElementById('localTaskTransferTargetSelect');
+    var selectCard = document.getElementById('localTaskTransferTargetSelectCard');
+    var targetSelect = selectDesktop && selectDesktop.offsetParent !== null ? selectDesktop
+                   : selectCard && selectCard.offsetParent !== null ? selectCard
+                   : selectDesktop || selectCard;
+
+    if (!targetSelect) {
+        alert('تعذر العثور على حقل اختيار العميل المنقول إليه.');
+        return;
+    }
+
+    var toCustomerId = parseInt(targetSelect.value || '0', 10);
+    if (!toCustomerId || isNaN(toCustomerId)) {
+        alert('يرجى اختيار العميل المراد نقل الإيصال إليه.');
+        return;
+    }
+    if (parseInt(fromCustomerId,10) === toCustomerId) {
+        alert('لا يمكن نقل الإيصال إلى نفس العميل.');
+        return;
+    }
+
+    var confirmMsg = 'سيتم نقل هذا الإيصال إلى العميل المحدد، مع خصم المبلغ من رصيد العميل الحالي وإضافته إلى رصيد العميل الجديد.\n\nهل أنت متأكد من المتابعة؟';
+    if (!confirm(confirmMsg)) {
+        return;
+    }
+
+    var btn = document.getElementById('localTaskTransferSubmitBtn');
+    var btnCard = document.getElementById('localTaskTransferSubmitBtnCard');
+    var activeBtn = btn && btn.offsetParent !== null ? btn
+                   : btnCard && btnCard.offsetParent !== null ? btnCard
+                   : btn || btnCard;
+
+    var originalHtml = activeBtn ? activeBtn.innerHTML : '';
+    if (activeBtn) {
+        activeBtn.disabled = true;
+        activeBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>جاري النقل...';
+    }
+
+    var basePath = '<?php echo getBasePath(); ?>';
+    var fd = new FormData();
+    fd.append('action', 'transfer_local_task_purchase');
+    fd.append('task_id', currentLocalTaskId);
+    fd.append('from_customer_id', fromCustomerId);
+    fd.append('to_customer_id', toCustomerId);
+
+    fetch(basePath + '/api/customer_purchase_history.php', {
+        method: 'POST',
+        credentials: 'same-origin',
+        body: fd
+    })
+    .then(response => response.json().catch(()=>{throw new Error('استجابة غير صالحة من الخادم.');}))
+    .then(data => {
+        alert(data.message || (data.success ? 'تم نقل الإيصال بنجاح.' : 'حدث خطأ أثناء نقل الإيصال.'));
+        if (data.success) {
+            if (typeof loadLocalCustomerPurchaseHistory === 'function') {
+                loadLocalCustomerPurchaseHistory();
+            }
+            try { 
+                var modalEl = document.getElementById('localTaskTransferModal');
+                if (modalEl && typeof bootstrap !== 'undefined') {
+                    var m = bootstrap.Modal.getInstance(modalEl);
+                    if (m) m.hide();
+                }
+                var cardEl = document.getElementById('localTaskTransferCard');
+                if (cardEl) cardEl.style.display = 'none';
+            } catch(e){console.error('Error closing task transfer UI', e);}
+        }
+    })
+    .catch(error => {
+        console.error('Error transferring local task purchase:', error);
+        alert(error.message || 'حدث خطأ أثناء الاتصال بالخادم.');
+    })
+    .finally(() => {
+        if (activeBtn) {
+            activeBtn.disabled = false;
+            activeBtn.innerHTML = originalHtml;
+        }
+    });
+}
+
+// make helpers globally accessible
+window.showLocalTaskTransferModal = showLocalTaskTransferModal;
+window.localResetTaskTransferTarget = localResetTaskTransferTarget;
+window.submitLocalTaskTransfer = submitLocalTaskTransfer;
+
 // دالة عرض سجل المشتريات (سطر واحد لكل فاتورة) + الفواتير الورقية + مرتجعات الفواتير الورقية + أوردرات معتمدة + التحصيلات + الرصيد بعد كل معاملة
 // معامل سادس: taskPurchases (أوردرات إنتاج معتمدة)، معامل سابع: filterOptions { searchText, dateFrom, dateTo, sortOrder }
 function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns, currentBalance, collections, taskPurchases, filterOptions) {
@@ -6660,7 +6794,8 @@ function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns
             var amount = parseFloat(tp.total_amount || 0);
             var taskId = parseInt(tp.task_id, 10) || 0;
             var receiptUrl = receiptBase ? (receiptBase + (receiptBase.indexOf('?') >= 0 ? '&' : '?') + 'id=' + taskId) : ('print_task_receipt.php?id=' + taskId);
-            var actionsCell = '<td><a href="' + receiptUrl + '" target="_blank" class="btn btn-sm btn-outline-primary" title="إيصال الأوردر"><i class="bi bi-receipt me-1"></i>إيصال</a></td>';
+            var transferBtn = '<button type="button" class="btn btn-sm btn-outline-warning ms-1" title="نقل الإيصال" onclick="showLocalTaskTransferModal(' + taskId + ', \'" + safeNum + "\', ' + amount + ')"><i class="bi bi-arrow-left-right"></i></button>';
+            var actionsCell = '<td><a href="' + receiptUrl + '" target="_blank" class="btn btn-sm btn-outline-primary" title="إيصال الأوردر"><i class="bi bi-receipt me-1"></i>إيصال</a>' + transferBtn + '</td>';
             var entry = { sortDate: normDate(tp.task_date || tp.created_at), effect: amount, labelText: taskNum, amountNum: amount, cells: ['<td>' + safeNum + '</td>', '<td>' + amount.toFixed(2) + ' ج.م</td>', '<td>' + dateStr + '</td>', actionsCell] };
             entry.searchableText = buildSearchableText(taskNum, amount, dateStr);
             allEntries.push(entry);

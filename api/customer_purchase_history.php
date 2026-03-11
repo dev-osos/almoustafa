@@ -172,6 +172,13 @@ try {
             }
             handleTransferLocalInvoice($currentUser);
             break;
+
+        case 'transfer_local_task_purchase':
+            if ($method !== 'POST') {
+                returnJsonResponse(['success' => false, 'message' => 'يجب استخدام طلب POST'], 405);
+            }
+            handleTransferLocalTaskPurchase($currentUser);
+            break;
             
         default:
             returnJsonResponse(['success' => false, 'message' => 'إجراء غير مدعوم'], 400);
@@ -619,6 +626,185 @@ function handleTransferLocalInvoice(array $currentUser): void
             'success' => false,
             'message' => 'حدث خطأ أثناء نقل الفاتورة. يرجى المحاولة مرة أخرى.'
         ], 500);
+    }
+}
+
+/**
+ * نقل إيصال أوردر لعميل محلي آخر وتعديل الأرصدة
+ */
+function handleTransferLocalTaskPurchase(array $currentUser): void
+{
+    try {
+        $db = db();
+
+        $fromCustomerId = isset($_POST['from_customer_id']) ? (int)$_POST['from_customer_id'] : 0;
+        $toCustomerId   = isset($_POST['to_customer_id']) ? (int)$_POST['to_customer_id'] : 0;
+        $taskId         = isset($_POST['task_id']) ? (int)$_POST['task_id'] : 0;
+
+        if ($fromCustomerId <= 0 || $toCustomerId <= 0 || $taskId <= 0) {
+            returnJsonResponse([
+                'success' => false,
+                'message' => 'بيانات غير صحيحة. يرجى اختيار عميلين صحيحين وإيصال صحيح.'
+            ], 422);
+        }
+
+        if ($fromCustomerId === $toCustomerId) {
+            returnJsonResponse([
+                'success' => false,
+                'message' => 'لا يمكن نقل الإيصال إلى نفس العميل.'
+            ], 422);
+        }
+
+        // السماح فقط للمدير والمحاسب
+        if (!in_array($currentUser['role'] ?? '', ['manager', 'accountant'], true)) {
+            returnJsonResponse([
+                'success' => false,
+                'message' => 'ليست لديك صلاحية نقل الإيصالات بين العملاء.'
+            ], 403);
+        }
+
+        $db->beginTransaction();
+
+        // قفل سجل الإيصال
+        $task = $db->queryOne(
+            "SELECT id, local_customer_id, total_amount, task_id 
+             FROM customer_task_purchases 
+             WHERE task_id = ? FOR UPDATE",
+            [$taskId]
+        );
+
+        if (!$task) {
+            $db->rollBack();
+            returnJsonResponse([
+                'success' => false,
+                'message' => 'لم يتم العثور على الإيصال المطلوب.'
+            ], 404);
+        }
+
+        $taskCustomerId = (int)($task['local_customer_id'] ?? 0);
+        if ($taskCustomerId !== $fromCustomerId) {
+            $db->rollBack();
+            returnJsonResponse([
+                'success' => false,
+                'message' => 'هذا الإيصال لا يخص العميل المحدد لنقله منه.'
+            ], 422);
+        }
+
+        $totalAmount = (float)($task['total_amount'] ?? 0);
+        if ($totalAmount <= 0) {
+            $db->rollBack();
+            returnJsonResponse([
+                'success' => false,
+                'message' => 'قيمة الإيصال غير صحيحة أو تساوي صفراً.'
+            ], 422);
+        }
+
+        // قفل العميلين
+        $fromCustomer = $db->queryOne(
+            "SELECT id, name, balance FROM local_customers WHERE id = ? FOR UPDATE",
+            [$fromCustomerId]
+        );
+        $toCustomer = $db->queryOne(
+            "SELECT id, name, balance FROM local_customers WHERE id = ? FOR UPDATE",
+            [$toCustomerId]
+        );
+
+        if (!$fromCustomer || !$toCustomer) {
+            $db->rollBack();
+            returnJsonResponse([
+                'success' => false,
+                'message' => 'أحد العميلين غير موجود.'
+            ], 404);
+        }
+
+        $fromBalanceOld = (float)($fromCustomer['balance'] ?? 0);
+        $toBalanceOld   = (float)($toCustomer['balance'] ?? 0);
+
+        // خصم مبلغ الإيصال من رصيد العميل المنقول منه
+        $fromBalanceNew = round($fromBalanceOld - $totalAmount, 2);
+        // إضافة مبلغ الإيصال لرصيد العميل المنقول إليه
+        $toBalanceNew   = round($toBalanceOld + $totalAmount, 2);
+
+        // تحديث مالك الإيصال
+        $db->execute(
+            "UPDATE customer_task_purchases SET local_customer_id = ? WHERE task_id = ?",
+            [$toCustomerId, $taskId]
+        );
+
+        // تحديث أرصدة العميلين
+        $db->execute(
+            "UPDATE local_customers SET balance = ?, balance_updated_at = NOW() WHERE id = ?",
+            [$fromBalanceNew, $fromCustomerId]
+        );
+        $db->execute(
+            "UPDATE local_customers SET balance = ?, balance_updated_at = NOW() WHERE id = ?",
+            [$toBalanceNew, $toCustomerId]
+        );
+
+        // تسجيل في سجل التدقيق إن توفر
+        if (function_exists('logAudit')) {
+            $details = [
+                'task_id'           => $taskId,
+                'amount'            => $totalAmount,
+                'from_customer_id'  => $fromCustomerId,
+                'from_customer'     => $fromCustomer['name'] ?? null,
+                'from_balance_old'  => $fromBalanceOld,
+                'from_balance_new'  => $fromBalanceNew,
+                'to_customer_id'    => $toCustomerId,
+                'to_customer'       => $toCustomer['name'] ?? null,
+                'to_balance_old'    => $toBalanceOld,
+                'to_balance_new'    => $toBalanceNew,
+            ];
+            logAudit(
+                $currentUser['id'] ?? null,
+                'transfer_local_task_purchase',
+                'customer_task_purchases',
+                $task['id'] ?? null,
+                null,
+                $details
+            );
+        }
+
+        $db->commit();
+
+        returnJsonResponse([
+            'success' => true,
+            'message' => 'تم نقل الإيصال بنجاح بين العملاء وتحديث الأرصدة.',
+            'task' => [
+                'task_id' => $taskId,
+                'amount'  => $totalAmount,
+            ],
+            'from_customer' => [
+                'id'           => $fromCustomerId,
+                'name'         => $fromCustomer['name'] ?? '',
+                'balance_old'  => $fromBalanceOld,
+                'balance_new'  => $fromBalanceNew,
+            ],
+            'to_customer' => [
+                'id'           => $toCustomerId,
+                'name'         => $toCustomer['name'] ?? '',
+                'balance_old'  => $toBalanceOld,
+                'balance_new'  => $toBalanceNew,
+            ],
+        ]);
+    } catch (Throwable $e) {
+        if (function_exists('db')) {
+            try {
+                $db = db();
+                if ($db->inTransaction()) {
+                    $db->rollBack();
+                }
+            } catch (Throwable $inner) {
+                // تجاهل
+            }
+        }
+        error_log('handleTransferLocalTaskPurchase error: ' . $e->getMessage());
+        returnJsonResponse([
+            'success' => false,
+            'message' => 'حدث خطأ أثناء نقل الإيصال. يرجى المحاولة مرة أخرى.'
+        ], 500);
+    }
+}
     }
 }
 
