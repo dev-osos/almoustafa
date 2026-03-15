@@ -1309,7 +1309,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $error = ($e instanceof InvalidArgumentException) ? $e->getMessage() : 'تعذر اعتماد الفاتورة: ' . $e->getMessage();
                 }
             }
-        } elseif ($totalAmount <= 0) {
+        } elseif ($totalAmount < 0) {
             $error = 'الإجمالي النهائي غير صالح.';
         } else {
             try {
@@ -2887,9 +2887,9 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                                 <?php
                                                 $taskApproved = in_array((int)$task['id'], $approvedTaskIds, true);
                                                 $hasCustomer = trim((string)($task['customer_name'] ?? '')) !== '' || trim((string)($task['customer_phone'] ?? '')) !== '';
-                                                $receiptTotal = isset($task['receipt_total']) && $task['receipt_total'] > 0 ? (float)$task['receipt_total'] : 0;
+                                                $receiptTotal = isset($task['receipt_total']) ? (float)$task['receipt_total'] : 0;
                                                 $isShippingOrderType = ($displayType === 'telegraph' || $displayType === 'shipping_company');
-                                                $canShowApproveBtn = !$taskApproved && $receiptTotal > 0 && ($hasCustomer || $isShippingOrderType);
+                                                $canShowApproveBtn = !$taskApproved && $receiptTotal >= 0 && ($hasCustomer || $isShippingOrderType);
                                                 if ($canShowApproveBtn):
                                                 ?>
                                                 <li>
