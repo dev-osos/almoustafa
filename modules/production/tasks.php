@@ -1692,16 +1692,7 @@ function tasksHtml(string $value): string
                 </div>
             </a>
         </div>
-        <div class="col-6 col-md-3">
-            <a href="<?php echo $filterBaseUrl . (strpos($filterBaseUrl, '?') !== false ? '&' : '?'); ?>overdue=1" class="text-decoration-none">
-                <div class="card <?php echo $overdueFilter ? 'bg-danger text-white' : 'border-danger'; ?> text-center h-100">
-                    <div class="card-body p-2">
-                        <h5 class="<?php echo $overdueFilter ? 'text-white' : 'text-danger'; ?> mb-0"><?php echo $stats['overdue']; ?></h5>
-                        <small class="<?php echo $overdueFilter ? 'text-white-50' : 'text-muted'; ?>">متأخرة</small>
-                    </div>
-                </div>
-            </a>
-        </div>
+        
     </div>
 
     <div class="card mb-3">
