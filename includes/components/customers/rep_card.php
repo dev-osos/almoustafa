@@ -44,7 +44,7 @@ if (!function_exists('renderRepresentativeCards')) {
                     $statusLabel = $status === 'active' ? 'نشط' : 'غير نشط';
                     $statusBadge = $status === 'active' ? 'bg-success-subtle text-success' : 'bg-secondary-subtle text-secondary';
                     ?>
-                    <div class="col-12 col-md-6 col-xl-6">
+                    <div class="col-6 col-md-6 col-xl-6">
                         <div 
                             class="card representative-card h-100 shadow-sm"
                             data-rep-id="<?php echo $repId; ?>"
