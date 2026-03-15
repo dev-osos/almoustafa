@@ -1399,9 +1399,13 @@ $typeColorMap = [
             <!-- تحصيل من مندوب -->
             <div class="col-12 col-lg-6 col-xxl-6">
                 <div class="card shadow-sm h-100">
-                    <div class="card-header bg-light fw-bold">
-                        <i class="bi bi-cash-coin me-2 text-primary"></i>تحصيل من مندوب
+                    <div class="card-header bg-light fw-bold d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-cash-coin me-2 text-primary"></i>تحصيل من مندوب</span>
+                        <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#collectFromRepCardBody" aria-expanded="false" aria-controls="collectFromRepCardBody">
+                            <i class="bi bi-chevron-down"></i>
+                        </button>
                     </div>
+                    <div class="collapse" id="collectFromRepCardBody">
                     <div class="card-body">
                         <form method="POST" id="collectFromRepCardForm" class="row g-3">
                             <input type="hidden" name="action" value="collect_from_sales_rep">
@@ -1450,15 +1454,20 @@ $typeColorMap = [
                             </div>
                         </form>
                     </div>
+                    </div><!-- /.collapse -->
                 </div>
             </div>
-            
+
             <!-- تحصيل خارجي -->
             <div class="col-12 col-lg-6 col-xxl-6">
                 <div class="card shadow-sm h-100">
-                    <div class="card-header bg-light fw-bold">
-                        <i class="bi bi-cash-stack me-2 text-success"></i>تحصيل خارجي
+                    <div class="card-header bg-light fw-bold d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-cash-stack me-2 text-success"></i>تحصيل خارجي</span>
+                        <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#externalCollectionCardBody" aria-expanded="false" aria-controls="externalCollectionCardBody">
+                            <i class="bi bi-chevron-down"></i>
+                        </button>
                     </div>
+                    <div class="collapse" id="externalCollectionCardBody">
                     <div class="card-body">
                         <form method="POST" class="row g-3">
                             <input type="hidden" name="action" value="external_collection">
@@ -1481,6 +1490,7 @@ $typeColorMap = [
                             </div>
                         </form>
                     </div>
+                    </div><!-- /.collapse -->
                 </div>
             </div>
 
@@ -1491,9 +1501,13 @@ $typeColorMap = [
             ?>
             <div class="col-12 col-lg-6 col-xxl-6">
                 <div class="card shadow-sm h-100">
-                    <div class="card-header bg-light fw-bold">
-                        <i class="bi bi-person-badge me-2 text-info"></i>عهدة الأموال
+                    <div class="card-header bg-light fw-bold d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-person-badge me-2 text-info"></i>عهدة الأموال</span>
+                        <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#custodyCardBody" aria-expanded="false" aria-controls="custodyCardBody">
+                            <i class="bi bi-chevron-down"></i>
+                        </button>
                     </div>
+                    <div class="collapse" id="custodyCardBody">
                     <div class="card-body">
                         <form method="POST" class="row g-3">
                             <input type="hidden" name="action" value="add_custody">
@@ -1544,15 +1558,20 @@ $typeColorMap = [
                             </div>
                         </form>
                     </div>
+                    </div><!-- /.collapse -->
                 </div>
             </div>
-            
+
             <!-- إنشاء تقرير تفصيلي -->
             <div class="col-12 col-lg-6 col-xxl-6">
                 <div class="card shadow-sm h-100">
-                    <div class="card-header bg-light fw-bold">
-                        <i class="bi bi-file-earmark-text me-2 text-success"></i>إنشاء تقرير تفصيلي
+                    <div class="card-header bg-light fw-bold d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-file-earmark-text me-2 text-success"></i>إنشاء تقرير تفصيلي</span>
+                        <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#generateReportCardBodyCollapse" aria-expanded="false" aria-controls="generateReportCardBodyCollapse">
+                            <i class="bi bi-chevron-down"></i>
+                        </button>
                     </div>
+                    <div class="collapse" id="generateReportCardBodyCollapse">
                     <div class="card-body">
                         <form method="GET" id="generateReportCardForm" onsubmit="return handleReportCardSubmit(event)" class="row g-3">
                             <div class="col-12">
@@ -1606,6 +1625,7 @@ $typeColorMap = [
                             </div>
                         </form>
                     </div>
+                    </div><!-- /.collapse -->
                 </div>
             </div>
         </div>
