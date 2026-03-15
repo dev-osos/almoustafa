@@ -3057,7 +3057,43 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
             fd.forEach(function(value, key) {
                 if (value !== '' && value !== '0') params.push(encodeURIComponent(key) + '=' + encodeURIComponent(value));
             });
-            window.location.href = '?' + params.join('&');
+            var url = '?' + params.join('&');
+            var wrapper = tbody.closest('.table-responsive');
+            if (wrapper) wrapper.style.opacity = '0.5';
+            fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then(function(r) { return r.text(); })
+                .then(function(html) {
+                    var parser = new DOMParser();
+                    var doc = parser.parseFromString(html, 'text/html');
+                    var newTbody = doc.getElementById('recentTasksTableBody');
+                    if (newTbody) tbody.innerHTML = newTbody.innerHTML;
+                    rows = tbody.querySelectorAll('tr.recent-tasks-filter-row');
+                    var newPagination = doc.getElementById('recentTasksPagination');
+                    if (newPagination) {
+                        paginationNav.outerHTML = newPagination.outerHTML;
+                        paginationNav = document.getElementById('recentTasksPagination');
+                    } else {
+                        paginationNav.innerHTML = '';
+                    }
+                    var newCounter = doc.querySelector('#recentTasksPagination')
+                        ? doc.querySelector('.card-header .text-muted.small')
+                        : null;
+                    var oldCounter = document.querySelector('[data-recent-tasks-counter]');
+                    if (!oldCounter) {
+                        var allSmall = document.querySelectorAll('.card-header .text-muted.small');
+                        allSmall.forEach(function(el) {
+                            if (el.textContent.indexOf('صفحة') !== -1) oldCounter = el;
+                        });
+                    }
+                    if (oldCounter && newCounter) oldCounter.textContent = newCounter.textContent;
+                    if (wrapper) wrapper.style.opacity = '';
+                    applyRecentTasksFilter();
+                    history.replaceState(null, '', url);
+                })
+                .catch(function() {
+                    if (wrapper) wrapper.style.opacity = '';
+                    window.location.href = url;
+                });
         });
     }
 })();
