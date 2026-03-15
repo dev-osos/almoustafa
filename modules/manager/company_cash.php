@@ -1663,9 +1663,13 @@ $canEditCustody = in_array($userRoleForCustody, ['manager', 'accountant', 'devel
 
 <!-- عهدة الأموال - سجل السجلات -->
 <div class="card shadow-sm mt-4">
-    <div class="card-header bg-light fw-bold">
+    <div class="card-header bg-light fw-bold d-flex justify-content-between align-items-center">
         <span><i class="bi bi-person-badge me-2 text-info"></i>سجل عهدة الأموال</span>
+        <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#custodyListCardBody" aria-expanded="false" aria-controls="custodyListCardBody">
+            <i class="bi bi-chevron-down"></i>
+        </button>
     </div>
+    <div class="collapse" id="custodyListCardBody">
     <div class="card-body">
         <?php if (empty($custodyList)): ?>
             <p class="text-muted text-center py-4 mb-0"><i class="bi bi-inbox me-2"></i>لا توجد سجلات عهدة حالياً</p>
@@ -1743,6 +1747,7 @@ $canEditCustody = in_array($userRoleForCustody, ['manager', 'accountant', 'devel
             <?php endif; ?>
         <?php endif; ?>
     </div>
+    </div><!-- /.collapse -->
 </div>
 
 <!-- بطاقة تعديل مبلغ العهدة (تظهر عند الضغط على تعديل) -->
