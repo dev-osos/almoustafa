@@ -2961,12 +2961,12 @@ function tasksHtml(string $value): string
     var debounceTimer;
     function scheduleFilter() {
         clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(applyTasksFilter, 180);
+        debounceTimer = setTimeout(function() { doAjaxTasksPage(1); }, 400);
     }
 
     document.querySelectorAll('#tasksFilterForm .tasks-dynamic-filter').forEach(function(el) {
         if (el.tagName === 'SELECT' || (el.type === 'date')) {
-            el.addEventListener('change', applyTasksFilter);
+            el.addEventListener('change', function() { doAjaxTasksPage(1); });
         } else {
             el.addEventListener('input', scheduleFilter);
             el.addEventListener('keyup', scheduleFilter);
@@ -2975,7 +2975,7 @@ function tasksHtml(string $value): string
 
     var form = document.getElementById('tasksFilterForm');
     if (form) {
-        form.addEventListener('submit', function(e) { e.preventDefault(); applyTasksFilter(); });
+        form.addEventListener('submit', function(e) { e.preventDefault(); doAjaxTasksPage(1); });
     }
 
     applyTasksFilter();
