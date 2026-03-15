@@ -35,7 +35,7 @@
         // الروابط التي يجب اعتراضها
         linkSelector: '.sidebar-nav a, .topbar a[href*="dashboard"], a[href*="?page="]',
         // استثناءات - روابط لا يجب اعتراضها
-        excludeSelectors: 'a[target="_blank"], a[download], a[data-ajax="false"], a[href^="#"], a[href^="javascript:"]',
+        excludeSelectors: 'a[target="_blank"], a[download], a[data-ajax="false"], a[href^="#"], a[href^="javascript:"], a.recent-tasks-page-link, a.tasks-page-link',
         // Timeout للطلبات - محسّن حسب نوع الاتصال
         // WiFi: 30 ثانية | بيانات الهاتف: 20 ثانية (أسرع للكشف عن الأخطاء)
         requestTimeout: isMobileData ? 20000 : 30000,
