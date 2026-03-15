@@ -1230,8 +1230,14 @@ $typeColorMap = [
         <div class="card shadow-sm h-100">
             <div class="card-header bg-light fw-bold d-flex justify-content-between align-items-center">
                 <span><i class="bi bi-graph-up-arrow me-2 text-primary"></i>ملخص الخزنة</span>
-                <span class="badge bg-primary text-white">محدّث</span>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-primary text-white">محدّث</span>
+                    <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#safeSummaryCardBody" aria-expanded="false" aria-controls="safeSummaryCardBody">
+                        <i class="bi bi-chevron-down"></i>
+                    </button>
+                </div>
             </div>
+            <div class="collapse" id="safeSummaryCardBody">
             <div class="card-body">
                 <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
                     <div>
@@ -1325,8 +1331,9 @@ $typeColorMap = [
                         </div>
                     </div>
                 </div>
-               
+
             </div>
+            </div><!-- /.collapse -->
         </div>
     </div>
     <div class="col-12 col-xxl-5">
