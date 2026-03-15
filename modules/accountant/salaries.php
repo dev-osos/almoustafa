@@ -4746,6 +4746,39 @@ $advanceStatusLabels = [
     </div>
     <div class="card-body">
         <p class="text-muted small mb-3">يحددها المدير أو المحاسب ولا تؤثر على حساب الراتب — مرجع لخصومات الشهر المحدد فقط.</p>
+
+        <?php if (!empty($pendingDeductions)):
+            // تجميع الخصومات حسب المستخدم
+            $deductionsByUser = [];
+            foreach ($pendingDeductions as $pd) {
+                $uid = $pd['user_id'] ?? 0;
+                $uname = $pd['full_name'] ?? $pd['username'] ?? '—';
+                if (!isset($deductionsByUser[$uid])) {
+                    $deductionsByUser[$uid] = ['name' => $uname, 'total' => 0, 'count' => 0];
+                }
+                $deductionsByUser[$uid]['total'] += (float)($pd['amount'] ?? 0);
+                $deductionsByUser[$uid]['count']++;
+            }
+        ?>
+        <div class="row g-2 mb-4">
+            <?php foreach ($deductionsByUser as $uid => $info): ?>
+            <div class="col-6 col-md-3 col-lg-2">
+                <div class="card border-danger h-100 text-center py-2 px-1" style="border-width:1.5px;">
+                    <div class="card-body p-1">
+                        <div class="fw-semibold text-truncate small mb-1" title="<?php echo htmlspecialchars($info['name']); ?>">
+                            <?php echo htmlspecialchars($info['name']); ?>
+                        </div>
+                        <div class="text-danger fw-bold">
+                            <?php echo function_exists('formatCurrency') ? formatCurrency($info['total']) : number_format($info['total'], 2); ?>
+                        </div>
+                        <div class="text-muted" style="font-size:0.72rem;"><?php echo $info['count']; ?> خصم</div>
+                    </div>
+                </div>
+            </div>
+            <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
+
         <form method="post" class="mb-4">
             <input type="hidden" name="action" value="add_pending_deduction">
             <input type="hidden" name="month" value="<?php echo (int)$selectedMonth; ?>">
