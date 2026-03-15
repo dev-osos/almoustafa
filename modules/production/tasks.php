@@ -1622,7 +1622,7 @@ function tasksHtml(string $value): string
     ?>
     <?php if (!defined('TASKS_PARTIAL_TABLE') || !TASKS_PARTIAL_TABLE): ?>
     <div class="row g-2 mb-3">
-        <div class="col-6 col-md-3">
+        <div class="col-6 col-md-4 col-lg-2">
             <a href="<?php echo $filterBaseUrl; ?>" class="text-decoration-none">
                 <div class="card <?php echo $statusFilter === '' && !$overdueFilter ? 'bg-primary text-white' : 'border-primary'; ?> text-center h-100">
                     <div class="card-body p-2">
@@ -1632,7 +1632,7 @@ function tasksHtml(string $value): string
                 </div>
             </a>
         </div>
-        <div class="col-6 col-md-3">
+        <div class="col-6 col-md-4 col-lg-2">
             <a href="<?php echo $filterBaseUrl . (strpos($filterBaseUrl, '?') !== false ? '&' : '?'); ?>status=pending" class="text-decoration-none">
                 <div class="card <?php echo $statusFilter === 'pending' ? 'bg-warning text-dark' : 'border-warning'; ?> text-center h-100">
                     <div class="card-body p-2">
@@ -1642,8 +1642,8 @@ function tasksHtml(string $value): string
                 </div>
             </a>
         </div>
-        
-        <div class="col-6 col-md-3">
+
+        <div class="col-6 col-md-4 col-lg-2">
             <a href="<?php echo $filterBaseUrl . (strpos($filterBaseUrl, '?') !== false ? '&' : '?'); ?>status=completed" class="text-decoration-none">
                 <div class="card <?php echo $statusFilter === 'completed' ? 'bg-success text-white' : 'border-success'; ?> text-center h-100">
                     <div class="card-body p-2">
@@ -1653,7 +1653,7 @@ function tasksHtml(string $value): string
                 </div>
             </a>
         </div>
-        <div class="col-6 col-md-3">
+        <div class="col-6 col-md-4 col-lg-2">
             <a href="<?php echo $filterBaseUrl . (strpos($filterBaseUrl, '?') !== false ? '&' : '?'); ?>status=with_delegate" class="text-decoration-none">
                 <div class="card <?php echo $statusFilter === 'with_delegate' ? 'bg-info text-white' : 'border-info'; ?> text-center h-100">
                     <div class="card-body p-2">
@@ -1663,7 +1663,7 @@ function tasksHtml(string $value): string
                 </div>
             </a>
         </div>
-        <div class="col-6 col-md-3">
+        <div class="col-6 col-md-4 col-lg-2">
             <a href="<?php echo $filterBaseUrl . (strpos($filterBaseUrl, '?') !== false ? '&' : '?'); ?>status=delivered" class="text-decoration-none">
                 <div class="card <?php echo $statusFilter === 'delivered' ? 'bg-success text-white' : 'border-success'; ?> text-center h-100">
                     <div class="card-body p-2">
@@ -1673,7 +1673,7 @@ function tasksHtml(string $value): string
                 </div>
             </a>
         </div>
-        <div class="col-6 col-md-3">
+        <div class="col-6 col-md-4 col-lg-2">
             <a href="<?php echo $filterBaseUrl . (strpos($filterBaseUrl, '?') !== false ? '&' : '?'); ?>status=returned" class="text-decoration-none">
                 <div class="card <?php echo $statusFilter === 'returned' ? 'bg-secondary text-white' : 'border-secondary'; ?> text-center h-100">
                     <div class="card-body p-2">
