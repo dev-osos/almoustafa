@@ -1334,9 +1334,13 @@ $typeColorMap = [
             <!-- تسجيل مصروف سريع -->
             <div class="col-12 col-lg-6 col-xxl-6">
                 <div class="card shadow-sm h-100">
-                    <div class="card-header bg-light fw-bold">
-                        <i class="bi bi-pencil-square me-2 text-success"></i>تسجيل مصروف
+                    <div class="card-header bg-light fw-bold d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-pencil-square me-2 text-success"></i>تسجيل مصروف</span>
+                        <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#quickExpenseCardBody" aria-expanded="false" aria-controls="quickExpenseCardBody">
+                            <i class="bi bi-chevron-down"></i>
+                        </button>
                     </div>
+                    <div class="collapse" id="quickExpenseCardBody">
                     <div class="card-body">
                         <form method="POST" class="row g-3" enctype="multipart/form-data">
                             <input type="hidden" name="action" value="add_quick_expense">
@@ -1388,9 +1392,10 @@ $typeColorMap = [
                             </div>
                         </form>
                     </div>
+                    </div><!-- /.collapse -->
                 </div>
             </div>
-            
+
             <!-- تحصيل من مندوب -->
             <div class="col-12 col-lg-6 col-xxl-6">
                 <div class="card shadow-sm h-100">
