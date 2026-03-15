@@ -3108,6 +3108,7 @@ function tasksHtml(string $value): string
     } else {
         initTaskActionsDropdowns();
     }
+    window.addEventListener('tasks-table-updated', initTaskActionsDropdowns);
 })();
 </script>
 

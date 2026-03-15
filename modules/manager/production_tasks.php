@@ -3043,6 +3043,28 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
 
     applyRecentTasksFilter();
 
+    function initRecentTasksDropdowns() {
+        if (typeof bootstrap === 'undefined' || !bootstrap.Dropdown) return;
+        tbody.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(function(toggle) {
+            var existing = bootstrap.Dropdown.getInstance(toggle);
+            if (existing) { try { existing.dispose(); } catch(e) {} }
+            new bootstrap.Dropdown(toggle, {
+                popperConfig: function(defaultConfig) {
+                    return Object.assign({}, defaultConfig, {
+                        strategy: 'fixed',
+                        modifiers: (defaultConfig.modifiers || []).concat([{
+                            name: 'flip',
+                            options: { fallbackPlacements: ['top-end', 'top-start', 'bottom-end'] }
+                        }, {
+                            name: 'preventOverflow',
+                            options: { boundary: 'viewport' }
+                        }])
+                    });
+                }
+            });
+        });
+    }
+
     function doAjaxPage(targetPage) {
         var fd = new FormData(form);
         fd.set('p', targetPage);
@@ -3080,6 +3102,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                 if (oldCounter && newCounter) oldCounter.textContent = newCounter.textContent;
                 if (wrapper) wrapper.style.opacity = '';
                 applyRecentTasksFilter();
+                initRecentTasksDropdowns();
                 history.replaceState(null, '', url);
             })
             .catch(function() {
