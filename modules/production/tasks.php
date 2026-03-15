@@ -2982,24 +2982,50 @@ function tasksHtml(string $value): string
 
     window.addEventListener('tasks-table-updated', applyTasksFilter);
 
-    // الحفاظ على الفلتر عند التنقل بين الصفحات: بناء رابط التصفح من قيم النموذج الحالية
-    var paginationNav = document.getElementById('tasksPagination');
-    if (paginationNav && form) {
-        paginationNav.addEventListener('click', function(e) {
-            var link = e.target && e.target.closest ? e.target.closest('a.tasks-page-link') : null;
-            if (!link || link.getAttribute('href') === '#' || link.closest('.page-item.disabled')) return;
-            var targetPage = link.getAttribute('data-page');
-            if (!targetPage) return;
-            e.preventDefault();
-            var fd = new FormData(form);
-            fd.set('p', targetPage);
-            var params = [];
-            fd.forEach(function(value, key) {
-                if (value !== '' && value !== '0') params.push(encodeURIComponent(key) + '=' + encodeURIComponent(value));
-            });
-            window.location.href = '?' + params.join('&');
+    // التنقل بين الصفحات بدون ريفريش (AJAX)
+    function doAjaxTasksPage(targetPage) {
+        var fd = new FormData(form);
+        fd.set('p', targetPage);
+        var params = [];
+        fd.forEach(function(value, key) {
+            if (value !== '' && value !== '0') params.push(encodeURIComponent(key) + '=' + encodeURIComponent(value));
         });
+        var url = '?' + params.join('&');
+        var wrapper = tbody.closest('.table-responsive') || tbody.closest('.dashboard-table-wrapper');
+        if (wrapper) wrapper.style.opacity = '0.5';
+        fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function(r) { return r.text(); })
+            .then(function(html) {
+                var parser = new DOMParser();
+                var doc = parser.parseFromString(html, 'text/html');
+                var newTbody = doc.getElementById('tasksTableBody');
+                if (newTbody) tbody.innerHTML = newTbody.innerHTML;
+                var paginationNav = document.getElementById('tasksPagination');
+                var newPagination = doc.getElementById('tasksPagination');
+                if (paginationNav && newPagination) {
+                    paginationNav.innerHTML = newPagination.innerHTML;
+                } else if (paginationNav && !newPagination) {
+                    paginationNav.innerHTML = '';
+                }
+                if (wrapper) wrapper.style.opacity = '';
+                applyTasksFilter();
+                window.dispatchEvent(new Event('tasks-table-updated'));
+                history.replaceState(null, '', url);
+            })
+            .catch(function() {
+                if (wrapper) wrapper.style.opacity = '';
+                window.location.href = url;
+            });
     }
+
+    document.addEventListener('click', function(e) {
+        var link = e.target && e.target.closest ? e.target.closest('a.tasks-page-link') : null;
+        if (!link || link.closest('.page-item.disabled')) return;
+        var targetPage = link.getAttribute('data-page');
+        if (!targetPage) return;
+        e.preventDefault();
+        doAjaxTasksPage(targetPage);
+    });
 })();
 </script>
 
