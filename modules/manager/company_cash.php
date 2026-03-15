@@ -593,6 +593,19 @@ if (isset($_SESSION['financial_form_data'])) {
     unset($_SESSION['financial_form_data']);
 }
 
+// دالة redirect مع cache-busting لضمان تحديث البيانات فوراً بعد كل معاملة
+function cacheBustRedirect(string $uri): void {
+    $parts = parse_url($uri);
+    $params = [];
+    if (isset($parts['query'])) parse_str($parts['query'], $params);
+    unset($params['_nocache'], $params['_refresh'], $params['_cache_bust'], $params['_t'], $params['_r'], $params['_auto_refresh']);
+    $params['_nocache'] = time() * 1000 + rand(0, 999);
+    $target = ($parts['path'] ?? '') . '?' . http_build_query($params);
+    if (isset($parts['fragment'])) $target .= '#' . $parts['fragment'];
+    if (!headers_sent()) { header('Location: ' . $target); } else { echo '<script>window.location.href = ' . json_encode($target) . ';</script>'; }
+    exit;
+}
+
 // معالجة POST
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
@@ -695,13 +708,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
         
-        $redirectTarget = $_SERVER['REQUEST_URI'] ?? '';
-        if (!headers_sent()) {
-            header('Location: ' . $redirectTarget);
-        } else {
-            echo '<script>window.location.href = ' . json_encode($redirectTarget) . ';</script>';
-        }
-        exit;
+        cacheBustRedirect($_SERVER['REQUEST_URI'] ?? '');
     }
 
     if ($action === 'external_collection') {
@@ -751,13 +758,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
         
-        $redirectTarget = $_SERVER['REQUEST_URI'] ?? '';
-        if (!headers_sent()) {
-            header('Location: ' . $redirectTarget);
-        } else {
-            echo '<script>window.location.href = ' . json_encode($redirectTarget) . ';</script>';
-        }
-        exit;
+        cacheBustRedirect($_SERVER['REQUEST_URI'] ?? '');
     }
 
     if ($action === 'add_quick_expense') {
@@ -968,9 +969,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['financial_error'] = 'حدث خطأ: ' . $e->getMessage();
             }
         }
-        $redirectTarget = $_SERVER['REQUEST_URI'] ?? '';
-        if (!headers_sent()) header('Location: ' . $redirectTarget); else echo '<script>window.location.href = ' . json_encode($redirectTarget) . ';</script>';
-        exit;
+        cacheBustRedirect($_SERVER['REQUEST_URI'] ?? '');
     }
 
     // عهدة الأموال - تعديل المبلغ (للمدير والمحاسب فقط، ويُسمح إذا لم يكن هناك استرجاع)
@@ -1002,9 +1001,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         }
-        $redirectTarget = $_SERVER['REQUEST_URI'] ?? '';
-        if (!headers_sent()) header('Location: ' . $redirectTarget); else echo '<script>window.location.href = ' . json_encode($redirectTarget) . ';</script>';
-        exit;
+        cacheBustRedirect($_SERVER['REQUEST_URI'] ?? '');
     }
 
     // عهدة الأموال - استرجاع (كامل أو جزء)
@@ -1049,9 +1046,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         }
-        $redirectTarget = $_SERVER['REQUEST_URI'] ?? '';
-        if (!headers_sent()) header('Location: ' . $redirectTarget); else echo '<script>window.location.href = ' . json_encode($redirectTarget) . ';</script>';
-        exit;
+        cacheBustRedirect($_SERVER['REQUEST_URI'] ?? '');
     }
 }
 
