@@ -1686,7 +1686,16 @@ function tasksHtml(string $value): string
         
     </div>
 
+    <?php
+    $filterIsActive = ($filterSearchText !== '' || $search !== '' || $filterTaskId !== '' || $filterCustomer !== '' || $filterOrderId !== '' || $filterTaskType !== '' || $filterDueFrom !== '' || $filterDueTo !== '' || $filterOrderDateFrom !== '' || $filterOrderDateTo !== '' || $assignedFilter > 0);
+    $filterCollapseShow = $filterIsActive ? 'show' : '';
+    ?>
     <div class="card mb-3">
+        <div class="card-header bg-transparent py-2 d-flex align-items-center justify-content-between" style="cursor:pointer;" data-bs-toggle="collapse" data-bs-target="#tasksFilterCollapse" aria-expanded="<?php echo $filterIsActive ? 'true' : 'false'; ?>" aria-controls="tasksFilterCollapse">
+            <span class="fw-semibold small"><i class="bi bi-funnel me-1"></i>البحث والفلترة <?php if ($filterIsActive): ?><span class="badge bg-primary ms-1">نشط</span><?php endif; ?></span>
+            <i class="bi bi-chevron-down tasks-filter-chevron" style="transition:transform .25s;<?php echo $filterIsActive ? 'transform:rotate(180deg);' : ''; ?>"></i>
+        </div>
+        <div class="collapse <?php echo $filterCollapseShow; ?>" id="tasksFilterCollapse">
         <div class="card-body p-3">
             <form method="GET" action="" id="tasksFilterForm">
                 <input type="hidden" name="page" value="tasks">
@@ -1753,6 +1762,7 @@ function tasksHtml(string $value): string
                     </div>
                 </div>
             </form>
+        </div>
         </div>
     </div>
 
@@ -1873,12 +1883,6 @@ function tasksHtml(string $value): string
                                     </td>
                                     <?php endif; ?>
                                     <td>
-                                        <?php 
-                                        $printCount = (int) ($task['receipt_print_count'] ?? 0);
-                                        if ($printCount > 0): 
-                                        ?>
-                                        <span class="badge bg-info mb-1" title="عدد مرات طباعة إيصال الاوردر" style="font-size: 0.7rem;"> <?php echo $printCount; ?> <?php echo $printCount === 1 ? '' : ''; ?></span>
-                                        <?php endif; ?>
                                         <strong><?php echo (int) $task['id']; ?></strong>
                                     </td>
                                     
@@ -2877,6 +2881,18 @@ function tasksHtml(string $value): string
 
     if (quantityInput) {
         quantityInput.addEventListener('input', updateProductionTitle);
+    }
+})();
+</script>
+
+<!-- تدوير سهم بطاقة الفلتر عند الفتح والإغلاق -->
+<script>
+(function() {
+    var collapseEl = document.getElementById('tasksFilterCollapse');
+    var chevron = document.querySelector('.tasks-filter-chevron');
+    if (collapseEl && chevron) {
+        collapseEl.addEventListener('show.bs.collapse', function() { chevron.style.transform = 'rotate(180deg)'; });
+        collapseEl.addEventListener('hide.bs.collapse', function() { chevron.style.transform = 'rotate(0deg)'; });
     }
 })();
 </script>
