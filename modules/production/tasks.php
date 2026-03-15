@@ -1642,16 +1642,7 @@ function tasksHtml(string $value): string
                 </div>
             </a>
         </div>
-        <div class="col-6 col-md-3">
-            <a href="<?php echo $filterBaseUrl . (strpos($filterBaseUrl, '?') !== false ? '&' : '?'); ?>status=received" class="text-decoration-none">
-                <div class="card <?php echo $statusFilter === 'received' ? 'bg-info text-white' : 'border-info'; ?> text-center h-100">
-                    <div class="card-body p-2">
-                        <h5 class="<?php echo $statusFilter === 'received' ? 'text-white' : 'text-info'; ?> mb-0"><?php echo $stats['received']; ?></h5>
-                        <small class="<?php echo $statusFilter === 'received' ? 'text-white-50' : 'text-muted'; ?>">مستلمة</small>
-                    </div>
-                </div>
-            </a>
-        </div>
+        
         <div class="col-6 col-md-3">
             <a href="<?php echo $filterBaseUrl . (strpos($filterBaseUrl, '?') !== false ? '&' : '?'); ?>status=completed" class="text-decoration-none">
                 <div class="card <?php echo $statusFilter === 'completed' ? 'bg-success text-white' : 'border-success'; ?> text-center h-100">
