@@ -318,7 +318,7 @@ $apiBase = getRelativeUrl('api/vehicle_maintenance.php');
                                     <td><?php echo function_exists('formatDate') ? formatDate($r['maintenance_date']) : $r['maintenance_date']; ?></td>
                                     <td><?php echo number_format($r['km_reading'] ?? 0); ?> كم</td>
                                     <td><?php echo isset($r['km_diff']) && $r['km_diff'] !== null ? number_format($r['km_diff']) . ' كم' : '-'; ?></td>
-                                    <td><?php echo ($r['type'] ?? '') === 'fuel_refill' && isset($r['fuel_amount']) && $r['fuel_amount'] !== null && $r['fuel_amount'] !== '' ? number_format((float)$r['fuel_amount'], 2) . ' ر.س' : '-'; ?></td>
+                                    <td><?php echo ($r['type'] ?? '') === 'fuel_refill' && isset($r['fuel_amount']) && $r['fuel_amount'] !== null && $r['fuel_amount'] !== '' ? number_format((float)$r['fuel_amount'], 2) . ' ' . getCurrencySymbol() : '-'; ?></td>
                                     <td>
                                         <?php if (!empty($r['photo_path'])): ?>
                                             <?php $photoUrl = getRelativeUrl('api/view_maintenance_photo.php?id=' . (int) $r['id']); ?>
