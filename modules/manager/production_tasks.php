@@ -4403,7 +4403,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
                 var html = '';
                 data.orders.forEach(function(order) {
-                    var label = order.task_number ? 'أوردر #' + order.task_number : (order.title || ('أوردر ' + order.task_id));
+                    var label = order.task_number ? '' + order.task_number : (order.title || ('' + order.task_id));
                     var shortDate = '';
                     if (order.date) {
                         var parts = order.date.split('-');
