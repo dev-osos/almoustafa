@@ -4328,6 +4328,14 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
+        // إذا عندنا بيانات الأوردرات محملة في الذاكرة → نستخرج منها مباشرة
+        if (_loadedCustomerOrders && _loadedCustomerOrders.customerId === customerIdVal) {
+            var localSuggestions = extractSuggestionsFromOrders(_loadedCustomerOrders.orders, productName);
+            _priceHistoryCache[cacheKey] = localSuggestions;
+            showPriceSuggestions(productRow, localSuggestions);
+            return;
+        }
+
         var _params = new URLSearchParams(window.location.search);
         _params.set('action', 'get_customer_price_history');
         _params.set('customer_id', customerIdVal);
@@ -4345,6 +4353,33 @@ document.addEventListener('DOMContentLoaded', function () {
             .catch(function() {});
     }
 
+    // استخراج مقترحات الأسعار من أوردرات محملة مسبقاً
+    var _loadedCustomerOrders = null; // { customerId, orders }
+
+    function extractSuggestionsFromOrders(orders, productName) {
+        var suggestions = [];
+        var seen = {};
+        var pnLower = productName.toLowerCase();
+        for (var i = 0; i < orders.length; i++) {
+            var order = orders[i];
+            if (!order.products) continue;
+            for (var j = 0; j < order.products.length; j++) {
+                var p = order.products[j];
+                var pName = (p.name || '').trim();
+                if (!pName) continue;
+                var pnl = pName.toLowerCase();
+                if (pnl.indexOf(pnLower) === -1 && pnLower.indexOf(pnl) === -1) continue;
+                if (!p.price || p.price <= 0) continue;
+                var key = parseFloat(p.price).toFixed(2) + '_' + (p.unit || '');
+                if (seen[key]) continue;
+                seen[key] = true;
+                suggestions.push({ price: p.price, unit: p.unit || 'قطعة', date: order.date || '' });
+                if (suggestions.length >= 5) return suggestions;
+            }
+        }
+        return suggestions;
+    }
+
     // عند اختيار عميل جديد: مسح الكاش وتحديث كل صفوف المنتجات + تفعيل زر السجل
     var _localCustomerIdEl = document.getElementById('local_customer_id_task');
     var _viewHistoryBtn    = document.getElementById('viewCustomerHistoryBtn');
@@ -4352,6 +4387,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (_localCustomerIdEl) {
         _localCustomerIdEl.addEventListener('customer-selected', function() {
             _priceHistoryCache = {};
+            _loadedCustomerOrders = null;
             if (productsContainer) {
                 productsContainer.querySelectorAll('.product-row').forEach(function(row) {
                     fetchProductPriceHistory(row);
@@ -4429,6 +4465,15 @@ document.addEventListener('DOMContentLoaded', function () {
                     html += '</div>';
                 });
                 contentEl.innerHTML = html;
+
+                // حفظ الأوردرات في الذاكرة وتحديث مقترحات الأسعار فوراً
+                _loadedCustomerOrders = { customerId: customerIdVal, orders: data.orders };
+                _priceHistoryCache = {}; // مسح كاش قديم ليُعاد بناؤه من البيانات الجديدة
+                if (productsContainer) {
+                    productsContainer.querySelectorAll('.product-row').forEach(function(row) {
+                        fetchProductPriceHistory(row);
+                    });
+                }
             })
             .catch(function(err) {
                 if (loadingEl) loadingEl.style.display = 'none';
