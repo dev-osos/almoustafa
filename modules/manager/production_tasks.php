@@ -1756,73 +1756,111 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
 
 // جلب سجل مشتريات العميل الكامل (AJAX)
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['action'] === 'get_customer_purchase_history' && ($isAccountant || $isManager || $isDeveloper)) {
-    $customerId = isset($_GET['customer_id']) ? intval($_GET['customer_id']) : 0;
-    header('Content-Type: application/json; charset=utf-8');
-    if ($customerId <= 0) {
-        echo json_encode(['success' => false, 'orders' => []], JSON_UNESCAPED_UNICODE);
-        exit;
-    }
-
-    // جلب الأوردرات من customer_task_purchases أو مباشرة من tasks
-    $taskIds = [];
-    $ctpMap  = [];
+    while (ob_get_level() > 0) { ob_end_clean(); }
+    ob_start();
     try {
-        $ctpCheck = $db->queryOne("SHOW TABLES LIKE 'customer_task_purchases'");
-        if (!empty($ctpCheck)) {
-            $ctpRows = $db->query("SELECT task_id, task_number, total_amount, task_date FROM customer_task_purchases WHERE local_customer_id = ? ORDER BY task_date DESC, id DESC LIMIT 50", [$customerId]);
-            foreach ($ctpRows as $r) {
-                $taskIds[] = (int)$r['task_id'];
-                $ctpMap[(int)$r['task_id']] = $r;
-            }
+        $customerId = isset($_GET['customer_id']) ? intval($_GET['customer_id']) : 0;
+        if ($customerId <= 0) {
+            ob_end_clean();
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['success' => false, 'orders' => []], JSON_UNESCAPED_UNICODE);
+            exit;
         }
-    } catch (Throwable $e) { $ctpMap = []; }
 
-    // أيضاً الأوردرات المرتبطة مباشرة بالعميل ولم تُضَف لـ ctp
-    $directRows = $db->query("SELECT id FROM tasks WHERE local_customer_id = ? ORDER BY created_at DESC LIMIT 50", [$customerId]);
-    foreach ($directRows as $r) {
-        $taskIds[] = (int)$r['id'];
-    }
-    $taskIds = array_unique($taskIds);
+        $taskIds = [];
+        $ctpMap  = [];
 
-    $orders = [];
-    if (!empty($taskIds)) {
-        $placeholders = implode(',', array_fill(0, count($taskIds), '?'));
-        $tasks = $db->query("SELECT id, title, created_at, notes, total_amount FROM tasks WHERE id IN ($placeholders) ORDER BY created_at DESC", $taskIds);
-        foreach ($tasks as $task) {
-            $tid   = (int)$task['id'];
-            $notes = (string)($task['notes'] ?? '');
-            $products = [];
-            if (preg_match('/\[PRODUCTS_JSON\]\s*:\s*(.+?)(?=\s*\n\s*\n|\[ASSIGNED_WORKERS_IDS\]|$)/s', $notes, $m)) {
-                $decoded = json_decode(trim($m[1]), true);
-                if (is_array($decoded)) {
-                    foreach ($decoded as $p) {
-                        $pName = trim((string)($p['name'] ?? ''));
-                        if ($pName === '') continue;
-                        $products[] = [
-                            'name'       => $pName,
-                            'quantity'   => isset($p['quantity']) && is_numeric($p['quantity']) ? (float)$p['quantity'] : null,
-                            'unit'       => trim((string)($p['unit'] ?? 'قطعة')) ?: 'قطعة',
-                            'price'      => isset($p['price']) && is_numeric($p['price']) ? (float)$p['price'] : null,
-                            'line_total' => isset($p['line_total']) && is_numeric($p['line_total']) ? (float)$p['line_total'] : null,
-                        ];
-                    }
+        // جلب من customer_task_purchases
+        try {
+            $ctpCheck = $db->queryOne("SHOW TABLES LIKE 'customer_task_purchases'");
+            if (!empty($ctpCheck)) {
+                $ctpRows = $db->query(
+                    "SELECT task_id, task_number, total_amount, task_date FROM customer_task_purchases WHERE local_customer_id = ? ORDER BY task_date DESC, id DESC LIMIT 50",
+                    [$customerId]
+                );
+                foreach ($ctpRows as $r) {
+                    $tid2 = (int)$r['task_id'];
+                    $taskIds[] = $tid2;
+                    $ctpMap[$tid2] = $r;
                 }
             }
-            $taskNum = isset($ctpMap[$tid]) ? ($ctpMap[$tid]['task_number'] ?? null) : null;
-            $total   = isset($ctpMap[$tid]) ? (float)($ctpMap[$tid]['total_amount'] ?? 0) : (float)($task['total_amount'] ?? 0);
-            $date    = isset($ctpMap[$tid]) ? ($ctpMap[$tid]['task_date'] ?? date('Y-m-d', strtotime($task['created_at']))) : date('Y-m-d', strtotime($task['created_at']));
-            $orders[] = [
-                'task_id'     => $tid,
-                'task_number' => $taskNum,
-                'title'       => trim((string)($task['title'] ?? '')),
-                'date'        => $date,
-                'total'       => $total,
-                'products'    => $products,
-            ];
-        }
-    }
+        } catch (Throwable $ignored) {}
 
-    echo json_encode(['success' => true, 'orders' => $orders], JSON_UNESCAPED_UNICODE);
+        // أيضاً الأوردرات المرتبطة مباشرة
+        try {
+            $directRows = $db->query(
+                "SELECT id FROM tasks WHERE local_customer_id = ? ORDER BY created_at DESC LIMIT 50",
+                [$customerId]
+            );
+            foreach ($directRows as $r) {
+                $taskIds[] = (int)$r['id'];
+            }
+        } catch (Throwable $ignored) {}
+
+        $taskIds = array_values(array_unique($taskIds));
+        $orders  = [];
+
+        if (!empty($taskIds)) {
+            $placeholders = implode(',', array_fill(0, count($taskIds), '?'));
+
+            // استخدام عمود آمن — total_amount قد لا يوجد في نسخ قديمة
+            $hasTotalCol = $db->queryOne("SHOW COLUMNS FROM tasks LIKE 'total_amount'");
+            $selectTotal = !empty($hasTotalCol) ? ', total_amount' : '';
+
+            $rows = $db->query(
+                "SELECT id, title, created_at, notes{$selectTotal} FROM tasks WHERE id IN ({$placeholders}) ORDER BY created_at DESC",
+                $taskIds
+            );
+
+            foreach ($rows as $task) {
+                $tid   = (int)$task['id'];
+                $notes = (string)($task['notes'] ?? '');
+                $products = [];
+
+                if (preg_match('/\[PRODUCTS_JSON\]\s*:\s*(.+?)(?=\s*\n\s*\n|\[ASSIGNED_WORKERS_IDS\]|$)/s', $notes, $m)) {
+                    $decoded = json_decode(trim($m[1]), true);
+                    if (is_array($decoded)) {
+                        foreach ($decoded as $p) {
+                            $pName = trim((string)($p['name'] ?? ''));
+                            if ($pName === '') continue;
+                            $products[] = [
+                                'name'       => $pName,
+                                'quantity'   => isset($p['quantity']) && is_numeric($p['quantity']) ? (float)$p['quantity'] : null,
+                                'unit'       => trim((string)($p['unit'] ?? 'قطعة')) ?: 'قطعة',
+                                'price'      => isset($p['price']) && is_numeric($p['price']) ? (float)$p['price'] : null,
+                                'line_total' => isset($p['line_total']) && is_numeric($p['line_total']) ? (float)$p['line_total'] : null,
+                            ];
+                        }
+                    }
+                }
+
+                $taskNum = isset($ctpMap[$tid]) ? ($ctpMap[$tid]['task_number'] ?? null) : null;
+                $total   = isset($ctpMap[$tid])
+                    ? (float)($ctpMap[$tid]['total_amount'] ?? 0)
+                    : (isset($task['total_amount']) ? (float)$task['total_amount'] : 0);
+                $date    = isset($ctpMap[$tid])
+                    ? ($ctpMap[$tid]['task_date'] ?? substr($task['created_at'], 0, 10))
+                    : substr($task['created_at'], 0, 10);
+
+                $orders[] = [
+                    'task_id'     => $tid,
+                    'task_number' => $taskNum,
+                    'title'       => trim((string)($task['title'] ?? '')),
+                    'date'        => $date,
+                    'total'       => $total,
+                    'products'    => $products,
+                ];
+            }
+        }
+
+        ob_end_clean();
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['success' => true, 'orders' => $orders], JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        ob_end_clean();
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['success' => false, 'error' => $e->getMessage(), 'orders' => []], JSON_UNESCAPED_UNICODE);
+    }
     exit;
 }
 
@@ -4355,17 +4393,26 @@ document.addEventListener('DOMContentLoaded', function () {
             params.set('customer_id', customerIdVal);
 
             fetch('?' + params.toString())
-                .then(function(r) { return r.json(); })
+                .then(function(r) {
+                    return r.text().then(function(text) {
+                        try { return JSON.parse(text); }
+                        catch(e) { throw new Error('استجابة غير صالحة: ' + text.substring(0, 200)); }
+                    });
+                })
                 .then(function(data) {
                     if (loadingEl) loadingEl.style.display = 'none';
                     if (!contentEl) return;
                     contentEl.style.display = '';
+                    if (data.error) {
+                        contentEl.innerHTML = '<div class="alert alert-warning small">خطأ: ' + data.error + '</div>';
+                        return;
+                    }
                     if (!data.success || !data.orders || data.orders.length === 0) {
                         contentEl.innerHTML = '<div class="text-center text-muted py-4"><i class="bi bi-inbox fs-3 d-block mb-2"></i>لا توجد مشتريات سابقة لهذا العميل</div>';
                         return;
                     }
                     var html = '';
-                    data.orders.forEach(function(order, idx) {
+                    data.orders.forEach(function(order) {
                         var label = order.task_number ? 'أوردر #' + order.task_number : (order.title || ('أوردر رقم ' + order.task_id));
                         var total = order.total && order.total > 0
                             ? '<span class="badge bg-success ms-2">' + parseFloat(order.total).toLocaleString('ar-EG', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' ج.م</span>'
@@ -4392,9 +4439,9 @@ document.addEventListener('DOMContentLoaded', function () {
                     });
                     contentEl.innerHTML = html;
                 })
-                .catch(function() {
+                .catch(function(err) {
                     if (loadingEl) loadingEl.style.display = 'none';
-                    if (contentEl) { contentEl.style.display = ''; contentEl.innerHTML = '<div class="alert alert-danger small">حدث خطأ أثناء جلب البيانات</div>'; }
+                    if (contentEl) { contentEl.style.display = ''; contentEl.innerHTML = '<div class="alert alert-danger small">' + (err.message || 'خطأ غير معروف') + '</div>'; }
                 });
         });
     }
