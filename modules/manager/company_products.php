@@ -1998,7 +1998,7 @@ foreach ($factoryProducts as $product) {
                                class="form-control form-control-sm" 
                                id="externalMinQuantity" 
                                placeholder="من" 
-                               step="0.01" 
+                               step="1" 
                                min="0">
                     </div>
                     <div class="col-6 col-md-6">
@@ -2007,7 +2007,7 @@ foreach ($factoryProducts as $product) {
                                class="form-control form-control-sm" 
                                id="externalMaxQuantity" 
                                placeholder="إلى" 
-                               step="0.01" 
+                               step="1" 
                                min="0">
                     </div>
                 </div>

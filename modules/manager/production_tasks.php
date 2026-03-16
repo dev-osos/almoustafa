@@ -1754,6 +1754,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
     exit;
 }
 
+// جلب سجل الأسعار السابقة لمنتج معين لعميل معين
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['action'] === 'get_customer_price_history' && ($isAccountant || $isManager || $isDeveloper)) {
+    $customerId  = isset($_GET['customer_id'])  ? intval($_GET['customer_id'])               : 0;
+    $productName = isset($_GET['product_name']) ? trim((string)$_GET['product_name'])        : '';
+    header('Content-Type: application/json; charset=utf-8');
+    if ($customerId <= 0 || $productName === '') {
+        echo json_encode(['success' => false, 'suggestions' => []], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    $tasks = $db->query(
+        "SELECT id, created_at, notes FROM tasks WHERE local_customer_id = ? ORDER BY created_at DESC LIMIT 40",
+        [$customerId]
+    );
+    $suggestions = [];
+    $seen = [];
+    foreach ($tasks as $task) {
+        $notes = (string)($task['notes'] ?? '');
+        if (!preg_match('/\[PRODUCTS_JSON\]\s*:\s*(.+?)(?=\s*\n\s*\n|\[ASSIGNED_WORKERS_IDS\]|$)/s', $notes, $m)) continue;
+        $decoded = json_decode(trim($m[1]), true);
+        if (!is_array($decoded)) continue;
+        foreach ($decoded as $p) {
+            $pName = trim((string)($p['name'] ?? ''));
+            if ($pName === '') continue;
+            // مطابقة جزئية (المنتج المطلوب يحتوي على اسم المنتج المخزن أو العكس)
+            if (mb_stripos($pName, $productName) === false && mb_stripos($productName, $pName) === false) continue;
+            $price = (isset($p['price']) && is_numeric($p['price'])) ? (float)$p['price'] : null;
+            $unit  = trim((string)($p['unit'] ?? 'قطعة')) ?: 'قطعة';
+            if ($price === null || $price <= 0) continue;
+            $key = round($price, 2) . '_' . $unit;
+            if (isset($seen[$key])) continue;
+            $seen[$key]  = true;
+            $suggestions[] = [
+                'price'   => $price,
+                'unit'    => $unit,
+                'date'    => date('Y-m-d', strtotime($task['created_at'])),
+                'task_id' => (int)$task['id'],
+            ];
+            if (count($suggestions) >= 5) break 2;
+        }
+    }
+    echo json_encode(['success' => true, 'suggestions' => $suggestions], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 // قراءة رسائل النجاح/الخطأ من session بعد redirect
 applyPRGPattern($error, $success);
 
@@ -3643,7 +3687,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 div.dataset.name = c.name;
                 div.dataset.phone = (c.phone || '').toString();
                 div.addEventListener('click', function() {
-                    if (hiddenIdEl) hiddenIdEl.value = this.dataset.id;
+                    if (hiddenIdEl) {
+                        hiddenIdEl.value = this.dataset.id;
+                        hiddenIdEl.dispatchEvent(new CustomEvent('customer-selected', { bubbles: true }));
+                    }
                     inputEl.value = this.dataset.name;
                     submitName.value = this.dataset.name || '';
                     submitPhone.value = this.dataset.phone || '';
@@ -3806,6 +3853,8 @@ document.addEventListener('DOMContentLoaded', function () {
                     inputEl.value = name;
                     dropEl.classList.add('d-none');
                     inputEl.focus();
+                    var _row = inputEl.closest('.product-row');
+                    if (_row) setTimeout(function() { if (typeof fetchProductPriceHistory === 'function') fetchProductPriceHistory(_row); }, 50);
                 });
                 dropEl.appendChild(div);
             });
@@ -3818,6 +3867,8 @@ document.addEventListener('DOMContentLoaded', function () {
         inputEl.addEventListener('focus', showDropdown);
         inputEl.addEventListener('blur', function() {
             setTimeout(hideDropdown, 200);
+            var _row = inputEl.closest('.product-row');
+            if (_row) setTimeout(function() { if (typeof fetchProductPriceHistory === 'function') fetchProductPriceHistory(_row); }, 300);
         });
         inputEl.dataset.productDropdownInited = '1';
     }
@@ -4072,6 +4123,105 @@ document.addEventListener('DOMContentLoaded', function () {
         document.getElementById('createTaskDiscount').addEventListener('change', updateCreateTaskSummary);
     }
     updateCreateTaskSummary();
+
+    // === مقترحات الأسعار السابقة ===
+    var _priceHistoryCache = {};
+
+    function getOrCreatePriceSuggestionsEl(productRow) {
+        var existing = productRow.querySelector('.price-suggestions-wrap');
+        if (existing) return existing;
+        var priceInput = productRow.querySelector('.product-price-input');
+        if (!priceInput) return null;
+        var col = priceInput.parentElement;
+        var wrap = document.createElement('div');
+        wrap.className = 'price-suggestions-wrap mt-1';
+        col.appendChild(wrap);
+        return wrap;
+    }
+
+    function showPriceSuggestions(productRow, suggestions) {
+        var wrap = getOrCreatePriceSuggestionsEl(productRow);
+        if (!wrap) return;
+        wrap.innerHTML = '';
+        if (!suggestions || suggestions.length === 0) return;
+        var label = document.createElement('div');
+        label.className = 'text-muted small mb-1';
+        label.textContent = 'أسعار سابقة:';
+        wrap.appendChild(label);
+        var pillsWrap = document.createElement('div');
+        pillsWrap.className = 'd-flex flex-wrap gap-1';
+        suggestions.forEach(function(s) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'btn btn-outline-info btn-sm py-0 px-2 price-suggestion-pill';
+            btn.style.fontSize = '0.75rem';
+            btn.title = 'اضغط لتطبيق هذا السعر';
+            var priceFormatted = parseFloat(s.price).toFixed(2);
+            btn.innerHTML = '<span class="fw-semibold">' + priceFormatted + '</span> ج.م'
+                + (s.date ? ' <span class="text-muted opacity-75">(' + s.date + ')</span>' : '');
+            btn.addEventListener('click', function() {
+                var priceInput = productRow.querySelector('.product-price-input');
+                if (priceInput) {
+                    priceInput.value = priceFormatted;
+                    priceInput.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+                pillsWrap.querySelectorAll('.price-suggestion-pill').forEach(function(b) {
+                    b.classList.remove('btn-info');
+                    b.classList.add('btn-outline-info');
+                });
+                btn.classList.remove('btn-outline-info');
+                btn.classList.add('btn-info');
+            });
+            pillsWrap.appendChild(btn);
+        });
+        wrap.appendChild(pillsWrap);
+    }
+
+    function fetchProductPriceHistory(productRow) {
+        var customerIdEl = document.getElementById('local_customer_id_task');
+        var customerIdVal = customerIdEl ? (customerIdEl.value || '').trim() : '';
+        var nameInput = productRow.querySelector('.product-name-input');
+        var productName = nameInput ? (nameInput.value || '').trim() : '';
+
+        if (!customerIdVal || !productName) {
+            var wrap = productRow.querySelector('.price-suggestions-wrap');
+            if (wrap) wrap.innerHTML = '';
+            return;
+        }
+
+        var cacheKey = customerIdVal + '::' + productName.toLowerCase();
+        if (_priceHistoryCache[cacheKey] !== undefined) {
+            showPriceSuggestions(productRow, _priceHistoryCache[cacheKey]);
+            return;
+        }
+
+        var url = window.location.pathname + '?action=get_customer_price_history'
+            + '&customer_id=' + encodeURIComponent(customerIdVal)
+            + '&product_name=' + encodeURIComponent(productName);
+
+        fetch(url)
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data && data.success && Array.isArray(data.suggestions)) {
+                    _priceHistoryCache[cacheKey] = data.suggestions;
+                    showPriceSuggestions(productRow, data.suggestions);
+                }
+            })
+            .catch(function() {});
+    }
+
+    // عند اختيار عميل جديد: مسح الكاش وتحديث كل صفوف المنتجات
+    var _localCustomerIdEl = document.getElementById('local_customer_id_task');
+    if (_localCustomerIdEl) {
+        _localCustomerIdEl.addEventListener('customer-selected', function() {
+            _priceHistoryCache = {};
+            if (productsContainer) {
+                productsContainer.querySelectorAll('.product-row').forEach(function(row) {
+                    fetchProductPriceHistory(row);
+                });
+            }
+        });
+    }
 });
 
 // دالة لتحديث step حقل الكمية بناءً على الوحدة المختارة
