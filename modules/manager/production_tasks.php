@@ -4195,9 +4195,11 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
-        var url = window.location.pathname + '?action=get_customer_price_history'
-            + '&customer_id=' + encodeURIComponent(customerIdVal)
-            + '&product_name=' + encodeURIComponent(productName);
+        var _params = new URLSearchParams(window.location.search);
+        _params.set('action', 'get_customer_price_history');
+        _params.set('customer_id', customerIdVal);
+        _params.set('product_name', productName);
+        var url = '?' + _params.toString();
 
         fetch(url)
             .then(function(r) { return r.json(); })
