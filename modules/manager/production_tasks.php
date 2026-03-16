@@ -4403,14 +4403,16 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
                 var html = '';
                 data.orders.forEach(function(order) {
-                    var label = order.task_number ? 'أوردر' + order.task_number : (order.title || ('أوردر ' + order.task_id));
-                    var total = order.total && order.total > 0
-                        ? '<span class="badge bg-success ms-2">' + parseFloat(order.total).toLocaleString('ar-EG', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' ج.م</span>'
-                        : '';
+                    var label = order.task_number ? 'أوردر #' + order.task_number : (order.title || ('أوردر ' + order.task_id));
+                    var shortDate = '';
+                    if (order.date) {
+                        var parts = order.date.split('-');
+                        shortDate = parts.length >= 3 ? parts[2] + '/' + parts[1] : order.date;
+                    }
                     html += '<div class="card mb-2 border-0 border-bottom">';
                     html += '<div class="px-2 pt-2 d-flex justify-content-between align-items-center">';
-                    html += '<span class="fw-semibold small"><i class="bi bi-receipt me-1 text-primary"></i>' + label + total + '</span>';
-                    html += '<span class="text-muted small">' + (order.date || '') + '</span>';
+                    html += '<span class="fw-semibold small"><i class="bi bi-receipt me-1 text-primary"></i>' + label + '</span>';
+                    html += '<span class="text-muted small">' + shortDate + '</span>';
                     html += '</div>';
                     if (order.products && order.products.length > 0) {
                         html += '<div class="table-responsive"><table class="table table-sm mb-1 small">';
@@ -4418,8 +4420,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         order.products.forEach(function(p) {
                             var qty   = p.quantity != null ? p.quantity + ' ' + (p.unit || '') : '—';
                             var price = p.price != null ? parseFloat(p.price).toFixed(2) + ' ج.م' : '—';
-                            var ltot  = p.line_total != null ? parseFloat(p.line_total).toFixed(2) + ' ج.م' : '—';
-                            html += '<tr><td>' + p.name + '</td><td class="text-center">' + qty + '</td><td class="text-center">' + price + '</td><td class="text-center">' + ltot + '</td></tr>';
+                            html += '<tr><td>' + p.name + '</td><td class="text-center">' + qty + '</td><td class="text-center">' + price + '</td></tr>';
                         });
                         html += '</tbody></table></div>';
                     } else {
