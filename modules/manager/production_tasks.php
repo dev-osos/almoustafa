@@ -4413,7 +4413,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     html += '<div class="px-2 pt-2 d-flex justify-content-between align-items-center">';
                     html += '<span class="fw-semibold small"><i class="bi bi-receipt me-1 text-primary"></i>' + label + '</span>';
                     html += '<span class="text-muted small">' + shortDate + '</span>';
-                    html += '</div>';
+                    html += '</div><div class="mb-1"></div>';
                     if (order.products && order.products.length > 0) {
                         html += '<div class="table-responsive"><table class="table table-sm mb-1 small">';
                         html += '<thead class="table-light"><tr><th>المنتج</th><th class="text-center">الكمية</th><th class="text-center">السعر</th></tr></thead><tbody>';
