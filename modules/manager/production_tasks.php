@@ -4415,14 +4415,22 @@ document.addEventListener('DOMContentLoaded', function () {
                     html += '<span class="text-muted small">' + shortDate + '</span>';
                     html += '</div><div class="mb-1"></div>';
                     if (order.products && order.products.length > 0) {
-                        html += '<div class="table-responsive"><table class="table table-sm mb-1 small">';
-                        html += '<thead class="table-light"><tr><th>المنتج</th><th class="text-center">الكمية</th><th class="text-center">السعر</th></tr></thead><tbody>';
+                        html += '<table class="table mb-1 w-100" style="font-size:0.75rem;border-collapse:collapse;">';
+                        html += '<thead class="table-light"><tr>'
+                            + '<th style="padding:3px 5px;width:50%;">اسم المنتج</th>'
+                            + '<th style="padding:3px 4px;width:25%;text-align:center;">الكمية</th>'
+                            + '<th style="padding:3px 4px;width:25%;text-align:center;">السعر</th>'
+                            + '</tr></thead><tbody>';
                         order.products.forEach(function(p) {
                             var qty   = p.quantity != null ? p.quantity + ' ' + (p.unit || '') : '—';
                             var price = p.price != null ? parseFloat(p.price).toFixed(2) + ' ج.م' : '—';
-                            html += '<tr><td>' + p.name + '</td><td class="text-center">' + qty + '</td><td class="text-center">' + price + '</td></tr>';
+                            html += '<tr>'
+                                + '<td style="padding:3px 5px;">' + p.name + '</td>'
+                                + '<td style="padding:3px 4px;text-align:center;">' + qty + '</td>'
+                                + '<td style="padding:3px 4px;text-align:center;">' + price + '</td>'
+                                + '</tr>';
                         });
-                        html += '</tbody></table></div>';
+                        html += '</tbody></table>';
                     } else {
                         html += '<div class="px-2 pb-2 text-muted small">لا تفاصيل منتجات</div>';
                     }
