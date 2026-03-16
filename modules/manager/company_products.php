@@ -1991,24 +1991,7 @@ foreach ($factoryProducts as $product) {
                             <?php endif; ?>
                         </select>
                     </div>
-                    <div class="col-6 col-md-6">
-                        <label class="form-label small mb-1"><i class="bi bi-currency-dollar me-1"></i>سعر من</label>
-                        <input type="number" 
-                               class="form-control form-control-sm" 
-                               id="externalMinPrice" 
-                               placeholder="من" 
-                               step="0.01" 
-                               min="0">
-                    </div>
-                    <div class="col-6 col-md-6">
-                        <label class="form-label small mb-1"><i class="bi bi-currency-dollar me-1"></i>سعر إلى</label>
-                        <input type="number" 
-                               class="form-control form-control-sm" 
-                               id="externalMaxPrice" 
-                               placeholder="إلى" 
-                               step="0.01" 
-                               min="0">
-                    </div>
+                   
                     <div class="col-6 col-md-6">
                         <label class="form-label small mb-1"><i class="bi bi-box me-1"></i>كمية من</label>
                         <input type="number" 
