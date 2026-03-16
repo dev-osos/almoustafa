@@ -4403,8 +4403,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
                 var html = '';
                 data.orders.forEach(function(order) {
-                    var label = order.task_number ? 'أوردر ' + order.task_number : (order.title || ('أوردر ' + order.task_id));
+                    var label = order.task_number ? 'أوردر' + order.task_number : (order.title || ('أوردر ' + order.task_id));
                     var total = order.total && order.total > 0
+                        ? '<span class="badge bg-success ms-2">' + parseFloat(order.total).toLocaleString('ar-EG', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' ج.م</span>'
                         : '';
                     html += '<div class="card mb-2 border-0 border-bottom">';
                     html += '<div class="px-2 pt-2 d-flex justify-content-between align-items-center">';
