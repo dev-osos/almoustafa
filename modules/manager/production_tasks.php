@@ -1754,6 +1754,78 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
     exit;
 }
 
+// جلب سجل مشتريات العميل الكامل (AJAX)
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['action'] === 'get_customer_purchase_history' && ($isAccountant || $isManager || $isDeveloper)) {
+    $customerId = isset($_GET['customer_id']) ? intval($_GET['customer_id']) : 0;
+    header('Content-Type: application/json; charset=utf-8');
+    if ($customerId <= 0) {
+        echo json_encode(['success' => false, 'orders' => []], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // جلب الأوردرات من customer_task_purchases أو مباشرة من tasks
+    $taskIds = [];
+    try {
+        $ctpCheck = $db->queryOne("SHOW TABLES LIKE 'customer_task_purchases'");
+        if (!empty($ctpCheck)) {
+            $ctpRows = $db->query("SELECT task_id, task_number, total_amount, task_date FROM customer_task_purchases WHERE local_customer_id = ? ORDER BY task_date DESC, id DESC LIMIT 50", [$customerId]);
+            $ctpMap = [];
+            foreach ($ctpRows as $r) {
+                $taskIds[] = (int)$r['task_id'];
+                $ctpMap[(int)$r['task_id']] = $r;
+            }
+        }
+    } catch (Throwable $e) { $ctpMap = []; }
+
+    // أيضاً الأوردرات المرتبطة مباشرة بالعميل ولم تُضَف لـ ctp
+    $directRows = $db->query("SELECT id FROM tasks WHERE local_customer_id = ? ORDER BY created_at DESC LIMIT 50", [$customerId]);
+    foreach ($directRows as $r) {
+        $taskIds[] = (int)$r['id'];
+    }
+    $taskIds = array_unique($taskIds);
+
+    $orders = [];
+    if (!empty($taskIds)) {
+        $placeholders = implode(',', array_fill(0, count($taskIds), '?'));
+        $tasks = $db->query("SELECT id, title, created_at, notes, total_amount FROM tasks WHERE id IN ($placeholders) ORDER BY created_at DESC", $taskIds);
+        foreach ($tasks as $task) {
+            $tid   = (int)$task['id'];
+            $notes = (string)($task['notes'] ?? '');
+            $products = [];
+            if (preg_match('/\[PRODUCTS_JSON\]\s*:\s*(.+?)(?=\s*\n\s*\n|\[ASSIGNED_WORKERS_IDS\]|$)/s', $notes, $m)) {
+                $decoded = json_decode(trim($m[1]), true);
+                if (is_array($decoded)) {
+                    foreach ($decoded as $p) {
+                        $pName = trim((string)($p['name'] ?? ''));
+                        if ($pName === '') continue;
+                        $products[] = [
+                            'name'       => $pName,
+                            'quantity'   => isset($p['quantity']) && is_numeric($p['quantity']) ? (float)$p['quantity'] : null,
+                            'unit'       => trim((string)($p['unit'] ?? 'قطعة')) ?: 'قطعة',
+                            'price'      => isset($p['price']) && is_numeric($p['price']) ? (float)$p['price'] : null,
+                            'line_total' => isset($p['line_total']) && is_numeric($p['line_total']) ? (float)$p['line_total'] : null,
+                        ];
+                    }
+                }
+            }
+            $taskNum = isset($ctpMap[$tid]) ? ($ctpMap[$tid]['task_number'] ?? null) : null;
+            $total   = isset($ctpMap[$tid]) ? (float)($ctpMap[$tid]['total_amount'] ?? 0) : (float)($task['total_amount'] ?? 0);
+            $date    = isset($ctpMap[$tid]) ? ($ctpMap[$tid]['task_date'] ?? date('Y-m-d', strtotime($task['created_at']))) : date('Y-m-d', strtotime($task['created_at']));
+            $orders[] = [
+                'task_id'     => $tid,
+                'task_number' => $taskNum,
+                'title'       => trim((string)($task['title'] ?? '')),
+                'date'        => $date,
+                'total'       => $total,
+                'products'    => $products,
+            ];
+        }
+    }
+
+    echo json_encode(['success' => true, 'orders' => $orders], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 // جلب سجل الأسعار السابقة لمنتج معين لعميل معين
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['action'] === 'get_customer_price_history' && ($isAccountant || $isManager || $isDeveloper)) {
     $customerId  = isset($_GET['customer_id'])  ? intval($_GET['customer_id'])               : 0;
@@ -2486,6 +2558,13 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             <label class="form-label">العنوان</label>
                             <input type="text" class="form-control" name="order_title" id="createOrderTitle" placeholder="عنوان التوصيل أو عنوان مميز يظهر في الإيصال">
                         </div>
+                        
+                        <div class="col-12">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" id="viewCustomerHistoryBtn" disabled title="اختر عميلاً أولاً">
+                                <i class="bi bi-clock-history me-1"></i>عرض سجل مشتريات العميل
+                            </button>
+                        </div>
+
                         <div class="col-12" id="productsSection">
                             <label class="form-label fw-bold">المنتجات والكميات</label>
                             <div id="productsContainer">
@@ -3294,6 +3373,26 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                     <p class="mt-2 mb-0 small">جاري التحميل...</p>
                 </div>
                 <div id="taskReceiptBody" style="display: none;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="customerPurchaseHistoryModal" tabindex="-1" aria-labelledby="customerPurchaseHistoryModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white py-2">
+                <h6 class="modal-title" id="customerPurchaseHistoryModalLabel">
+                    <i class="bi bi-clock-history me-1"></i>سجل مشتريات العميل: <span id="historyModalCustomerName"></span>
+                </h6>
+                <button type="button" class="btn-close btn-close-white btn-sm" data-bs-dismiss="modal" aria-label="إغلاق"></button>
+            </div>
+            <div class="modal-body p-3" id="customerPurchaseHistoryBody">
+                <div class="text-center py-4 text-muted" id="customerHistoryLoading">
+                    <div class="spinner-border spinner-border-sm" role="status"></div>
+                    <p class="mt-2 mb-0 small">جاري تحميل السجل...</p>
+                </div>
+                <div id="customerHistoryContent" style="display:none;"></div>
             </div>
         </div>
     </div>
@@ -4212,8 +4311,10 @@ document.addEventListener('DOMContentLoaded', function () {
             .catch(function() {});
     }
 
-    // عند اختيار عميل جديد: مسح الكاش وتحديث كل صفوف المنتجات
+    // عند اختيار عميل جديد: مسح الكاش وتحديث كل صفوف المنتجات + تفعيل زر السجل
     var _localCustomerIdEl = document.getElementById('local_customer_id_task');
+    var _viewHistoryBtn    = document.getElementById('viewCustomerHistoryBtn');
+
     if (_localCustomerIdEl) {
         _localCustomerIdEl.addEventListener('customer-selected', function() {
             _priceHistoryCache = {};
@@ -4222,6 +4323,79 @@ document.addEventListener('DOMContentLoaded', function () {
                     fetchProductPriceHistory(row);
                 });
             }
+            // تفعيل زر السجل
+            if (_viewHistoryBtn) {
+                _viewHistoryBtn.disabled = false;
+                _viewHistoryBtn.removeAttribute('title');
+            }
+        });
+    }
+
+    // فتح modal سجل المشتريات
+    if (_viewHistoryBtn) {
+        _viewHistoryBtn.addEventListener('click', function() {
+            var customerIdVal  = _localCustomerIdEl ? (_localCustomerIdEl.value || '').trim() : '';
+            var customerNameEl = document.getElementById('local_customer_search_task');
+            var customerName   = customerNameEl ? (customerNameEl.value || '').trim() : 'العميل';
+            if (!customerIdVal) return;
+
+            var nameSpan = document.getElementById('historyModalCustomerName');
+            if (nameSpan) nameSpan.textContent = customerName;
+
+            var loadingEl = document.getElementById('customerHistoryLoading');
+            var contentEl = document.getElementById('customerHistoryContent');
+            if (loadingEl) { loadingEl.style.display = ''; }
+            if (contentEl) { contentEl.style.display = 'none'; contentEl.innerHTML = ''; }
+
+            var modalEl = document.getElementById('customerPurchaseHistoryModal');
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+
+            var params = new URLSearchParams(window.location.search);
+            params.set('action', 'get_customer_purchase_history');
+            params.set('customer_id', customerIdVal);
+
+            fetch('?' + params.toString())
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (loadingEl) loadingEl.style.display = 'none';
+                    if (!contentEl) return;
+                    contentEl.style.display = '';
+                    if (!data.success || !data.orders || data.orders.length === 0) {
+                        contentEl.innerHTML = '<div class="text-center text-muted py-4"><i class="bi bi-inbox fs-3 d-block mb-2"></i>لا توجد مشتريات سابقة لهذا العميل</div>';
+                        return;
+                    }
+                    var html = '';
+                    data.orders.forEach(function(order, idx) {
+                        var label = order.task_number ? 'أوردر #' + order.task_number : (order.title || ('أوردر رقم ' + order.task_id));
+                        var total = order.total && order.total > 0
+                            ? '<span class="badge bg-success ms-2">' + parseFloat(order.total).toLocaleString('ar-EG', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' ج.م</span>'
+                            : '';
+                        html += '<div class="card mb-2 border-0 shadow-sm">';
+                        html += '<div class="card-header bg-light d-flex justify-content-between align-items-center py-2 px-3">';
+                        html += '<span class="fw-semibold small"><i class="bi bi-receipt me-1 text-primary"></i>' + label + total + '</span>';
+                        html += '<span class="text-muted small">' + (order.date || '') + '</span>';
+                        html += '</div>';
+                        if (order.products && order.products.length > 0) {
+                            html += '<div class="card-body p-0"><table class="table table-sm mb-0 small">';
+                            html += '<thead class="table-light"><tr><th>المنتج</th><th class="text-center">الكمية</th><th class="text-center">السعر</th><th class="text-center">الإجمالي</th></tr></thead><tbody>';
+                            order.products.forEach(function(p) {
+                                var qty   = p.quantity != null ? p.quantity + ' ' + (p.unit || '') : '—';
+                                var price = p.price != null ? parseFloat(p.price).toFixed(2) + ' ج.م' : '—';
+                                var ltot  = p.line_total != null ? parseFloat(p.line_total).toFixed(2) + ' ج.م' : '—';
+                                html += '<tr><td>' + p.name + '</td><td class="text-center">' + qty + '</td><td class="text-center">' + price + '</td><td class="text-center">' + ltot + '</td></tr>';
+                            });
+                            html += '</tbody></table></div>';
+                        } else {
+                            html += '<div class="card-body py-2 text-muted small">لا تفاصيل منتجات</div>';
+                        }
+                        html += '</div>';
+                    });
+                    contentEl.innerHTML = html;
+                })
+                .catch(function() {
+                    if (loadingEl) loadingEl.style.display = 'none';
+                    if (contentEl) { contentEl.style.display = ''; contentEl.innerHTML = '<div class="alert alert-danger small">حدث خطأ أثناء جلب البيانات</div>'; }
+                });
         });
     }
 });
