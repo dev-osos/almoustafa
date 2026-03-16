@@ -4403,9 +4403,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
                 var html = '';
                 data.orders.forEach(function(order) {
-                    var label = order.task_number ? 'أوردر #' + order.task_number : (order.title || ('أوردر ' + order.task_id));
+                    var label = order.task_number ? 'أوردر ' + order.task_number : (order.title || ('أوردر ' + order.task_id));
                     var total = order.total && order.total > 0
-                        ? '<span class="badge bg-success ms-2">' + parseFloat(order.total).toLocaleString('ar-EG', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' ج.م</span>'
                         : '';
                     html += '<div class="card mb-2 border-0 border-bottom">';
                     html += '<div class="px-2 pt-2 d-flex justify-content-between align-items-center">';
@@ -4414,7 +4413,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     html += '</div>';
                     if (order.products && order.products.length > 0) {
                         html += '<div class="table-responsive"><table class="table table-sm mb-1 small">';
-                        html += '<thead class="table-light"><tr><th>المنتج</th><th class="text-center">الكمية</th><th class="text-center">السعر</th><th class="text-center">الإجمالي</th></tr></thead><tbody>';
+                        html += '<thead class="table-light"><tr><th>المنتج</th><th class="text-center">الكمية</th><th class="text-center">السعر</th></tr></thead><tbody>';
                         order.products.forEach(function(p) {
                             var qty   = p.quantity != null ? p.quantity + ' ' + (p.unit || '') : '—';
                             var price = p.price != null ? parseFloat(p.price).toFixed(2) + ' ج.م' : '—';
