@@ -1954,6 +1954,9 @@ foreach ($factoryProducts as $product) {
             </h5>
             <div class="d-flex gap-2 align-items-center">
                 <span class="badge" id="externalProductsCount"><?php echo $totalExternalProducts; ?> منتج</span>
+                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="printExternalInventory()" title="طباعة جرد المنتجات الظاهرة">
+                    <i class="bi bi-printer me-1"></i>طباعة الجرد
+                </button>
                 <button type="button" class="btn btn-success-custom btn-sm" onclick="showAddExternalProductModal()">
                     <i class="bi bi-plus-circle me-1"></i>إضافة منتج خارجي
                 </button>
@@ -4555,5 +4558,140 @@ function initEditExternalButtons() {
         }
     });
 })();
+
+// ===== طباعة جرد المنتجات الخارجية =====
+function printExternalInventory() {
+    const grid = document.getElementById('externalProductsGrid');
+    if (!grid) {
+        alert('لا توجد منتجات لطباعتها');
+        return;
+    }
+
+    const cards = grid.querySelectorAll('.product-card');
+    if (cards.length === 0) {
+        alert('لا توجد منتجات ظاهرة لطباعتها');
+        return;
+    }
+
+    // قراءة فلاتر البحث الحالية لعرضها في رأس التقرير
+    const searchVal = (document.getElementById('externalSearchInput') || {}).value || '';
+    const categoryVal = (document.getElementById('externalCategoryFilter') || {}).value || '';
+    const minPrice = (document.getElementById('externalMinPrice') || {}).value || '';
+    const maxPrice = (document.getElementById('externalMaxPrice') || {}).value || '';
+    const minQty = (document.getElementById('externalMinQuantity') || {}).value || '';
+    const maxQty = (document.getElementById('externalMaxQuantity') || {}).value || '';
+
+    const filterParts = [];
+    if (searchVal) filterParts.push('بحث: ' + searchVal);
+    if (categoryVal) filterParts.push('الصنف: ' + categoryVal);
+    if (minPrice || maxPrice) filterParts.push('السعر: ' + (minPrice || '—') + ' – ' + (maxPrice || '—'));
+    if (minQty || maxQty) filterParts.push('الكمية: ' + (minQty || '—') + ' – ' + (maxQty || '—'));
+    const filterText = filterParts.length ? filterParts.join(' | ') : 'جميع المنتجات';
+
+    // استخراج بيانات البطاقات الظاهرة
+    let rows = '';
+    let grandTotal = 0;
+    let serial = 1;
+    cards.forEach(card => {
+        const rows_data = card.querySelectorAll('.product-detail-row');
+        let name = '', category = '', quantity = '', unitPrice = '', totalVal = '';
+
+        const nameEl = card.querySelector('.product-name');
+        if (nameEl) name = nameEl.textContent.trim();
+
+        rows_data.forEach(row => {
+            const spans = row.querySelectorAll('span');
+            if (spans.length >= 2) {
+                const label = spans[0].textContent.trim();
+                const value = spans[1].textContent.trim();
+                if (label.includes('الصنف')) category = value;
+                else if (label.includes('الكمية')) quantity = value;
+                else if (label.includes('سعر الوحدة')) unitPrice = value;
+                else if (label.includes('الإجمالي')) totalVal = value;
+            }
+        });
+
+        // جمع القيمة الإجمالية
+        const totalNum = parseFloat(totalVal.replace(/[^0-9.]/g, '')) || 0;
+        grandTotal += totalNum;
+
+        rows += `<tr>
+            <td>${serial++}</td>
+            <td>${name}</td>
+            <td>${category}</td>
+            <td>${quantity}</td>
+            <td>${unitPrice}</td>
+            <td class="total-cell">${totalVal}</td>
+        </tr>`;
+    });
+
+    // القيمة الإجمالية المعروضة في الصفحة (تعكس الفلتر)
+    const totalValueEl = document.getElementById('externalTotalValue');
+    const displayedTotal = totalValueEl ? totalValueEl.textContent.trim() : '';
+
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' });
+    const timeStr = now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+
+    const printHTML = `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>جرد المنتجات الخارجية</title>
+<style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Tahoma, Arial, sans-serif; direction: rtl; font-size: 13px; color: #222; background: #fff; padding: 20px; }
+    .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #0c2c80; padding-bottom: 12px; }
+    .header h1 { font-size: 20px; color: #0c2c80; margin-bottom: 4px; }
+    .header .meta { font-size: 12px; color: #555; }
+    .filter-info { background: #f0f4ff; border: 1px solid #c8d6ff; border-radius: 6px; padding: 8px 14px; margin-bottom: 16px; font-size: 12px; color: #333; }
+    table { width: 100%; border-collapse: collapse; }
+    thead th { background: #0c2c80; color: #fff; padding: 8px 10px; text-align: right; font-size: 13px; }
+    tbody tr:nth-child(even) { background: #f5f7ff; }
+    tbody td { padding: 7px 10px; border-bottom: 1px solid #dde; }
+    .total-cell { font-weight: bold; color: #10b981; }
+    .footer-row td { font-weight: bold; background: #e8edff; border-top: 2px solid #0c2c80; font-size: 14px; }
+    @media print {
+        body { padding: 10px; }
+        button { display: none; }
+    }
+</style>
+</head>
+<body>
+<div class="header">
+    <h1>جرد المنتجات الخارجية</h1>
+    <div class="meta">${dateStr} — ${timeStr}</div>
+</div>
+<div class="filter-info">الفلتر المطبق: ${filterText} &nbsp;|&nbsp; عدد المنتجات: ${cards.length}</div>
+<table>
+    <thead>
+        <tr>
+            <th>#</th>
+            <th>اسم المنتج</th>
+            <th>الصنف</th>
+            <th>الكمية</th>
+            <th>سعر الوحدة</th>
+            <th>الإجمالي</th>
+        </tr>
+    </thead>
+    <tbody>
+        ${rows}
+        <tr class="footer-row">
+            <td colspan="5" style="text-align:center;">إجمالي القيمة</td>
+            <td class="total-cell">${displayedTotal || '—'}</td>
+        </tr>
+    </tbody>
+</table>
+</body>
+</html>`;
+
+    const win = window.open('', '_blank', 'width=900,height=700');
+    win.document.write(printHTML);
+    win.document.close();
+    win.focus();
+    win.print();
+}
+
+window.printExternalInventory = printExternalInventory;
 </script>
 
