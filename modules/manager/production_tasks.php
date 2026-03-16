@@ -2602,6 +2602,21 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                 <i class="bi bi-clock-history me-1"></i>عرض سجل مشتريات العميل
                             </button>
                         </div>
+                        <div class="col-12" id="customerPurchaseHistoryCard" style="display:none;">
+                            <div class="card border-primary border-opacity-25 shadow-sm mt-1">
+                                <div class="card-header bg-light d-flex justify-content-between align-items-center py-2 px-3">
+                                    <span class="fw-semibold small"><i class="bi bi-clock-history me-1 text-primary"></i>سجل مشتريات: <span id="historyCardCustomerName"></span></span>
+                                    <button type="button" class="btn-close btn-sm" id="closeHistoryCard" aria-label="إغلاق"></button>
+                                </div>
+                                <div class="card-body p-2" style="max-height:350px; overflow-y:auto;">
+                                    <div class="text-center py-3 text-muted" id="customerHistoryLoading" style="display:none;">
+                                        <div class="spinner-border spinner-border-sm" role="status"></div>
+                                        <p class="mt-1 mb-0 small">جاري تحميل السجل...</p>
+                                    </div>
+                                    <div id="customerHistoryContent"></div>
+                                </div>
+                            </div>
+                        </div>
 
                         <div class="col-12" id="productsSection">
                             <label class="form-label fw-bold">المنتجات والكميات</label>
@@ -3416,25 +3431,6 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
     </div>
 </div>
 
-<div class="modal fade" id="customerPurchaseHistoryModal" tabindex="-1" aria-labelledby="customerPurchaseHistoryModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable">
-        <div class="modal-content">
-            <div class="modal-header bg-primary text-white py-2">
-                <h6 class="modal-title" id="customerPurchaseHistoryModalLabel">
-                    <i class="bi bi-clock-history me-1"></i>سجل مشتريات العميل: <span id="historyModalCustomerName"></span>
-                </h6>
-                <button type="button" class="btn-close btn-close-white btn-sm" data-bs-dismiss="modal" aria-label="إغلاق"></button>
-            </div>
-            <div class="modal-body p-3" id="customerPurchaseHistoryBody">
-                <div class="text-center py-4 text-muted" id="customerHistoryLoading">
-                    <div class="spinner-border spinner-border-sm" role="status"></div>
-                    <p class="mt-2 mb-0 small">جاري تحميل السجل...</p>
-                </div>
-                <div id="customerHistoryContent" style="display:none;"></div>
-            </div>
-        </div>
-    </div>
-</div>
 
 <style>
 .search-wrap.position-relative { position: relative; }
@@ -4369,80 +4365,94 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    // فتح modal سجل المشتريات
+    // عرض سجل المشتريات في بطاقة inline
+    var _historyCard    = document.getElementById('customerPurchaseHistoryCard');
+    var _closeHistoryBtn = document.getElementById('closeHistoryCard');
+
+    function loadCustomerHistory(customerIdVal, customerName) {
+        var loadingEl = document.getElementById('customerHistoryLoading');
+        var contentEl = document.getElementById('customerHistoryContent');
+        var nameSpan  = document.getElementById('historyCardCustomerName');
+
+        if (nameSpan)  nameSpan.textContent = customerName;
+        if (loadingEl) loadingEl.style.display = '';
+        if (contentEl) contentEl.innerHTML = '';
+        if (_historyCard) _historyCard.style.display = '';
+
+        var params = new URLSearchParams(window.location.search);
+        params.set('action', 'get_customer_purchase_history');
+        params.set('customer_id', customerIdVal);
+
+        fetch('?' + params.toString())
+            .then(function(r) {
+                return r.text().then(function(text) {
+                    try { return JSON.parse(text); }
+                    catch(e) { throw new Error('استجابة غير صالحة: ' + text.substring(0, 200)); }
+                });
+            })
+            .then(function(data) {
+                if (loadingEl) loadingEl.style.display = 'none';
+                if (!contentEl) return;
+                if (data.error) {
+                    contentEl.innerHTML = '<div class="alert alert-warning small mb-0">خطأ: ' + data.error + '</div>';
+                    return;
+                }
+                if (!data.success || !data.orders || data.orders.length === 0) {
+                    contentEl.innerHTML = '<div class="text-center text-muted py-3"><i class="bi bi-inbox fs-4 d-block mb-1"></i><small>لا توجد مشتريات سابقة</small></div>';
+                    return;
+                }
+                var html = '';
+                data.orders.forEach(function(order) {
+                    var label = order.task_number ? 'أوردر #' + order.task_number : (order.title || ('أوردر ' + order.task_id));
+                    var total = order.total && order.total > 0
+                        ? '<span class="badge bg-success ms-2">' + parseFloat(order.total).toLocaleString('ar-EG', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' ج.م</span>'
+                        : '';
+                    html += '<div class="card mb-2 border-0 border-bottom">';
+                    html += '<div class="px-2 pt-2 d-flex justify-content-between align-items-center">';
+                    html += '<span class="fw-semibold small"><i class="bi bi-receipt me-1 text-primary"></i>' + label + total + '</span>';
+                    html += '<span class="text-muted small">' + (order.date || '') + '</span>';
+                    html += '</div>';
+                    if (order.products && order.products.length > 0) {
+                        html += '<div class="table-responsive"><table class="table table-sm mb-1 small">';
+                        html += '<thead class="table-light"><tr><th>المنتج</th><th class="text-center">الكمية</th><th class="text-center">السعر</th><th class="text-center">الإجمالي</th></tr></thead><tbody>';
+                        order.products.forEach(function(p) {
+                            var qty   = p.quantity != null ? p.quantity + ' ' + (p.unit || '') : '—';
+                            var price = p.price != null ? parseFloat(p.price).toFixed(2) + ' ج.م' : '—';
+                            var ltot  = p.line_total != null ? parseFloat(p.line_total).toFixed(2) + ' ج.م' : '—';
+                            html += '<tr><td>' + p.name + '</td><td class="text-center">' + qty + '</td><td class="text-center">' + price + '</td><td class="text-center">' + ltot + '</td></tr>';
+                        });
+                        html += '</tbody></table></div>';
+                    } else {
+                        html += '<div class="px-2 pb-2 text-muted small">لا تفاصيل منتجات</div>';
+                    }
+                    html += '</div>';
+                });
+                contentEl.innerHTML = html;
+            })
+            .catch(function(err) {
+                if (loadingEl) loadingEl.style.display = 'none';
+                if (contentEl) contentEl.innerHTML = '<div class="alert alert-danger small mb-0">' + (err.message || 'خطأ غير معروف') + '</div>';
+            });
+    }
+
     if (_viewHistoryBtn) {
         _viewHistoryBtn.addEventListener('click', function() {
             var customerIdVal  = _localCustomerIdEl ? (_localCustomerIdEl.value || '').trim() : '';
             var customerNameEl = document.getElementById('local_customer_search_task');
             var customerName   = customerNameEl ? (customerNameEl.value || '').trim() : 'العميل';
             if (!customerIdVal) return;
+            // إذا كانت البطاقة ظاهرة بالفعل، أخفها (toggle)
+            if (_historyCard && _historyCard.style.display !== 'none') {
+                _historyCard.style.display = 'none';
+                return;
+            }
+            loadCustomerHistory(customerIdVal, customerName);
+        });
+    }
 
-            var nameSpan = document.getElementById('historyModalCustomerName');
-            if (nameSpan) nameSpan.textContent = customerName;
-
-            var loadingEl = document.getElementById('customerHistoryLoading');
-            var contentEl = document.getElementById('customerHistoryContent');
-            if (loadingEl) { loadingEl.style.display = ''; }
-            if (contentEl) { contentEl.style.display = 'none'; contentEl.innerHTML = ''; }
-
-            var modalEl = document.getElementById('customerPurchaseHistoryModal');
-            bootstrap.Modal.getOrCreateInstance(modalEl).show();
-
-            var params = new URLSearchParams(window.location.search);
-            params.set('action', 'get_customer_purchase_history');
-            params.set('customer_id', customerIdVal);
-
-            fetch('?' + params.toString())
-                .then(function(r) {
-                    return r.text().then(function(text) {
-                        try { return JSON.parse(text); }
-                        catch(e) { throw new Error('استجابة غير صالحة: ' + text.substring(0, 200)); }
-                    });
-                })
-                .then(function(data) {
-                    if (loadingEl) loadingEl.style.display = 'none';
-                    if (!contentEl) return;
-                    contentEl.style.display = '';
-                    if (data.error) {
-                        contentEl.innerHTML = '<div class="alert alert-warning small">خطأ: ' + data.error + '</div>';
-                        return;
-                    }
-                    if (!data.success || !data.orders || data.orders.length === 0) {
-                        contentEl.innerHTML = '<div class="text-center text-muted py-4"><i class="bi bi-inbox fs-3 d-block mb-2"></i>لا توجد مشتريات سابقة لهذا العميل</div>';
-                        return;
-                    }
-                    var html = '';
-                    data.orders.forEach(function(order) {
-                        var label = order.task_number ? 'أوردر #' + order.task_number : (order.title || ('أوردر رقم ' + order.task_id));
-                        var total = order.total && order.total > 0
-                            ? '<span class="badge bg-success ms-2">' + parseFloat(order.total).toLocaleString('ar-EG', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' ج.م</span>'
-                            : '';
-                        html += '<div class="card mb-2 border-0 shadow-sm">';
-                        html += '<div class="card-header bg-light d-flex justify-content-between align-items-center py-2 px-3">';
-                        html += '<span class="fw-semibold small"><i class="bi bi-receipt me-1 text-primary"></i>' + label + total + '</span>';
-                        html += '<span class="text-muted small">' + (order.date || '') + '</span>';
-                        html += '</div>';
-                        if (order.products && order.products.length > 0) {
-                            html += '<div class="card-body p-0"><table class="table table-sm mb-0 small">';
-                            html += '<thead class="table-light"><tr><th>المنتج</th><th class="text-center">الكمية</th><th class="text-center">السعر</th><th class="text-center">الإجمالي</th></tr></thead><tbody>';
-                            order.products.forEach(function(p) {
-                                var qty   = p.quantity != null ? p.quantity + ' ' + (p.unit || '') : '—';
-                                var price = p.price != null ? parseFloat(p.price).toFixed(2) + ' ج.م' : '—';
-                                var ltot  = p.line_total != null ? parseFloat(p.line_total).toFixed(2) + ' ج.م' : '—';
-                                html += '<tr><td>' + p.name + '</td><td class="text-center">' + qty + '</td><td class="text-center">' + price + '</td><td class="text-center">' + ltot + '</td></tr>';
-                            });
-                            html += '</tbody></table></div>';
-                        } else {
-                            html += '<div class="card-body py-2 text-muted small">لا تفاصيل منتجات</div>';
-                        }
-                        html += '</div>';
-                    });
-                    contentEl.innerHTML = html;
-                })
-                .catch(function(err) {
-                    if (loadingEl) loadingEl.style.display = 'none';
-                    if (contentEl) { contentEl.style.display = ''; contentEl.innerHTML = '<div class="alert alert-danger small">' + (err.message || 'خطأ غير معروف') + '</div>'; }
-                });
+    if (_closeHistoryBtn) {
+        _closeHistoryBtn.addEventListener('click', function() {
+            if (_historyCard) _historyCard.style.display = 'none';
         });
     }
 });
