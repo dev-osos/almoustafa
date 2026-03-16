@@ -1765,11 +1765,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
 
     // جلب الأوردرات من customer_task_purchases أو مباشرة من tasks
     $taskIds = [];
+    $ctpMap  = [];
     try {
         $ctpCheck = $db->queryOne("SHOW TABLES LIKE 'customer_task_purchases'");
         if (!empty($ctpCheck)) {
             $ctpRows = $db->query("SELECT task_id, task_number, total_amount, task_date FROM customer_task_purchases WHERE local_customer_id = ? ORDER BY task_date DESC, id DESC LIMIT 50", [$customerId]);
-            $ctpMap = [];
             foreach ($ctpRows as $r) {
                 $taskIds[] = (int)$r['task_id'];
                 $ctpMap[(int)$r['task_id']] = $r;
