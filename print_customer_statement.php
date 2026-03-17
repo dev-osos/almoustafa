@@ -807,11 +807,11 @@ function getLocalCustomerStatementData($customerId) {
         <div class="summary-section">
             <h2 class="section-title" style="margin-top: 0;">ملخص الحساب</h2>
             <div class="summary-row">
-                <span class="summary-label">إجمالي المدين</span>
+                <span class="summary-label">إجمالي المشتريات</span>
                 <span class="summary-value amount-positive"><?php echo formatCurrency($statementData['totals']['total_debit'] ?? 0); ?></span>
             </div>
             <div class="summary-row">
-                <span class="summary-label">إجمالي الدائن</span>
+                <span class="summary-label">إجمالي المدفوعات/المرتجعات</span>
                 <span class="summary-value amount-negative"><?php echo formatCurrency($statementData['totals']['total_credit'] ?? 0); ?></span>
             </div>
             <div class="summary-row">

@@ -2523,9 +2523,36 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
         </div>
     </div>
 
-    <button class="btn btn-primary mb-3" type="button" data-bs-toggle="collapse" data-bs-target="#createTaskFormCollapse" aria-expanded="false" aria-controls="createTaskFormCollapse">
-        <i class="bi bi-plus-circle me-1"></i>إنشاء أوردر جديد
-    </button>
+    <div class="d-inline-flex gap-2 mb-3">
+        <button class="btn btn-primary" type="button" data-bs-toggle="collapse" data-bs-target="#createTaskFormCollapse" aria-expanded="false" aria-controls="createTaskFormCollapse">
+            <i class="bi bi-plus-circle me-1"></i>إنشاء أوردر جديد
+        </button>
+        <button class="btn btn-warning" type="button" data-bs-toggle="collapse" data-bs-target="#duplicateOrderCollapse" aria-expanded="false" aria-controls="duplicateOrderCollapse">
+            <i class="bi bi-copy me-1"></i>تكرار أوردر
+        </button>
+    </div>
+
+    <div class="collapse mb-2" id="duplicateOrderCollapse">
+        <div class="card shadow-sm border-warning">
+            <div class="card-header bg-warning bg-opacity-25">
+                <h5 class="mb-0"><i class="bi bi-copy me-2"></i>تكرار أوردر موجود</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small mb-3">أدخل رقم الأوردر الموجود لفتح نموذج إنشاء أوردر جديد بنفس البيانات تماماً</p>
+                <div class="row g-2 align-items-end">
+                    <div class="col-auto">
+                        <label class="form-label fw-semibold">رقم الأوردر</label>
+                        <input type="number" class="form-control" id="duplicateOrderIdInput" placeholder="مثال: 123" min="1" style="width:170px;">
+                    </div>
+                    <div class="col-auto">
+                        <button type="button" class="btn btn-warning" onclick="duplicateOrderById()">
+                            <i class="bi bi-copy me-1"></i>تكرار
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <div class="collapse" id="createTaskFormCollapse">
         <div class="card shadow-sm">
@@ -2994,7 +3021,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                         <?php
                                         $relatedType = $task['related_type'] ?? '';
                                         $displayType = (strpos($relatedType, 'manager_') === 0) ? substr($relatedType, 8) : ($task['task_type'] ?? 'general');
-                                        $orderTypeLabels = ['shop_order' => 'اوردر محل', 'cash_customer' => 'عميل نقدي', 'telegraph' => 'تليجراف', 'shipping_company' => 'شركة شحن', 'general' => 'مهمة عامة', 'production' => 'إنتاج منتج'];
+                                        $orderTypeLabels = ['shop_order' => ' محل', 'cash_customer' => 'عميل نقدي', 'telegraph' => 'تليجراف', 'shipping_company' => 'شركة شحن'];
                                         echo htmlspecialchars($orderTypeLabels[$displayType] ?? $displayType);
                                         ?>
                                     </td>
@@ -4497,6 +4524,10 @@ document.addEventListener('DOMContentLoaded', function () {
             if (_historyCard) _historyCard.style.display = 'none';
         });
     }
+
+    // تصدير دوال داخلية للاستخدام في تكرار الأوردر
+    window._addCreateProductRow = addProductRow;
+    window._updateCreateTaskSummary = updateCreateTaskSummary;
 });
 
 // دالة لتحديث step حقل الكمية بناءً على الوحدة المختارة
@@ -4917,5 +4948,115 @@ window.closeChangeStatusCard = function() {
 })();
 
 // لا حاجة لإعادة التحميل التلقائي - preventDuplicateSubmission يتولى ذلك
+
+// ===== تكرار أوردر موجود =====
+function fillProductRowForDuplicate(row, product) {
+    if (!row || !product) return;
+    var nameInput = row.querySelector('.product-name-input');
+    if (nameInput) nameInput.value = product.name || '';
+    var qtyInput = row.querySelector('.product-quantity-input');
+    if (qtyInput) qtyInput.value = (product.quantity != null) ? product.quantity : '';
+    var unitInput = row.querySelector('.product-unit-input');
+    if (unitInput) unitInput.value = product.unit || 'قطعة';
+    var priceInput = row.querySelector('.product-price-input');
+    if (priceInput) priceInput.value = (product.price != null) ? product.price : '';
+    var lineTotalInput = row.querySelector('.product-line-total-input');
+    if (lineTotalInput) lineTotalInput.value = (product.line_total != null) ? product.line_total : '';
+}
+
+window.duplicateOrderById = function() {
+    var idInput = document.getElementById('duplicateOrderIdInput');
+    var taskId = idInput ? parseInt(idInput.value, 10) : 0;
+    if (!taskId || taskId <= 0) {
+        alert('يرجى إدخال رقم أوردر صحيح');
+        return;
+    }
+    var url = new URL(window.location.href);
+    url.searchParams.set('action', 'get_task_for_edit');
+    url.searchParams.set('task_id', String(taskId));
+    fetch(url.toString())
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (!data.success || !data.task) {
+                alert('لم يتم العثور على أوردر بهذا الرقم!');
+                return;
+            }
+            var t = data.task;
+
+            // الحقول الأساسية
+            var typeEl = document.getElementById('taskTypeSelect');
+            if (typeEl) typeEl.value = t.task_type || 'shop_order';
+
+            var priorityEl = document.querySelector('#createTaskFormCollapse select[name="priority"]');
+            if (priorityEl) priorityEl.value = t.priority || 'normal';
+
+            var dueDateEl = document.querySelector('#createTaskFormCollapse input[name="due_date"]');
+            if (dueDateEl) dueDateEl.value = t.due_date || '';
+
+            // العميل
+            var customerNameHidden = document.getElementById('submit_customer_name');
+            if (customerNameHidden) customerNameHidden.value = t.customer_name || '';
+            var localSearch = document.getElementById('local_customer_search_task');
+            if (localSearch) localSearch.value = t.customer_name || '';
+            var phoneEl = document.getElementById('submit_customer_phone');
+            if (phoneEl) phoneEl.value = t.customer_phone || '';
+
+            // عنوان الأوردر والملاحظات
+            var titleEl = document.getElementById('createOrderTitle');
+            if (titleEl) titleEl.value = t.order_title || '';
+            var detailsEl = document.querySelector('#createTaskFormCollapse textarea[name="details"]');
+            if (detailsEl) detailsEl.value = t.details || '';
+
+            // الشحن والخصم
+            var shippingEl = document.getElementById('createTaskShippingFees');
+            if (shippingEl) shippingEl.value = (t.shipping_fees != null) ? t.shipping_fees : 0;
+            var discountEl = document.getElementById('createTaskDiscount');
+            if (discountEl) discountEl.value = (t.discount != null) ? t.discount : 0;
+
+            // المنتجات
+            var products = (Array.isArray(t.products) && t.products.length > 0) ? t.products : [{}];
+            var container = document.getElementById('productsContainer');
+            if (container) {
+                // إزالة الصفوف الزائدة، الإبقاء على الأول فقط
+                container.querySelectorAll('.product-row').forEach(function(row, i) {
+                    if (i > 0) row.remove();
+                });
+                // ملء الصف الأول
+                var firstRow = container.querySelector('.product-row');
+                if (firstRow) fillProductRowForDuplicate(firstRow, products[0]);
+                // إضافة وملء الصفوف المتبقية
+                for (var i = 1; i < products.length; i++) {
+                    if (typeof window._addCreateProductRow === 'function') {
+                        window._addCreateProductRow();
+                    } else {
+                        var addBtn = document.getElementById('addProductBtn');
+                        if (addBtn) addBtn.click();
+                    }
+                    var allRows = container.querySelectorAll('.product-row');
+                    var newRow = allRows[allRows.length - 1];
+                    if (newRow) fillProductRowForDuplicate(newRow, products[i]);
+                }
+            }
+
+            // تحديث الإجمالي
+            if (typeof window._updateCreateTaskSummary === 'function') {
+                window._updateCreateTaskSummary();
+            }
+
+            // إغلاق بطاقة التكرار وفتح نموذج الإنشاء
+            var dupCollapse = document.getElementById('duplicateOrderCollapse');
+            if (dupCollapse) {
+                var dupBs = bootstrap.Collapse.getInstance(dupCollapse);
+                if (dupBs) dupBs.hide();
+            }
+            var createCollapse = document.getElementById('createTaskFormCollapse');
+            if (createCollapse) {
+                var createBs = bootstrap.Collapse.getInstance(createCollapse) || new bootstrap.Collapse(createCollapse, { toggle: false });
+                createBs.show();
+                setTimeout(function() { createCollapse.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 150);
+            }
+        })
+        .catch(function() { alert('حدث خطأ أثناء جلب بيانات الأوردر!'); });
+};
 </script>
 
