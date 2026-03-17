@@ -771,7 +771,7 @@ function getLocalCustomerStatementData($customerId) {
                         if ($isLocalCustomer) {
                             $amtLabel = $m['debit'] > 0 ? formatCurrency($m['debit']) : ('-' . formatCurrency($m['credit']));
                             if (isset($m['type']) && $m['type'] === 'collection') {
-                                $amtLabel .= ' (تحصيل)';
+                                $amtLabel .= '';
                             }
                         }
                     ?>
