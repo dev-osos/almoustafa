@@ -1629,7 +1629,7 @@ foreach ($factoryProducts as $product) {
                 .products-grid {
                     padding: 25px;
                     display: grid;
-                    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+                    grid-template-columns: repeat(4, 1fr);
                     gap: 20px;
                     width: 100%;
                     max-width: 100%;
