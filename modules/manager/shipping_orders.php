@@ -3536,6 +3536,7 @@ $hasShippingCompanies = !empty($shippingCompanies);
 $tgShipments = [];
 $tgPagination = [];
 $tgError = '';
+$tgInitialPage = max(1, (int)($_GET['tg_page'] ?? 1));
 try {
     $tgQuery = 'query ListShipments($first: Int, $page: Int, $input: ListShipmentsFilterInput) {
   listShipments(first: $first, page: $page, input: $input) {
@@ -3552,7 +3553,7 @@ try {
 }';
     $tgPayload = json_encode([
         'operationName' => 'ListShipments',
-        'variables'     => ['first' => 20, 'page' => 1, 'input' => (object)[]],
+        'variables'     => ['first' => 20, 'page' => $tgInitialPage, 'input' => (object)[]],
         'query'         => $tgQuery,
     ]);
     $ch = curl_init('https://system.telegraphex.com:8443/graphql');
@@ -4474,7 +4475,7 @@ function copyShippingCollectionResult(btn) {
                         <th class="text-nowrap">المنطقة</th>
                         <th class="text-nowrap">الحالة</th>
                         <th class="text-nowrap text-end">السعر</th>
-                        <th class="text-nowrap text-end">المبلغ</th>
+                        <th class="text-nowrap text-end">الصافي</th>
                     </tr>
                 </thead>
                 <tbody id="tgShipmentsBody">
