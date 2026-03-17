@@ -4601,7 +4601,7 @@ function copyShippingCollectionResult(btn) {
                                 };
                             ?>
                             <tr>
-                                <td class="fw-semibold text-nowrap"><?php echo htmlspecialchars($tgs['code'] ?? '-'); ?></td>
+                                <td class="fw-semibold text-nowrap"><span class="tg-copy-code" title="انقر للنسخ" style="cursor:pointer"><?php echo htmlspecialchars($tgs['code'] ?? '-'); ?></span></td>
                                 <td class="text-muted text-nowrap"><?php echo htmlspecialchars(!empty($tgs['date']) ? date('Y-m-d H:i', strtotime($tgs['date'])) : '-'); ?></td>
                                 <td><?php echo htmlspecialchars($tgs['recipientName'] ?? '-'); ?></td>
                                 <td class="text-nowrap"><?php echo htmlspecialchars($tgs['recipientZone']['name'] ?? '-'); ?></td>
@@ -4718,7 +4718,7 @@ function copyShippingCollectionResult(btn) {
             var sc = (s.status && s.status.code) ? s.status.code : '';
             var sn = (s.status && s.status.name) ? s.status.name : sc;
             return '<tr>' +
-                '<td class="fw-semibold text-nowrap">' + tgEsc(s.code) + '</td>' +
+                '<td class="fw-semibold text-nowrap"><span class="tg-copy-code" title="انقر للنسخ" style="cursor:pointer">' + tgEsc(s.code) + '</span></td>' +
                 '<td class="text-muted text-nowrap">' + tgFmtDate(s.date) + '</td>' +
                 '<td>' + tgEsc(s.recipientName) + '</td>' +
                 '<td class="text-nowrap">' + tgEsc(s.recipientZone && s.recipientZone.name) + '</td>' +
@@ -4946,6 +4946,20 @@ function copyShippingCollectionResult(btn) {
     }
 
     attachTgPageLinks();
+
+    // نسخ رقم الشحنة عند الضغط
+    document.addEventListener('click', function (e) {
+        var el = e.target.closest('.tg-copy-code');
+        if (!el) return;
+        var code = el.textContent.trim();
+        if (!code || code === '-') return;
+        navigator.clipboard.writeText(code).then(function () {
+            var prev = el.textContent;
+            el.textContent = 'تم النسخ ✓';
+            el.style.color = '#198754';
+            setTimeout(function () { el.textContent = prev; el.style.color = ''; }, 1200);
+        });
+    });
 })();
 </script>
 
