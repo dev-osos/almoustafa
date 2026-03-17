@@ -2624,15 +2624,15 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                 <div class="product-row mb-3 p-3 border rounded" data-product-index="0">
                                     <div class="row g-2">
                                         <div class="col-12 col-md-3">
-                                            <label class="form-label small">اسم المنتج</label>
+                                            <label class="form-label small">المنتج</label>
                                             <div class="product-name-wrap position-relative">
-                                                <input type="text" class="form-control product-name-input" name="products[0][name]" placeholder="أدخل اسم المنتج أو القالب أو اختر من القائمة" autocomplete="off" required>
+                                                <input type="text" class="form-control product-name-input" name="products[0][name]" placeholder="اختر من القائمة" autocomplete="off" required>
                                                 <div class="product-template-dropdown d-none"></div>
                                             </div>
                                         </div>
                                         <div class="col-6 col-md-2">
                                             <label class="form-label small">الكمية</label>
-                                            <input type="number" class="form-control product-quantity-input" name="products[0][quantity]" step="1" min="0" placeholder="مثال: 120" id="product-quantity-0" required>
+                                            <input type="number" class="form-control product-quantity-input" name="products[0][quantity]" step="1" min="0" placeholder="0" id="product-quantity-0" required>
                                             <small class="product-effective-qty-hint text-muted d-none" id="product-effective-qty-hint-0"></small>
                                         </div>
                                         <div class="col-6 col-md-2">
@@ -2679,23 +2679,21 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             <button type="button" class="btn btn-outline-primary btn-sm mt-2" id="addProductBtn">
                                 <i class="bi bi-plus-circle me-1"></i>إضافة منتج آخر
                             </button>
-                            <div class="form-text mt-2">
-                                <small class="text-muted">يمكنك إضافة أكثر من منتج وكمية في نفس المهمة.</small>
-                            </div>
+                         
                         </div>
                         <div class="col-12 mt-2">
-                            <label class="form-label">وصف وتفاصيل وملاحظات الاوردر</label>
+                            <label class="form-label"> ملاحظات </label>
                             <textarea class="form-control" name="details" rows="3" placeholder="أدخل التفاصيل والتعليمات اللازمة للعمال."></textarea>
                         </div>
                         <div class="col-12 col-md-6 col-lg-4 mt-2">
-                            <label class="form-label" for="createTaskShippingFees">رسوم الشحن (ج.م)</label>
+                            <label class="form-label" for="createTaskShippingFees">الشحن</label>
                             <div class="input-group">
                                 <input type="number" class="form-control" name="shipping_fees" id="createTaskShippingFees" step="0.01" min="0" placeholder="0.00" value="0">
                                 <span class="input-group-text">ج.م</span>
                             </div>
                         </div>
                         <div class="col-12 col-md-6 col-lg-4 mt-2">
-                            <label class="form-label" for="createTaskDiscount">الخصم (ج.م)</label>
+                            <label class="form-label" for="createTaskDiscount">خصم</label>
                             <div class="input-group">
                                 <input type="number" class="form-control" name="discount" id="createTaskDiscount" step="0.01" min="0" placeholder="0.00" value="0">
                                 <span class="input-group-text">ج.م</span>
