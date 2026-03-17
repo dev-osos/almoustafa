@@ -3131,7 +3131,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                         ?>
                                         <span class="badge bg-info mb-1" title="عدد مرات طباعة إيصال الأوردر" style="font-size: 0.7rem;"> <?php echo $printCount; ?> <?php echo $printCount === 1 ? '' : ''; ?></span>
                                         <?php endif; ?>
-                                        <strong>#<?php echo (int)$task['id']; ?></strong>
+                                        <strong class="copy-order-id" title="انقر للنسخ" style="cursor:pointer">#<?php echo (int)$task['id']; ?></strong>
                                         <?php
                                         $createdAt = $task['created_at'] ?? '';
                                         if ($createdAt !== '') {
@@ -5562,5 +5562,19 @@ window.duplicateOrderById = function() {
         })
         .catch(function() { alert('حدث خطأ أثناء جلب بيانات الأوردر!'); });
 };
+
+// نسخ رقم الطلب عند الضغط
+document.addEventListener('click', function (e) {
+    var el = e.target.closest('.copy-order-id');
+    if (!el) return;
+    var text = el.textContent.replace('#', '').trim();
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(function () {
+        var prev = el.textContent;
+        el.textContent = 'تم النسخ ✓';
+        el.style.color = '#198754';
+        setTimeout(function () { el.textContent = prev; el.style.color = ''; }, 1200);
+    });
+});
 </script>
 
