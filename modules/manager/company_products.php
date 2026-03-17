@@ -2041,9 +2041,7 @@ foreach ($factoryProducts as $product) {
                             $totalValue = floatval($product['total_value'] ?? 0);
                         ?>
                         <div class="product-card">
-                            <div class="product-status" style="background: #10b981;">
-                                <i class="bi bi-cart4 me-1"></i>خارجي
-                            </div>
+                           
 
                             <div class="product-name"><?php echo $productName; ?></div>
                             <div style="color: #94a3b8; font-size: 13px; margin-bottom: 10px;">منتج خارجي</div>
