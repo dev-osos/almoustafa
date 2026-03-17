@@ -4308,6 +4308,156 @@ document.addEventListener('DOMContentLoaded', function () {
         editTaskTypeEl.addEventListener('change', toggleEditTgFields);
     }
 
+    // ===== نظام autocomplete للمحافظات =====
+    (function() {
+        var GOV_LIST = <?php $govJson = json_decode(file_get_contents(__DIR__ . '/../../gov.json'), true); echo json_encode($govJson['data']['listZonesDropdown'] ?? []); ?>;
+
+        var style = document.createElement('style');
+        style.textContent = [
+            '.gov-dropdown{position:absolute;top:100%;right:0;left:0;z-index:1055;background:#fff;border:1px solid #ced4da;border-radius:0 0 .375rem .375rem;max-height:220px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.12);}',
+            '.gov-dropdown .gov-item{padding:.45rem .75rem;cursor:pointer;font-size:.9rem;}',
+            '.gov-dropdown .gov-item:hover,.gov-dropdown .gov-item.active{background:#e9f0ff;color:#0d6efd;}',
+            '.gov-dropdown .gov-no-result{padding:.45rem .75rem;font-size:.85rem;color:#888;}'
+        ].join('');
+        document.head.appendChild(style);
+
+        function initGovAutocomplete(searchInputId, hiddenInputId) {
+            var searchEl = document.getElementById(searchInputId);
+            var hiddenEl = document.getElementById(hiddenInputId);
+            if (!searchEl || !hiddenEl) return;
+
+            var dropdown = searchEl.closest('.gov-autocomplete-wrap').querySelector('.gov-dropdown');
+            var activeIdx = -1;
+
+            function renderDropdown(filtered) {
+                dropdown.innerHTML = '';
+                activeIdx = -1;
+                if (!filtered.length) {
+                    dropdown.innerHTML = '<div class="gov-no-result">لا توجد نتائج</div>';
+                    dropdown.classList.remove('d-none');
+                    return;
+                }
+                filtered.forEach(function(gov, i) {
+                    var item = document.createElement('div');
+                    item.className = 'gov-item';
+                    item.textContent = gov.name;
+                    item.addEventListener('mousedown', function(e) {
+                        e.preventDefault();
+                        selectGov(gov.name);
+                    });
+                    dropdown.appendChild(item);
+                });
+                dropdown.classList.remove('d-none');
+            }
+
+            function selectGov(name) {
+                searchEl.value = name;
+                hiddenEl.value = name;
+                dropdown.classList.add('d-none');
+                searchEl.classList.remove('is-invalid');
+            }
+
+            function closeDropdown() {
+                dropdown.classList.add('d-none');
+                // إذا الحقل فارغ، امسح القيمة المخفية
+                if (!searchEl.value.trim()) {
+                    hiddenEl.value = '';
+                }
+                // إذا الكتابة لا تطابق اختياراً من القائمة، أعد الاسم المحفوظ أو امسح
+                var typed = searchEl.value.trim();
+                var match = GOV_LIST.find(function(g) { return g.name === typed; });
+                if (!match) {
+                    searchEl.value = hiddenEl.value;
+                }
+            }
+
+            searchEl.addEventListener('input', function() {
+                var q = this.value.trim();
+                hiddenEl.value = ''; // مسح القيمة حتى يتم الاختيار من القائمة
+                if (!q) { dropdown.classList.add('d-none'); return; }
+                var filtered = GOV_LIST.filter(function(g) { return g.name.includes(q); });
+                renderDropdown(filtered);
+            });
+
+            searchEl.addEventListener('focus', function() {
+                var q = this.value.trim();
+                if (q) {
+                    var filtered = GOV_LIST.filter(function(g) { return g.name.includes(q); });
+                    if (filtered.length) renderDropdown(filtered);
+                } else {
+                    renderDropdown(GOV_LIST);
+                }
+            });
+
+            searchEl.addEventListener('keydown', function(e) {
+                var items = dropdown.querySelectorAll('.gov-item');
+                if (!items.length) return;
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    activeIdx = Math.min(activeIdx + 1, items.length - 1);
+                    items.forEach(function(el, i) { el.classList.toggle('active', i === activeIdx); });
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    activeIdx = Math.max(activeIdx - 1, 0);
+                    items.forEach(function(el, i) { el.classList.toggle('active', i === activeIdx); });
+                } else if (e.key === 'Enter') {
+                    if (activeIdx >= 0 && items[activeIdx]) {
+                        e.preventDefault();
+                        selectGov(items[activeIdx].textContent);
+                    }
+                } else if (e.key === 'Escape') {
+                    closeDropdown();
+                }
+            });
+
+            searchEl.addEventListener('blur', function() {
+                setTimeout(closeDropdown, 150);
+            });
+        }
+
+        function validateGovOnSubmit(formEl, hiddenInputId, searchInputId) {
+            var hiddenEl = document.getElementById(hiddenInputId);
+            var searchEl = document.getElementById(searchInputId);
+            var wrap = formEl ? formEl.closest('.collapse, form') : null;
+            // التحقق فقط إذا كان الحقل ظاهراً (تليجراف)
+            var govWrap = searchEl ? searchEl.closest('[id$="GovWrap"]') : null;
+            if (!govWrap || govWrap.classList.contains('d-none')) return true;
+            if (!hiddenEl || !hiddenEl.value.trim()) {
+                if (searchEl) {
+                    searchEl.classList.add('is-invalid');
+                    searchEl.focus();
+                }
+                return false;
+            }
+            return true;
+        }
+
+        // تهيئة الحقلين
+        initGovAutocomplete('createGovSearch', 'createGov');
+        initGovAutocomplete('editGovSearch', 'editGov');
+
+        // التحقق عند الإرسال - نموذج الإنشاء
+        var createForm = document.querySelector('#createTaskFormCollapse form');
+        if (createForm) {
+            createForm.addEventListener('submit', function(e) {
+                if (!validateGovOnSubmit(this, 'createGov', 'createGovSearch')) {
+                    e.preventDefault();
+                }
+            });
+        }
+
+        // التحقق عند الإرسال - نموذج التعديل
+        var editForm = document.querySelector('#editTaskFormCollapse form');
+        if (editForm) {
+            editForm.addEventListener('submit', function(e) {
+                if (!validateGovOnSubmit(this, 'editGov', 'editGovSearch')) {
+                    e.preventDefault();
+                }
+            });
+        }
+    })();
+    // ===== نهاية نظام autocomplete للمحافظات =====
+
     // تحميل أسماء القوالب وتعبئة datalist
     function loadTemplateSuggestions() {
         if (!templateSuggestions) {
