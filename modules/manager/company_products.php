@@ -2592,6 +2592,35 @@ foreach ($factoryProducts as $product) {
     </div>
 </div>
 
+<!-- Card للموبايل - إضافة كمية لمنتج خارجي -->
+<div class="card shadow-sm mb-4 d-md-none" id="addQuantityExternalCard" style="display: none;">
+    <div class="card-header bg-secondary text-white">
+        <h5 class="mb-0"><i class="bi bi-plus-circle me-2"></i>إضافة كمية للمنتج الخارجي</h5>
+    </div>
+    <div class="card-body">
+        <form method="POST" id="addQuantityExternalCardForm">
+            <input type="hidden" name="action" value="add_quantity_external_product">
+            <input type="hidden" name="product_id" id="addQtyExtCard_product_id">
+            <div class="mb-3">
+                <label class="form-label">المنتج</label>
+                <input type="text" class="form-control" id="addQtyExtCard_product_name" readonly>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">الكمية الحالية</label>
+                <input type="text" class="form-control" id="addQtyExtCard_current_qty" readonly>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">الكمية المضافة <span class="text-danger">*</span></label>
+                <input type="number" step="0.01" min="0.01" class="form-control" name="quantity_to_add" id="addQtyExtCard_to_add" required placeholder="أدخل الكمية">
+            </div>
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-secondary text-white">إضافة</button>
+                <button type="button" class="btn btn-secondary" onclick="closeAddQuantityExternalCard()">إلغاء</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <!-- Modal تفاصيل التشغيلة -->
 <div class="modal fade d-none d-md-block" id="batchDetailsModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
     <div class="modal-dialog modal-lg modal-dialog-scrollable modal-dialog-centered">
@@ -2674,9 +2703,10 @@ function scrollToElement(element) {
 
 function closeAllForms() {
     const cards = [
-        'addExternalProductCard', 
-        'editExternalProductCard', 
+        'addExternalProductCard',
+        'editExternalProductCard',
         'deleteExternalProductCard',
+        'addQuantityExternalCard',
         'batchDetailsCard',
         'printBarcodesCard'
     ];
@@ -2787,6 +2817,15 @@ function printBarcodesFromCard() {
 
 function closeDeleteExternalProductCard() {
     const card = document.getElementById('deleteExternalProductCard');
+    if (card) {
+        card.style.display = 'none';
+        const form = card.querySelector('form');
+        if (form) form.reset();
+    }
+}
+
+function closeAddQuantityExternalCard() {
+    const card = document.getElementById('addQuantityExternalCard');
     if (card) {
         card.style.display = 'none';
         const form = card.querySelector('form');
@@ -4526,17 +4565,30 @@ function initEditExternalButtons() {
             const productId = addQtyExternalBtn.getAttribute('data-product-id');
             const productName = addQtyExternalBtn.getAttribute('data-product-name');
             const currentQty = addQtyExternalBtn.getAttribute('data-quantity') || '0';
-            const productIdEl = document.getElementById('add_quantity_external_product_id');
-            const productNameEl = document.getElementById('add_quantity_external_product_name');
-            const currentQtyEl = document.getElementById('add_quantity_external_current_qty');
-            const toAddEl = document.getElementById('add_quantity_external_to_add');
-            if (productId && productIdEl && productNameEl && currentQtyEl && toAddEl) {
-                productIdEl.value = productId;
-                productNameEl.value = productName || '';
-                currentQtyEl.value = currentQty;
-                toAddEl.value = '';
-                const modal = new bootstrap.Modal(document.getElementById('addQuantityExternalModal'));
-                modal.show();
+            if (isMobile()) {
+                const card = document.getElementById('addQuantityExternalCard');
+                if (card) {
+                    closeAllForms();
+                    document.getElementById('addQtyExtCard_product_id').value = productId || '';
+                    document.getElementById('addQtyExtCard_product_name').value = productName || '';
+                    document.getElementById('addQtyExtCard_current_qty').value = currentQty;
+                    document.getElementById('addQtyExtCard_to_add').value = '';
+                    card.style.display = 'block';
+                    setTimeout(function() { scrollToElement(card); }, 50);
+                }
+            } else {
+                const productIdEl = document.getElementById('add_quantity_external_product_id');
+                const productNameEl = document.getElementById('add_quantity_external_product_name');
+                const currentQtyEl = document.getElementById('add_quantity_external_current_qty');
+                const toAddEl = document.getElementById('add_quantity_external_to_add');
+                if (productId && productIdEl && productNameEl && currentQtyEl && toAddEl) {
+                    productIdEl.value = productId;
+                    productNameEl.value = productName || '';
+                    currentQtyEl.value = currentQty;
+                    toAddEl.value = '';
+                    const modal = new bootstrap.Modal(document.getElementById('addQuantityExternalModal'));
+                    modal.show();
+                }
             }
         }
     });
