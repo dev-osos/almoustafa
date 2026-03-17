@@ -3478,6 +3478,62 @@ $statusLabels = [
 
 $hasProducts = !empty($availableProducts);
 $hasShippingCompanies = !empty($shippingCompanies);
+
+// ===== جلب شحنات TelegraphEx =====
+$tgShipments = [];
+$tgPagination = [];
+$tgError = '';
+try {
+    $tgQuery = 'query ListShipments($first: Int, $page: Int, $input: ListShipmentsFilterInput) {
+  listShipments(first: $first, page: $page, input: $input) {
+    data {
+      code status { name code } date recipientName
+      recipientZone { id name } recipientSubzone { name }
+      price amount refNumber recipientMobile id cancelled
+      branch { id name } type { name code }
+      collected totalAmount allDueFees deliveryFees returnFees
+      paymentType { code } deliveryType { name }
+    }
+    paginatorInfo { total count currentPage lastPage perPage }
+  }
+}';
+    $tgPayload = json_encode([
+        'operationName' => 'ListShipments',
+        'variables'     => ['first' => 20, 'page' => 1, 'input' => (object)[]],
+        'query'         => $tgQuery,
+    ]);
+    $ch = curl_init('https://system.telegraphex.com:8443/graphql');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => $tgPayload,
+        CURLOPT_TIMEOUT        => 10,
+        CURLOPT_HTTPHEADER     => [
+            'Content-Type: application/json',
+            'Accept: */*',
+            'authorization: Bearer 244917|ZzSXzdfFKcLnxRwsTbEhRlSsv9OjRRIDvknDEKVc86ec3127',
+            'x-app-version: 5.2.2',
+            'x-client-name: PHP-Server',
+            'x-client-type: WEB',
+        ],
+    ]);
+    $tgResponse = curl_exec($ch);
+    $tgCurlErr  = curl_error($ch);
+    curl_close($ch);
+    if ($tgCurlErr) {
+        $tgError = 'خطأ في الاتصال: ' . $tgCurlErr;
+    } else {
+        $tgDecoded = json_decode($tgResponse, true);
+        if (!empty($tgDecoded['data']['listShipments']['data'])) {
+            $tgShipments  = $tgDecoded['data']['listShipments']['data'];
+            $tgPagination = $tgDecoded['data']['listShipments']['paginatorInfo'] ?? [];
+        } elseif (!empty($tgDecoded['errors'])) {
+            $tgError = $tgDecoded['errors'][0]['message'] ?? 'خطأ من TelegraphEx';
+        }
+    }
+} catch (Throwable $tgEx) {
+    $tgError = 'استثناء: ' . $tgEx->getMessage();
+}
 ?>
 
 <?php if ($error): ?>
@@ -4337,6 +4393,96 @@ function copyShippingCollectionResult(btn) {
             </div>
         </div>
         </div>
+    </div>
+</div>
+
+<!-- ===== جدول شحنات TelegraphEx ===== -->
+<div class="card shadow-sm mb-4" id="tgShipmentsCard">
+    <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <h5 class="mb-0"><i class="bi bi-truck me-2 text-primary"></i>شحنات TelegraphEx</h5>
+        <?php if (!empty($tgPagination)): ?>
+            <span class="badge bg-secondary">
+                <?php echo (int)($tgPagination['total'] ?? 0); ?> شحنة إجمالاً — صفحة
+                <?php echo (int)($tgPagination['currentPage'] ?? 1); ?> / <?php echo (int)($tgPagination['lastPage'] ?? 1); ?>
+            </span>
+        <?php endif; ?>
+    </div>
+    <div class="card-body p-0">
+        <?php if ($tgError): ?>
+            <div class="alert alert-danger m-3"><i class="bi bi-exclamation-triangle-fill me-2"></i><?php echo htmlspecialchars($tgError); ?></div>
+        <?php elseif (empty($tgShipments)): ?>
+            <div class="text-center text-muted py-4"><i class="bi bi-inbox fs-4 d-block mb-2"></i>لا توجد شحنات</div>
+        <?php else: ?>
+            <div class="table-responsive">
+                <table class="table table-hover table-striped align-middle mb-0 small">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>رقم الشحنة</th>
+                            <th>التاريخ</th>
+                            <th>المستلم</th>
+                            <th>المنطقة</th>
+                            <th>المنطقة الفرعية</th>
+                            <th>الهاتف</th>
+                            <th>الحالة</th>
+                            <th>النوع</th>
+                            <th>الفرع</th>
+                            <th>نوع التوصيل</th>
+                            <th>نوع الدفع</th>
+                            <th class="text-end">السعر</th>
+                            <th class="text-end">المبلغ</th>
+                            <th class="text-end">رسوم التوصيل</th>
+                            <th class="text-end">رسوم الإرجاع</th>
+                            <th class="text-end">إجمالي الرسوم</th>
+                            <th class="text-end">الإجمالي</th>
+                            <th>تم التحصيل</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($tgShipments as $tgs): ?>
+                            <?php
+                                $tgsStatusCode = $tgs['status']['code'] ?? '';
+                                $tgsStatusBadge = match($tgsStatusCode) {
+                                    'DTR'   => 'bg-success',
+                                    'PKD'   => 'bg-warning text-dark',
+                                    'CNL'   => 'bg-secondary',
+                                    default => 'bg-info text-dark',
+                                };
+                            ?>
+                            <tr>
+                                <td class="fw-semibold"><?php echo htmlspecialchars($tgs['code'] ?? '-'); ?></td>
+                                <td class="text-muted"><?php echo htmlspecialchars(!empty($tgs['date']) ? date('Y-m-d H:i', strtotime($tgs['date'])) : '-'); ?></td>
+                                <td><?php echo htmlspecialchars($tgs['recipientName'] ?? '-'); ?></td>
+                                <td><?php echo htmlspecialchars($tgs['recipientZone']['name'] ?? '-'); ?></td>
+                                <td><?php echo htmlspecialchars($tgs['recipientSubzone']['name'] ?? '-'); ?></td>
+                                <td dir="ltr"><?php echo htmlspecialchars($tgs['recipientMobile'] ?? '-'); ?></td>
+                                <td>
+                                    <span class="badge <?php echo $tgsStatusBadge; ?>">
+                                        <?php echo htmlspecialchars($tgs['status']['name'] ?? $tgsStatusCode); ?>
+                                    </span>
+                                </td>
+                                <td><?php echo htmlspecialchars($tgs['type']['name'] ?? '-'); ?></td>
+                                <td><?php echo htmlspecialchars($tgs['branch']['name'] ?? '-'); ?></td>
+                                <td><?php echo htmlspecialchars($tgs['deliveryType']['name'] ?? '-'); ?></td>
+                                <td><?php echo htmlspecialchars($tgs['paymentType']['code'] ?? '-'); ?></td>
+                                <td class="text-end"><?php echo number_format((float)($tgs['price'] ?? 0), 2); ?></td>
+                                <td class="text-end"><?php echo number_format((float)($tgs['amount'] ?? 0), 2); ?></td>
+                                <td class="text-end"><?php echo number_format((float)($tgs['deliveryFees'] ?? 0), 2); ?></td>
+                                <td class="text-end"><?php echo number_format((float)($tgs['returnFees'] ?? 0), 2); ?></td>
+                                <td class="text-end fw-semibold"><?php echo number_format((float)($tgs['allDueFees'] ?? 0), 2); ?></td>
+                                <td class="text-end fw-semibold"><?php echo number_format((float)($tgs['totalAmount'] ?? 0), 2); ?></td>
+                                <td class="text-center">
+                                    <?php if ($tgs['collected']): ?>
+                                        <i class="bi bi-check-circle-fill text-success"></i>
+                                    <?php else: ?>
+                                        <i class="bi bi-x-circle text-danger"></i>
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
     </div>
 </div>
 
@@ -6178,7 +6324,7 @@ function displayShippingInvoiceLog(history, paperInvoices, paperInvoiceReturns) 
         var safeNum = ('مرتجع ورقية - ' + (pr.invoice_number || pr.id)).replace(/</g, '&lt;').replace(/>/g, '&gt;');
         var dateStr = (pr.return_date || pr.created_at || '-').toString().substring(0, 10);
         var viewBtn = pr.image_path
-            ? '<button type="button" class="btn btn-sm btn-outline-warning" onclick="showShippingPaperInvoiceReturnImage(' + parseInt(pr.id, 10) + ')" title="عرض صورة المرتجع"><i class="bi bi-image me-1"></i>عرض المرتجع</button>'
+            ? '<button type="button" class="btn btn-sm btn-outline-warning" onclick="showShippingPaperInvoiceReturnImage(' + parseInt(pr.id, 10) + ')" title="ع��ض صورة المرتجع"><i class="bi bi-image me-1"></i>عرض المرتجع</button>'
             : '<span class="text-muted small">لا توجد صورة</span>';
         rows.push('<td>' + safeNum + '</td><td class="text-warning">-' + parseFloat(pr.return_amount || 0).toFixed(2) + ' ج.م</td><td>' + dateStr + '</td><td>' + viewBtn + '</td>');
     });
