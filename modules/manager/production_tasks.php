@@ -2781,7 +2781,9 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                         <div class="col-md-4">
                             <label class="form-label">الأولوية</label>
                             <select class="form-select" name="priority" id="editPriority">
+                                <option value="low">منخفضة</option>
                                 <option value="normal" selected>عادية</option>
+                                <option value="high">مرتفعة</option>
                                 <option value="urgent">عاجلة</option>
                             </select>
                         </div>
@@ -2789,20 +2791,65 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             <label class="form-label">تاريخ الاستحقاق</label>
                             <input type="date" class="form-control" name="due_date" id="editDueDate">
                         </div>
-                        <div class="col-md-2">
-                            <label class="form-label">اسم العميل</label>
-                            <div class="position-relative">
-                                <input type="text" class="form-control" name="customer_name" id="editCustomerName" placeholder="بحث أو أدخل اسم العميل">
+                        <div class="col-md-4">
+                            <label class="form-label">العميل</label>
+                            <div class="customer-type-wrap d-flex flex-wrap gap-3 mb-2">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="customer_type_radio_edit" id="ct_edit_local" value="local" checked>
+                                    <label class="form-check-label" for="ct_edit_local">عميل محلي</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="customer_type_radio_edit" id="ct_edit_rep" value="rep">
+                                    <label class="form-check-label" for="ct_edit_rep">عميل مندوب</label>
+                                </div>
                             </div>
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label">رقم العميل</label>
-                            <input type="text" class="form-control" name="customer_phone" id="editCustomerPhone" placeholder="أدخل رقم العميل" dir="ltr">
+                            <input type="hidden" name="customer_name" id="edit_submit_customer_name" value="">
+                            <div id="customer_select_local_edit" class="customer-select-block mb-2">
+                                <div class="search-wrap position-relative">
+                                    <input type="text" id="local_customer_search_edit" class="form-control form-control-sm" placeholder="اكتب للبحث أو أدخل اسم عميل جديد..." autocomplete="off">
+                                    <input type="hidden" id="local_customer_id_edit" name="local_customer_id" value="">
+                                    <div id="local_customer_dropdown_edit" class="search-dropdown-task d-none"></div>
+                                </div>
+                            </div>
+                            <div id="customer_select_rep_edit" class="customer-select-block mb-2 d-none">
+                                <div class="search-wrap position-relative">
+                                    <input type="text" id="rep_customer_search_edit" class="form-control form-control-sm" placeholder="اكتب للبحث أو أدخل اسم عميل جديد..." autocomplete="off">
+                                    <input type="hidden" id="rep_customer_id_edit" value="">
+                                    <div id="rep_customer_dropdown_edit" class="search-dropdown-task d-none"></div>
+                                </div>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small">رقم العميل</label>
+                                <input type="text" name="customer_phone" id="edit_submit_customer_phone" class="form-control form-control-sm" placeholder="رقم الهاتف" dir="ltr" value="">
+                            </div>
+                            <small class="form-text text-muted d-block">اختر عميلاً مسجلاً أو اكتب اسماً جديداً—يُحفظ تلقائياً كعميل جديد إن لم يكن مسجلاً</small>
                         </div>
                         <div class="col-md-5">
                             <label class="form-label">العنوان</label>
                             <input type="text" class="form-control" name="order_title" id="editOrderTitle" placeholder="عنوان التوصيل أو عنوان مميز يظهر في الإيصال">
                         </div>
+
+                        <div class="col-12">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" id="editViewCustomerHistoryBtn" disabled title="اختر عميلاً أولاً">
+                                <i class="bi bi-clock-history me-1"></i>عرض سجل مشتريات العميل
+                            </button>
+                        </div>
+                        <div class="col-12" id="editCustomerPurchaseHistoryCard" style="display:none;">
+                            <div class="card border-primary border-opacity-25 shadow-sm mt-1">
+                                <div class="card-header bg-light d-flex justify-content-between align-items-center py-2 px-3">
+                                    <span class="fw-semibold small"><i class="bi bi-clock-history me-1 text-primary"></i>سجل مشتريات: <span id="editHistoryCardCustomerName"></span></span>
+                                    <button type="button" class="btn-close btn-sm" id="editCloseHistoryCard" aria-label="إغلاق"></button>
+                                </div>
+                                <div class="card-body p-2" style="max-height:350px; overflow-y:auto;">
+                                    <div class="text-center py-3 text-muted" id="editCustomerHistoryLoading" style="display:none;">
+                                        <div class="spinner-border spinner-border-sm" role="status"></div>
+                                        <p class="mt-1 mb-0 small">جاري تحميل السجل...</p>
+                                    </div>
+                                    <div id="editCustomerHistoryContent"></div>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="col-12" id="editProductsSection">
                             <label class="form-label fw-bold">المنتجات والكميات</label>
                             <div id="editProductsContainer"></div>
@@ -2811,25 +2858,25 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             </button>
                         </div>
                         <div class="col-12 mt-2">
-                            <label class="form-label">وصف وتفاصيل وملاحظات الاوردر</label>
-                            <textarea class="form-control" name="details" id="editDetails" rows="3" placeholder="أدخل التفاصيل والتعليمات اللازمة للعمال."></textarea>
+                            <label class="form-label"> ملاحظات </label>
+                            <textarea class="form-control" name="details" id="editDetails" rows="3" placeholder=""></textarea>
                         </div>
-                        <div class="col-12 col-md-6 col-lg-4">
-                            <label class="form-label" for="editTaskShippingFees">رسوم الشحن (ج.م)</label>
+                        <div class="col-12 col-md-6 col-lg-4 mt-2">
+                            <label class="form-label" for="editTaskShippingFees">الشحن</label>
                             <div class="input-group">
                                 <input type="number" class="form-control" name="shipping_fees" id="editTaskShippingFees" step="0.01" min="0" placeholder="0.00" value="0">
                                 <span class="input-group-text">ج.م</span>
                             </div>
                         </div>
-                        <div class="col-12 col-md-6 col-lg-4">
-                            <label class="form-label" for="editTaskDiscount">الخصم (ج.م)</label>
+                        <div class="col-12 col-md-6 col-lg-4 mt-2">
+                            <label class="form-label" for="editTaskDiscount">خصم</label>
                             <div class="input-group">
                                 <input type="number" class="form-control" name="discount" id="editTaskDiscount" step="0.01" min="0" placeholder="0.00" value="0">
                                 <span class="input-group-text">ج.م</span>
                             </div>
                         </div>
                         <div class="col-12 mt-3">
-                            <div class="card bg-light border-secondary border-opacity-25" id="editTaskTotalSummaryCard">
+                            <div class="card bg-light border-primary border-opacity-25" id="editTaskTotalSummaryCard">
                                 <div class="card-body py-3">
                                     <h6 class="card-title mb-2"><i class="bi bi-calculator me-2"></i>ملخص الإجمالي النهائي</h6>
                                     <div class="row g-2 small">
@@ -3482,8 +3529,14 @@ var editProductIndex = 0;
 function buildEditProductRow(idx, product) {
     var p = product || { name: '', quantity: '', unit: 'قطعة', price: '', line_total: '' };
     var unitVal = String(p.unit || 'قطعة').trim();
-    var opts = ['كرتونة','عبوة','كيلو','جرام','شرينك','دسته','قطعة'].map(function(u) {
+    var unitOpts = ['كرتونة','عبوة','كيلو','جرام','شرينك','دسته','قطعة'].map(function(u) {
         return '<option value="' + u + '"' + (u === unitVal ? ' selected' : '') + '>' + u + '</option>';
+    }).join('');
+    var quCats = (typeof __quCategories !== 'undefined' && Array.isArray(__quCategories)) ? __quCategories : [];
+    var catVal = String(p.category || '').trim();
+    var catOpts = '<option value="">— اختر التصنيف —</option>' + quCats.map(function(qc) {
+        var t = (qc.type || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        return '<option value="' + t + '"' + (t === catVal ? ' selected' : '') + '>' + t + '</option>';
     }).join('');
     var qtyVal = (p.quantity !== null && p.quantity !== undefined && p.quantity !== '') ? String(p.quantity) : '';
     var priceVal = (p.price !== null && p.price !== undefined && p.price !== '') ? String(p.price) : '';
@@ -3491,17 +3544,21 @@ function buildEditProductRow(idx, product) {
     var nameVal = String(p.name || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     return '<div class="product-row mb-3 p-3 border rounded edit-product-row" data-edit-product-index="' + idx + '">' +
         '<div class="row g-2">' +
-        '<div class="col-md-3"><label class="form-label small">اسم المنتج</label>' +
-        '<input type="text" class="form-control edit-product-name" name="products[' + idx + '][name]" placeholder="اسم المنتج أو القالب" list="templateSuggestions" value="' + nameVal + '"></div>' +
-        '<div class="col-md-1"><label class="form-label small">الكمية</label>' +
-        '<input type="number" class="form-control edit-product-qty" name="products[' + idx + '][quantity]" step="0.01" min="0" placeholder="120" value="' + qtyVal + '"></div>' +
-        '<div class="col-md-1"><label class="form-label small">الوحدة</label>' +
-        '<select class="form-select form-select-sm" name="products[' + idx + '][unit]">' + opts + '</select></div>' +
-        '<div class="col-md-1"><label class="form-label small">السعر</label>' +
+        '<div class="col-12 col-md-3"><label class="form-label small">المنتج</label>' +
+        '<div class="product-name-wrap position-relative">' +
+        '<input type="text" class="form-control edit-product-name" name="products[' + idx + '][name]" placeholder="اختر من القائمة" autocomplete="off" list="templateSuggestions" value="' + nameVal + '">' +
+        '</div></div>' +
+        '<div class="col-6 col-md-2"><label class="form-label small">الكمية</label>' +
+        '<input type="number" class="form-control edit-product-qty" name="products[' + idx + '][quantity]" step="1" min="0" placeholder="0" value="' + qtyVal + '"></div>' +
+        '<div class="col-6 col-md-2"><label class="form-label small">التصنيف</label>' +
+        '<select class="form-select form-select-sm edit-product-category" name="products[' + idx + '][category]">' + catOpts + '</select></div>' +
+        '<div class="col-6 col-md-2"><label class="form-label small">الوحدة</label>' +
+        '<select class="form-select form-select-sm edit-product-unit" name="products[' + idx + '][unit]">' + unitOpts + '</select></div>' +
+        '<div class="col-6 col-md-2"><label class="form-label small">السعر</label>' +
         '<input type="number" class="form-control edit-product-price" name="products[' + idx + '][price]" step="0.01" min="0" placeholder="0.00" value="' + priceVal + '"></div>' +
-        '<div class="col-md-2"><label class="form-label small">الإجمالي</label>' +
+        '<div class="col-6 col-md-2"><label class="form-label small">الإجمالي</label>' +
         '<div class="input-group input-group-sm"><input type="number" class="form-control edit-product-line-total" name="products[' + idx + '][line_total]" step="0.01" min="0" placeholder="0.00" value="' + lineTotalVal + '"><span class="input-group-text">ج.م</span></div></div>' +
-        '<div class="col-md-1 d-flex align-items-end">' +
+        '<div class="col-6 col-md-1 d-flex align-items-end">' +
         '<button type="button" class="btn btn-danger btn-sm w-100 edit-remove-product-btn"><i class="bi bi-trash"></i></button></div></div></div>';
 }
 /** عند تغيير الكمية أو السعر: الإجمالي = الكمية × السعر */
@@ -3616,8 +3673,24 @@ window.openEditTaskModal = function(taskId) {
                 document.getElementById('editTaskType').value = t.task_type || 'shop_order';
                 document.getElementById('editPriority').value = t.priority || 'normal';
                 document.getElementById('editDueDate').value = t.due_date || '';
-                document.getElementById('editCustomerName').value = t.customer_name || '';
-                document.getElementById('editCustomerPhone').value = t.customer_phone || '';
+                // حقول العميل الجديدة
+                var editSubName = document.getElementById('edit_submit_customer_name');
+                if (editSubName) editSubName.value = t.customer_name || '';
+                var editLocalSearch = document.getElementById('local_customer_search_edit');
+                if (editLocalSearch) editLocalSearch.value = t.customer_name || '';
+                var editLocalId = document.getElementById('local_customer_id_edit');
+                if (editLocalId) editLocalId.value = '';
+                var editSubPhone = document.getElementById('edit_submit_customer_phone');
+                if (editSubPhone) editSubPhone.value = t.customer_phone || '';
+                // إعادة تعيين راديو العميل إلى محلي
+                var localRadio = document.getElementById('ct_edit_local');
+                if (localRadio) { localRadio.checked = true; localRadio.dispatchEvent(new Event('change')); }
+                // تعطيل زر السجل حتى يتم اختيار عميل مسجل
+                var editHistBtn = document.getElementById('editViewCustomerHistoryBtn');
+                if (editHistBtn) { editHistBtn.disabled = true; editHistBtn.title = 'اختر عميلاً أولاً'; }
+                // إخفاء بطاقة السجل
+                var editHistCard = document.getElementById('editCustomerPurchaseHistoryCard');
+                if (editHistCard) editHistCard.style.display = 'none';
                 document.getElementById('editDetails').value = t.details || '';
                 var orderTitleEl = document.getElementById('editOrderTitle');
                 if (orderTitleEl && t.order_title !== undefined) orderTitleEl.value = t.order_title || '';
@@ -3647,6 +3720,125 @@ document.addEventListener('DOMContentLoaded', function() {
         editAddBtn.addEventListener('click', function() { addEditProductRow({}); });
     }
     delegateEditSummaryInputs();
+
+    // === تهيئة بحث العميل في نموذج التعديل ===
+    (function initCustomerCardEdit() {
+        var localCustomers = (typeof __localCustomersForTask !== 'undefined' && Array.isArray(__localCustomersForTask)) ? __localCustomersForTask : [];
+        var repCustomers = (typeof __repCustomersForTask !== 'undefined' && Array.isArray(__repCustomersForTask)) ? __repCustomersForTask : [];
+        var submitName  = document.getElementById('edit_submit_customer_name');
+        var submitPhone = document.getElementById('edit_submit_customer_phone');
+        var localSearch = document.getElementById('local_customer_search_edit');
+        var localId     = document.getElementById('local_customer_id_edit');
+        var localDrop   = document.getElementById('local_customer_dropdown_edit');
+        var repSearch   = document.getElementById('rep_customer_search_edit');
+        var repDrop     = document.getElementById('rep_customer_dropdown_edit');
+        var histBtn     = document.getElementById('editViewCustomerHistoryBtn');
+        var histCard    = document.getElementById('editCustomerPurchaseHistoryCard');
+        var histClose   = document.getElementById('editCloseHistoryCard');
+        if (!submitName || !submitPhone) return;
+
+        function matchSearch(text, q) {
+            if (!q || !text) return true;
+            return (text + '').toLowerCase().indexOf((q + '').trim().toLowerCase()) !== -1;
+        }
+        function matchLocal(c, q) {
+            var extra = (c.phones && c.phones.length) ? c.phones.join(' ') : (c.phone || '');
+            return matchSearch((c.name || '') + ' ' + extra, q);
+        }
+        function matchRep(c, q) {
+            return matchSearch((c.name || '') + ' ' + (c.rep_name || '') + ' ' + (c.phone || ''), q);
+        }
+
+        function setEditCustomerBlocks() {
+            var v = document.querySelector('input[name="customer_type_radio_edit"]:checked');
+            var val = v ? v.value : 'local';
+            var localBlock = document.getElementById('customer_select_local_edit');
+            var repBlock   = document.getElementById('customer_select_rep_edit');
+            if (localBlock) localBlock.classList.toggle('d-none', val !== 'local');
+            if (repBlock)   repBlock.classList.toggle('d-none',   val !== 'rep');
+            if (val !== 'local') { if (localSearch) localSearch.value = ''; if (localId) localId.value = ''; if (localDrop) localDrop.classList.add('d-none'); }
+            if (val !== 'rep')   { if (repSearch) repSearch.value = ''; if (repDrop) repDrop.classList.add('d-none'); }
+        }
+        document.querySelectorAll('input[name="customer_type_radio_edit"]').forEach(function(r) {
+            r.addEventListener('change', setEditCustomerBlocks);
+        });
+        setEditCustomerBlocks();
+
+        function showEditDrop(inputEl, hiddenIdEl, dropEl, list, getLabel, matcher) {
+            if (!inputEl || !dropEl) return;
+            var q = (inputEl.value || '').trim();
+            var filtered = list.filter(function(c) { return matcher(c, q); });
+            dropEl.innerHTML = '';
+            if (!filtered.length) { dropEl.classList.add('d-none'); return; }
+            filtered.forEach(function(c) {
+                var div = document.createElement('div');
+                div.className = 'search-dropdown-item-task';
+                div.textContent = getLabel(c);
+                div.dataset.id = c.id;
+                div.dataset.name = c.name;
+                div.dataset.phone = (c.phone || '').toString();
+                div.addEventListener('click', function() {
+                    if (hiddenIdEl) {
+                        hiddenIdEl.value = this.dataset.id;
+                        hiddenIdEl.dispatchEvent(new CustomEvent('edit-customer-selected', { bubbles: true }));
+                    }
+                    inputEl.value = this.dataset.name;
+                    submitName.value = this.dataset.name || '';
+                    submitPhone.value = this.dataset.phone || '';
+                    dropEl.classList.add('d-none');
+                });
+                dropEl.appendChild(div);
+            });
+            dropEl.classList.remove('d-none');
+        }
+        function initEditSearch(inputEl, hiddenIdEl, dropEl, list, getLabel, matcher) {
+            if (!inputEl || !dropEl) return;
+            inputEl.addEventListener('input', function() { if (hiddenIdEl) hiddenIdEl.value = ''; showEditDrop(inputEl, hiddenIdEl, dropEl, list, getLabel, matcher); });
+            inputEl.addEventListener('focus', function() { showEditDrop(inputEl, hiddenIdEl, dropEl, list, getLabel, matcher); });
+        }
+        initEditSearch(localSearch, localId, localDrop, localCustomers, function(c) { return c.name + (c.phone ? ' — ' + c.phone : ''); }, matchLocal);
+        initEditSearch(repSearch, null, repDrop, repCustomers, function(c) { return c.rep_name ? c.name + ' (' + c.rep_name + ')' : c.name; }, matchRep);
+
+        // تفعيل زر السجل عند اختيار عميل مسجل
+        if (localId) {
+            localId.addEventListener('edit-customer-selected', function() {
+                if (histBtn) { histBtn.disabled = false; histBtn.removeAttribute('title'); }
+            });
+        }
+
+        // زر عرض السجل
+        if (histBtn) {
+            histBtn.addEventListener('click', function() {
+                var cid = localId ? (localId.value || '').trim() : '';
+                var cname = localSearch ? (localSearch.value || 'العميل').trim() : 'العميل';
+                if (!cid) return;
+                if (histCard && histCard.style.display !== 'none') { histCard.style.display = 'none'; return; }
+                loadEditCustomerHistory(cid, cname);
+            });
+        }
+        if (histClose) {
+            histClose.addEventListener('click', function() { if (histCard) histCard.style.display = 'none'; });
+        }
+
+        // إغلاق القوائم عند الضغط خارجها
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('#editTaskForm .search-wrap')) {
+                if (localDrop) localDrop.classList.add('d-none');
+                if (repDrop)   repDrop.classList.add('d-none');
+            }
+        });
+
+        // عند الإرسال: ضمان تعبئة customer_name
+        var form = document.getElementById('editTaskForm');
+        if (form) {
+            form.addEventListener('submit', function() {
+                var v = document.querySelector('input[name="customer_type_radio_edit"]:checked');
+                var val = v ? v.value : 'local';
+                var activeSearch = (val === 'local') ? localSearch : repSearch;
+                if (activeSearch && activeSearch.value.trim()) submitName.value = activeSearch.value.trim();
+            });
+        }
+    })();
 });
 
 window.openOrderReceiptModal = function(orderId) {
@@ -4948,6 +5140,50 @@ window.closeChangeStatusCard = function() {
 })();
 
 // لا حاجة لإعادة التحميل التلقائي - preventDuplicateSubmission يتولى ذلك
+
+// ===== سجل مشتريات العميل في نموذج التعديل =====
+function loadEditCustomerHistory(customerIdVal, customerName) {
+    var loadingEl = document.getElementById('editCustomerHistoryLoading');
+    var contentEl = document.getElementById('editCustomerHistoryContent');
+    var nameSpan  = document.getElementById('editHistoryCardCustomerName');
+    var histCard  = document.getElementById('editCustomerPurchaseHistoryCard');
+    if (nameSpan)  nameSpan.textContent = customerName;
+    if (loadingEl) loadingEl.style.display = '';
+    if (contentEl) contentEl.innerHTML = '';
+    if (histCard)  histCard.style.display = '';
+    var params = new URLSearchParams(window.location.search);
+    params.set('action', 'get_customer_purchase_history');
+    params.set('customer_id', customerIdVal);
+    fetch('?' + params.toString())
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (loadingEl) loadingEl.style.display = 'none';
+            if (!contentEl) return;
+            if (!data.success || !data.orders || data.orders.length === 0) {
+                contentEl.innerHTML = '<div class="text-center text-muted py-3"><i class="bi bi-inbox fs-4 d-block mb-1"></i><small>لا توجد مشتريات سابقة</small></div>';
+                return;
+            }
+            var html = '';
+            data.orders.forEach(function(order) {
+                var label = order.task_number ? '' + order.task_number : (order.title || ('' + order.task_id));
+                var shortDate = '';
+                if (order.date) { var parts = order.date.split('-'); shortDate = parts.length >= 3 ? parts[2] + '/' + parts[1] : order.date; }
+                html += '<div class="card mb-2 border-0 border-bottom"><div class="px-2 pt-2 d-flex justify-content-between align-items-center">';
+                html += '<span class="fw-semibold small"><i class="bi bi-receipt me-1 text-primary"></i>' + label + '</span>';
+                html += '<span class="text-muted small">' + shortDate + '</span></div><div class="mb-1"></div>';
+                if (order.products && order.products.length > 0) {
+                    html += '<div class="table-responsive"><table class="table table-sm mb-1 small"><thead class="table-light"><tr><th>المنتج</th><th class="text-center">الكمية</th><th class="text-center">السعر</th></tr></thead><tbody>';
+                    order.products.forEach(function(p) {
+                        html += '<tr><td>' + p.name + '</td><td class="text-center">' + (p.quantity != null ? p.quantity + ' ' + (p.unit || '') : '—') + '</td><td class="text-center">' + (p.price != null ? parseFloat(p.price).toFixed(2) + ' ج.م' : '—') + '</td></tr>';
+                    });
+                    html += '</tbody></table></div>';
+                } else { html += '<div class="px-2 pb-2 text-muted small">لا تفاصيل منتجات</div>'; }
+                html += '</div>';
+            });
+            contentEl.innerHTML = html;
+        })
+        .catch(function() { if (loadingEl) loadingEl.style.display = 'none'; if (contentEl) contentEl.innerHTML = '<div class="alert alert-danger small mb-0">خطأ في تحميل السجل</div>'; });
+}
 
 // ===== تكرار أوردر موجود =====
 function fillProductRowForDuplicate(row, product) {
