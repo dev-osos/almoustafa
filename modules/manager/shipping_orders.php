@@ -4605,7 +4605,7 @@ function copyShippingCollectionResult(btn) {
 
     function tgBuildRows(shipments) {
         if (!shipments || !shipments.length) {
-            return '<tr><td colspan="18" class="text-center text-muted py-4"><i class="bi bi-inbox fs-4 d-block mb-2"></i>لا توجد شحنات</td></tr>';
+            return '<tr><td colspan="7" class="text-center text-muted py-4"><i class="bi bi-inbox fs-4 d-block mb-2"></i>لا توجد شحنات</td></tr>';
         }
         return shipments.map(function (s) {
             var sc = (s.status && s.status.code) ? s.status.code : '';
@@ -4615,22 +4615,9 @@ function copyShippingCollectionResult(btn) {
                 '<td class="text-muted text-nowrap">' + tgFmtDate(s.date) + '</td>' +
                 '<td>' + tgEsc(s.recipientName) + '</td>' +
                 '<td class="text-nowrap">' + tgEsc(s.recipientZone && s.recipientZone.name) + '</td>' +
-                '<td class="text-nowrap">' + tgEsc(s.recipientSubzone && s.recipientSubzone.name) + '</td>' +
-                '<td class="text-nowrap" dir="ltr">' + tgEsc(s.recipientMobile) + '</td>' +
                 '<td class="text-nowrap"><span class="badge ' + tgStatusBadge(sc) + '">' + tgEsc(sn) + '</span></td>' +
-                '<td class="text-nowrap">' + tgEsc(s.type && s.type.name) + '</td>' +
-                '<td class="text-nowrap">' + tgEsc(s.branch && s.branch.name) + '</td>' +
-                '<td class="text-nowrap">' + tgEsc(s.deliveryType && s.deliveryType.name) + '</td>' +
-                '<td class="text-nowrap">' + tgEsc(s.paymentType && s.paymentType.code) + '</td>' +
                 '<td class="text-end text-nowrap">' + tgFmt(s.price) + '</td>' +
                 '<td class="text-end text-nowrap">' + tgFmt(s.amount) + '</td>' +
-                '<td class="text-end text-nowrap">' + tgFmt(s.deliveryFees) + '</td>' +
-                '<td class="text-end text-nowrap">' + tgFmt(s.returnFees) + '</td>' +
-                '<td class="text-end text-nowrap fw-semibold">' + tgFmt(s.allDueFees) + '</td>' +
-                '<td class="text-end text-nowrap fw-semibold">' + tgFmt(s.totalAmount) + '</td>' +
-                '<td class="text-center">' + (s.collected
-                    ? '<i class="bi bi-check-circle-fill text-success"></i>'
-                    : '<i class="bi bi-x-circle text-danger"></i>') + '</td>' +
                 '</tr>';
         }).join('');
     }
