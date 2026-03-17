@@ -801,27 +801,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $approvedAt = $markAsApproved ? date('Y-m-d H:i:s') : null;
                 }
 
-                $db->execute(
-                    "INSERT INTO financial_transactions (type, amount, supplier_id, description, reference_number, status, approved_by, created_by, approved_at)
-                     VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?)",
-                    [
-                        'expense',
-                        $amount,
-                        $description,
-                        $referenceNumber,
-                        $status,
-                        $approvedBy,
-                        $currentUser['id'],
-                        $approvedAt
-                    ]
-                );
+                // كشف نوع "توريد للإدارة" — يُحفظ في accountant_transactions كـ expense
+                // ويُستثنى من المصروفات العادية ليُحسب ضمن توريدات الإدارة فقط
+                $isManagementSupply = (mb_strpos($description, 'توريد للإدارة') === 0);
 
-                $transactionId = $db->getLastInsertId();
+                if ($isManagementSupply) {
+                    $db->execute(
+                        "INSERT INTO accountant_transactions
+                             (transaction_type, amount, description, reference_number, status, approved_by, created_by, approved_at)
+                         VALUES ('expense', ?, ?, ?, 'approved', ?, ?, NOW())",
+                        [$amount, $description, $referenceNumber, $currentUser['id'], $currentUser['id']]
+                    );
+                    $transactionId = $db->getLastInsertId();
+                    $auditTable    = 'accountant_transaction';
+                } else {
+                    $db->execute(
+                        "INSERT INTO financial_transactions (type, amount, supplier_id, description, reference_number, status, approved_by, created_by, approved_at)
+                         VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?)",
+                        ['expense', $amount, $description, $referenceNumber, $status, $approvedBy, $currentUser['id'], $approvedAt]
+                    );
+                    $transactionId = $db->getLastInsertId();
+                    $auditTable    = 'financial_transaction';
+                }
 
                 $attachmentPath = null;
                 $allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'doc', 'docx', 'xls', 'xlsx'];
                 $maxSize = 5 * 1024 * 1024;
-                if (!empty($_FILES['attachment']['name']) && $_FILES['attachment']['error'] === UPLOAD_ERR_OK) {
+                if (!$isManagementSupply && !empty($_FILES['attachment']['name']) && $_FILES['attachment']['error'] === UPLOAD_ERR_OK) {
                     $ext = strtolower(pathinfo($_FILES['attachment']['name'], PATHINFO_EXTENSION));
                     if (in_array($ext, $allowedExtensions, true) && $_FILES['attachment']['size'] <= $maxSize) {
                         $subDir = date('Y/m');
@@ -844,16 +850,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 // إذا كانت الحالة pending، إرسال طلب موافقة للمدير
                 // (لا يحدث هذا للمدير أو المحاسب لأنهما يعتمدان تلقائياً)
-                if ($status === 'pending') {
+                if ($status === 'pending' && !$isManagementSupply) {
                     $approvalNotes = sprintf(
                         "مصروف سريع\nالمبلغ: %s ج.م\nالوصف: %s%s",
                         formatCurrency($amount),
                         $description,
                         "\nالرقم المرجعي: " . $referenceNumber
                     );
-                    
+
                     $approvalResult = requestApproval('financial', $transactionId, $currentUser['id'], $approvalNotes);
-                    
+
                     if (!$approvalResult['success']) {
                         error_log('Failed to create approval request for expense: ' . ($approvalResult['message'] ?? 'Unknown error'));
                     }
@@ -862,20 +868,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 logAudit(
                     $currentUser['id'],
                     'quick_expense_create',
-                    'financial_transaction',
+                    $auditTable,
                     $transactionId,
                     null,
                     [
-                        'amount' => $amount,
-                        'status' => $status,
-                        'reference' => $referenceNumber
+                        'amount'     => $amount,
+                        'status'     => $isManagementSupply ? 'approved' : $status,
+                        'reference'  => $referenceNumber,
+                        'category'   => $isManagementSupply ? 'management_supply' : 'expense',
                     ]
                 );
 
                 unset($_SESSION['financial_form_data']);
 
                 // رسالة النجاح
-                if ($isManager || $isAccountant) {
+                if ($isManagementSupply) {
+                    $_SESSION['financial_success'] = 'تم تسجيل توريد الإدارة واعتماده — سيُخصم من صافي رصيد الخزنة.';
+                } elseif ($isManager || $isAccountant) {
                     $_SESSION['financial_success'] = 'تم تسجيل المصروف واعتماده تلقائياً.';
                 } else {
                     $_SESSION['financial_success'] = $markAsApproved
@@ -1130,9 +1139,10 @@ $treasurySummary = $db->queryOne("
         (SELECT COALESCE(SUM(CASE WHEN type = 'income' AND status = 'approved' THEN amount ELSE 0 END), 0) FROM financial_transactions) +
         (SELECT COALESCE(SUM(CASE WHEN transaction_type IN ('collection_from_sales_rep', 'income') AND status = 'approved' THEN amount ELSE 0 END), 0) FROM accountant_transactions) AS approved_income,
         (SELECT COALESCE(SUM(CASE WHEN type = 'expense' AND status = 'approved' THEN amount ELSE 0 END), 0) FROM financial_transactions) +
-        (SELECT COALESCE(SUM(CASE WHEN transaction_type = 'expense' AND status = 'approved' 
+        (SELECT COALESCE(SUM(CASE WHEN transaction_type = 'expense' AND status = 'approved'
             AND (description NOT LIKE '%سلفة%' AND description NOT LIKE '%سلف%')
             AND description NOT LIKE '%تسوية رصيد دائن ل%'
+            AND description NOT LIKE 'توريد للإدارة%'
             THEN amount ELSE 0 END), 0) FROM accountant_transactions) AS approved_expense,
         (SELECT COALESCE(SUM(CASE WHEN type = 'transfer' AND status = 'approved' THEN amount ELSE 0 END), 0) FROM financial_transactions) +
         (SELECT COALESCE(SUM(CASE WHEN transaction_type = 'transfer' AND status = 'approved' THEN amount ELSE 0 END), 0) FROM accountant_transactions) AS approved_transfer,
@@ -1155,6 +1165,7 @@ $monthlySummary = $db->queryOne("
         (SELECT COALESCE(SUM(CASE WHEN transaction_type = 'expense' AND status = 'approved'
             AND (description NOT LIKE '%سلفة%' AND description NOT LIKE '%سلف%')
             AND description NOT LIKE '%تسوية رصيد دائن ل%'
+            AND description NOT LIKE 'توريد للإدارة%'
             AND DATE(created_at) BETWEEN ? AND ? THEN amount ELSE 0 END), 0) FROM accountant_transactions) AS m_expense,
 
         (SELECT COALESCE(SUM(CASE WHEN type = 'payment' AND status = 'approved'
@@ -1213,8 +1224,11 @@ if (!empty($accountantTableExists ?? $db->queryOne("SHOW TABLES LIKE 'accountant
 
     $r4 = $db->queryOne(
         "SELECT COALESCE(SUM(amount),0) AS s FROM accountant_transactions
-         WHERE transaction_type='income' AND status='approved'
-         AND description LIKE '%تحصيل للإدارة%'
+         WHERE status='approved'
+         AND (
+             (transaction_type='income'  AND description LIKE '%تحصيل للإدارة%')
+             OR (transaction_type='expense' AND description LIKE 'توريد للإدارة%')
+         )
          AND DATE(created_at) BETWEEN ? AND ?",
         [$summaryDateStart, $summaryDateEnd]
     );
@@ -1297,9 +1311,11 @@ if (!empty($accountantTableExists)) {
     $managementSuppliesResult = $db->queryOne(
         "SELECT COALESCE(SUM(amount), 0) as total_supplies
          FROM accountant_transactions
-         WHERE transaction_type = 'income' 
-         AND status = 'approved'
-         AND description LIKE '%تحصيل للإدارة%'"
+         WHERE status = 'approved'
+         AND (
+             (transaction_type = 'income' AND description LIKE '%تحصيل للإدارة%')
+             OR (transaction_type = 'expense' AND description LIKE 'توريد للإدارة%')
+         )"
     );
     $totalManagementSupplies = (float) ($managementSuppliesResult['total_supplies'] ?? 0);
 }
@@ -1494,7 +1510,36 @@ $typeColorMap = [
                             </div>
                             <div class="col-12">
                                 <label for="quickExpenseDescription" class="form-label">وصف المصروف <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control" id="quickExpenseDescription" name="description" required placeholder="أدخل تفاصيل المصروف..." value="<?php echo htmlspecialchars($financialFormData['description'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                                <div class="dropdown">
+                                    <input type="text" class="form-control" id="quickExpenseDescription" name="description" required
+                                        placeholder="أدخل تفاصيل المصروف أو اختر من القائمة..."
+                                        value="<?php echo htmlspecialchars($financialFormData['description'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                        autocomplete="off"
+                                        data-bs-toggle="dropdown" aria-expanded="false"
+                                        oninput="filterExpenseSuggestions(this)">
+                                    <ul class="dropdown-menu w-100" id="expenseSuggestionsList" style="max-height:220px;overflow-y:auto;">
+                                        <?php
+                                        $expenseSuggestions = [
+                                            'توريد للإدارة',
+                                            'مواصلات اوردر ',
+                                            'مواصلات تحصيلات  ',
+                                            'فواتير كهرباء',
+                                            'شحن رصيد ل ',
+                                            'صيانة العربيه ',
+                                            'بنزين العربيه ',
+                                            'مشتريات',
+                                            ' سلفه ',
+                                        ];
+                                        foreach ($expenseSuggestions as $s): ?>
+                                            <li>
+                                                <a class="dropdown-item expense-suggestion-item" href="#"
+                                                   onclick="selectExpenseSuggestion(this); return false;">
+                                                    <?php echo htmlspecialchars($s, ENT_QUOTES, 'UTF-8'); ?>
+                                                </a>
+                                            </li>
+                                        <?php endforeach; ?>
+                                    </ul>
+                                </div>
                             </div>
                             <div class="col-12">
                                 <label for="quickExpenseReference" class="form-label">رقم مرجعي</label>
@@ -2485,6 +2530,29 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+// ── مقترحات أنواع المصروفات ────────────────────────────────────────────────
+function selectExpenseSuggestion(el) {
+    const input = document.getElementById('quickExpenseDescription');
+    if (input) {
+        input.value = el.textContent.trim();
+        // إغلاق الـ dropdown
+        const dd = bootstrap.Dropdown.getInstance(input);
+        if (dd) dd.hide();
+        input.focus();
+    }
+}
+
+function filterExpenseSuggestions(input) {
+    const q = input.value.trim().toLowerCase();
+    document.querySelectorAll('#expenseSuggestionsList .expense-suggestion-item').forEach(function(item) {
+        const match = !q || item.textContent.trim().toLowerCase().includes(q);
+        item.closest('li').style.display = match ? '' : 'none';
+    });
+    // افتح الـ dropdown إذا فُتح بالكتابة
+    const dd = bootstrap.Dropdown.getOrCreateInstance(input);
+    if (dd && input.value.length > 0) dd.show();
+}
 </script>
 <?php } catch (Throwable $company_cash_ex) {
     $company_cash_error = $company_cash_ex->getMessage();
