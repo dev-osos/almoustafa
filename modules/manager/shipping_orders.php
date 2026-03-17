@@ -426,6 +426,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    if ($action === 'tg_shipments' && $isAjax) {
+        $tgPage = max(1, (int)($_POST['tg_page'] ?? 1));
+        $tgQ = 'query ListShipments($first: Int, $page: Int, $input: ListShipmentsFilterInput) {
+  listShipments(first: $first, page: $page, input: $input) {
+    data {
+      code status { name code } date recipientName
+      recipientZone { id name } recipientSubzone { name }
+      price amount refNumber recipientMobile id cancelled
+      branch { id name } type { name code }
+      collected totalAmount allDueFees deliveryFees returnFees
+      paymentType { code } deliveryType { name }
+    }
+    paginatorInfo { total count currentPage lastPage perPage }
+  }
+}';
+        $tgPayloadAjax = json_encode([
+            'operationName' => 'ListShipments',
+            'variables'     => ['first' => 20, 'page' => $tgPage, 'input' => (object)[]],
+            'query'         => $tgQ,
+        ]);
+        $chAjax = curl_init('https://system.telegraphex.com:8443/graphql');
+        curl_setopt_array($chAjax, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => $tgPayloadAjax,
+            CURLOPT_TIMEOUT        => 10,
+            CURLOPT_HTTPHEADER     => [
+                'Content-Type: application/json',
+                'Accept: */*',
+                'authorization: Bearer 244917|ZzSXzdfFKcLnxRwsTbEhRlSsv9OjRRIDvknDEKVc86ec3127',
+                'x-app-version: 5.2.2',
+                'x-client-name: PHP-Server',
+                'x-client-type: WEB',
+            ],
+        ]);
+        $tgRespAjax = curl_exec($chAjax);
+        $tgErrAjax  = curl_error($chAjax);
+        curl_close($chAjax);
+        header('Content-Type: application/json; charset=utf-8');
+        if ($tgErrAjax) {
+            echo json_encode(['success' => false, 'error' => $tgErrAjax], JSON_UNESCAPED_UNICODE);
+        } else {
+            $tgDecAjax = json_decode($tgRespAjax, true);
+            echo json_encode([
+                'success'    => true,
+                'shipments'  => $tgDecAjax['data']['listShipments']['data'] ?? [],
+                'pagination' => $tgDecAjax['data']['listShipments']['paginatorInfo'] ?? [],
+                'errors'     => $tgDecAjax['errors'] ?? [],
+            ], JSON_UNESCAPED_UNICODE);
+        }
+        exit;
+    }
+
     if ($action === 'search_orders') {
         $query = trim($_POST['query'] ?? '');
 
@@ -4400,44 +4453,49 @@ function copyShippingCollectionResult(btn) {
 <div class="card shadow-sm mb-4" id="tgShipmentsCard">
     <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
         <h5 class="mb-0"><i class="bi bi-truck me-2 text-primary"></i>شحنات TelegraphEx</h5>
-        <?php if (!empty($tgPagination)): ?>
-            <span class="badge bg-secondary">
-                <?php echo (int)($tgPagination['total'] ?? 0); ?> شحنة إجمالاً — صفحة
+        <span class="badge bg-secondary" id="tgPaginationBadge">
+            <?php if (!empty($tgPagination)): ?>
+                <?php echo (int)($tgPagination['total'] ?? 0); ?> شحنة — صفحة
                 <?php echo (int)($tgPagination['currentPage'] ?? 1); ?> / <?php echo (int)($tgPagination['lastPage'] ?? 1); ?>
-            </span>
-        <?php endif; ?>
+            <?php endif; ?>
+        </span>
     </div>
     <div class="card-body p-0">
-        <?php if ($tgError): ?>
-            <div class="alert alert-danger m-3"><i class="bi bi-exclamation-triangle-fill me-2"></i><?php echo htmlspecialchars($tgError); ?></div>
-        <?php elseif (empty($tgShipments)): ?>
-            <div class="text-center text-muted py-4"><i class="bi bi-inbox fs-4 d-block mb-2"></i>لا توجد شحنات</div>
-        <?php else: ?>
-            <div class="table-responsive">
-                <table class="table table-hover table-striped align-middle mb-0 small">
-                    <thead class="table-dark">
-                        <tr>
-                            <th>رقم الشحنة</th>
-                            <th>التاريخ</th>
-                            <th>المستلم</th>
-                            <th>المنطقة</th>
-                            <th>المنطقة الفرعية</th>
-                            <th>الهاتف</th>
-                            <th>الحالة</th>
-                            <th>النوع</th>
-                            <th>الفرع</th>
-                            <th>نوع التوصيل</th>
-                            <th>نوع الدفع</th>
-                            <th class="text-end">السعر</th>
-                            <th class="text-end">المبلغ</th>
-                            <th class="text-end">رسوم التوصيل</th>
-                            <th class="text-end">رسوم الإرجاع</th>
-                            <th class="text-end">إجمالي الرسوم</th>
-                            <th class="text-end">الإجمالي</th>
-                            <th>تم التحصيل</th>
-                        </tr>
-                    </thead>
-                    <tbody>
+        <!-- منطقة الجدول مع scrollbar جانبي وأفقي -->
+        <div id="tgTableWrapper" style="max-height: 480px; overflow-y: auto; overflow-x: auto;">
+            <table class="table table-hover table-striped align-middle mb-0 small" id="tgShipmentsTable" style="min-width: 1400px;">
+                <thead class="table-dark sticky-top" style="top:0; z-index:2;">
+                    <tr>
+                        <th class="text-nowrap">رقم الشحنة</th>
+                        <th class="text-nowrap">التاريخ</th>
+                        <th class="text-nowrap">المستلم</th>
+                        <th class="text-nowrap">المنطقة</th>
+                        <th class="text-nowrap">المنطقة الفرعية</th>
+                        <th class="text-nowrap">الهاتف</th>
+                        <th class="text-nowrap">الحالة</th>
+                        <th class="text-nowrap">النوع</th>
+                        <th class="text-nowrap">الفرع</th>
+                        <th class="text-nowrap">نوع التوصيل</th>
+                        <th class="text-nowrap">نوع الدفع</th>
+                        <th class="text-nowrap text-end">السعر</th>
+                        <th class="text-nowrap text-end">المبلغ</th>
+                        <th class="text-nowrap text-end">رسوم التوصيل</th>
+                        <th class="text-nowrap text-end">رسوم الإرجاع</th>
+                        <th class="text-nowrap text-end">إجمالي الرسوم</th>
+                        <th class="text-nowrap text-end">الإجمالي</th>
+                        <th class="text-nowrap text-center">تم التحصيل</th>
+                    </tr>
+                </thead>
+                <tbody id="tgShipmentsBody">
+                    <?php if ($tgError): ?>
+                        <tr><td colspan="18" class="text-center text-danger py-3">
+                            <i class="bi bi-exclamation-triangle-fill me-1"></i><?php echo htmlspecialchars($tgError); ?>
+                        </td></tr>
+                    <?php elseif (empty($tgShipments)): ?>
+                        <tr><td colspan="18" class="text-center text-muted py-4">
+                            <i class="bi bi-inbox fs-4 d-block mb-2"></i>لا توجد شحنات
+                        </td></tr>
+                    <?php else: ?>
                         <?php foreach ($tgShipments as $tgs): ?>
                             <?php
                                 $tgsStatusCode = $tgs['status']['code'] ?? '';
@@ -4449,27 +4507,27 @@ function copyShippingCollectionResult(btn) {
                                 };
                             ?>
                             <tr>
-                                <td class="fw-semibold"><?php echo htmlspecialchars($tgs['code'] ?? '-'); ?></td>
-                                <td class="text-muted"><?php echo htmlspecialchars(!empty($tgs['date']) ? date('Y-m-d H:i', strtotime($tgs['date'])) : '-'); ?></td>
+                                <td class="fw-semibold text-nowrap"><?php echo htmlspecialchars($tgs['code'] ?? '-'); ?></td>
+                                <td class="text-muted text-nowrap"><?php echo htmlspecialchars(!empty($tgs['date']) ? date('Y-m-d H:i', strtotime($tgs['date'])) : '-'); ?></td>
                                 <td><?php echo htmlspecialchars($tgs['recipientName'] ?? '-'); ?></td>
-                                <td><?php echo htmlspecialchars($tgs['recipientZone']['name'] ?? '-'); ?></td>
-                                <td><?php echo htmlspecialchars($tgs['recipientSubzone']['name'] ?? '-'); ?></td>
-                                <td dir="ltr"><?php echo htmlspecialchars($tgs['recipientMobile'] ?? '-'); ?></td>
-                                <td>
+                                <td class="text-nowrap"><?php echo htmlspecialchars($tgs['recipientZone']['name'] ?? '-'); ?></td>
+                                <td class="text-nowrap"><?php echo htmlspecialchars($tgs['recipientSubzone']['name'] ?? '-'); ?></td>
+                                <td class="text-nowrap" dir="ltr"><?php echo htmlspecialchars($tgs['recipientMobile'] ?? '-'); ?></td>
+                                <td class="text-nowrap">
                                     <span class="badge <?php echo $tgsStatusBadge; ?>">
                                         <?php echo htmlspecialchars($tgs['status']['name'] ?? $tgsStatusCode); ?>
                                     </span>
                                 </td>
-                                <td><?php echo htmlspecialchars($tgs['type']['name'] ?? '-'); ?></td>
-                                <td><?php echo htmlspecialchars($tgs['branch']['name'] ?? '-'); ?></td>
-                                <td><?php echo htmlspecialchars($tgs['deliveryType']['name'] ?? '-'); ?></td>
-                                <td><?php echo htmlspecialchars($tgs['paymentType']['code'] ?? '-'); ?></td>
-                                <td class="text-end"><?php echo number_format((float)($tgs['price'] ?? 0), 2); ?></td>
-                                <td class="text-end"><?php echo number_format((float)($tgs['amount'] ?? 0), 2); ?></td>
-                                <td class="text-end"><?php echo number_format((float)($tgs['deliveryFees'] ?? 0), 2); ?></td>
-                                <td class="text-end"><?php echo number_format((float)($tgs['returnFees'] ?? 0), 2); ?></td>
-                                <td class="text-end fw-semibold"><?php echo number_format((float)($tgs['allDueFees'] ?? 0), 2); ?></td>
-                                <td class="text-end fw-semibold"><?php echo number_format((float)($tgs['totalAmount'] ?? 0), 2); ?></td>
+                                <td class="text-nowrap"><?php echo htmlspecialchars($tgs['type']['name'] ?? '-'); ?></td>
+                                <td class="text-nowrap"><?php echo htmlspecialchars($tgs['branch']['name'] ?? '-'); ?></td>
+                                <td class="text-nowrap"><?php echo htmlspecialchars($tgs['deliveryType']['name'] ?? '-'); ?></td>
+                                <td class="text-nowrap"><?php echo htmlspecialchars($tgs['paymentType']['code'] ?? '-'); ?></td>
+                                <td class="text-end text-nowrap"><?php echo number_format((float)($tgs['price'] ?? 0), 2); ?></td>
+                                <td class="text-end text-nowrap"><?php echo number_format((float)($tgs['amount'] ?? 0), 2); ?></td>
+                                <td class="text-end text-nowrap"><?php echo number_format((float)($tgs['deliveryFees'] ?? 0), 2); ?></td>
+                                <td class="text-end text-nowrap"><?php echo number_format((float)($tgs['returnFees'] ?? 0), 2); ?></td>
+                                <td class="text-end text-nowrap fw-semibold"><?php echo number_format((float)($tgs['allDueFees'] ?? 0), 2); ?></td>
+                                <td class="text-end text-nowrap fw-semibold"><?php echo number_format((float)($tgs['totalAmount'] ?? 0), 2); ?></td>
                                 <td class="text-center">
                                     <?php if ($tgs['collected']): ?>
                                         <i class="bi bi-check-circle-fill text-success"></i>
@@ -4479,12 +4537,230 @@ function copyShippingCollectionResult(btn) {
                                 </td>
                             </tr>
                         <?php endforeach; ?>
-                    </tbody>
-                </table>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- شريط التحميل -->
+        <div id="tgLoadingBar" class="d-none text-center py-3">
+            <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+            <span class="text-muted small">جاري تحميل الشحنات...</span>
+        </div>
+
+        <!-- Pagination -->
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 px-3 py-2 border-top" id="tgPaginationBar">
+            <div class="text-muted small" id="tgPaginationInfo">
+                <?php if (!empty($tgPagination)): ?>
+                    عرض <?php echo (int)($tgPagination['count'] ?? count($tgShipments)); ?> من <?php echo (int)($tgPagination['total'] ?? 0); ?> شحنة
+                <?php endif; ?>
             </div>
-        <?php endif; ?>
+            <nav aria-label="تنقل بين صفحات TelegraphEx">
+                <ul class="pagination pagination-sm mb-0" id="tgPaginationList">
+                    <?php if (!empty($tgPagination)): ?>
+                        <?php
+                            $tgCurrent  = (int)($tgPagination['currentPage'] ?? 1);
+                            $tgLastPage = (int)($tgPagination['lastPage'] ?? 1);
+                        ?>
+                        <li class="page-item <?php echo $tgCurrent <= 1 ? 'disabled' : ''; ?>">
+                            <a class="page-link tg-page-link" href="#" data-page="<?php echo $tgCurrent - 1; ?>">
+                                <i class="bi bi-chevron-right"></i>
+                            </a>
+                        </li>
+                        <?php
+                            $tgFrom = max(1, $tgCurrent - 2);
+                            $tgTo   = min($tgLastPage, $tgCurrent + 2);
+                            if ($tgFrom > 1): ?>
+                                <li class="page-item"><a class="page-link tg-page-link" href="#" data-page="1">1</a></li>
+                                <?php if ($tgFrom > 2): ?>
+                                    <li class="page-item disabled"><span class="page-link">…</span></li>
+                                <?php endif; ?>
+                        <?php endif; ?>
+                        <?php for ($tgP = $tgFrom; $tgP <= $tgTo; $tgP++): ?>
+                            <li class="page-item <?php echo $tgP === $tgCurrent ? 'active' : ''; ?>">
+                                <a class="page-link tg-page-link" href="#" data-page="<?php echo $tgP; ?>"><?php echo $tgP; ?></a>
+                            </li>
+                        <?php endfor; ?>
+                        <?php if ($tgTo < $tgLastPage): ?>
+                            <?php if ($tgTo < $tgLastPage - 1): ?>
+                                <li class="page-item disabled"><span class="page-link">…</span></li>
+                            <?php endif; ?>
+                            <li class="page-item"><a class="page-link tg-page-link" href="#" data-page="<?php echo $tgLastPage; ?>"><?php echo $tgLastPage; ?></a></li>
+                        <?php endif; ?>
+                        <li class="page-item <?php echo $tgCurrent >= $tgLastPage ? 'disabled' : ''; ?>">
+                            <a class="page-link tg-page-link" href="#" data-page="<?php echo $tgCurrent + 1; ?>">
+                                <i class="bi bi-chevron-left"></i>
+                            </a>
+                        </li>
+                    <?php endif; ?>
+                </ul>
+            </nav>
+        </div>
     </div>
 </div>
+
+<script>
+(function () {
+    var tgCurrentPage = <?php echo (int)($tgPagination['currentPage'] ?? 1); ?>;
+    var tgLastPage    = <?php echo (int)($tgPagination['lastPage'] ?? 1); ?>;
+    var tgTotal       = <?php echo (int)($tgPagination['total'] ?? 0); ?>;
+
+    function tgStatusBadge(code) {
+        var map = { DTR: 'bg-success', PKD: 'bg-warning text-dark', CNL: 'bg-secondary' };
+        return map[code] || 'bg-info text-dark';
+    }
+
+    function tgEsc(str) {
+        if (!str && str !== 0) return '-';
+        return String(str)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function tgFmt(n) {
+        return parseFloat(n || 0).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function tgFmtDate(str) {
+        if (!str) return '-';
+        return str.substring(0, 16).replace('T', ' ');
+    }
+
+    function tgBuildRows(shipments) {
+        if (!shipments || !shipments.length) {
+            return '<tr><td colspan="18" class="text-center text-muted py-4"><i class="bi bi-inbox fs-4 d-block mb-2"></i>لا توجد شحنات</td></tr>';
+        }
+        return shipments.map(function (s) {
+            var sc = (s.status && s.status.code) ? s.status.code : '';
+            var sn = (s.status && s.status.name) ? s.status.name : sc;
+            return '<tr>' +
+                '<td class="fw-semibold text-nowrap">' + tgEsc(s.code) + '</td>' +
+                '<td class="text-muted text-nowrap">' + tgFmtDate(s.date) + '</td>' +
+                '<td>' + tgEsc(s.recipientName) + '</td>' +
+                '<td class="text-nowrap">' + tgEsc(s.recipientZone && s.recipientZone.name) + '</td>' +
+                '<td class="text-nowrap">' + tgEsc(s.recipientSubzone && s.recipientSubzone.name) + '</td>' +
+                '<td class="text-nowrap" dir="ltr">' + tgEsc(s.recipientMobile) + '</td>' +
+                '<td class="text-nowrap"><span class="badge ' + tgStatusBadge(sc) + '">' + tgEsc(sn) + '</span></td>' +
+                '<td class="text-nowrap">' + tgEsc(s.type && s.type.name) + '</td>' +
+                '<td class="text-nowrap">' + tgEsc(s.branch && s.branch.name) + '</td>' +
+                '<td class="text-nowrap">' + tgEsc(s.deliveryType && s.deliveryType.name) + '</td>' +
+                '<td class="text-nowrap">' + tgEsc(s.paymentType && s.paymentType.code) + '</td>' +
+                '<td class="text-end text-nowrap">' + tgFmt(s.price) + '</td>' +
+                '<td class="text-end text-nowrap">' + tgFmt(s.amount) + '</td>' +
+                '<td class="text-end text-nowrap">' + tgFmt(s.deliveryFees) + '</td>' +
+                '<td class="text-end text-nowrap">' + tgFmt(s.returnFees) + '</td>' +
+                '<td class="text-end text-nowrap fw-semibold">' + tgFmt(s.allDueFees) + '</td>' +
+                '<td class="text-end text-nowrap fw-semibold">' + tgFmt(s.totalAmount) + '</td>' +
+                '<td class="text-center">' + (s.collected
+                    ? '<i class="bi bi-check-circle-fill text-success"></i>'
+                    : '<i class="bi bi-x-circle text-danger"></i>') + '</td>' +
+                '</tr>';
+        }).join('');
+    }
+
+    function tgBuildPagination(current, last) {
+        if (last <= 1) return '';
+        var items = [];
+
+        function li(page, label, active, disabled) {
+            var cls = 'page-item' + (active ? ' active' : '') + (disabled ? ' disabled' : '');
+            var inner = disabled
+                ? '<span class="page-link">' + label + '</span>'
+                : '<a class="page-link tg-page-link" href="#" data-page="' + page + '">' + label + '</a>';
+            return '<li class="' + cls + '">' + inner + '</li>';
+        }
+
+        items.push(li(current - 1, '<i class="bi bi-chevron-right"></i>', false, current <= 1));
+
+        var from = Math.max(1, current - 2);
+        var to   = Math.min(last, current + 2);
+        if (from > 1) {
+            items.push(li(1, '1', false, false));
+            if (from > 2) items.push(li(0, '…', false, true));
+        }
+        for (var p = from; p <= to; p++) items.push(li(p, p, p === current, false));
+        if (to < last) {
+            if (to < last - 1) items.push(li(0, '…', false, true));
+            items.push(li(last, last, false, false));
+        }
+        items.push(li(current + 1, '<i class="bi bi-chevron-left"></i>', false, current >= last));
+
+        return items.join('');
+    }
+
+    function tgLoadPage(page) {
+        if (page < 1 || page > tgLastPage) return;
+        tgCurrentPage = page;
+
+        var body    = document.getElementById('tgShipmentsBody');
+        var loading = document.getElementById('tgLoadingBar');
+        var wrapper = document.getElementById('tgTableWrapper');
+
+        if (loading) loading.classList.remove('d-none');
+        if (wrapper) wrapper.style.opacity = '0.4';
+
+        var fd = new FormData();
+        fd.append('action', 'tg_shipments');
+        fd.append('tg_page', page);
+
+        fetch(window.location.href, {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            body: fd
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            if (loading) loading.classList.add('d-none');
+            if (wrapper) wrapper.style.opacity = '1';
+
+            if (!data.success) {
+                if (body) body.innerHTML = '<tr><td colspan="18" class="text-center text-danger py-3"><i class="bi bi-exclamation-triangle-fill me-1"></i>' + (data.error || 'خطأ') + '</td></tr>';
+                return;
+            }
+
+            var pg = data.pagination || {};
+            tgLastPage    = parseInt(pg.lastPage  || 1);
+            tgCurrentPage = parseInt(pg.currentPage || page);
+            tgTotal       = parseInt(pg.total || 0);
+            var count     = parseInt(pg.count || (data.shipments ? data.shipments.length : 0));
+
+            if (body) body.innerHTML = tgBuildRows(data.shipments);
+
+            var badge = document.getElementById('tgPaginationBadge');
+            if (badge) badge.textContent = tgTotal + ' شحنة — صفحة ' + tgCurrentPage + ' / ' + tgLastPage;
+
+            var info = document.getElementById('tgPaginationInfo');
+            if (info) info.textContent = 'عرض ' + count + ' من ' + tgTotal + ' شحنة';
+
+            var plist = document.getElementById('tgPaginationList');
+            if (plist) {
+                plist.innerHTML = tgBuildPagination(tgCurrentPage, tgLastPage);
+                attachTgPageLinks();
+            }
+
+            // العودة لأعلى الجدول
+            if (wrapper) wrapper.scrollTop = 0;
+        })
+        .catch(function () {
+            if (loading) loading.classList.add('d-none');
+            if (wrapper) wrapper.style.opacity = '1';
+            if (body) body.innerHTML = '<tr><td colspan="18" class="text-center text-danger py-3">حدث خطأ في الاتصال</td></tr>';
+        });
+    }
+
+    function attachTgPageLinks() {
+        document.querySelectorAll('.tg-page-link').forEach(function (el) {
+            el.addEventListener('click', function (e) {
+                e.preventDefault();
+                var p = parseInt(this.getAttribute('data-page'));
+                if (p && p !== tgCurrentPage) tgLoadPage(p);
+            });
+        });
+    }
+
+    attachTgPageLinks();
+})();
+</script>
 
 <!-- Modal للكمبيوتر فقط -->
 <div class="modal fade d-none d-md-block" id="addShippingCompanyModal" tabindex="-1" aria-hidden="true">
