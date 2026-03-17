@@ -3556,12 +3556,16 @@ $hasShippingCompanies = !empty($shippingCompanies);
 <?php endif; ?>
 
 <div class="card shadow-sm mb-4">
-    <div class="card-header d-flex justify-content-between align-items-center">
+    <div class="card-header d-flex justify-content-between align-items-center" style="cursor:pointer;" onclick="bootstrap.Collapse.getOrCreateInstance(document.getElementById('newShippingOrderCollapse')).toggle()">
         <div>
             <h5 class="mb-1">تسجيل طلب شحن جديد</h5>
             <small class="text-muted">قم بتسليم المنتجات لشركة الشحن وتتبع الدين عليها لحين استلام العميل.</small>
         </div>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#newShippingOrderCollapse" aria-expanded="false" aria-controls="newShippingOrderCollapse" onclick="event.stopPropagation()">
+            <i class="bi bi-chevron-down"></i>
+        </button>
     </div>
+    <div class="collapse" id="newShippingOrderCollapse">
     <div class="card-body">
         <?php if (!$hasShippingCompanies): ?>
             <div class="alert alert-warning d-flex align-items-center gap-2 mb-0">
@@ -3716,6 +3720,7 @@ $hasShippingCompanies = !empty($shippingCompanies);
                 </div>
             </form>
         <?php endif; ?>
+    </div>
     </div>
 </div>
 
