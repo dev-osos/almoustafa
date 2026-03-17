@@ -4465,36 +4465,25 @@ function copyShippingCollectionResult(btn) {
         <div id="tgTableWrapper" style="height: 420px; overflow-y: scroll; overflow-x: hidden; position: relative;">
             <!-- حاوية scroll أفقي داخلية -->
             <div style="overflow-x: auto; min-width: 100%;">
-            <table class="table table-hover table-striped align-middle mb-0 small" id="tgShipmentsTable" style="min-width: 1400px;">
+            <table class="table table-hover table-striped align-middle mb-0 small" id="tgShipmentsTable" style="min-width: 700px;">
                 <thead class="table-dark" style="position: sticky; top: 0; z-index: 2;">
                     <tr>
                         <th class="text-nowrap">رقم الشحنة</th>
                         <th class="text-nowrap">التاريخ</th>
                         <th class="text-nowrap">المستلم</th>
                         <th class="text-nowrap">المنطقة</th>
-                        <th class="text-nowrap">المنطقة الفرعية</th>
-                        <th class="text-nowrap">الهاتف</th>
                         <th class="text-nowrap">الحالة</th>
-                        <th class="text-nowrap">النوع</th>
-                        <th class="text-nowrap">الفرع</th>
-                        <th class="text-nowrap">نوع التوصيل</th>
-                        <th class="text-nowrap">نوع الدفع</th>
                         <th class="text-nowrap text-end">السعر</th>
                         <th class="text-nowrap text-end">المبلغ</th>
-                        <th class="text-nowrap text-end">رسوم التوصيل</th>
-                        <th class="text-nowrap text-end">رسوم الإرجاع</th>
-                        <th class="text-nowrap text-end">إجمالي الرسوم</th>
-                        <th class="text-nowrap text-end">الإجمالي</th>
-                        <th class="text-nowrap text-center">تم التحصيل</th>
                     </tr>
                 </thead>
                 <tbody id="tgShipmentsBody">
                     <?php if ($tgError): ?>
-                        <tr><td colspan="18" class="text-center text-danger py-3">
+                        <tr><td colspan="7" class="text-center text-danger py-3">
                             <i class="bi bi-exclamation-triangle-fill me-1"></i><?php echo htmlspecialchars($tgError); ?>
                         </td></tr>
                     <?php elseif (empty($tgShipments)): ?>
-                        <tr><td colspan="18" class="text-center text-muted py-4">
+                        <tr><td colspan="7" class="text-center text-muted py-4">
                             <i class="bi bi-inbox fs-4 d-block mb-2"></i>لا توجد شحنات
                         </td></tr>
                     <?php else: ?>
@@ -4513,30 +4502,13 @@ function copyShippingCollectionResult(btn) {
                                 <td class="text-muted text-nowrap"><?php echo htmlspecialchars(!empty($tgs['date']) ? date('Y-m-d H:i', strtotime($tgs['date'])) : '-'); ?></td>
                                 <td><?php echo htmlspecialchars($tgs['recipientName'] ?? '-'); ?></td>
                                 <td class="text-nowrap"><?php echo htmlspecialchars($tgs['recipientZone']['name'] ?? '-'); ?></td>
-                                <td class="text-nowrap"><?php echo htmlspecialchars($tgs['recipientSubzone']['name'] ?? '-'); ?></td>
-                                <td class="text-nowrap" dir="ltr"><?php echo htmlspecialchars($tgs['recipientMobile'] ?? '-'); ?></td>
                                 <td class="text-nowrap">
                                     <span class="badge <?php echo $tgsStatusBadge; ?>">
                                         <?php echo htmlspecialchars($tgs['status']['name'] ?? $tgsStatusCode); ?>
                                     </span>
                                 </td>
-                                <td class="text-nowrap"><?php echo htmlspecialchars($tgs['type']['name'] ?? '-'); ?></td>
-                                <td class="text-nowrap"><?php echo htmlspecialchars($tgs['branch']['name'] ?? '-'); ?></td>
-                                <td class="text-nowrap"><?php echo htmlspecialchars($tgs['deliveryType']['name'] ?? '-'); ?></td>
-                                <td class="text-nowrap"><?php echo htmlspecialchars($tgs['paymentType']['code'] ?? '-'); ?></td>
                                 <td class="text-end text-nowrap"><?php echo number_format((float)($tgs['price'] ?? 0), 2); ?></td>
                                 <td class="text-end text-nowrap"><?php echo number_format((float)($tgs['amount'] ?? 0), 2); ?></td>
-                                <td class="text-end text-nowrap"><?php echo number_format((float)($tgs['deliveryFees'] ?? 0), 2); ?></td>
-                                <td class="text-end text-nowrap"><?php echo number_format((float)($tgs['returnFees'] ?? 0), 2); ?></td>
-                                <td class="text-end text-nowrap fw-semibold"><?php echo number_format((float)($tgs['allDueFees'] ?? 0), 2); ?></td>
-                                <td class="text-end text-nowrap fw-semibold"><?php echo number_format((float)($tgs['totalAmount'] ?? 0), 2); ?></td>
-                                <td class="text-center">
-                                    <?php if ($tgs['collected']): ?>
-                                        <i class="bi bi-check-circle-fill text-success"></i>
-                                    <?php else: ?>
-                                        <i class="bi bi-x-circle text-danger"></i>
-                                    <?php endif; ?>
-                                </td>
                             </tr>
                         <?php endforeach; ?>
                     <?php endif; ?>
