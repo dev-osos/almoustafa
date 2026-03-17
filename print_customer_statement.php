@@ -803,25 +803,6 @@ function getLocalCustomerStatementData($customerId) {
                 <?php endif; ?>
             </tbody>
         </table>
-        
-        <?php
-        // استخراج أوردرات من الحركات لعرض تفاصيلها
-        $taskMovements = array_filter($statementData['movements'] ?? [], function($m) {
-            return isset($m['type']) && $m['type'] === 'task_purchase';
-        });
-        if ($isLocalCustomer && !empty($taskMovements)): ?>
-        
-            <div style="border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 16px; page-break-inside: avoid;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #e2e8f0;">
-                    <div>
-                        <strong style="font-size: 16px;">أوردر <?php echo htmlspecialchars($tm['task_number']); ?></strong>
-                        <?php if ($tmOrderTitle): ?><span style="color: #6b7280; margin-right: 8px;"><?php echo htmlspecialchars($tmOrderTitle); ?></span><?php endif; ?>
-                    </div>
-                    <div style="text-align: left; font-size: 13px; color: #6b7280;"><?php echo formatDate($tm['date']); ?></div>
-                </div>
-              
-        <?php endif; ?>
-
         <!-- الملخص -->
         <div class="summary-section">
             <h2 class="section-title" style="margin-top: 0;">ملخص الحساب</h2>
