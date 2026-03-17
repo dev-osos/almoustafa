@@ -1381,13 +1381,6 @@ $typeColorMap = [
                         <div class="h3 fw-bold mb-0 <?php echo $netApprovedBalance >= 0 ? 'text-success' : 'text-danger'; ?>">
                             <?php echo formatCurrency($netApprovedBalance); ?>
                         </div>
-                        <small class="text-muted">إجمالي منذ البداية</small>
-                    </div>
-                    <div class="text-end">
-                        <span class="text-muted small d-block mb-1">صافي <?php echo $summaryMonthLabel; ?></span>
-                        <div class="h5 fw-bold mb-0 <?php echo $mNet >= 0 ? 'text-success' : 'text-danger'; ?>">
-                            <?php echo ($mNet >= 0 ? '+' : '') . formatCurrency($mNet); ?>
-                        </div>
                     </div>
                 </div>
 
