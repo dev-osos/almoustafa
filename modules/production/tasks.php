@@ -1883,7 +1883,7 @@ function tasksHtml(string $value): string
                                     </td>
                                     <?php endif; ?>
                                     <td>
-                                        <strong><?php echo (int) $task['id']; ?></strong><br>
+                                        <strong># <?php echo (int) $task['id']; ?></strong><br>
                                         <span class="text-muted" style="font-size:.7rem;"><?php echo !empty($task['created_at']) ? date('d/m', strtotime($task['created_at'])) : ''; ?></span>
                                     </td>
                                     

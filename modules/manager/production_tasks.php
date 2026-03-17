@@ -1378,6 +1378,83 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $error = ($e instanceof InvalidArgumentException) ? $e->getMessage() : 'تعذر اعتماد الفاتورة: ' . $e->getMessage();
             }
         }
+    } elseif ($action === 'bulk_approve_task_invoice' && ($isAccountant || $isManager)) {
+        $taskIdsRaw = $_POST['task_ids'] ?? [];
+        if (!is_array($taskIdsRaw)) $taskIdsRaw = explode(',', (string)$taskIdsRaw);
+        $taskIds = array_values(array_filter(array_map('intval', $taskIdsRaw)));
+        if (empty($taskIds)) {
+            $error = 'لم يتم تحديد أي أوردرات.';
+        } else {
+            $ph = implode(',', array_fill(0, count($taskIds), '?'));
+            $tasks = $db->query(
+                "SELECT id, customer_name, customer_phone, local_customer_id, created_at, notes, task_type, related_type FROM tasks WHERE id IN ($ph)",
+                $taskIds
+            );
+            $successCount = 0;
+            $skippedShipping = 0;
+            $errors = [];
+            foreach (($tasks ?: []) as $bulkTask) {
+                $tid = (int)$bulkTask['id'];
+                $totalAmount = getTaskReceiptTotalFromNotes($bulkTask['notes'] ?? '');
+                $relType = $bulkTask['related_type'] ?? '';
+                $dispType = (strpos($relType, 'manager_') === 0) ? substr($relType, 8) : ($bulkTask['task_type'] ?? 'general');
+                if ($dispType === 'telegraph' || $dispType === 'shipping_company') {
+                    $skippedShipping++;
+                    continue;
+                }
+                $existingApproval = $db->queryOne("SELECT id FROM customer_task_purchases WHERE task_id = ?", [$tid]);
+                if ($existingApproval) {
+                    $errors[] = "أوردر #$tid: تم اعتماده مسبقاً.";
+                    continue;
+                }
+                $custId = (int)($bulkTask['local_customer_id'] ?? 0);
+                if ($custId <= 0) {
+                    $bName  = trim((string)($bulkTask['customer_name']  ?? ''));
+                    $bPhone = trim((string)($bulkTask['customer_phone'] ?? ''));
+                    if ($bName !== '' || $bPhone !== '') {
+                        $match = $db->queryOne(
+                            "SELECT id FROM local_customers WHERE status = 'active' AND (name = ? OR phone = ?) LIMIT 1",
+                            [$bName, $bPhone !== '' ? $bPhone : $bName]
+                        );
+                        $custId = $match ? (int)$match['id'] : 0;
+                    }
+                }
+                if ($custId <= 0) {
+                    $errors[] = "أوردر #$tid: لم يتم العثور على عميل محلي مطابق.";
+                    continue;
+                }
+                try {
+                    $db->beginTransaction();
+                    deductTaskProductsFromStock($db, $bulkTask['notes'] ?? '');
+                    $taskNumber = '#' . $tid;
+                    $taskDate   = date('Y-m-d', strtotime($bulkTask['created_at'] ?? 'now'));
+                    $db->execute(
+                        "INSERT INTO customer_task_purchases (local_customer_id, task_id, task_number, total_amount, task_date) VALUES (?, ?, ?, ?, ?)",
+                        [$custId, $tid, $taskNumber, $totalAmount, $taskDate]
+                    );
+                    $db->execute(
+                        "UPDATE local_customers SET balance = COALESCE(balance, 0) + ? WHERE id = ?",
+                        [$totalAmount, $custId]
+                    );
+                    $db->execute(
+                        "UPDATE tasks SET total_amount = ?, local_customer_id = ? WHERE id = ?",
+                        [$totalAmount, $custId, $tid]
+                    );
+                    $db->commit();
+                    logAudit($currentUser['id'], 'approve_task_invoice', 'tasks', $tid, null, ['local_customer_id' => $custId, 'total_amount' => $totalAmount]);
+                    $successCount++;
+                } catch (Exception $e) {
+                    if (isset($db) && $db->inTransaction()) $db->rollBack();
+                    $errors[] = "أوردر #$tid: " . $e->getMessage();
+                }
+            }
+            $msg = "تم اعتماد {$successCount} فاتورة بنجاح.";
+            if ($skippedShipping > 0) $msg .= " ({$skippedShipping} أوردر شحن يتطلب اعتماداً فردياً).";
+            if (!empty($errors)) $msg .= ' ملاحظات: ' . implode(' | ', $errors);
+            $userRole = ($currentUser['role'] ?? '') === 'accountant' ? 'accountant' : 'manager';
+            preventDuplicateSubmission($msg, ['page' => 'production_tasks'], null, $userRole);
+            exit;
+        }
     } elseif ($action === 'cancel_task') {
         $taskId = intval($_POST['task_id'] ?? 0);
 
@@ -2918,6 +2995,11 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                 <button type="button" class="btn btn-outline-primary btn-sm" id="printSelectedReceiptsBtn" title="طباعة إيصالات الأوردرات المحددة" disabled>
                     <i class="bi bi-printer me-1"></i>طباعة المحدد (<span id="selectedCount">0</span>)
                 </button>
+                <?php if ($isAccountant || $isManager): ?>
+                <button type="button" class="btn btn-outline-success btn-sm" id="approveSelectedBtn" title="اعتماد الفواتير المحددة" disabled onclick="openBulkApproveCard()">
+                    <i class="bi bi-check2-circle me-1"></i>اعتماد المحدد (<span id="approveSelectedCount">0</span>)
+                </button>
+                <?php endif; ?>
                 <?php endif; ?>
             </div>
         </div>
@@ -3017,7 +3099,29 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                 <tr class="recent-tasks-filter-row" data-task-id="<?php echo (int)$task['id']; ?>" data-search="<?php echo htmlspecialchars($rowSearchText, ENT_QUOTES, 'UTF-8'); ?>" data-customer="<?php echo htmlspecialchars($rowCustomer, ENT_QUOTES, 'UTF-8'); ?>" data-task-type="<?php echo htmlspecialchars($displayType, ENT_QUOTES, 'UTF-8'); ?>" data-due-date="<?php echo htmlspecialchars($rowDueDate, ENT_QUOTES, 'UTF-8'); ?>" data-order-date="<?php echo htmlspecialchars($rowOrderDate, ENT_QUOTES, 'UTF-8'); ?>">
                                     <?php if ($canPrintTasks): ?>
                                     <td>
-                                        <input type="checkbox" class="form-check-input task-print-checkbox" value="<?php echo (int)$task['id']; ?>" data-print-url="<?php echo htmlspecialchars(getRelativeUrl('print_task_receipt.php?id=' . (int)$task['id']), ENT_QUOTES, 'UTF-8'); ?>">
+                                        <?php
+                                        $cbNotes = $task['notes'] ?? '';
+                                        $cbProductsJson = '[]';
+                                        if (preg_match('/\[PRODUCTS_JSON\]:(.+?)(?=\n\[|\n\n|\z)/s', $cbNotes, $cbPm)) {
+                                            $cbDecoded = json_decode(trim($cbPm[1]), true);
+                                            if (is_array($cbDecoded)) $cbProductsJson = json_encode($cbDecoded, JSON_UNESCAPED_UNICODE);
+                                        }
+                                        $cbShipping = 0.0;
+                                        if (preg_match('/\[SHIPPING_FEES\]:\s*([0-9.]+)/', $cbNotes, $cbSm)) $cbShipping = (float)$cbSm[1];
+                                        $cbDiscount = 0.0;
+                                        if (preg_match('/\[DISCOUNT\]:\s*([0-9.]+)/', $cbNotes, $cbDm)) $cbDiscount = (float)$cbDm[1];
+                                        $cbApproved = in_array((int)$task['id'], $approvedTaskIds, true) ? '1' : '0';
+                                        $cbReceiptTotal = isset($task['receipt_total']) ? (float)$task['receipt_total'] : 0;
+                                        ?>
+                                        <input type="checkbox" class="form-check-input task-print-checkbox" value="<?php echo (int)$task['id']; ?>"
+                                            data-print-url="<?php echo htmlspecialchars(getRelativeUrl('print_task_receipt.php?id=' . (int)$task['id']), ENT_QUOTES, 'UTF-8'); ?>"
+                                            data-customer-name="<?php echo htmlspecialchars(trim((string)($task['customer_name'] ?? '')), ENT_QUOTES, 'UTF-8'); ?>"
+                                            data-receipt-total="<?php echo $cbReceiptTotal; ?>"
+                                            data-order-type="<?php echo htmlspecialchars($displayType ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                            data-approved="<?php echo $cbApproved; ?>"
+                                            data-products-json="<?php echo htmlspecialchars($cbProductsJson, ENT_QUOTES, 'UTF-8'); ?>"
+                                            data-shipping-fees="<?php echo $cbShipping; ?>"
+                                            data-discount="<?php echo $cbDiscount; ?>">
                                     </td>
                                     <?php endif; ?>
                                     <td>
@@ -4865,6 +4969,183 @@ window.openApproveInvoiceCard = function(taskId, customerName, receiptTotal, ord
     }
 };
 
+// ===== بطاقة اعتماد الفواتير المحددة (جماعي) =====
+function ensureBulkApproveCardExists() {
+    if (document.getElementById('bulkApproveCardCollapse')) return true;
+    var host = document.querySelector('main') || document.getElementById('main-content') || document.body;
+    if (!host) return false;
+    var wrapper = document.createElement('div');
+    wrapper.className = 'container-fluid px-0';
+    wrapper.id = 'bulkApproveCardWrapper';
+    wrapper.innerHTML =
+        '<div class="collapse" id="bulkApproveCardCollapse">' +
+        '<div class="card shadow-sm border-success mb-3">' +
+        '<div class="card-header bg-success text-white d-flex justify-content-between align-items-center">' +
+        '<h5 class="mb-0"><i class="bi bi-check2-all me-2"></i><span id="bulkApproveCardTitle">اعتماد الفواتير المحددة</span></h5>' +
+        '<button type="button" class="btn btn-sm btn-light" onclick="closeBulkApproveCard()" aria-label="إغلاق"><i class="bi bi-x-lg"></i></button>' +
+        '</div>' +
+        '<div class="card-body">' +
+        '<div id="bulkApproveOrdersContainer"></div>' +
+        '<form method="POST" id="bulkApproveCardForm" action="?page=production_tasks" class="mt-3">' +
+        '<input type="hidden" name="action" value="bulk_approve_task_invoice">' +
+        '<div id="bulkApproveTaskIdsContainer"></div>' +
+        '<div id="bulkApproveShippingWarning" class="alert alert-warning py-2 small" style="display:none;"></div>' +
+        '<div class="d-flex gap-2 mt-3">' +
+        '<button type="button" class="btn btn-secondary w-50" onclick="closeBulkApproveCard()"><i class="bi bi-x-circle me-1"></i>إلغاء</button>' +
+        '<button type="submit" class="btn btn-success w-50" id="bulkApproveSubmitBtn"><i class="bi bi-check2-all me-1"></i>اعتماد الكل</button>' +
+        '</div>' +
+        '</form>' +
+        '</div>' +
+        '</div>' +
+        '</div>';
+    host.appendChild(wrapper);
+    return !!document.getElementById('bulkApproveCardCollapse');
+}
+
+function closeBulkApproveCard() {
+    var collapse = document.getElementById('bulkApproveCardCollapse');
+    if (collapse && typeof bootstrap !== 'undefined') {
+        var c = bootstrap.Collapse.getInstance(collapse);
+        if (c) c.hide();
+    }
+}
+
+window.openBulkApproveCard = function() {
+    var checked = document.querySelectorAll('.task-print-checkbox:checked');
+    if (!checked.length) return;
+
+    var orderTypeLabels = {
+        'shop_order': 'محل', 'cash_customer': 'عميل نقدي',
+        'telegraph': 'تليجراف', 'shipping_company': 'شركة شحن'
+    };
+
+    var approvable = [];
+    var shippingOrders = [];
+    var alreadyApproved = [];
+
+    checked.forEach(function(cb) {
+        var id = parseInt(cb.value, 10);
+        var approved = cb.getAttribute('data-approved') === '1';
+        var orderType = (cb.getAttribute('data-order-type') || '').trim();
+        var isShipping = (orderType === 'telegraph' || orderType === 'shipping_company');
+        var customerName = cb.getAttribute('data-customer-name') || '—';
+        var receiptTotal = parseFloat(cb.getAttribute('data-receipt-total')) || 0;
+        var productsJson = cb.getAttribute('data-products-json') || '[]';
+        var shippingFees = parseFloat(cb.getAttribute('data-shipping-fees')) || 0;
+        var discount = parseFloat(cb.getAttribute('data-discount')) || 0;
+        var typeLabel = orderTypeLabels[orderType] || orderType;
+
+        var products = [];
+        try { products = JSON.parse(productsJson); } catch(e) {}
+
+        var orderData = { id: id, customerName: customerName, orderType: orderType, typeLabel: typeLabel, receiptTotal: receiptTotal, products: products, shippingFees: shippingFees, discount: discount };
+
+        if (approved) {
+            alreadyApproved.push(orderData);
+        } else if (isShipping) {
+            shippingOrders.push(orderData);
+        } else {
+            approvable.push(orderData);
+        }
+    });
+
+    if (!ensureBulkApproveCardExists()) return;
+
+    var titleEl = document.getElementById('bulkApproveCardTitle');
+    var container = document.getElementById('bulkApproveOrdersContainer');
+    var idsContainer = document.getElementById('bulkApproveTaskIdsContainer');
+    var shippingWarning = document.getElementById('bulkApproveShippingWarning');
+    var submitBtn = document.getElementById('bulkApproveSubmitBtn');
+
+    if (titleEl) titleEl.textContent = 'اعتماد الفواتير المحددة (' + approvable.length + ' فاتورة)';
+
+    // بناء hidden inputs لمعرفات الأوردرات القابلة للاعتماد
+    if (idsContainer) {
+        idsContainer.innerHTML = approvable.map(function(o) {
+            return '<input type="hidden" name="task_ids[]" value="' + o.id + '">';
+        }).join('');
+    }
+
+    // تحذير الشحن
+    if (shippingWarning) {
+        if (shippingOrders.length > 0) {
+            shippingWarning.style.display = '';
+            shippingWarning.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i><strong>' + shippingOrders.length + ' أوردر شحن/تليجراف</strong> لم تُدرج: يتطلب اعتمادها فردياً (تحديد شركة الشحن وصافي سعر الطرد). ' +
+                shippingOrders.map(function(o) { return '#' + o.id; }).join('، ');
+        } else {
+            shippingWarning.style.display = 'none';
+        }
+    }
+
+    // بناء جدول تفاصيل الأوردرات
+    if (container) {
+        if (approvable.length === 0 && alreadyApproved.length === 0 && shippingOrders.length === 0) {
+            container.innerHTML = '<div class="alert alert-info">لا توجد فواتير قابلة للاعتماد.</div>';
+        } else {
+            var allOrders = approvable.concat(alreadyApproved).concat(shippingOrders);
+            var html = '<div class="table-responsive"><table class="table table-sm table-bordered align-middle mb-0">' +
+                '<thead class="table-light"><tr><th>رقم الأوردر</th><th>العميل</th><th>النوع</th><th>المنتجات</th><th>الإجمالي</th><th>الحالة</th></tr></thead><tbody>';
+
+            allOrders.forEach(function(o) {
+                var statusBadge;
+                if (alreadyApproved.indexOf(o) >= 0) {
+                    statusBadge = '<span class="badge bg-secondary">معتمد مسبقاً</span>';
+                } else if (shippingOrders.indexOf(o) >= 0) {
+                    statusBadge = '<span class="badge bg-warning text-dark">يتطلب اعتماداً فردياً</span>';
+                } else {
+                    statusBadge = '<span class="badge bg-success">سيتم الاعتماد</span>';
+                }
+
+                // بناء قائمة المنتجات
+                var productsList = '';
+                if (o.products && o.products.length > 0) {
+                    productsList = '<ul class="mb-0 ps-3 small">';
+                    o.products.forEach(function(p) {
+                        var pName = p.name || p.product_name || '';
+                        var pQty  = parseFloat(p.quantity || p.qty || 0);
+                        var pPrice = parseFloat(p.price || 0);
+                        var pTotal = parseFloat(p.line_total || (pQty * pPrice) || 0);
+                        if (pName) {
+                            productsList += '<li>' + pName.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                            if (pQty > 0) productsList += ' × ' + pQty;
+                            if (pPrice > 0) productsList += ' × ' + pPrice.toFixed(2) + ' ج.م';
+                            if (pTotal > 0) productsList += ' = <strong>' + pTotal.toFixed(2) + ' ج.م</strong>';
+                            productsList += '</li>';
+                        }
+                    });
+                    productsList += '</ul>';
+                    if (o.shippingFees > 0) productsList += '<div class="small text-muted">+ شحن: ' + o.shippingFees.toFixed(2) + ' ج.م</div>';
+                    if (o.discount > 0) productsList += '<div class="small text-muted">- خصم: ' + o.discount.toFixed(2) + ' ج.م</div>';
+                } else {
+                    productsList = '<span class="text-muted small">—</span>';
+                }
+
+                html += '<tr>' +
+                    '<td><strong>#' + o.id + '</strong></td>' +
+                    '<td>' + (o.customerName || '—').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</td>' +
+                    '<td><span class="badge bg-light text-dark border">' + (o.typeLabel || '—').replace(/</g, '&lt;') + '</span></td>' +
+                    '<td>' + productsList + '</td>' +
+                    '<td class="fw-bold text-success">' + o.receiptTotal.toFixed(2) + ' ج.م</td>' +
+                    '<td>' + statusBadge + '</td>' +
+                    '</tr>';
+            });
+            html += '</tbody></table></div>';
+            container.innerHTML = html;
+        }
+    }
+
+    if (submitBtn) submitBtn.disabled = approvable.length === 0;
+
+    var collapse = document.getElementById('bulkApproveCardCollapse');
+    if (collapse && typeof bootstrap !== 'undefined') {
+        var c = bootstrap.Collapse.getOrCreateInstance(collapse, { toggle: false });
+        c.show();
+        setTimeout(function() {
+            if (collapse.scrollIntoView) collapse.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }, 150);
+    }
+};
+
 // دالة لفتح modal تغيير الحالة - يجب أن تكون في النطاق العام
 window.openChangeStatusModal = function(taskId, currentStatus) {
     function ensureChangeStatusCardExists() {
@@ -5092,12 +5373,14 @@ window.closeChangeStatusCard = function() {
     collapse.hide();
 };
 
-// تحديد أوردرات متعددة للطباعة
+// تحديد أوردرات متعددة للطباعة والاعتماد
 (function() {
     var selectAll = document.getElementById('selectAllTasks');
     var checkboxes = document.querySelectorAll('.task-print-checkbox');
     var printBtn = document.getElementById('printSelectedReceiptsBtn');
     var selectedCountEl = document.getElementById('selectedCount');
+    var approveBtn = document.getElementById('approveSelectedBtn');
+    var approveCountEl = document.getElementById('approveSelectedCount');
     if (!checkboxes.length) return;
 
     function updateSelection() {
@@ -5105,6 +5388,16 @@ window.closeChangeStatusCard = function() {
         var n = checked.length;
         if (selectedCountEl) selectedCountEl.textContent = n;
         if (printBtn) printBtn.disabled = n === 0;
+        // عد الأوردرات القابلة للاعتماد (غير معتمدة وليست شحن)
+        var approvable = 0;
+        checked.forEach(function(cb) {
+            var approved = cb.getAttribute('data-approved');
+            var orderType = (cb.getAttribute('data-order-type') || '').trim();
+            var isShipping = (orderType === 'telegraph' || orderType === 'shipping_company');
+            if (approved !== '1' && !isShipping) approvable++;
+        });
+        if (approveCountEl) approveCountEl.textContent = approvable;
+        if (approveBtn) approveBtn.disabled = approvable === 0;
         if (selectAll) {
             selectAll.checked = checkboxes.length > 0 && checked.length === checkboxes.length;
             selectAll.indeterminate = checked.length > 0 && checked.length < checkboxes.length;
