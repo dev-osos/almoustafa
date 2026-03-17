@@ -2733,7 +2733,11 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                         </div>
                         <div class="col-md-3 d-none" id="createGovWrap">
                             <label class="form-label">المحافظة</label>
-                            <input type="text" class="form-control" name="tg_governorate" id="createGov" placeholder="المحافظة">
+                            <div class="gov-autocomplete-wrap position-relative">
+                                <input type="text" class="form-control gov-search-input" id="createGovSearch" placeholder="ابحث عن محافظة..." autocomplete="off">
+                                <input type="hidden" name="tg_governorate" id="createGov">
+                                <div class="gov-dropdown d-none"></div>
+                            </div>
                         </div>
                         <div class="col-md-3 d-none" id="createCityWrap">
                             <label class="form-label">المدينة</label>
@@ -2947,7 +2951,11 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                         </div>
                         <div class="col-md-3 d-none" id="editGovWrap">
                             <label class="form-label">المحافظة</label>
-                            <input type="text" class="form-control" name="tg_governorate" id="editGov" placeholder="المحافظة">
+                            <div class="gov-autocomplete-wrap position-relative">
+                                <input type="text" class="form-control gov-search-input" id="editGovSearch" placeholder="ابحث عن محافظة..." autocomplete="off">
+                                <input type="hidden" name="tg_governorate" id="editGov">
+                                <div class="gov-dropdown d-none"></div>
+                            </div>
                         </div>
                         <div class="col-md-3 d-none" id="editCityWrap">
                             <label class="form-label">المدينة</label>
@@ -3851,7 +3859,9 @@ window.openEditTaskModal = function(taskId) {
                 var orderTitleEl = document.getElementById('editOrderTitle');
                 if (orderTitleEl && t.order_title !== undefined) orderTitleEl.value = t.order_title || '';
                 var editGovEl = document.getElementById('editGov');
+                var editGovSearch = document.getElementById('editGovSearch');
                 if (editGovEl) editGovEl.value = t.tg_governorate || '';
+                if (editGovSearch) editGovSearch.value = t.tg_governorate || '';
                 var editCityEl = document.getElementById('editCity');
                 if (editCityEl) editCityEl.value = t.tg_city || '';
                 if (typeof toggleEditTgFields === 'function') toggleEditTgFields();

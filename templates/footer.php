@@ -300,8 +300,7 @@ if (!defined('ACCESS_ALLOWED')) {
         // تحديد فترة Polling حسب نوع الاتصال
         // WiFi: 90 ثانية | بيانات الهاتف: 180 ثانية (3 دقائق) لتقليل استهلاك البيانات
         const POLLING_INTERVAL = isMobileData ? 180 * 1000 : 90 * 1000;
-        const ACTIVITY_TIMEOUT = 15 * 60 * 1000; // 15 دقيقة
-        
+
         const activityEvents = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click', 'keydown'];
         let unifiedPollInterval;
         let isPolling = false;
@@ -363,11 +362,6 @@ if (!defined('ACCESS_ALLOWED')) {
         
         function executeUnifiedPolling() {
             if (isPolling || document.hidden) {
-                return;
-            }
-            
-            const timeSinceActivity = Date.now() - lastActivity;
-            if (timeSinceActivity > ACTIVITY_TIMEOUT) {
                 return;
             }
             
@@ -570,7 +564,48 @@ if (!defined('ACCESS_ALLOWED')) {
         
     })();
     </script>
-    
+
+    <!-- Session Keep-Alive - يمنع انتهاء الجلسة بغض النظر عن النشاط أو حالة التبويب -->
+    <script>
+    (function() {
+        'use strict';
+
+        if (window.__sessionKeepAliveActive) return;
+        window.__sessionKeepAliveActive = true;
+
+        // كل 10 دقائق - أقل من أي gc_maxlifetime معقول
+        var KEEPALIVE_INTERVAL = 10 * 60 * 1000;
+
+        function pingKeepAlive() {
+            var apiPath = typeof window.getApiPath === 'function'
+                ? window.getApiPath('api/session_keepalive.php')
+                : 'api/session_keepalive.php';
+
+            fetch(apiPath, {
+                method: 'GET',
+                cache: 'no-cache',
+                credentials: 'same-origin',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(function(response) { return response.json(); })
+            .then(function(data) {
+                if (data && data.expired) {
+                    // الجلسة انتهت - إعادة التوجيه لصفحة الدخول
+                    var loginUrl = typeof window.getApiPath === 'function'
+                        ? window.getApiPath('index.php').split('?')[0]
+                        : 'index.php';
+                    window.location.replace(loginUrl);
+                }
+            })
+            .catch(function() {}); // تجاهل الأخطاء الشبكية المؤقتة
+        }
+
+        // تشغيل keepalive كل 10 دقائق بغض النظر عن النشاط أو إخفاء التبويب
+        setInterval(pingKeepAlive, KEEPALIVE_INTERVAL);
+
+    })();
+    </script>
+
     <!-- Install Banner -->
     <div class="install-banner" id="installBanner">
         <div class="install-banner-content">
