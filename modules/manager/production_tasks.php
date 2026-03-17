@@ -2525,10 +2525,10 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
 
     <div class="d-inline-flex gap-2 mb-3">
         <button class="btn btn-primary" type="button" data-bs-toggle="collapse" data-bs-target="#createTaskFormCollapse" aria-expanded="false" aria-controls="createTaskFormCollapse">
-            <i class="bi bi-plus-circle me-1"></i>إنشاء أوردر جديد
+            <i class="bi bi-plus-circle me-1"></i> إنشاء أوردر جديد
         </button>
         <button class="btn btn-warning" type="button" data-bs-toggle="collapse" data-bs-target="#duplicateOrderCollapse" aria-expanded="false" aria-controls="duplicateOrderCollapse">
-            <i class="bi bi-copy me-1"></i>تكرار أوردر
+            <i class="bi bi-copy me-1"></i> تكرار أوردر
         </button>
     </div>
 
