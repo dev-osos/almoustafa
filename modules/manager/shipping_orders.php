@@ -480,6 +480,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    if ($action === 'tg_search' && $isAjax) {
+        $searchTerm = trim($_POST['search'] ?? '');
+        if ($searchTerm === '') {
+            while (ob_get_level()) { ob_end_clean(); }
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['success' => true, 'shipments' => [], 'total' => 0], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $tgSQ = 'query ListShipments($first: Int, $page: Int, $input: ListShipmentsFilterInput) {
+  listShipments(first: $first, page: $page, input: $input) {
+    data {
+      code status { name code } date recipientName
+      recipientZone { id name } recipientSubzone { name }
+      price amount refNumber recipientMobile id
+      branch { id name } type { name code }
+      collected totalAmount allDueFees deliveryFees returnFees
+      paymentType { code } deliveryType { name }
+    }
+    paginatorInfo { lastPage }
+  }
+}';
+        $tgSHeaders = [
+            'Content-Type: application/json', 'Accept: */*',
+            'authorization: Bearer 244917|ZzSXzdfFKcLnxRwsTbEhRlSsv9OjRRIDvknDEKVc86ec3127',
+            'x-app-version: 5.2.2', 'x-client-name: PHP-Server', 'x-client-type: WEB',
+        ];
+        $fetchPage = function(int $page) use ($tgSQ, $tgSHeaders): array {
+            $payload = json_encode(['operationName' => 'ListShipments', 'variables' => ['first' => 20, 'page' => $page, 'input' => (object)[]], 'query' => $tgSQ]);
+            $ch = curl_init('https://system.telegraphex.com:8443/graphql');
+            curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true, CURLOPT_POSTFIELDS => $payload, CURLOPT_TIMEOUT => 15, CURLOPT_HTTPHEADER => $tgSHeaders]);
+            $resp = curl_exec($ch);
+            $err  = curl_error($ch);
+            curl_close($ch);
+            if ($err) return ['error' => $err];
+            $dec = json_decode($resp, true);
+            return ['data' => $dec['data']['listShipments']['data'] ?? [], 'lastPage' => (int)($dec['data']['listShipments']['paginatorInfo']['lastPage'] ?? 1)];
+        };
+        $first = $fetchPage(1);
+        if (isset($first['error'])) {
+            while (ob_get_level()) { ob_end_clean(); }
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['success' => false, 'error' => $first['error']], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $allShipments = $first['data'];
+        $lastPage     = $first['lastPage'];
+        for ($p = 2; $p <= $lastPage; $p++) {
+            $r = $fetchPage($p);
+            if (!isset($r['error'])) $allShipments = array_merge($allShipments, $r['data']);
+        }
+        $term     = mb_strtolower($searchTerm);
+        $filtered = array_values(array_filter($allShipments, function($s) use ($term) {
+            $haystack = mb_strtolower(implode(' ', [
+                $s['code'] ?? '', $s['recipientName'] ?? '', $s['recipientMobile'] ?? '',
+                $s['refNumber'] ?? '', $s['status']['name'] ?? '', $s['status']['code'] ?? '',
+                $s['recipientZone']['name'] ?? '', $s['recipientSubzone']['name'] ?? '',
+                $s['branch']['name'] ?? '', $s['type']['name'] ?? '',
+            ]));
+            return mb_strpos($haystack, $term) !== false;
+        }));
+        while (ob_get_level()) { ob_end_clean(); }
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['success' => true, 'shipments' => $filtered, 'total' => count($filtered)], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
     if ($action === 'search_orders') {
         $query = trim($_POST['query'] ?? '');
 
@@ -4463,6 +4529,19 @@ function copyShippingCollectionResult(btn) {
         </span>
     </div>
     <div class="card-body p-0">
+        <!-- شريط البحث المتقدم -->
+        <div class="px-3 pt-2 pb-2 border-bottom" id="tgSearchBar">
+            <div class="input-group input-group-sm">
+                <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
+                <input type="text" class="form-control" id="tgSearchInput"
+                    placeholder="بحث في كل الصفحات: رقم الشحنة، المستلم، الهاتف، المنطقة، الحالة..."
+                    autocomplete="off" dir="auto">
+                <button class="btn btn-outline-secondary d-none" type="button" id="tgSearchClear" title="مسح البحث">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+            <div id="tgSearchStatus" class="text-muted small mt-1 d-none"></div>
+        </div>
         <!-- حاوية scroll رأسي -->
         <div id="tgTableWrapper" style="height: 420px; overflow-y: scroll; overflow-x: hidden; position: relative;">
             <!-- حاوية scroll أفقي داخلية -->
@@ -4582,6 +4661,12 @@ function copyShippingCollectionResult(btn) {
     var tgLastPage    = <?php echo (int)($tgPagination['lastPage'] ?? 1); ?>;
     var tgTotal       = <?php echo (int)($tgPagination['total'] ?? 0); ?>;
 
+    // ===== وضع البحث =====
+    var tgSearchMode    = false;
+    var tgSearchResults = [];
+    var tgSearchTimer   = null;
+    var TG_SEARCH_PER   = 20;
+
     function tgStatusBadge(code) {
         var map = { DTR: 'bg-success', PKD: 'bg-warning text-dark', CNL: 'bg-secondary' };
         return map[code] || 'bg-info text-dark';
@@ -4653,6 +4738,7 @@ function copyShippingCollectionResult(btn) {
     }
 
     function tgLoadPage(page) {
+        if (tgSearchMode) { tgShowLocalPage(page); return; }
         if (page < 1 || page > tgLastPage) return;
         tgCurrentPage = page;
 
@@ -4678,7 +4764,7 @@ function copyShippingCollectionResult(btn) {
             if (wrapper) wrapper.style.opacity = '1';
 
             if (!data.success) {
-                if (body) body.innerHTML = '<tr><td colspan="18" class="text-center text-danger py-3"><i class="bi bi-exclamation-triangle-fill me-1"></i>' + (data.error || 'خطأ') + '</td></tr>';
+                if (body) body.innerHTML = '<tr><td colspan="7" class="text-center text-danger py-3"><i class="bi bi-exclamation-triangle-fill me-1"></i>' + (data.error || 'خطأ') + '</td></tr>';
                 return;
             }
 
@@ -4702,14 +4788,129 @@ function copyShippingCollectionResult(btn) {
                 attachTgPageLinks();
             }
 
-            // العودة لأعلى الجدول
             if (wrapper) wrapper.scrollTop = 0;
         })
         .catch(function () {
             if (loading) loading.classList.add('d-none');
             if (wrapper) wrapper.style.opacity = '1';
-            if (body) body.innerHTML = '<tr><td colspan="18" class="text-center text-danger py-3">حدث خطأ في الاتصال</td></tr>';
+            if (body) body.innerHTML = '<tr><td colspan="7" class="text-center text-danger py-3">حدث خطأ في الاتصال</td></tr>';
         });
+    }
+
+    // ===== تصفح محلي لنتائج البحث =====
+    function tgShowLocalPage(page) {
+        var total = tgSearchResults.length;
+        var pages = Math.ceil(total / TG_SEARCH_PER) || 1;
+        if (page < 1 || page > pages) return;
+        tgCurrentPage = page;
+        tgLastPage    = pages;
+
+        var start   = (page - 1) * TG_SEARCH_PER;
+        var slice   = tgSearchResults.slice(start, start + TG_SEARCH_PER);
+        var body    = document.getElementById('tgShipmentsBody');
+        var wrapper = document.getElementById('tgTableWrapper');
+
+        if (body) body.innerHTML = tgBuildRows(slice);
+
+        var badge = document.getElementById('tgPaginationBadge');
+        if (badge) badge.textContent = total + ' نتيجة — صفحة ' + page + ' / ' + pages;
+
+        var info = document.getElementById('tgPaginationInfo');
+        if (info) info.textContent = 'عرض ' + slice.length + ' من ' + total + ' نتيجة';
+
+        var plist = document.getElementById('tgPaginationList');
+        if (plist) {
+            plist.innerHTML = tgBuildPagination(page, pages);
+            attachTgPageLinks();
+        }
+
+        if (wrapper) wrapper.scrollTop = 0;
+    }
+
+    // ===== منطق البحث =====
+    function tgRunSearch(term) {
+        var body    = document.getElementById('tgShipmentsBody');
+        var loading = document.getElementById('tgLoadingBar');
+        var wrapper = document.getElementById('tgTableWrapper');
+        var status  = document.getElementById('tgSearchStatus');
+        var pbar    = document.getElementById('tgPaginationBar');
+
+        if (loading) loading.classList.remove('d-none');
+        if (wrapper) wrapper.style.opacity = '0.4';
+        if (status)  { status.classList.remove('d-none'); status.textContent = 'جاري البحث في كل الصفحات...'; }
+        if (pbar)    pbar.classList.add('d-none');
+
+        var fd = new FormData();
+        fd.append('action', 'tg_search');
+        fd.append('search', term);
+
+        fetch(window.location.href, {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            body: fd
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            if (loading) loading.classList.add('d-none');
+            if (wrapper) wrapper.style.opacity = '1';
+            if (pbar)    pbar.classList.remove('d-none');
+
+            if (!data.success) {
+                if (status) { status.classList.remove('d-none'); status.textContent = 'خطأ: ' + (data.error || 'فشل البحث'); }
+                if (body) body.innerHTML = '<tr><td colspan="7" class="text-center text-danger py-3"><i class="bi bi-exclamation-triangle-fill me-1"></i>' + (data.error || 'فشل البحث') + '</td></tr>';
+                return;
+            }
+
+            tgSearchMode    = true;
+            tgSearchResults = data.shipments || [];
+            var total       = data.total || 0;
+
+            if (status) {
+                status.classList.remove('d-none');
+                status.textContent = total > 0 ? 'تم العثور على ' + total + ' نتيجة' : 'لا توجد نتائج مطابقة';
+            }
+
+            tgShowLocalPage(1);
+        })
+        .catch(function () {
+            if (loading) loading.classList.add('d-none');
+            if (wrapper) wrapper.style.opacity = '1';
+            if (pbar)    pbar.classList.remove('d-none');
+            if (status)  { status.classList.remove('d-none'); status.textContent = 'حدث خطأ في الاتصال'; }
+            if (body)    body.innerHTML = '<tr><td colspan="7" class="text-center text-danger py-3">حدث خطأ في الاتصال</td></tr>';
+        });
+    }
+
+    function tgClearSearch() {
+        tgSearchMode    = false;
+        tgSearchResults = [];
+        var inp    = document.getElementById('tgSearchInput');
+        var clrBtn = document.getElementById('tgSearchClear');
+        var status = document.getElementById('tgSearchStatus');
+        if (inp)    inp.value = '';
+        if (clrBtn) clrBtn.classList.add('d-none');
+        if (status) { status.classList.add('d-none'); status.textContent = ''; }
+        tgLoadPage(1);
+    }
+
+    var tgSearchInput = document.getElementById('tgSearchInput');
+    var tgSearchClear = document.getElementById('tgSearchClear');
+
+    if (tgSearchInput) {
+        tgSearchInput.addEventListener('input', function () {
+            var val = this.value.trim();
+            if (tgSearchClear) tgSearchClear.classList.toggle('d-none', val === '');
+            clearTimeout(tgSearchTimer);
+            if (val === '') { tgClearSearch(); return; }
+            tgSearchTimer = setTimeout(function () { tgRunSearch(val); }, 450);
+        });
+        tgSearchInput.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') tgClearSearch();
+        });
+    }
+
+    if (tgSearchClear) {
+        tgSearchClear.addEventListener('click', tgClearSearch);
     }
 
     function attachTgPageLinks() {
