@@ -1374,23 +1374,23 @@ $typeColorMap = [
             </div>
             <div class="collapse" id="safeSummaryCardBody">
             <div class="card-body">
-                <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+                <!-- صافي رصيد الخزنة الكلي -->
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 p-3 rounded-3 mb-3" style="background:rgba(var(--bs-primary-rgb),.07); border:1px solid rgba(var(--bs-primary-rgb),.2);">
                     <div>
-                        <span class="text-muted text-uppercase small">صافي الشهر</span>
-                        <div class="display-6 fw-bold mt-1 <?php echo $mNet >= 0 ? 'text-success' : 'text-danger'; ?>">
-                            <?php echo formatCurrency($mNet); ?>
+                        <span class="text-muted small d-block">صافي رصيد الخزنة</span>
+                        <div class="h3 fw-bold mb-0 <?php echo $netApprovedBalance >= 0 ? 'text-success' : 'text-danger'; ?>">
+                            <?php echo formatCurrency($netApprovedBalance); ?>
                         </div>
-                        <small class="text-muted"><?php echo $summaryMonthLabel; ?></small>
+                        <small class="text-muted">إجمالي منذ البداية</small>
                     </div>
                     <div class="text-end">
-                        <div class="badge bg-success text-white fw-semibold px-3 py-2 mb-1 d-block">
-                            <?php echo formatCurrency($mIncome); ?> إيرادات
-                        </div>
-                        <div class="badge bg-danger text-white fw-semibold px-3 py-2 d-block">
-                            <?php echo formatCurrency($mExpense + $mPayment); ?> مصروفات
+                        <span class="text-muted small d-block mb-1">صافي <?php echo $summaryMonthLabel; ?></span>
+                        <div class="h5 fw-bold mb-0 <?php echo $mNet >= 0 ? 'text-success' : 'text-danger'; ?>">
+                            <?php echo ($mNet >= 0 ? '+' : '') . formatCurrency($mNet); ?>
                         </div>
                     </div>
                 </div>
+
                 <div class="row g-3 mt-3">
                     <div class="col-12 col-md-4">
                         <div class="border rounded-3 p-3 h-100">
