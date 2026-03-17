@@ -5084,7 +5084,7 @@ window.openBulkApproveCard = function() {
         } else {
             var allOrders = approvable.concat(alreadyApproved).concat(shippingOrders);
             var html = '<div class="table-responsive"><table class="table table-sm table-bordered align-middle mb-0">' +
-                '<thead class="table-light"><tr><th>رقم الأوردر</th><th>العميل</th><th>النوع</th><th>المنتجات</th><th>الإجمالي</th><th>الحالة</th></tr></thead><tbody>';
+                '<thead class="table-light"><tr><th>رقم الأوردر</th><th>العميل</th><th>النوع</th><th>الإجمالي</th><th>الحالة</th></tr></thead><tbody>';
 
             allOrders.forEach(function(o) {
                 var statusBadge;
@@ -5096,35 +5096,10 @@ window.openBulkApproveCard = function() {
                     statusBadge = '<span class="badge bg-success">سيتم الاعتماد</span>';
                 }
 
-                // بناء قائمة المنتجات
-                var productsList = '';
-                if (o.products && o.products.length > 0) {
-                    productsList = '<ul class="mb-0 ps-3 small">';
-                    o.products.forEach(function(p) {
-                        var pName = p.name || p.product_name || '';
-                        var pQty  = parseFloat(p.quantity || p.qty || 0);
-                        var pPrice = parseFloat(p.price || 0);
-                        var pTotal = parseFloat(p.line_total || (pQty * pPrice) || 0);
-                        if (pName) {
-                            productsList += '<li>' + pName.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                            if (pQty > 0) productsList += ' × ' + pQty;
-                            if (pPrice > 0) productsList += ' × ' + pPrice.toFixed(2) + ' ج.م';
-                            if (pTotal > 0) productsList += ' = <strong>' + pTotal.toFixed(2) + ' ج.م</strong>';
-                            productsList += '</li>';
-                        }
-                    });
-                    productsList += '</ul>';
-                    if (o.shippingFees > 0) productsList += '<div class="small text-muted">+ شحن: ' + o.shippingFees.toFixed(2) + ' ج.م</div>';
-                    if (o.discount > 0) productsList += '<div class="small text-muted">- خصم: ' + o.discount.toFixed(2) + ' ج.م</div>';
-                } else {
-                    productsList = '<span class="text-muted small">—</span>';
-                }
-
                 html += '<tr>' +
                     '<td><strong>#' + o.id + '</strong></td>' +
                     '<td>' + (o.customerName || '—').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</td>' +
                     '<td><span class="badge bg-light text-dark border">' + (o.typeLabel || '—').replace(/</g, '&lt;') + '</span></td>' +
-                    '<td>' + productsList + '</td>' +
                     '<td class="fw-bold text-success">' + o.receiptTotal.toFixed(2) + ' ج.م</td>' +
                     '<td>' + statusBadge + '</td>' +
                     '</tr>';
