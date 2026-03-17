@@ -4211,9 +4211,15 @@ function copyShippingCollectionResult(btn) {
 <div class="card shadow-sm">
     <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
         <h5 class="mb-0">طلبات الشحن</h5>
-        <div class="input-group input-group-sm w-auto" style="min-width: 280px;">
-             <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
-             <input type="text" class="form-control border-start-0 ps-0" id="orderSearchInput" placeholder="بحث شامل (رقم الطلب، TG، العميل...)">
+        <button class="btn btn-sm btn-outline-secondary" type="button" id="orderSearchToggle" title="بحث">
+            <i class="bi bi-search"></i>
+        </button>
+    </div>
+    <div id="orderSearchCollapse" class="px-3 pt-2 pb-1 border-bottom" style="display:none;">
+        <div class="input-group input-group-sm">
+            <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+            <input type="text" class="form-control border-start-0 ps-0" id="orderSearchInput" placeholder="بحث شامل (رقم الطلب، TG، العميل...)">
+            <button class="btn btn-outline-secondary" type="button" id="orderSearchClose" title="إغلاق"><i class="bi bi-x"></i></button>
         </div>
     </div>
     <div class="card-body p-0">
@@ -7412,6 +7418,25 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
+    // فتح/إغلاق حقل البحث
+    var orderSearchToggle   = document.getElementById('orderSearchToggle');
+    var orderSearchCollapse = document.getElementById('orderSearchCollapse');
+    var orderSearchClose    = document.getElementById('orderSearchClose');
+    if (orderSearchToggle) {
+        orderSearchToggle.addEventListener('click', function () {
+            var visible = orderSearchCollapse.style.display !== 'none';
+            orderSearchCollapse.style.display = visible ? 'none' : '';
+            if (!visible) document.getElementById('orderSearchInput').focus();
+        });
+    }
+    if (orderSearchClose) {
+        orderSearchClose.addEventListener('click', function () {
+            orderSearchCollapse.style.display = 'none';
+            var inp = document.getElementById('orderSearchInput');
+            if (inp) { inp.value = ''; inp.dispatchEvent(new Event('input')); }
+        });
+    }
+
     // Real-time Search functionality
     const searchInput = document.getElementById('orderSearchInput');
     const searchResultsContainer = document.getElementById('searchResultsContainer');
