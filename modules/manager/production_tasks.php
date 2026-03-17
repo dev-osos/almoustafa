@@ -2838,14 +2838,13 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
 
     <div class="card shadow-sm mt-4">
         <div class="card-header bg-light d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>آخر المهام التي تم إرسالها</h5>
+            <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>قائمة الأوردرات</h5>
             <div class="d-flex align-items-center gap-2">
                 <?php if ($canPrintTasks && !empty($recentTasks)): ?>
                 <button type="button" class="btn btn-outline-primary btn-sm" id="printSelectedReceiptsBtn" title="طباعة إيصالات الأوردرات المحددة" disabled>
                     <i class="bi bi-printer me-1"></i>طباعة المحدد (<span id="selectedCount">0</span>)
                 </button>
                 <?php endif; ?>
-                <span class="text-muted small"><?php echo $totalRecentTasks; ?> <?php echo $totalRecentTasks === 1 ? 'مهمة' : 'مهام'; ?> · صفحة <?php echo $tasksPageNum; ?> من <?php echo $totalRecentPages; ?></span>
             </div>
         </div>
         <div class="card-body p-0">
