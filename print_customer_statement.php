@@ -810,28 +810,7 @@ function getLocalCustomerStatementData($customerId) {
             return isset($m['type']) && $m['type'] === 'task_purchase';
         });
         if ($isLocalCustomer && !empty($taskMovements)): ?>
-        <!-- إيصالات الأوردرات -->
-        <div style="margin-top: 32px;">
-            <h2 class="section-title">إيصالات الأوردرات</h2>
-            <?php foreach ($taskMovements as $tm):
-                // استخراج المنتجات من الملاحظات
-                $tmProducts = [];
-                if (!empty($tm['notes'])) {
-                    if (preg_match('/\[PRODUCTS_JSON\]:(.+?)(?=\n|$)/', $tm['notes'], $matches)) {
-                        $decoded = json_decode(trim($matches[1]), true);
-                        if (is_array($decoded) && !empty($decoded)) $tmProducts = $decoded;
-                    }
-                }
-                if (empty($tmProducts) && !empty($tm['product_name'])) {
-                    $tmProducts[] = ['name' => $tm['product_name'], 'quantity' => $tm['quantity'], 'unit' => $tm['unit']];
-                }
-                $tmShipping = 0; $tmDiscount = 0; $tmOrderTitle = '';
-                if (!empty($tm['notes'])) {
-                    if (preg_match('/\[SHIPPING_FEES\]:\s*([0-9.]+)/', $tm['notes'], $m2)) $tmShipping = (float)$m2[1];
-                    if (preg_match('/\[DISCOUNT\]:\s*([0-9.]+)/', $tm['notes'], $m2)) $tmDiscount = (float)$m2[1];
-                    if (preg_match('/\[ORDER_TITLE\]:\s*([^\n]+)/', $tm['notes'], $m2)) $tmOrderTitle = trim($m2[1]);
-                }
-            ?>
+        
             <div style="border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 16px; page-break-inside: avoid;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #e2e8f0;">
                     <div>
@@ -840,44 +819,7 @@ function getLocalCustomerStatementData($customerId) {
                     </div>
                     <div style="text-align: left; font-size: 13px; color: #6b7280;"><?php echo formatDate($tm['date']); ?></div>
                 </div>
-                <?php if (!empty($tmProducts)): ?>
-                <table style="width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 8px;">
-                    <thead>
-                        <tr style="background: #f9fafb;">
-                            <th style="padding: 6px 10px; text-align: right; border-bottom: 1px solid #e2e8f0;">المنتج</th>
-                            <th style="padding: 6px 10px; text-align: right; border-bottom: 1px solid #e2e8f0;">الكمية</th>
-                            <th style="padding: 6px 10px; text-align: right; border-bottom: 1px solid #e2e8f0;">الوحدة</th>
-                            <?php if (!empty(array_filter(array_column($tmProducts, 'price')))): ?>
-                            <th style="padding: 6px 10px; text-align: right; border-bottom: 1px solid #e2e8f0;">السعر</th>
-                            <?php endif; ?>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($tmProducts as $tp2): ?>
-                        <tr>
-                            <td style="padding: 6px 10px; border-bottom: 1px solid #f3f4f6;"><?php echo htmlspecialchars($tp2['name'] ?? '-'); ?></td>
-                            <td style="padding: 6px 10px; border-bottom: 1px solid #f3f4f6;"><?php echo htmlspecialchars($tp2['quantity'] ?? '-'); ?></td>
-                            <td style="padding: 6px 10px; border-bottom: 1px solid #f3f4f6;"><?php echo htmlspecialchars($tp2['unit'] ?? 'قطعة'); ?></td>
-                            <?php if (!empty(array_filter(array_column($tmProducts, 'price')))): ?>
-                            <td style="padding: 6px 10px; border-bottom: 1px solid #f3f4f6;"><?php echo !empty($tp2['price']) ? formatCurrency($tp2['price']) : '-'; ?></td>
-                            <?php endif; ?>
-                        </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-                <?php endif; ?>
-                <div style="text-align: left; font-size: 13px;">
-                    <?php if ($tmDiscount > 0): ?>
-                    <span style="color: #6b7280; margin-left: 16px;">خصم: <?php echo formatCurrency($tmDiscount); ?></span>
-                    <?php endif; ?>
-                    <?php if ($tmShipping > 0): ?>
-                    <span style="color: #6b7280; margin-left: 16px;">شحن: <?php echo formatCurrency($tmShipping); ?></span>
-                    <?php endif; ?>
-                    <strong style="font-size: 15px;">الإجمالي: <span class="amount-positive"><?php echo formatCurrency($tm['debit']); ?></span></strong>
-                </div>
-            </div>
-            <?php endforeach; ?>
-        </div>
+              
         <?php endif; ?>
 
         <!-- الملخص -->
