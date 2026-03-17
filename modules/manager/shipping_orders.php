@@ -4461,10 +4461,12 @@ function copyShippingCollectionResult(btn) {
         </span>
     </div>
     <div class="card-body p-0">
-        <!-- منطقة الجدول مع scrollbar جانبي وأفقي -->
-        <div id="tgTableWrapper" style="max-height: 480px; overflow-y: auto; overflow-x: auto;">
+        <!-- حاوية scroll رأسي -->
+        <div id="tgTableWrapper" style="height: 420px; overflow-y: scroll; overflow-x: hidden; position: relative;">
+            <!-- حاوية scroll أفقي داخلية -->
+            <div style="overflow-x: auto; min-width: 100%;">
             <table class="table table-hover table-striped align-middle mb-0 small" id="tgShipmentsTable" style="min-width: 1400px;">
-                <thead class="table-dark sticky-top" style="top:0; z-index:2;">
+                <thead class="table-dark" style="position: sticky; top: 0; z-index: 2;">
                     <tr>
                         <th class="text-nowrap">رقم الشحنة</th>
                         <th class="text-nowrap">التاريخ</th>
@@ -4540,7 +4542,8 @@ function copyShippingCollectionResult(btn) {
                     <?php endif; ?>
                 </tbody>
             </table>
-        </div>
+            </div><!-- /inner horizontal scroll -->
+        </div><!-- /tgTableWrapper vertical scroll -->
 
         <!-- شريط التحميل -->
         <div id="tgLoadingBar" class="d-none text-center py-3">
