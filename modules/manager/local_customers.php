@@ -2119,11 +2119,11 @@ document.addEventListener('DOMContentLoaded', function() {
                                     $balanceUpdatedAt = isset($customer['balance_updated_at']) ? trim($customer['balance_updated_at']) : '';
                                     if (!empty($balanceUpdatedAt) && function_exists('formatDateTime')): ?>
                                         <span class="badge bg-info-subtle text-info mb-1 d-inline-block" style="font-size: 0.7rem;" title="آخر تعديل للرصيد">
-                                            <i class="bi bi-clock-history me-1"></i><?php echo formatDateTime($balanceUpdatedAt); ?>
+                                            <i class="bi bi-clock-history me-1"></i><?php echo formatDateTime($balanceUpdatedAt, 'd/m g:i A'); ?>
                                         </span>
                                     <?php elseif (!empty($balanceUpdatedAt)): ?>
                                         <span class="badge bg-info-subtle text-info mb-1 d-inline-block" style="font-size: 0.7rem;" title="آخر تعديل للرصيد">
-                                            <i class="bi bi-clock-history me-1"></i><?php echo date('m-d H:i', strtotime($balanceUpdatedAt)); ?>
+                                            <i class="bi bi-clock-history me-1"></i><?php echo date('d/m g:i A', strtotime($balanceUpdatedAt)); ?>
                                         </span>
                                     <?php endif; ?>
                                     <strong><?php echo htmlspecialchars($customer['name']); ?></strong>
