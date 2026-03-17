@@ -597,7 +597,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $title = trim($_POST['title'] ?? '');
         $details = trim($_POST['details'] ?? '');
-        $orderTitle = trim($_POST['order_title'] ?? '');
+        $orderTitle    = trim($_POST['order_title'] ?? '');
+        $tgGovernorate = trim($_POST['tg_governorate'] ?? '');
+        $tgCity        = trim($_POST['tg_city'] ?? '');
         $priority = $_POST['priority'] ?? 'normal';
         $priority = in_array($priority, $allowedPriorities, true) ? $priority : 'normal';
         $dueDate = $_POST['due_date'] ?? '';
@@ -845,10 +847,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($orderTitle !== '') {
                     $notesParts[] = '[ORDER_TITLE]:' . $orderTitle;
                 }
+                if ($tgGovernorate !== '') {
+                    $notesParts[] = '[TG_GOV]:' . $tgGovernorate;
+                }
+                if ($tgCity !== '') {
+                    $notesParts[] = '[TG_CITY]:' . $tgCity;
+                }
                 if ($details) {
                     $notesParts[] = $details;
                 }
-                
+
                 // حفظ المنتجات المتعددة في notes بصيغة JSON
                 if (!empty($products)) {
                     $productsJson = json_encode($products, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -1532,7 +1540,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'غير مصرح بتعديل المهمة.';
         } else {
             try {
-                $task = $db->queryOne("SELECT id FROM tasks WHERE id = ? LIMIT 1", [$taskId]);
+                $task = $db->queryOne("SELECT id, customer_name, customer_phone, local_customer_id FROM tasks WHERE id = ? LIMIT 1", [$taskId]);
                 if (!$task) {
                     $error = 'المهمة غير موجودة.';
                 } else {
@@ -1544,7 +1552,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $customerName = trim($_POST['customer_name'] ?? '') ?: null;
                     $customerPhone = trim($_POST['customer_phone'] ?? '') ?: null;
                     $details = trim($_POST['details'] ?? '') ?: null;
-                    $orderTitle = trim($_POST['order_title'] ?? '');
+                    $orderTitle    = trim($_POST['order_title'] ?? '');
+                    $tgGovernorate = trim($_POST['tg_governorate'] ?? '');
+                    $tgCity        = trim($_POST['tg_city'] ?? '');
                     $assignees = isset($_POST['assigned_to']) && is_array($_POST['assigned_to'])
                         ? array_filter(array_map('intval', $_POST['assigned_to']))
                         : [];
@@ -1573,6 +1583,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $notesParts = [];
                     if ($orderTitle !== '') {
                         $notesParts[] = '[ORDER_TITLE]:' . $orderTitle;
+                    }
+                    if ($tgGovernorate !== '') {
+                        $notesParts[] = '[TG_GOV]:' . $tgGovernorate;
+                    }
+                    if ($tgCity !== '') {
+                        $notesParts[] = '[TG_CITY]:' . $tgCity;
                     }
                     if ($details) $notesParts[] = $details;
                     if (!empty($products)) {
@@ -1628,13 +1644,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                     $firstAssignee = !empty($assignees) ? (int)$assignees[0] : 0;
                     $relatedType = 'manager_' . $taskType;
+                    // إذا تغير اسم أو هاتف العميل نُصفّر local_customer_id لإعادة ربطه صحيحاً عند الاعتماد
+                    $oldName  = trim((string)($task['customer_name'] ?? ''));
+                    $oldPhone = trim((string)($task['customer_phone'] ?? ''));
+                    $newName  = $customerName ?? '';
+                    $newPhone = $customerPhone ?? '';
+                    $customerChanged = ($newName !== $oldName || $newPhone !== $oldPhone);
+                    $newLocalCustomerId = $customerChanged ? null : ($task['local_customer_id'] ?: null);
                     $db->execute(
                         "UPDATE tasks SET task_type = ?, related_type = ?, priority = ?, due_date = ?, customer_name = ?, customer_phone = ?,
-                         notes = ?, product_name = ?, quantity = ?, unit = ?, template_id = ?, product_id = ?, assigned_to = ?
+                         notes = ?, product_name = ?, quantity = ?, unit = ?, template_id = ?, product_id = ?, assigned_to = ?, local_customer_id = ?
                          WHERE id = ?",
                         [
                             $taskType, $relatedType, $priority, $dueDate, $customerName, $customerPhone,
                             $notesValue, $productName, $quantity, $unit, $templateId, $productId ?: null, $firstAssignee ?: null,
+                            $newLocalCustomerId,
                             $taskId
                         ]
                     );
@@ -1714,6 +1738,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
             if (preg_match('/\[ORDER_TITLE\]\s*:\s*([^\n]+)/', $notes, $m)) {
                 $orderTitle = trim($m[1]);
             }
+            $tgGovernorate = '';
+            if (preg_match('/\[TG_GOV\]\s*:\s*([^\n]+)/', $notes, $m)) {
+                $tgGovernorate = trim($m[1]);
+            }
+            $tgCity = '';
+            if (preg_match('/\[TG_CITY\]\s*:\s*([^\n]+)/', $notes, $m)) {
+                $tgCity = trim($m[1]);
+            }
             // استخراج العمال المخصصين
             if (preg_match('/\[ASSIGNED_WORKERS_IDS\]\s*:\s*([0-9,\s]+)/', $notes, $m)) {
                 $assignees = array_filter(array_map('intval', preg_split('/[\s,]+/', trim($m[1]), -1, PREG_SPLIT_NO_EMPTY)));
@@ -1730,6 +1762,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
                 $details = preg_replace('/\[SHIPPING_FEES\]\s*:\s*[0-9.]+/', '', $details);
                 $details = preg_replace('/\[DISCOUNT\]\s*:\s*[0-9.]+/', '', $details);
                 $details = preg_replace('/\[ORDER_TITLE\]\s*:\s*[^\n]+/', '', $details);
+                $details = preg_replace('/\[TG_GOV\]\s*:\s*[^\n]+/', '', $details);
+                $details = preg_replace('/\[TG_CITY\]\s*:\s*[^\n]+/', '', $details);
                 $details = preg_replace('/\n\s*\n\s*\n+/', "\n\n", trim($details));
             }
             // تنسيق تاريخ الاستحقاق لـ input type="date" (YYYY-MM-DD)
@@ -1757,7 +1791,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
                     'assignees' => array_values($assignees),
                     'shipping_fees' => $shippingFees,
                     'discount' => $discount,
-                    'order_title' => $orderTitle
+                    'order_title' => $orderTitle,
+                    'tg_governorate' => $tgGovernorate,
+                    'tg_city' => $tgCity
                 ]
             ], JSON_UNESCAPED_UNICODE);
             exit;
@@ -2695,11 +2731,19 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             </div>
                             <small class="form-text text-muted d-block">اختر عميلاً مسجلاً أو اكتب اسماً جديداً—يُحفظ تلقائياً كعميل جديد إن لم يكن مسجلاً</small>
                         </div>
+                        <div class="col-md-3 d-none" id="createGovWrap">
+                            <label class="form-label">المحافظة</label>
+                            <input type="text" class="form-control" name="tg_governorate" id="createGov" placeholder="المحافظة">
+                        </div>
+                        <div class="col-md-3 d-none" id="createCityWrap">
+                            <label class="form-label">المدينة</label>
+                            <input type="text" class="form-control" name="tg_city" id="createCity" placeholder="المدينة">
+                        </div>
                         <div class="col-md-5">
                             <label class="form-label">العنوان</label>
                             <input type="text" class="form-control" name="order_title" id="createOrderTitle" placeholder="عنوان التوصيل أو عنوان مميز يظهر في الإيصال">
                         </div>
-                        
+
                         <div class="col-12">
                             <button type="button" class="btn btn-outline-secondary btn-sm" id="viewCustomerHistoryBtn" disabled title="اختر عميلاً أولاً">
                                 <i class="bi bi-clock-history me-1"></i>عرض سجل مشتريات العميل
@@ -2900,6 +2944,14 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                 <input type="text" name="customer_phone" id="edit_submit_customer_phone" class="form-control form-control-sm" placeholder="رقم الهاتف" dir="ltr" value="">
                             </div>
                             <small class="form-text text-muted d-block">اختر عميلاً مسجلاً أو اكتب اسماً جديداً—يُحفظ تلقائياً كعميل جديد إن لم يكن مسجلاً</small>
+                        </div>
+                        <div class="col-md-3 d-none" id="editGovWrap">
+                            <label class="form-label">المحافظة</label>
+                            <input type="text" class="form-control" name="tg_governorate" id="editGov" placeholder="المحافظة">
+                        </div>
+                        <div class="col-md-3 d-none" id="editCityWrap">
+                            <label class="form-label">المدينة</label>
+                            <input type="text" class="form-control" name="tg_city" id="editCity" placeholder="المدينة">
                         </div>
                         <div class="col-md-5">
                             <label class="form-label">العنوان</label>
@@ -3798,6 +3850,11 @@ window.openEditTaskModal = function(taskId) {
                 document.getElementById('editDetails').value = t.details || '';
                 var orderTitleEl = document.getElementById('editOrderTitle');
                 if (orderTitleEl && t.order_title !== undefined) orderTitleEl.value = t.order_title || '';
+                var editGovEl = document.getElementById('editGov');
+                if (editGovEl) editGovEl.value = t.tg_governorate || '';
+                var editCityEl = document.getElementById('editCity');
+                if (editCityEl) editCityEl.value = t.tg_city || '';
+                if (typeof toggleEditTgFields === 'function') toggleEditTgFields();
                 var shippingEl = document.getElementById('editTaskShippingFees');
                 if (shippingEl && typeof t.shipping_fees === 'number') shippingEl.value = t.shipping_fees;
                 if (shippingEl && (typeof t.shipping_fees === 'string' && t.shipping_fees !== '')) shippingEl.value = t.shipping_fees;
@@ -4214,6 +4271,32 @@ document.addEventListener('DOMContentLoaded', function () {
         taskTypeSelect.addEventListener('change', updateTaskTypeUI);
     }
     updateTaskTypeUI();
+
+    // إظهار/إخفاء حقلي المحافظة والمدينة عند اختيار تليجراف (نموذج الإنشاء)
+    function toggleCreateTgFields() {
+        var isTg = taskTypeSelect && taskTypeSelect.value === 'telegraph';
+        ['createGovWrap', 'createCityWrap'].forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el) { el.classList.toggle('d-none', !isTg); }
+        });
+    }
+    if (taskTypeSelect) {
+        taskTypeSelect.addEventListener('change', toggleCreateTgFields);
+    }
+    toggleCreateTgFields();
+
+    // إظهار/إخفاء حقلي المحافظة والمدينة (نموذج التعديل)
+    var editTaskTypeEl = document.getElementById('editTaskType');
+    function toggleEditTgFields() {
+        var isTg = editTaskTypeEl && editTaskTypeEl.value === 'telegraph';
+        ['editGovWrap', 'editCityWrap'].forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el) { el.classList.toggle('d-none', !isTg); }
+        });
+    }
+    if (editTaskTypeEl) {
+        editTaskTypeEl.addEventListener('change', toggleEditTgFields);
+    }
 
     // تحميل أسماء القوالب وتعبئة datalist
     function loadTemplateSuggestions() {
