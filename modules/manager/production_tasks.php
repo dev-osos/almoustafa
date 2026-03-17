@@ -2441,8 +2441,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-            <h2 class="mb-1"><i class="bi bi-list-task me-2"></i> أوردرات لقسم الإنتاج</h2>
-            <p class="text-muted mb-0">قم بإنشاء أوردرات موجهة لعمال الإنتاج مع تتبّع الحالة في صفحة الأوردرات الخاصة بهم.</p>
+            <h2 class="mb-1"><i class="bi bi-list-task me-2"></i> الاوردرات  </h2>
         </div>
     </div>
 
@@ -2683,7 +2682,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                         </div>
                         <div class="col-12 mt-2">
                             <label class="form-label"> ملاحظات </label>
-                            <textarea class="form-control" name="details" rows="3" placeholder="أدخل التفاصيل والتعليمات اللازمة للعمال."></textarea>
+                            <textarea class="form-control" name="details" rows="3" placeholder=""></textarea>
                         </div>
                         <div class="col-12 col-md-6 col-lg-4 mt-2">
                             <label class="form-label" for="createTaskShippingFees">الشحن</label>
