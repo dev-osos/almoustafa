@@ -481,6 +481,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($action === 'tg_search' && $isAjax) {
+        set_time_limit(120);
         $searchTerm = trim($_POST['search'] ?? '');
         if ($searchTerm === '') {
             while (ob_get_level()) { ob_end_clean(); }
@@ -506,29 +507,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'authorization: Bearer 244917|ZzSXzdfFKcLnxRwsTbEhRlSsv9OjRRIDvknDEKVc86ec3127',
             'x-app-version: 5.2.2', 'x-client-name: PHP-Server', 'x-client-type: WEB',
         ];
-        $fetchPage = function(int $page) use ($tgSQ, $tgSHeaders): array {
+        $makeCh = function(int $page) use ($tgSQ, $tgSHeaders) {
             $payload = json_encode(['operationName' => 'ListShipments', 'variables' => ['first' => 20, 'page' => $page, 'input' => (object)[]], 'query' => $tgSQ]);
             $ch = curl_init('https://system.telegraphex.com:8443/graphql');
-            curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true, CURLOPT_POSTFIELDS => $payload, CURLOPT_TIMEOUT => 15, CURLOPT_HTTPHEADER => $tgSHeaders]);
-            $resp = curl_exec($ch);
-            $err  = curl_error($ch);
-            curl_close($ch);
-            if ($err) return ['error' => $err];
-            $dec = json_decode($resp, true);
-            return ['data' => $dec['data']['listShipments']['data'] ?? [], 'lastPage' => (int)($dec['data']['listShipments']['paginatorInfo']['lastPage'] ?? 1)];
+            curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true, CURLOPT_POSTFIELDS => $payload, CURLOPT_TIMEOUT => 20, CURLOPT_HTTPHEADER => $tgSHeaders]);
+            return $ch;
         };
-        $first = $fetchPage(1);
-        if (isset($first['error'])) {
+        // جلب الصفحة الأولى لمعرفة lastPage
+        $ch1  = $makeCh(1);
+        $resp1 = curl_exec($ch1);
+        $err1  = curl_error($ch1);
+        curl_close($ch1);
+        if ($err1) {
             while (ob_get_level()) { ob_end_clean(); }
             header('Content-Type: application/json; charset=utf-8');
-            echo json_encode(['success' => false, 'error' => $first['error']], JSON_UNESCAPED_UNICODE);
+            echo json_encode(['success' => false, 'error' => $err1], JSON_UNESCAPED_UNICODE);
             exit;
         }
-        $allShipments = $first['data'];
-        $lastPage     = $first['lastPage'];
-        for ($p = 2; $p <= $lastPage; $p++) {
-            $r = $fetchPage($p);
-            if (!isset($r['error'])) $allShipments = array_merge($allShipments, $r['data']);
+        $dec1         = json_decode($resp1, true);
+        $allShipments = $dec1['data']['listShipments']['data'] ?? [];
+        $lastPage     = (int)($dec1['data']['listShipments']['paginatorInfo']['lastPage'] ?? 1);
+        // جلب الصفحات المتبقية بشكل متوازٍ
+        if ($lastPage > 1) {
+            $mh      = curl_multi_init();
+            $handles = [];
+            for ($p = 2; $p <= $lastPage; $p++) {
+                $ch = $makeCh($p);
+                curl_multi_add_handle($mh, $ch);
+                $handles[$p] = $ch;
+            }
+            do {
+                $status = curl_multi_exec($mh, $running);
+                if ($running) curl_multi_select($mh);
+            } while ($running && $status === CURLM_OK);
+            foreach ($handles as $ch) {
+                $body = curl_multi_getcontent($ch);
+                if ($body) {
+                    $dec = json_decode($body, true);
+                    $pageData = $dec['data']['listShipments']['data'] ?? [];
+                    $allShipments = array_merge($allShipments, $pageData);
+                }
+                curl_multi_remove_handle($mh, $ch);
+                curl_close($ch);
+            }
+            curl_multi_close($mh);
         }
         $term     = mb_strtolower($searchTerm);
         $filtered = array_values(array_filter($allShipments, function($s) use ($term) {
@@ -4486,7 +4508,7 @@ function copyShippingCollectionResult(btn) {
                                             <?php endif; ?>
                                         </td>
                                         <td>
-                                            <?php if (!empty($invoiceLink)): ?>
+ب                                            <?php if (!empty($invoiceLink)): ?>
                                                 <?php echo $invoiceLink; ?>
                                             <?php else: ?>
                                                 <span class="text-muted">لا توجد فاتورة</span>
