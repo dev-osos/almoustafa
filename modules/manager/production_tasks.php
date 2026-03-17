@@ -2741,7 +2741,9 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                         </div>
                         <div class="col-md-3 d-none" id="createCityWrap">
                             <label class="form-label">المدينة</label>
-                            <input type="text" class="form-control" name="tg_city" id="createCity" placeholder="المدينة">
+                            <select class="form-select" name="tg_city" id="createCity">
+                                <option value="">-- اختر المدينة --</option>
+                            </select>
                         </div>
                         <div class="col-md-5">
                             <label class="form-label">العنوان</label>
@@ -2959,7 +2961,9 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                         </div>
                         <div class="col-md-3 d-none" id="editCityWrap">
                             <label class="form-label">المدينة</label>
-                            <input type="text" class="form-control" name="tg_city" id="editCity" placeholder="المدينة">
+                            <select class="form-select" name="tg_city" id="editCity">
+                                <option value="">-- اختر المدينة --</option>
+                            </select>
                         </div>
                         <div class="col-md-5">
                             <label class="form-label">العنوان</label>
@@ -3863,7 +3867,11 @@ window.openEditTaskModal = function(taskId) {
                 if (editGovEl) editGovEl.value = t.tg_governorate || '';
                 if (editGovSearch) editGovSearch.value = t.tg_governorate || '';
                 var editCityEl = document.getElementById('editCity');
-                if (editCityEl) editCityEl.value = t.tg_city || '';
+                if (editCityEl && t.tg_governorate && typeof window.triggerCityFetchByGovName === 'function') {
+                    window.triggerCityFetchByGovName(t.tg_governorate, 'editCity', t.tg_city || '');
+                } else if (editCityEl) {
+                    editCityEl.value = t.tg_city || '';
+                }
                 if (typeof toggleEditTgFields === 'function') toggleEditTgFields();
                 var shippingEl = document.getElementById('editTaskShippingFees');
                 if (shippingEl && typeof t.shipping_fees === 'number') shippingEl.value = t.shipping_fees;
@@ -4308,7 +4316,7 @@ document.addEventListener('DOMContentLoaded', function () {
         editTaskTypeEl.addEventListener('change', toggleEditTgFields);
     }
 
-    // ===== نظام autocomplete للمحافظات =====
+    // ===== نظام autocomplete للمحافظات + جلب المدن ديناميكياً =====
     (function() {
         var GOV_LIST = <?php $govJson = json_decode(file_get_contents(__DIR__ . '/../../gov.json'), true); echo json_encode($govJson['data']['listZonesDropdown'] ?? []); ?>;
 
@@ -4321,7 +4329,60 @@ document.addEventListener('DOMContentLoaded', function () {
         ].join('');
         document.head.appendChild(style);
 
-        function initGovAutocomplete(searchInputId, hiddenInputId) {
+        // بناء مسار API بشكل ديناميكي
+        function getTgZonesApiPath() {
+            var currentPath = window.location.pathname || '/';
+            var pathParts = currentPath.split('/').filter(Boolean);
+            var stopSegments = ['dashboard', 'modules', 'api', 'assets', 'includes'];
+            var baseParts = [];
+            for (var i = 0; i < pathParts.length; i++) {
+                var part = pathParts[i];
+                if (stopSegments.indexOf(part) !== -1 || part.indexOf('.php') !== -1) break;
+                baseParts.push(part);
+            }
+            var basePath = baseParts.length ? '/' + baseParts.join('/') : '';
+            return (basePath + '/api/tg_zones.php').replace(/\/+/g, '/');
+        }
+
+        // جلب مدن المحافظة من API وتعبئة الـ select
+        function fetchCities(govCode, selectId, preSelectValue) {
+            var sel = document.getElementById(selectId);
+            if (!sel || !govCode) return;
+            sel.innerHTML = '<option value="">جاري التحميل...</option>';
+            sel.disabled = true;
+            fetch(getTgZonesApiPath() + '?parentId=' + encodeURIComponent(govCode))
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var zones = (data && data.data && data.data.listZonesDropdown) || [];
+                    sel.innerHTML = '<option value="">-- اختر المدينة --</option>';
+                    zones.forEach(function(z) {
+                        var opt = document.createElement('option');
+                        opt.value = z.name;
+                        opt.textContent = z.name;
+                        if (preSelectValue && z.name === preSelectValue) opt.selected = true;
+                        sel.appendChild(opt);
+                    });
+                    sel.disabled = false;
+                })
+                .catch(function() {
+                    sel.innerHTML = '<option value="">خطأ في تحميل المدن</option>';
+                    sel.disabled = false;
+                });
+        }
+
+        // دالة عامة: جلب مدن المحافظة بالاسم (تُستخدم عند تعبئة نموذج التعديل)
+        window.triggerCityFetchByGovName = function(govName, selectId, preSelectValue) {
+            if (!govName) return;
+            var gov = GOV_LIST.find(function(g) { return g.name === govName; });
+            if (gov) fetchCities(gov.code, selectId, preSelectValue);
+        };
+
+        function resetCitySelect(selectId) {
+            var sel = document.getElementById(selectId);
+            if (sel) { sel.innerHTML = '<option value="">-- اختر المدينة --</option>'; sel.disabled = false; }
+        }
+
+        function initGovAutocomplete(searchInputId, hiddenInputId, citySelectId) {
             var searchEl = document.getElementById(searchInputId);
             var hiddenEl = document.getElementById(hiddenInputId);
             if (!searchEl || !hiddenEl) return;
@@ -4337,33 +4398,36 @@ document.addEventListener('DOMContentLoaded', function () {
                     dropdown.classList.remove('d-none');
                     return;
                 }
-                filtered.forEach(function(gov, i) {
+                filtered.forEach(function(gov) {
                     var item = document.createElement('div');
                     item.className = 'gov-item';
                     item.textContent = gov.name;
+                    item.dataset.code = gov.code;
                     item.addEventListener('mousedown', function(e) {
                         e.preventDefault();
-                        selectGov(gov.name);
+                        selectGov(gov.name, gov.code);
                     });
                     dropdown.appendChild(item);
                 });
                 dropdown.classList.remove('d-none');
             }
 
-            function selectGov(name) {
+            function selectGov(name, code) {
                 searchEl.value = name;
                 hiddenEl.value = name;
                 dropdown.classList.add('d-none');
                 searchEl.classList.remove('is-invalid');
+                if (citySelectId && code) {
+                    fetchCities(code, citySelectId);
+                }
             }
 
             function closeDropdown() {
                 dropdown.classList.add('d-none');
-                // إذا الحقل فارغ، امسح القيمة المخفية
                 if (!searchEl.value.trim()) {
                     hiddenEl.value = '';
+                    if (citySelectId) resetCitySelect(citySelectId);
                 }
-                // إذا الكتابة لا تطابق اختياراً من القائمة، أعد الاسم المحفوظ أو امسح
                 var typed = searchEl.value.trim();
                 var match = GOV_LIST.find(function(g) { return g.name === typed; });
                 if (!match) {
@@ -4373,7 +4437,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
             searchEl.addEventListener('input', function() {
                 var q = this.value.trim();
-                hiddenEl.value = ''; // مسح القيمة حتى يتم الاختيار من القائمة
+                hiddenEl.value = '';
+                if (citySelectId) resetCitySelect(citySelectId);
                 if (!q) { dropdown.classList.add('d-none'); return; }
                 var filtered = GOV_LIST.filter(function(g) { return g.name.includes(q); });
                 renderDropdown(filtered);
@@ -4403,7 +4468,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 } else if (e.key === 'Enter') {
                     if (activeIdx >= 0 && items[activeIdx]) {
                         e.preventDefault();
-                        selectGov(items[activeIdx].textContent);
+                        selectGov(items[activeIdx].textContent, items[activeIdx].dataset.code);
                     }
                 } else if (e.key === 'Escape') {
                     closeDropdown();
@@ -4418,8 +4483,6 @@ document.addEventListener('DOMContentLoaded', function () {
         function validateGovOnSubmit(formEl, hiddenInputId, searchInputId) {
             var hiddenEl = document.getElementById(hiddenInputId);
             var searchEl = document.getElementById(searchInputId);
-            var wrap = formEl ? formEl.closest('.collapse, form') : null;
-            // التحقق فقط إذا كان الحقل ظاهراً (تليجراف)
             var govWrap = searchEl ? searchEl.closest('[id$="GovWrap"]') : null;
             if (!govWrap || govWrap.classList.contains('d-none')) return true;
             if (!hiddenEl || !hiddenEl.value.trim()) {
@@ -4432,9 +4495,9 @@ document.addEventListener('DOMContentLoaded', function () {
             return true;
         }
 
-        // تهيئة الحقلين
-        initGovAutocomplete('createGovSearch', 'createGov');
-        initGovAutocomplete('editGovSearch', 'editGov');
+        // تهيئة الحقلين مع ربط قوائم المدن
+        initGovAutocomplete('createGovSearch', 'createGov', 'createCity');
+        initGovAutocomplete('editGovSearch', 'editGov', 'editCity');
 
         // التحقق عند الإرسال - نموذج الإنشاء
         var createForm = document.querySelector('#createTaskFormCollapse form');
