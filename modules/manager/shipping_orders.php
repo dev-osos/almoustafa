@@ -464,6 +464,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $tgRespAjax = curl_exec($chAjax);
         $tgErrAjax  = curl_error($chAjax);
         curl_close($chAjax);
+        while (ob_get_level()) { ob_end_clean(); }
         header('Content-Type: application/json; charset=utf-8');
         if ($tgErrAjax) {
             echo json_encode(['success' => false, 'error' => $tgErrAjax], JSON_UNESCAPED_UNICODE);
