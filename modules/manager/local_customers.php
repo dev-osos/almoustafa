@@ -2115,6 +2115,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             <tr>
                                 <td><strong><?php echo (int)$customer['id']; ?></strong></td>
                                 <td>
+                                    <strong><?php echo htmlspecialchars($customer['name']); ?></strong>
                                     <?php
                                     $balanceUpdatedAt = isset($customer['balance_updated_at']) ? trim($customer['balance_updated_at']) : '';
                                     if (!empty($balanceUpdatedAt) && function_exists('formatDateTime')): ?>
@@ -2126,7 +2127,6 @@ document.addEventListener('DOMContentLoaded', function() {
                                             <i class="bi bi-clock-history me-1"></i><?php echo date('d/m g:i A', strtotime($balanceUpdatedAt)); ?>
                                         </span>
                                     <?php endif; ?>
-                                    <strong><?php echo htmlspecialchars($customer['name']); ?></strong>
                                 </td>
                                 <td>
                                     <?php
