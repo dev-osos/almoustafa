@@ -4584,15 +4584,16 @@ function copyShippingCollectionResult(btn) {
                         <th class="text-nowrap">الحالة</th>
                         <th class="text-nowrap text-end">السعر</th>
                         <th class="text-nowrap text-end">الصافي</th>
+                        <th class="text-nowrap text-center">إجراءات</th>
                     </tr>
                 </thead>
                 <tbody id="tgShipmentsBody">
                     <?php if ($tgError): ?>
-                        <tr><td colspan="7" class="text-center text-danger py-3">
+                        <tr><td colspan="8" class="text-center text-danger py-3">
                             <i class="bi bi-exclamation-triangle-fill me-1"></i><?php echo htmlspecialchars($tgError); ?>
                         </td></tr>
                     <?php elseif (empty($tgShipments)): ?>
-                        <tr><td colspan="7" class="text-center text-muted py-4">
+                        <tr><td colspan="8" class="text-center text-muted py-4">
                             <i class="bi bi-inbox fs-4 d-block mb-2"></i>لا توجد شحنات
                         </td></tr>
                     <?php else: ?>
@@ -4618,6 +4619,20 @@ function copyShippingCollectionResult(btn) {
                                 </td>
                                 <td class="text-end text-nowrap"><?php echo number_format((float)($tgs['price'] ?? 0), 2); ?></td>
                                 <td class="text-end text-nowrap"><?php echo number_format((float)($tgs['amount'] ?? 0), 2); ?></td>
+                                <td class="text-center text-nowrap">
+                                    <?php
+                                        $tgsCode = $tgs['code'] ?? '';
+                                        $tgsNum  = preg_replace('/^TG/i', '', $tgsCode);
+                                    ?>
+                                    <?php if ($tgsNum): ?>
+                                    <a href="https://system.telegraphex.com/print/waybill/shipment/A4/1c/<?php echo urlencode($tgsNum); ?>"
+                                       target="_blank"
+                                       class="btn btn-sm btn-outline-primary"
+                                       title="طباعة البوليصة">
+                                        <i class="bi bi-printer"></i>
+                                    </a>
+                                    <?php endif; ?>
+                                </td>
                             </tr>
                         <?php endforeach; ?>
                     <?php endif; ?>

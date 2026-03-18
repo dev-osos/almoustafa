@@ -1,0 +1,15 @@
+URL: https://system.telegraphex.com/print/waybill/shipment/A4/1c/+ رقم الشحنه بدون TG
+--------
+headers
+GET /print/waybill/shipment/A4/1c/7955670 HTTP/1.1
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+Accept-Encoding: gzip, deflate, br
+Accept-Language: en-GB,en-US;q=0.9,en;q=0.8
+Connection: keep-alive
+Cookie: _gcl_au=1.1.1363519705.1773781420
+Host: system.telegraphex.com
+Referer: https://system.telegraphex.com/admin/shipments
+Sec-Fetch-Dest: document
+Sec-Fetch-Mode: navigate
+Sec-Fetch-Site: none
+User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.3 Safari/605.1.15
