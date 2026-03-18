@@ -2039,12 +2039,13 @@ foreach ($factoryProducts as $product) {
                             $unit = htmlspecialchars($product['unit'] ?? 'قطعة');
                             $unitPrice = floatval($product['unit_price'] ?? 0);
                             $totalValue = floatval($product['total_value'] ?? 0);
+                            $id=$product['id'] ?? 0;
                         ?>
                         <div class="product-card">
                            
 
                             <div class="product-name"><?php echo $productName; ?></div>
-                            <div style="color: #94a3b8; font-size: 13px; margin-bottom: 10px;">منتج خارجي</div>
+                            <div style="color: #94a3b8; font-size: 13px; margin-bottom: 10px;"> الكود : <?php echo $id; ?></div>
 
                             <?php $extCategory = htmlspecialchars($product['category'] ?? '—'); ?>
                             <div class="product-detail-row"><span>الصنف:</span> <span><?php echo $extCategory; ?></span></div>
