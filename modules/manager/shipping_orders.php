@@ -4597,6 +4597,17 @@ function copyShippingCollectionResult(btn) {
                             <i class="bi bi-inbox fs-4 d-block mb-2"></i>لا توجد شحنات
                         </td></tr>
                     <?php else: ?>
+                        <?php
+                            // مسار proxy البوليصة (يُحسب مرة واحدة)
+                            $__parts   = explode('/', trim(parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH), '/'));
+                            $__stop    = ['dashboard','modules','api','assets','includes'];
+                            $__base    = [];
+                            foreach ($__parts as $__p) {
+                                if (in_array($__p, $__stop) || str_ends_with($__p, '.php')) break;
+                                $__base[] = $__p;
+                            }
+                            $tgPrintBasePath = ($__base ? '/' . implode('/', $__base) : '') . '/api/tg_print_waybill.php';
+                        ?>
                         <?php foreach ($tgShipments as $tgs): ?>
                             <?php
                                 $tgsStatusCode = $tgs['status']['code'] ?? '';
@@ -4625,7 +4636,7 @@ function copyShippingCollectionResult(btn) {
                                         $tgsNum  = preg_replace('/^TG/i', '', $tgsCode);
                                     ?>
                                     <?php if ($tgsNum): ?>
-                                    <a href="https://system.telegraphex.com/print/waybill/shipment/A4/1c/<?php echo urlencode($tgsNum); ?>"
+                                    <a href="<?php echo htmlspecialchars($tgPrintBasePath . '?num=' . urlencode($tgsNum)); ?>"
                                        target="_blank"
                                        class="btn btn-sm btn-outline-primary"
                                        title="طباعة البوليصة">
