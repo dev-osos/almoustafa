@@ -1,11 +1,12 @@
 <?php
 /**
  * Proxy: طباعة بوليصة TelegraphEx
- * يجلب صفحة الطباعة بالـ Bearer token ويعيد HTML جاهز للعرض
  */
 define('ACCESS_ALLOWED', true);
 
 $shipmentNum = isset($_GET['num']) ? preg_replace('/[^0-9A-Za-z\-]/', '', $_GET['num']) : '';
+$debug       = isset($_GET['debug']);
+
 if (!$shipmentNum) {
     http_response_code(400);
     echo '<p style="font-family:sans-serif;color:red">رقم الشحنة مطلوب</p>';
@@ -19,9 +20,11 @@ curl_setopt_array($ch, [
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_FOLLOWLOCATION => true,
     CURLOPT_TIMEOUT        => 20,
+    CURLOPT_HEADER         => $debug, // اجلب headers في debug mode
     CURLOPT_HTTPHEADER     => [
         'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Authorization: Bearer 245467|m90rxf6dkwYyeku570WIGKSuyhkZr1Kt2ehSUQVLf862e568',
+        'Cookie: token=245467|m90rxf6dkwYyeku570WIGKSuyhkZr1Kt2ehSUQVLf862e568',
         'Referer: https://system.telegraphex.com/admin/shipments',
         'x-app-version: 5.2.2',
         'x-client-name: Mac OS-Safari',
@@ -30,10 +33,26 @@ curl_setopt_array($ch, [
     ],
 ]);
 
-$html     = curl_exec($ch);
+$response = curl_exec($ch);
 $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+$headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
 $error    = curl_error($ch);
 curl_close($ch);
+
+// --- وضع Debug ---
+if ($debug) {
+    header('Content-Type: text/plain; charset=utf-8');
+    $responseHeaders = $debug ? substr($response, 0, $headerSize) : '';
+    $body = $debug ? substr($response, $headerSize) : $response;
+    echo "=== HTTP CODE: $httpCode ===\n\n";
+    echo "=== RESPONSE HEADERS ===\n$responseHeaders\n\n";
+    echo "=== BODY (first 2000 chars) ===\n" . substr($body, 0, 2000) . "\n";
+    echo "=== BODY LENGTH: " . strlen($body) . " chars ===\n";
+    if ($error) echo "=== CURL ERROR: $error ===\n";
+    exit;
+}
+
+$html = $response;
 
 if ($error) {
     http_response_code(502);
@@ -47,12 +66,12 @@ if ($httpCode >= 400 || !$html) {
     exit;
 }
 
-// تحويل الروابط النسبية إلى مطلقة حتى تعمل الأصول (CSS/JS/صور)
+// تحويل الروابط النسبية إلى مطلقة
 $base = 'https://system.telegraphex.com';
 $html = preg_replace('/(src|href)=(["\'])\/(?!\/)/i', '$1=$2' . $base . '/', $html);
 $html = preg_replace('/(url\(["\']?)\/(?!\/)/i', '$1' . $base . '/', $html);
 
-// حقن script طباعة تلقائي مباشرة بعد تحميل الصفحة
+// حقن script طباعة تلقائي
 $printScript = '<script>window.addEventListener("load",function(){window.print();});</script>';
 $html = str_replace('</body>', $printScript . '</body>', $html);
 
