@@ -5114,11 +5114,8 @@ document.addEventListener('DOMContentLoaded', function () {
             if (!isNaN(v) && v >= 0) subtotal += v;
         });
         var shipping = 0;
-        // في حالة تليجراف: استخدام تكلفة التوصيل من API بدلاً من الشحن اليدوي
-        var isTg = document.getElementById('createTaskType') && document.getElementById('createTaskType').value === 'telegraph';
-        if (isTg) {
-            shipping = window._tgDeliveryCost || 0;
-        } else if (shippingInput) {
+        var isTg = document.getElementById('taskTypeSelect') && document.getElementById('taskTypeSelect').value === 'telegraph';
+        if (!isTg && shippingInput) {
             var v = parseFloat(shippingInput.value || '0');
             if (!isNaN(v) && v >= 0) shipping = v;
         }
@@ -5127,7 +5124,14 @@ document.addEventListener('DOMContentLoaded', function () {
             var v = parseFloat(discountInput.value || '0');
             if (!isNaN(v) && v >= 0) discount = v;
         }
-        var finalTotal = Math.max(0, subtotal + shipping - discount);
+        var finalTotal;
+        if (isTg) {
+            // تليجراف: الإجمالي = إجمالي المنتجات - تكلفة التوصيل
+            var deliveryCost = window._tgDeliveryCost || 0;
+            finalTotal = Math.max(0, subtotal - deliveryCost);
+        } else {
+            finalTotal = Math.max(0, subtotal + shipping - discount);
+        }
         subtotalEl.textContent = subtotal.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
         shippingEl.textContent = shipping.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
         if (discountEl) discountEl.textContent = discount.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
