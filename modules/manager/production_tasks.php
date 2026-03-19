@@ -4478,6 +4478,9 @@ document.addEventListener('DOMContentLoaded', function () {
             if (shippingInput) { shippingInput.value = '0'; }
             updateCreateTaskSummary();
             fetchCreateDeliveryCost();
+        } else {
+            window._tgDeliveryCost = 0;
+            updateCreateTaskSummary();
         }
     }
     if (taskTypeSelect) {
@@ -5115,7 +5118,11 @@ document.addEventListener('DOMContentLoaded', function () {
             if (!isNaN(v) && v >= 0) subtotal += v;
         });
         var shipping = 0;
-        if (shippingInput) {
+        // في حالة تليجراف: استخدام تكلفة التوصيل من API بدلاً من الشحن اليدوي
+        var isTg = document.getElementById('createTaskType') && document.getElementById('createTaskType').value === 'telegraph';
+        if (isTg) {
+            shipping = window._tgDeliveryCost || 0;
+        } else if (shippingInput) {
             var v = parseFloat(shippingInput.value || '0');
             if (!isNaN(v) && v >= 0) shipping = v;
         }
@@ -5200,11 +5207,15 @@ document.addEventListener('DOMContentLoaded', function () {
                     if (fees) {
                         var deliveryCost = (parseFloat(fees.delivery) || 0) + (parseFloat(fees.weight) || 0) + (parseFloat(fees.collection) || 0);
                         if (valueEl) valueEl.textContent = deliveryCost.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+                        window._tgDeliveryCost = deliveryCost;
+                        updateCreateTaskSummary();
                         var returnVal = parseFloat(fees['return']) || 0;
                         var returnEl = document.getElementById('createTaskReturnCostValue');
                         if (returnEl) returnEl.textContent = returnVal.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
                     } else {
                         if (valueEl) valueEl.textContent = 'غير متاح';
+                        window._tgDeliveryCost = 0;
+                        updateCreateTaskSummary();
                         var returnEl = document.getElementById('createTaskReturnCostValue');
                         if (returnEl) returnEl.textContent = '—';
                     }

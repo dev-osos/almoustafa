@@ -1,7 +1,7 @@
 {
     "data": {
         "calculateShipmentFees": {
-            "amount": -57,
+
             "delivery": 57,
             "weight": 0,
             "collection": 0,
