@@ -1619,7 +1619,7 @@ $lang = $translations;
                                 شركة البركة © <?php echo date('Y'); ?>
                             </small>
                             <br>
-                            <a href="install-guide.php" class="install-pwa-link">
+                            <a href="<?php echo str_replace('/assets/', '/', ASSETS_URL); ?>install.php" class="install-pwa-link">
                                 <i class="bi bi-download"></i>
                                 تثبيت التطبيق على جهازك
                             </a>
