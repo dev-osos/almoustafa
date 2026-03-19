@@ -3007,6 +3007,10 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                                 <span id="createTaskDeliveryCostValue">—</span>
                                             </strong>
                                         </div>
+                                        <div class="col-6 col-md-3 d-none" id="createTaskReturnCostCol">
+                                            <span class="text-muted">رسوم الإرجاع:</span>
+                                            <strong class="d-block text-warning" id="createTaskReturnCostValue">—</strong>
+                                        </div>
                                         <div class="col-6 col-md-3">
                                             <span class="text-muted">الخصم:</span>
                                             <strong class="d-block" id="createTaskDiscountDisplay">0.00 ج.م</strong>
@@ -4466,6 +4470,8 @@ document.addEventListener('DOMContentLoaded', function () {
         if (shippingWrap) shippingWrap.classList.toggle('d-none', isTg);
         if (shippingCol)  shippingCol.classList.toggle('d-none', isTg);
         if (deliveryCol)  deliveryCol.classList.toggle('d-none', !isTg);
+        var returnCol = document.getElementById('createTaskReturnCostCol');
+        if (returnCol) returnCol.classList.toggle('d-none', !isTg);
         if (isTg) {
             // تصفير قيمة الشحن اليدوي عند التبديل لتليجراف
             var shippingInput = document.getElementById('createTaskShippingFees');
@@ -5194,8 +5200,13 @@ document.addEventListener('DOMContentLoaded', function () {
                     if (fees) {
                         var deliveryCost = (parseFloat(fees.delivery) || 0) + (parseFloat(fees.weight) || 0) + (parseFloat(fees.collection) || 0);
                         if (valueEl) valueEl.textContent = deliveryCost.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+                        var returnVal = parseFloat(fees['return']) || 0;
+                        var returnEl = document.getElementById('createTaskReturnCostValue');
+                        if (returnEl) returnEl.textContent = returnVal.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
                     } else {
                         if (valueEl) valueEl.textContent = 'غير متاح';
+                        var returnEl = document.getElementById('createTaskReturnCostValue');
+                        if (returnEl) returnEl.textContent = '—';
                     }
                 })
                 .catch(function() {
