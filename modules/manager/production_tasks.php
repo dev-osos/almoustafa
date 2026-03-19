@@ -4476,11 +4476,11 @@ document.addEventListener('DOMContentLoaded', function () {
             // تصفير قيمة الشحن اليدوي عند التبديل لتليجراف
             var shippingInput = document.getElementById('createTaskShippingFees');
             if (shippingInput) { shippingInput.value = '0'; }
-            if (typeof updateCreateTaskSummary === 'function') updateCreateTaskSummary();
-            if (typeof fetchCreateDeliveryCost === 'function') fetchCreateDeliveryCost();
+            if (typeof window._updateCreateTaskSummary === 'function') window._updateCreateTaskSummary();
+            if (typeof window.fetchCreateDeliveryCost === 'function') window.fetchCreateDeliveryCost();
         } else {
             window._tgDeliveryCost = 0;
-            if (typeof updateCreateTaskSummary === 'function') updateCreateTaskSummary();
+            if (typeof window._updateCreateTaskSummary === 'function') window._updateCreateTaskSummary();
         }
     }
     if (taskTypeSelect) {
