@@ -613,7 +613,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $assignees = $_POST['assigned_to'] ?? [];
         $shippingFees = 0;
-        if (isset($_POST['shipping_fees']) && $_POST['shipping_fees'] !== '') {
+        if ($taskType !== 'telegraph' && isset($_POST['shipping_fees']) && $_POST['shipping_fees'] !== '') {
             $shippingFees = (float) str_replace(',', '.', (string) $_POST['shipping_fees']);
             if ($shippingFees < 0) $shippingFees = 0;
         }
@@ -1662,7 +1662,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ? array_filter(array_map('intval', $_POST['assigned_to']))
                         : [];
                     $shippingFees = 0;
-                    if (isset($_POST['shipping_fees']) && $_POST['shipping_fees'] !== '') {
+                    if ($taskType !== 'telegraph' && isset($_POST['shipping_fees']) && $_POST['shipping_fees'] !== '') {
                         $shippingFees = (float) str_replace(',', '.', (string) $_POST['shipping_fees']);
                         if ($shippingFees < 0) $shippingFees = 0;
                     }
@@ -2973,7 +2973,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             <label class="form-label"> ملاحظات </label>
                             <textarea class="form-control" name="details" rows="3" placeholder=""></textarea>
                         </div>
-                        <div class="col-12 col-md-6 col-lg-4 mt-2">
+                        <div class="col-12 col-md-6 col-lg-4 mt-2" id="createShippingFeesWrap">
                             <label class="form-label" for="createTaskShippingFees">الشحن</label>
                             <div class="input-group">
                                 <input type="number" class="form-control" name="shipping_fees" id="createTaskShippingFees" step="0.01" min="0" placeholder="0.00" value="0">
@@ -2996,9 +2996,16 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                             <span class="text-muted">إجمالي المنتجات:</span>
                                             <strong class="d-block" id="createTaskSubtotalDisplay">0.00 ج.م</strong>
                                         </div>
-                                        <div class="col-6 col-md-3">
+                                        <div class="col-6 col-md-3" id="createTaskShippingCol">
                                             <span class="text-muted">رسوم الشحن:</span>
                                             <strong class="d-block" id="createTaskShippingDisplay">0.00 ج.م</strong>
+                                        </div>
+                                        <div class="col-6 col-md-3 d-none" id="createTaskDeliveryCostCol">
+                                            <span class="text-muted">تكلفة التوصيل (TelegraphEx):</span>
+                                            <strong class="d-block text-info" id="createTaskDeliveryCostDisplay">
+                                                <span class="spinner-border spinner-border-sm d-none" id="createTaskDeliveryCostSpinner"></span>
+                                                <span id="createTaskDeliveryCostValue">—</span>
+                                            </strong>
                                         </div>
                                         <div class="col-6 col-md-3">
                                             <span class="text-muted">الخصم:</span>
@@ -4452,6 +4459,20 @@ document.addEventListener('DOMContentLoaded', function () {
             var el = document.getElementById(id);
             if (el) { el.classList.toggle('d-none', !isTg); }
         });
+        // إخفاء خانة الشحن اليدوية وإظهار تكلفة التوصيل عند اختيار تليجراف
+        var shippingWrap = document.getElementById('createShippingFeesWrap');
+        var shippingCol  = document.getElementById('createTaskShippingCol');
+        var deliveryCol  = document.getElementById('createTaskDeliveryCostCol');
+        if (shippingWrap) shippingWrap.classList.toggle('d-none', isTg);
+        if (shippingCol)  shippingCol.classList.toggle('d-none', isTg);
+        if (deliveryCol)  deliveryCol.classList.toggle('d-none', !isTg);
+        if (isTg) {
+            // تصفير قيمة الشحن اليدوي عند التبديل لتليجراف
+            var shippingInput = document.getElementById('createTaskShippingFees');
+            if (shippingInput) { shippingInput.value = '0'; }
+            updateCreateTaskSummary();
+            fetchCreateDeliveryCost();
+        }
     }
     if (taskTypeSelect) {
         taskTypeSelect.addEventListener('change', toggleCreateTgFields);
@@ -4656,11 +4677,13 @@ document.addEventListener('DOMContentLoaded', function () {
                         govIdEl.value = gov ? gov.id : code;
                     }
                     if (cityInstance && code) fetchCities(code, cityInstance);
+                    if (typeof window.fetchCreateDeliveryCost === 'function') window.fetchCreateDeliveryCost();
                 },
                 onClear: function() {
                     var govIdEl = govIdInputId ? document.getElementById(govIdInputId) : null;
                     if (govIdEl) govIdEl.value = '';
                     if (cityInstance) cityInstance.reset();
+                    if (typeof window.fetchCreateDeliveryCost === 'function') window.fetchCreateDeliveryCost();
                 }
             });
         }
@@ -4683,10 +4706,12 @@ document.addEventListener('DOMContentLoaded', function () {
                         var city = cityList.find(function(c) { return c.name === name; });
                         cityIdEl.value = city ? city.id : code;
                     }
+                    if (typeof window.fetchCreateDeliveryCost === 'function') window.fetchCreateDeliveryCost();
                 },
                 onClear: function() {
                     var cityIdEl = cityIdInputId ? document.getElementById(cityIdInputId) : null;
                     if (cityIdEl) cityIdEl.value = '';
+                    if (typeof window.fetchCreateDeliveryCost === 'function') window.fetchCreateDeliveryCost();
                 }
             });
             if (instance) {
@@ -5108,6 +5133,95 @@ document.addEventListener('DOMContentLoaded', function () {
         document.getElementById('createTaskDiscount').addEventListener('change', updateCreateTaskSummary);
     }
     updateCreateTaskSummary();
+
+    // === حساب تكلفة التوصيل TelegraphEx ===
+    var _tgCalcTimer = null;
+    function getTgCalcApiPath() {
+        var currentPath = window.location.pathname || '/';
+        var pathParts = currentPath.split('/').filter(Boolean);
+        var stopSegments = ['dashboard', 'modules', 'api', 'assets', 'includes'];
+        var baseParts = [];
+        for (var i = 0; i < pathParts.length; i++) {
+            if (stopSegments.indexOf(pathParts[i]) !== -1 || pathParts[i].indexOf('.php') !== -1) break;
+            baseParts.push(pathParts[i]);
+        }
+        var basePath = baseParts.length ? '/' + baseParts.join('/') : '';
+        return (basePath + '/api/tg_calc_fees.php').replace(/\/+/g, '/');
+    }
+
+    function fetchCreateDeliveryCost() {
+        var isTg = taskTypeSelect && taskTypeSelect.value === 'telegraph';
+        if (!isTg) return;
+
+        var govIdEl   = document.getElementById('createGovId');
+        var cityIdEl  = document.getElementById('createCityId');
+        var weightEl  = document.getElementById('createTgWeight');
+        var spinner   = document.getElementById('createTaskDeliveryCostSpinner');
+        var valueEl   = document.getElementById('createTaskDeliveryCostValue');
+
+        var govId  = govIdEl ? parseInt(govIdEl.value) : 0;
+        var cityId = cityIdEl ? parseInt(cityIdEl.value) : 0;
+
+        if (!govId || !cityId) {
+            if (valueEl) valueEl.textContent = '—';
+            return;
+        }
+
+        // حساب إجمالي المنتجات - الخصم
+        var subtotal = 0;
+        productsContainer.querySelectorAll('.product-line-total-input').forEach(function(inp) {
+            var v = parseFloat(inp.value || '0');
+            if (!isNaN(v) && v >= 0) subtotal += v;
+        });
+        var discountInput = document.getElementById('createTaskDiscount');
+        var discount = discountInput ? parseFloat(discountInput.value || '0') : 0;
+        if (isNaN(discount) || discount < 0) discount = 0;
+        var price = Math.max(0, subtotal - discount);
+        var weight = weightEl ? parseFloat(weightEl.value || '1') : 1;
+        if (isNaN(weight) || weight <= 0) weight = 1;
+
+        if (spinner) spinner.classList.remove('d-none');
+        if (valueEl) valueEl.textContent = 'جاري الحساب...';
+
+        clearTimeout(_tgCalcTimer);
+        _tgCalcTimer = setTimeout(function() {
+            var url = getTgCalcApiPath() + '?price=' + price + '&recipientZoneId=' + govId + '&recipientSubzoneId=' + cityId + '&weight=' + weight;
+            fetch(url)
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (spinner) spinner.classList.add('d-none');
+                    var fees = data && data.data && data.data.calculateShipmentFees;
+                    if (fees) {
+                        var delivery = parseFloat(fees.delivery) || 0;
+                        if (valueEl) valueEl.textContent = delivery.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+                    } else {
+                        if (valueEl) valueEl.textContent = 'غير متاح';
+                    }
+                })
+                .catch(function() {
+                    if (spinner) spinner.classList.add('d-none');
+                    if (valueEl) valueEl.textContent = 'خطأ في الحساب';
+                });
+        }, 500);
+    }
+
+    // جعل الدالة متاحة عالمياً ليتم استدعاؤها من autocomplete callbacks
+    window.fetchCreateDeliveryCost = fetchCreateDeliveryCost;
+
+    // ربط حساب تكلفة التوصيل بتغيير الوزن/الخصم/المنتجات
+    if (document.getElementById('createTgWeight')) {
+        document.getElementById('createTgWeight').addEventListener('input', fetchCreateDeliveryCost);
+    }
+    if (document.getElementById('createTaskDiscount')) {
+        document.getElementById('createTaskDiscount').addEventListener('input', fetchCreateDeliveryCost);
+        document.getElementById('createTaskDiscount').addEventListener('change', fetchCreateDeliveryCost);
+    }
+    // تحديث عند تغيير المنتجات
+    productsContainer.addEventListener('input', function(e) {
+        if (e.target.classList.contains('product-quantity-input') || e.target.classList.contains('product-price-input') || e.target.classList.contains('product-line-total-input')) {
+            fetchCreateDeliveryCost();
+        }
+    });
 
     // === مقترحات الأسعار السابقة ===
     var _priceHistoryCache = {};
