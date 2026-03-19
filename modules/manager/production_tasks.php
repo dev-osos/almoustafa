@@ -4570,6 +4570,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 hiddenEl.value = name;
                 dropdown.classList.add('d-none');
                 searchEl.classList.remove('is-invalid');
+                try { hiddenEl.dispatchEvent(new CustomEvent('ac-select', { detail: { name: name, code: code } })); } catch(e) {}
                 if (opts.onSelect) opts.onSelect(name, code);
             }
 
@@ -4670,7 +4671,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         // تهيئة autocomplete المحافظات
-        function initGovAutocomplete(searchInputId, hiddenInputId, cityInstance, govIdInputId) {
+        function initGovAutocomplete(searchInputId, hiddenInputId, cityInstance) {
             return initAutocomplete({
                 searchId: searchInputId,
                 hiddenId: hiddenInputId,
@@ -4680,25 +4681,16 @@ document.addEventListener('DOMContentLoaded', function () {
                 noResultClass: 'gov-no-result',
                 getList: function() { return GOV_LIST; },
                 onSelect: function(name, code) {
-                    var govIdEl = govIdInputId ? document.getElementById(govIdInputId) : null;
-                    if (govIdEl) {
-                        var gov = GOV_LIST.find(function(g) { return g.name === name; });
-                        govIdEl.value = gov ? gov.id : code;
-                    }
                     if (cityInstance && code) fetchCities(code, cityInstance);
-                    if (typeof window.fetchCreateDeliveryCost === 'function') window.fetchCreateDeliveryCost();
                 },
                 onClear: function() {
-                    var govIdEl = govIdInputId ? document.getElementById(govIdInputId) : null;
-                    if (govIdEl) govIdEl.value = '';
                     if (cityInstance) cityInstance.reset();
-                    if (typeof window.fetchCreateDeliveryCost === 'function') window.fetchCreateDeliveryCost();
                 }
             });
         }
 
         // تهيئة autocomplete المدن (القائمة تُحدَّث ديناميكياً)
-        function initCityAutocomplete(searchInputId, hiddenInputId, cityIdInputId) {
+        function initCityAutocomplete(searchInputId, hiddenInputId) {
             var cityList = [];
             var instance = initAutocomplete({
                 searchId: searchInputId,
@@ -4708,20 +4700,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 itemClass: 'city-item',
                 noResultClass: 'city-no-result',
                 getList: function() { return cityList; },
-                _list: cityList,
-                onSelect: function(name, code) {
-                    var cityIdEl = cityIdInputId ? document.getElementById(cityIdInputId) : null;
-                    if (cityIdEl) {
-                        var city = cityList.find(function(c) { return c.name === name; });
-                        cityIdEl.value = city ? city.id : code;
-                    }
-                    if (typeof window.fetchCreateDeliveryCost === 'function') window.fetchCreateDeliveryCost();
-                },
-                onClear: function() {
-                    var cityIdEl = cityIdInputId ? document.getElementById(cityIdInputId) : null;
-                    if (cityIdEl) cityIdEl.value = '';
-                    if (typeof window.fetchCreateDeliveryCost === 'function') window.fetchCreateDeliveryCost();
-                }
+                _list: cityList
             });
             if (instance) {
                 instance._searchId = searchInputId;
@@ -4756,13 +4735,13 @@ document.addEventListener('DOMContentLoaded', function () {
 
         // تهيئة autocomplete المدن
         var cityInstances = {
-            createCitySearch: initCityAutocomplete('createCitySearch', 'createCity', 'createCityId'),
-            editCitySearch:   initCityAutocomplete('editCitySearch',   'editCity',   'editCityId')
+            createCitySearch: initCityAutocomplete('createCitySearch', 'createCity'),
+            editCitySearch:   initCityAutocomplete('editCitySearch',   'editCity')
         };
 
         // تهيئة autocomplete المحافظات مع ربط المدن
-        initGovAutocomplete('createGovSearch', 'createGov', cityInstances.createCitySearch, 'createGovId');
-        initGovAutocomplete('editGovSearch',   'editGov',   cityInstances.editCitySearch,   'editGovId');
+        initGovAutocomplete('createGovSearch', 'createGov', cityInstances.createCitySearch);
+        initGovAutocomplete('editGovSearch',   'editGov',   cityInstances.editCitySearch);
 
         // التحقق عند الإرسال - نموذج الإنشاء
         var createForm = document.querySelector('#createTaskFormCollapse form');
@@ -4781,6 +4760,23 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     })();
     // ===== نهاية نظام autocomplete للمحافظات والمدن =====
+
+    // ===== ملء حقول gov_id و city_id عند اختيار قيمة من autocomplete =====
+    (function() {
+        function linkIdField(hiddenNameId, idFieldId) {
+            var h = document.getElementById(hiddenNameId);
+            var idEl = document.getElementById(idFieldId);
+            if (!h || !idEl) return;
+            h.addEventListener('ac-select', function(e) {
+                var d = e.detail || {};
+                idEl.value = d.code || '';
+            });
+        }
+        linkIdField('createGov', 'createGovId');
+        linkIdField('editGov', 'editGovId');
+        linkIdField('createCity', 'createCityId');
+        linkIdField('editCity', 'editCityId');
+    })();
 
     // تحميل أسماء القوالب وتعبئة datalist
     function loadTemplateSuggestions() {
