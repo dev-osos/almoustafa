@@ -850,9 +850,12 @@ $lang = $translations;
     <link href="<?php echo ASSETS_URL; ?>css/rtl.css" rel="preload" as="style" onload="this.onload=null;this.rel='stylesheet'">
     <noscript><link href="<?php echo ASSETS_URL; ?>css/rtl.css" rel="stylesheet"></noscript>
     
-    <!-- PWA Splash Screen CSS -->
+    <!-- Google Fonts for login page -->
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&family=Noto+Kufi+Arabic:wght@400;700;900&display=swap" rel="stylesheet">
+
+    <!-- PWA Splash Screen CSS + Login Page Redesign -->
     <style>
-        /* شاشة التحميل الرئيسية - ألوان التطبيق */
+        /* شاشة التحميل الرئيسية */
         #pwaSplashScreen {
             position: fixed;
             top: 0;
@@ -869,19 +872,19 @@ $lang = $translations;
             z-index: 9999;
             transition: opacity 0.5s ease, visibility 0.5s ease;
         }
-        
+
         @keyframes gradientShift {
             0% { background-position: 0% 50%; }
             50% { background-position: 100% 50%; }
             100% { background-position: 0% 50%; }
         }
-        
+
         #pwaSplashScreen.hidden {
             opacity: 0;
             visibility: hidden;
             pointer-events: none;
         }
-        
+
         .splash-logo {
             width: 180px;
             height: 180px;
@@ -889,23 +892,17 @@ $lang = $translations;
             animation: logoFadeIn 0.8s ease-out, logoFloat 3s ease-in-out infinite 0.8s;
             filter: drop-shadow(0 8px 25px rgba(0, 0, 0, 0.3));
         }
-        
+
         @keyframes logoFadeIn {
-            from {
-                opacity: 0;
-                transform: scale(0.8);
-            }
-            to {
-                opacity: 1;
-                transform: scale(1);
-            }
+            from { opacity: 0; transform: scale(0.8); }
+            to { opacity: 1; transform: scale(1); }
         }
-        
+
         @keyframes logoFloat {
             0%, 100% { transform: translateY(0px); }
             50% { transform: translateY(-10px); }
         }
-        
+
         .splash-title {
             color: white;
             font-size: 2rem;
@@ -915,16 +912,434 @@ $lang = $translations;
             text-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
             animation: titleFadeIn 1s ease-out 0.3s both;
         }
-        
+
         @keyframes titleFadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ===== LOGIN PAGE REDESIGN — Dark Honey Theme ===== */
+        :root {
+            --honey-50: #fefcf3;
+            --honey-100: #fdf6d8;
+            --honey-200: #faeaab;
+            --honey-300: #f5d76e;
+            --honey-400: #f1c40f;
+            --honey-500: #d4a90a;
+            --honey-600: #b08908;
+            --honey-700: #8a6606;
+            --honey-800: #5c4404;
+            --honey-900: #1a1207;
+            --lp-surface: #0f0b04;
+            --lp-surface-elevated: #1a1409;
+            --lp-surface-card: #221b0e;
+            --lp-text-primary: #fdf6d8;
+            --lp-text-secondary: #c9b87a;
+            --lp-text-muted: #8a7a4e;
+            --lp-radius: 20px;
+        }
+
+        body.login-page {
+            font-family: 'Tajawal', sans-serif !important;
+            background: var(--lp-surface) !important;
+            color: var(--lp-text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Honeycomb background texture */
+        body.login-page::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none;
+            opacity: 0.03;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='100'%3E%3Cpath d='M28 66L0 50L0 16L28 0L56 16L56 50L28 66L28 100' fill='none' stroke='%23f1c40f' stroke-width='1'/%3E%3Cpath d='M28 0L28 34L0 50L0 84L28 100L56 84L56 50L28 34' fill='none' stroke='%23f1c40f' stroke-width='1'/%3E%3C/svg%3E");
+            background-size: 56px 100px;
+        }
+
+        /* Ambient glow */
+        body.login-page::after {
+            content: '';
+            position: fixed;
+            top: -200px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 600px;
+            height: 600px;
+            border-radius: 50%;
+            filter: blur(120px);
+            pointer-events: none;
+            z-index: 0;
+            background: radial-gradient(circle, rgba(241,196,15,0.12) 0%, transparent 70%);
+        }
+
+        body.login-page .container-fluid {
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Override Bootstrap card for login */
+        body.login-page .login-card {
+            background: var(--lp-surface-card) !important;
+            border: 1px solid rgba(241,196,15,0.08) !important;
+            border-radius: var(--lp-radius) !important;
+            box-shadow:
+                0 8px 32px rgba(0,0,0,0.4),
+                0 0 80px rgba(241,196,15,0.05) !important;
+            animation: loginCardIn 0.6s ease-out;
+        }
+
+        @keyframes loginCardIn {
+            from { opacity: 0; transform: translateY(24px) scale(0.97); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        /* App icon in login */
+        body.login-page .login-app-icon {
+            width: 80px;
+            height: 80px;
+            border-radius: 20px;
+            overflow: hidden;
+            margin: 0 auto 16px;
+            box-shadow:
+                0 0 0 1px rgba(241,196,15,0.15),
+                0 8px 32px rgba(0,0,0,0.5),
+                0 0 60px rgba(241,196,15,0.1);
+            animation: iconFloat 3s ease-in-out infinite;
+            position: relative;
+        }
+        body.login-page .login-app-icon img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        body.login-page .login-app-icon::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 20px;
+            background: linear-gradient(135deg, rgba(255,255,255,0.15) 0%, transparent 50%);
+        }
+
+        /* Headings */
+        body.login-page h3 {
+            font-family: 'Noto Kufi Arabic', 'Tajawal', sans-serif !important;
+            font-weight: 900 !important;
+            background: linear-gradient(135deg, var(--honey-300), var(--honey-400), var(--honey-500));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-size: 1.5rem !important;
+            letter-spacing: -0.02em;
+        }
+
+        body.login-page .text-muted,
+        body.login-page p.text-muted {
+            color: var(--lp-text-muted) !important;
+        }
+
+        /* Form labels */
+        body.login-page .form-label {
+            color: var(--lp-text-secondary) !important;
+            font-weight: 500;
+            font-size: 0.9rem;
+        }
+        body.login-page .form-label i {
+            color: var(--honey-400);
+        }
+
+        /* Form inputs */
+        body.login-page .form-control {
+            background: var(--lp-surface) !important;
+            border: 1px solid rgba(241,196,15,0.12) !important;
+            border-radius: 14px !important;
+            color: var(--lp-text-primary) !important;
+            padding: 12px 16px !important;
+            font-family: 'Tajawal', sans-serif !important;
+            font-size: 0.95rem !important;
+            transition: all 0.3s ease !important;
+        }
+        body.login-page .form-control::placeholder {
+            color: var(--lp-text-muted) !important;
+        }
+        body.login-page .form-control:focus {
+            border-color: rgba(241,196,15,0.35) !important;
+            box-shadow: 0 0 0 3px rgba(241,196,15,0.08), 0 0 20px rgba(241,196,15,0.05) !important;
+            background: var(--lp-surface-elevated) !important;
+        }
+
+        /* Input group (password toggle) */
+        body.login-page .input-group .btn-outline-secondary {
+            background: var(--lp-surface) !important;
+            border: 1px solid rgba(241,196,15,0.12) !important;
+            border-right: none !important;
+            border-radius: 14px 0 0 14px !important;
+            color: var(--lp-text-muted) !important;
+            transition: all 0.3s ease !important;
+        }
+        body.login-page .input-group .btn-outline-secondary:hover {
+            color: var(--honey-400) !important;
+            background: var(--lp-surface-elevated) !important;
+        }
+        body.login-page .input-group .form-control {
+            border-left: none !important;
+            border-radius: 0 14px 14px 0 !important;
+        }
+
+        /* Checkbox */
+        body.login-page .form-check-input {
+            background-color: var(--lp-surface) !important;
+            border-color: rgba(241,196,15,0.2) !important;
+            border-radius: 6px !important;
+        }
+        body.login-page .form-check-input:checked {
+            background-color: var(--honey-400) !important;
+            border-color: var(--honey-400) !important;
+        }
+        body.login-page .form-check-input:focus {
+            box-shadow: 0 0 0 3px rgba(241,196,15,0.1) !important;
+        }
+        body.login-page .form-check-label {
+            color: var(--lp-text-secondary) !important;
+            font-size: 0.85rem;
+        }
+        body.login-page .form-check-label i {
+            color: var(--honey-500);
+        }
+
+        /* Primary button (login) */
+        body.login-page .btn-primary {
+            background: linear-gradient(135deg, var(--honey-400), var(--honey-500)) !important;
+            border: none !important;
+            border-radius: 16px !important;
+            color: var(--honey-900) !important;
+            font-family: 'Tajawal', sans-serif !important;
+            font-weight: 700 !important;
+            font-size: 1.05rem !important;
+            padding: 14px 24px !important;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
+            box-shadow:
+                0 4px 20px rgba(241,196,15,0.3),
+                0 0 60px rgba(241,196,15,0.1),
+                inset 0 1px 0 rgba(255,255,255,0.2) !important;
+        }
+        body.login-page .btn-primary::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, transparent 30%, rgba(255,255,255,0.2) 50%, transparent 70%);
+            transform: translateX(-100%);
+            transition: transform 0.6s ease;
+        }
+        body.login-page .btn-primary:hover::before {
+            transform: translateX(100%);
+        }
+        body.login-page .btn-primary:hover {
+            transform: translateY(-2px) !important;
+            box-shadow:
+                0 8px 32px rgba(241,196,15,0.4),
+                0 0 80px rgba(241,196,15,0.15),
+                inset 0 1px 0 rgba(255,255,255,0.3) !important;
+        }
+        body.login-page .btn-primary:active {
+            transform: translateY(0) scale(0.98) !important;
+        }
+        body.login-page .btn-primary:disabled {
+            opacity: 0.6 !important;
+            transform: none !important;
+        }
+        body.login-page .btn-primary .spinner-border {
+            color: var(--honey-900) !important;
+        }
+
+        /* WebAuthn / fingerprint button */
+        body.login-page .btn-outline-primary {
+            background: transparent !important;
+            border: 1px solid rgba(241,196,15,0.2) !important;
+            border-radius: 14px !important;
+            color: var(--honey-300) !important;
+            font-family: 'Tajawal', sans-serif !important;
+            font-weight: 600 !important;
+            padding: 12px 20px !important;
+            transition: all 0.3s ease !important;
+        }
+        body.login-page .btn-outline-primary:hover {
+            background: rgba(241,196,15,0.06) !important;
+            border-color: rgba(241,196,15,0.35) !important;
+            color: var(--honey-400) !important;
+            transform: translateY(-1px);
+        }
+
+        /* Divider / separator */
+        body.login-page hr {
+            border-color: rgba(241,196,15,0.08) !important;
+        }
+        body.login-page .text-center .text-muted.small {
+            color: var(--lp-text-muted) !important;
+        }
+
+        /* Alerts */
+        body.login-page .alert-warning {
+            background: rgba(241,196,15,0.08) !important;
+            border: 1px solid rgba(241,196,15,0.15) !important;
+            border-radius: 14px !important;
+            color: var(--honey-300) !important;
+        }
+        body.login-page .alert-warning .btn-close {
+            filter: invert(0.7) sepia(1) saturate(5) hue-rotate(10deg);
+        }
+        body.login-page .alert-success {
+            background: rgba(46,204,113,0.08) !important;
+            border: 1px solid rgba(46,204,113,0.15) !important;
+            border-radius: 14px !important;
+            color: #6ddb9e !important;
+        }
+        body.login-page .alert-success .btn-close {
+            filter: invert(0.7) sepia(1) saturate(3) hue-rotate(90deg);
+        }
+        body.login-page .alert-danger {
+            background: rgba(231,76,60,0.08) !important;
+            border: 1px solid rgba(231,76,60,0.15) !important;
+            border-radius: 14px !important;
+            color: #f1948a !important;
+        }
+        body.login-page .alert-danger .btn-close {
+            filter: invert(0.7) sepia(1) saturate(5) hue-rotate(-30deg);
+        }
+        body.login-page .alert-info {
+            background: rgba(52,152,219,0.08) !important;
+            border: 1px solid rgba(52,152,219,0.15) !important;
+            border-radius: 14px !important;
+            color: #85c1e9 !important;
+        }
+        body.login-page .alert-info .spinner-border {
+            color: var(--honey-400) !important;
+        }
+
+        /* Footer */
+        body.login-page .login-footer {
+            color: var(--lp-text-muted) !important;
+        }
+
+        /* Install link */
+        body.login-page .install-pwa-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--honey-500);
+            text-decoration: none;
+            font-size: 0.8rem;
+            font-weight: 500;
+            transition: color 0.3s ease;
+            margin-top: 8px;
+        }
+        body.login-page .install-pwa-link:hover {
+            color: var(--honey-400);
+        }
+
+        /* ===== MODAL OVERRIDES ===== */
+        body.login-page .modal-content {
+            background: var(--lp-surface-card) !important;
+            border: 1px solid rgba(241,196,15,0.1) !important;
+            border-radius: var(--lp-radius) !important;
+        }
+        body.login-page .modal-header {
+            background: linear-gradient(135deg, rgba(241,196,15,0.1), rgba(241,196,15,0.03)) !important;
+            border-bottom: 1px solid rgba(241,196,15,0.08) !important;
+        }
+        body.login-page .modal-header .modal-title {
+            color: var(--honey-300) !important;
+        }
+        body.login-page .modal-header .btn-close {
+            filter: invert(0.7) sepia(1) saturate(5) hue-rotate(10deg);
+        }
+        body.login-page .modal-footer {
+            background: var(--lp-surface-elevated) !important;
+            border-top: 1px solid rgba(241,196,15,0.06) !important;
+        }
+        body.login-page .modal-footer .btn-secondary {
+            background: var(--lp-surface-card) !important;
+            border: 1px solid rgba(241,196,15,0.15) !important;
+            color: var(--lp-text-secondary) !important;
+            border-radius: 12px !important;
+        }
+        body.login-page .modal-body {
+            color: var(--lp-text-primary) !important;
+        }
+
+        /* Modal account items */
+        body.login-page .fingerprint-account-item {
+            background: var(--lp-surface) !important;
+            border: 1px solid rgba(241,196,15,0.08) !important;
+            border-radius: 16px !important;
+            transition: all 0.3s ease !important;
+        }
+        body.login-page .fingerprint-account-item:hover {
+            border-color: rgba(241,196,15,0.25) !important;
+            background: var(--lp-surface-elevated) !important;
+            box-shadow: 0 4px 20px rgba(241,196,15,0.08) !important;
+        }
+        body.login-page .fingerprint-account-item .fw-semibold {
+            color: var(--lp-text-primary) !important;
+        }
+        body.login-page .fingerprint-account-item .text-muted {
+            color: var(--lp-text-muted) !important;
+        }
+        body.login-page .fingerprint-account-item .badge.bg-primary {
+            background: linear-gradient(135deg, var(--honey-400), var(--honey-500)) !important;
+            color: var(--honey-900) !important;
+        }
+
+        body.login-page .fingerprint-icon-wrapper {
+            background: linear-gradient(135deg, rgba(241,196,15,0.15), rgba(241,196,15,0.05)) !important;
+            box-shadow: 0 4px 12px rgba(241,196,15,0.08) !important;
+            color: var(--honey-400) !important;
+        }
+
+        body.login-page .bg-light {
+            background: var(--lp-surface-elevated) !important;
+        }
+
+        /* Modal passkey info box */
+        body.login-page .modal-body .bg-light {
+            background: var(--lp-surface) !important;
+            border-color: rgba(241,196,15,0.08) !important;
+        }
+        body.login-page .modal-body .btn-outline-primary {
+            border-color: rgba(241,196,15,0.2) !important;
+            color: var(--honey-300) !important;
+        }
+        body.login-page .modal-body .btn-outline-primary:hover {
+            background: rgba(241,196,15,0.08) !important;
+            color: var(--honey-400) !important;
+        }
+
+        /* Empty state in modal */
+        body.login-page .modal-body .text-primary {
+            color: var(--honey-400) !important;
+        }
+        body.login-page .modal-body h5 {
+            color: var(--lp-text-primary) !important;
+        }
+        body.login-page .modal-body .btn-primary {
+            background: linear-gradient(135deg, var(--honey-400), var(--honey-500)) !important;
+            color: var(--honey-900) !important;
+        }
+        body.login-page .modal-body .btn-outline-secondary {
+            background: transparent !important;
+            border-color: rgba(241,196,15,0.15) !important;
+            color: var(--lp-text-secondary) !important;
+            border-radius: 12px !important;
+        }
+
+        /* Modal backdrop */
+        body.login-page .modal-backdrop.show {
+            background: rgba(15,11,4,0.85) !important;
         }
     </style>
     
@@ -1097,7 +1512,9 @@ $lang = $translations;
                 <div class="card shadow-xxl border-0 login-card">
                     <div class="card-body p-4 p-md-5">
                         <div class="text-center mb-4">
-                            <i class="bi bi-shield-lock-fill text-primary" style="font-size: 3rem;"></i>
+                            <div class="login-app-icon">
+                                <img src="<?php echo ASSETS_URL; ?>icons/icon-192x192.png" alt="<?php echo APP_NAME; ?>">
+                            </div>
                             <h3 class="mt-3 mb-1"><?php echo $lang['login_title']; ?></h3>
                             <p class="text-muted"><?php echo $lang['login_subtitle']; ?></p>
                         </div>
@@ -1196,11 +1613,16 @@ $lang = $translations;
                             <?php endif; ?>
                         </form>
                         
-                        <div class="text-center mt-4">
+                        <div class="text-center mt-4 login-footer">
                             <small class="text-muted">
                                 <i class="bi bi-info-circle me-1"></i>
                                 شركة البركة © <?php echo date('Y'); ?>
                             </small>
+                            <br>
+                            <a href="install-guide.php" class="install-pwa-link">
+                                <i class="bi bi-download"></i>
+                                تثبيت التطبيق على جهازك
+                            </a>
                         </div>
                     </div>
                 </div>
