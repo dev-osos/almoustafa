@@ -1,0 +1,31 @@
+{
+    "data": {
+        "saveShipment": {
+            "id": 8048973,
+            "date": "2026-03-19 03:26:53",
+            "code": "TG7105223",
+            "recipientName": "01001092652",
+            "description": "عسل نحل",
+            "piecesCount": 1,
+            "recipientAddress": "الاسكندرية 36 شارع كفر عبده الدور التالت شقة 3",
+            "amount": -57,
+            "totalAmount": 0,
+            "allDueFees": 57,
+            "inWarehouse": false,
+            "recipientZone": {
+                "id": 1,
+                "name": "الاسكندرية"
+            },
+            "customer": {
+                "id": 832,
+                "name": "شركة البركة لتجارة المواد الغذائية",
+                "code": "833"
+            },
+            "recipientSubzone": {
+                "id": 34,
+                "name": "كفر عبده"
+            },
+            "shipmentProducts": []
+        }
+    }
+}

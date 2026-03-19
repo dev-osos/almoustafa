@@ -1154,10 +1154,103 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // يتم استدعاؤه بعد الالتزام لمنع أي مشاكل في المعاملة
                 enforceTasksRetentionLimit($db, $tasksRetentionLimit);
 
+                // ===== إرسال شحنة TelegraphEx تلقائياً عند إنشاء اوردر تليجراف =====
+                $tgShipmentMsg = '';
+                if ($taskType === 'telegraph') {
+                    try {
+                        $tgGovId  = isset($_POST['tg_gov_id']) ? (int)$_POST['tg_gov_id'] : 0;
+                        $tgCityId = isset($_POST['tg_city_id']) ? (int)$_POST['tg_city_id'] : 0;
+
+                        // حساب الإجمالي النهائي (مجموع line_total للمنتجات + شحن - خصم)
+                        $tgSubtotal = 0;
+                        if (!empty($products)) {
+                            foreach ($products as $p) {
+                                $tgSubtotal += (float)($p['line_total'] ?? 0);
+                            }
+                        }
+                        $tgFinalTotal = max(0, $tgSubtotal + $shippingFees - $discount);
+                        $tgWeightVal  = ($tgWeight !== '') ? (float)$tgWeight : 0;
+
+                        $tgPayload = json_encode([
+                            'operationName' => 'SaveShipment',
+                            'variables' => [
+                                'input' => [
+                                    'recipientName'      => $customerName ?: '',
+                                    'paymentTypeCode'    => 'COLC',
+                                    'priceTypeCode'      => 'INCLD',
+                                    'recipientZoneId'    => $tgGovId,
+                                    'recipientSubzoneId' => $tgCityId,
+                                    'recipientPhone'     => null,
+                                    'recipientMobile'    => $customerPhone ?: '',
+                                    'recipientAddress'   => $orderTitle ?: '',
+                                    'senderName'         => 'شركة البركة لتجارة المواد الغذائية',
+                                    'senderPhone'        => '01203630363',
+                                    'senderMobile'       => '01003533905',
+                                    'senderZoneId'       => 1,
+                                    'senderSubzoneId'    => 346,
+                                    'senderAddress'      => 'ش اسوان متفرع من شارع ريدمبكس العجمي ابو يوسف',
+                                    'description'        => $tgParcelDesc ?: '',
+                                    'notes'              => $details ?: '',
+                                    'refNumber'          => (string)$taskId,
+                                    'typeCode'           => 'FDP',
+                                    'openableCode'       => 'Y',
+                                    'serviceId'          => 1,
+                                    'weight'             => $tgWeightVal,
+                                    'piecesCount'        => 1,
+                                    'price'              => $tgFinalTotal,
+                                    'size'               => ['length' => 0, 'height' => 0, 'width' => 0],
+                                ],
+                            ],
+                            'query' => 'mutation SaveShipment($input: ShipmentInput!) { saveShipment(input: $input) { id date code recipientName description piecesCount recipientAddress amount totalAmount allDueFees inWarehouse recipientZone { id name } customer { id name code } recipientSubzone { id name } shipmentProducts { id price quantity type product { id name weight } } } }',
+                        ], JSON_UNESCAPED_UNICODE);
+
+                        $ch = curl_init('https://system.telegraphex.com:8443/graphql');
+                        curl_setopt_array($ch, [
+                            CURLOPT_POST           => true,
+                            CURLOPT_POSTFIELDS     => $tgPayload,
+                            CURLOPT_RETURNTRANSFER => true,
+                            CURLOPT_TIMEOUT        => 15,
+                            CURLOPT_HTTPHEADER     => [
+                                'Content-Type: application/json',
+                                'Authorization: Bearer 245467|m90rxf6dkwYyeku570WIGKSuyhkZr1Kt2ehSUQVLf862e568',
+                                'Accept: */*',
+                                'x-app-version: 5.2.2',
+                                'x-client-name: Mac OS-Safari',
+                                'x-client-type: WEB',
+                            ],
+                        ]);
+
+                        $tgResult   = curl_exec($ch);
+                        $tgHttpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                        $tgCurlErr  = curl_error($ch);
+                        curl_close($ch);
+
+                        if ($tgCurlErr) {
+                            error_log('TelegraphEx shipment cURL error: ' . $tgCurlErr);
+                            $tgShipmentMsg = ' ⚠ فشل الاتصال بـ TelegraphEx: ' . $tgCurlErr;
+                        } else {
+                            $tgResponse = json_decode($tgResult, true);
+                            if (isset($tgResponse['data']['saveShipment']['code'])) {
+                                $tgCode = $tgResponse['data']['saveShipment']['code'];
+                                $tgShipmentMsg = ' ✅ تم تسجيل الشحنة في TelegraphEx برقم: ' . $tgCode;
+                            } else {
+                                $tgErrors = $tgResponse['errors'] ?? [];
+                                $tgErrMsg = !empty($tgErrors) ? ($tgErrors[0]['message'] ?? 'خطأ غير معروف') : 'استجابة غير متوقعة';
+                                error_log('TelegraphEx shipment error: ' . $tgResult);
+                                $tgShipmentMsg = ' ⚠ فشل تسجيل الشحنة في TelegraphEx: ' . $tgErrMsg;
+                            }
+                        }
+                    } catch (Throwable $tgEx) {
+                        error_log('TelegraphEx shipment exception: ' . $tgEx->getMessage());
+                        $tgShipmentMsg = ' ⚠ خطأ أثناء تسجيل الشحنة في TelegraphEx';
+                    }
+                }
+
                 // التوجيه إلى صفحة طباعة إيصال الأوردر مع فتح نافذة الطباعة تلقائياً (معاينة المتصفح)
                 $successMessage = count($assignees) > 0
                     ? 'تم إرسال المهمة بنجاح إلى ' . count($assignees) . ' من عمال الإنتاج.'
                     : 'تم إرسال المهمة بنجاح.';
+                $successMessage .= $tgShipmentMsg;
                 $userRole = ($currentUser['role'] ?? '') === 'accountant' ? 'accountant' : 'manager';
                 $printReceiptUrl = getRelativeUrl('print_task_receipt.php?id=' . (int) $taskId . '&print=1');
                 preventDuplicateSubmission($successMessage, [], $printReceiptUrl, $userRole);
@@ -2764,6 +2857,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             <div class="gov-autocomplete-wrap position-relative">
                                 <input type="text" class="form-control gov-search-input" id="createGovSearch" placeholder="ابحث عن محافظة..." autocomplete="off">
                                 <input type="hidden" name="tg_governorate" id="createGov">
+                                <input type="hidden" name="tg_gov_id" id="createGovId">
                                 <div class="gov-dropdown d-none"></div>
                             </div>
                         </div>
@@ -2772,6 +2866,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             <div class="city-autocomplete-wrap position-relative">
                                 <input type="text" class="form-control city-search-input" id="createCitySearch" placeholder="ابحث عن مدينة..." autocomplete="off">
                                 <input type="hidden" name="tg_city" id="createCity">
+                                <input type="hidden" name="tg_city_id" id="createCityId">
                                 <div class="city-dropdown d-none"></div>
                             </div>
                         </div>
@@ -2996,6 +3091,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             <div class="gov-autocomplete-wrap position-relative">
                                 <input type="text" class="form-control gov-search-input" id="editGovSearch" placeholder="ابحث عن محافظة..." autocomplete="off">
                                 <input type="hidden" name="tg_governorate" id="editGov">
+                                <input type="hidden" name="tg_gov_id" id="editGovId">
                                 <div class="gov-dropdown d-none"></div>
                             </div>
                         </div>
@@ -3004,6 +3100,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             <div class="city-autocomplete-wrap position-relative">
                                 <input type="text" class="form-control city-search-input" id="editCitySearch" placeholder="ابحث عن مدينة..." autocomplete="off">
                                 <input type="hidden" name="tg_city" id="editCity">
+                                <input type="hidden" name="tg_city_id" id="editCityId">
                                 <div class="city-dropdown d-none"></div>
                             </div>
                         </div>
@@ -4543,7 +4640,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         // تهيئة autocomplete المحافظات
-        function initGovAutocomplete(searchInputId, hiddenInputId, cityInstance) {
+        function initGovAutocomplete(searchInputId, hiddenInputId, cityInstance, govIdInputId) {
             return initAutocomplete({
                 searchId: searchInputId,
                 hiddenId: hiddenInputId,
@@ -4553,16 +4650,23 @@ document.addEventListener('DOMContentLoaded', function () {
                 noResultClass: 'gov-no-result',
                 getList: function() { return GOV_LIST; },
                 onSelect: function(name, code) {
+                    var govIdEl = govIdInputId ? document.getElementById(govIdInputId) : null;
+                    if (govIdEl) {
+                        var gov = GOV_LIST.find(function(g) { return g.name === name; });
+                        govIdEl.value = gov ? gov.id : code;
+                    }
                     if (cityInstance && code) fetchCities(code, cityInstance);
                 },
                 onClear: function() {
+                    var govIdEl = govIdInputId ? document.getElementById(govIdInputId) : null;
+                    if (govIdEl) govIdEl.value = '';
                     if (cityInstance) cityInstance.reset();
                 }
             });
         }
 
         // تهيئة autocomplete المدن (القائمة تُحدَّث ديناميكياً)
-        function initCityAutocomplete(searchInputId, hiddenInputId) {
+        function initCityAutocomplete(searchInputId, hiddenInputId, cityIdInputId) {
             var cityList = [];
             var instance = initAutocomplete({
                 searchId: searchInputId,
@@ -4572,7 +4676,18 @@ document.addEventListener('DOMContentLoaded', function () {
                 itemClass: 'city-item',
                 noResultClass: 'city-no-result',
                 getList: function() { return cityList; },
-                _list: cityList
+                _list: cityList,
+                onSelect: function(name, code) {
+                    var cityIdEl = cityIdInputId ? document.getElementById(cityIdInputId) : null;
+                    if (cityIdEl) {
+                        var city = cityList.find(function(c) { return c.name === name; });
+                        cityIdEl.value = city ? city.id : code;
+                    }
+                },
+                onClear: function() {
+                    var cityIdEl = cityIdInputId ? document.getElementById(cityIdInputId) : null;
+                    if (cityIdEl) cityIdEl.value = '';
+                }
             });
             if (instance) {
                 instance._searchId = searchInputId;
@@ -4607,13 +4722,13 @@ document.addEventListener('DOMContentLoaded', function () {
 
         // تهيئة autocomplete المدن
         var cityInstances = {
-            createCitySearch: initCityAutocomplete('createCitySearch', 'createCity'),
-            editCitySearch:   initCityAutocomplete('editCitySearch',   'editCity')
+            createCitySearch: initCityAutocomplete('createCitySearch', 'createCity', 'createCityId'),
+            editCitySearch:   initCityAutocomplete('editCitySearch',   'editCity',   'editCityId')
         };
 
         // تهيئة autocomplete المحافظات مع ربط المدن
-        initGovAutocomplete('createGovSearch', 'createGov', cityInstances.createCitySearch);
-        initGovAutocomplete('editGovSearch',   'editGov',   cityInstances.editCitySearch);
+        initGovAutocomplete('createGovSearch', 'createGov', cityInstances.createCitySearch, 'createGovId');
+        initGovAutocomplete('editGovSearch',   'editGov',   cityInstances.editCitySearch,   'editGovId');
 
         // التحقق عند الإرسال - نموذج الإنشاء
         var createForm = document.querySelector('#createTaskFormCollapse form');
