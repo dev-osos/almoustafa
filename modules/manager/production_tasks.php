@@ -5192,8 +5192,8 @@ document.addEventListener('DOMContentLoaded', function () {
                     if (spinner) spinner.classList.add('d-none');
                     var fees = data && data.data && data.data.calculateShipmentFees;
                     if (fees) {
-                        var delivery = parseFloat(fees.delivery) || 0;
-                        if (valueEl) valueEl.textContent = delivery.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+                        var deliveryCost = (parseFloat(fees.delivery) || 0) + (parseFloat(fees.weight) || 0) + (parseFloat(fees.collection) || 0);
+                        if (valueEl) valueEl.textContent = deliveryCost.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
                     } else {
                         if (valueEl) valueEl.textContent = 'غير متاح';
                     }
