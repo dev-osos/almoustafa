@@ -600,6 +600,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $orderTitle    = trim($_POST['order_title'] ?? '');
         $tgGovernorate = trim($_POST['tg_governorate'] ?? '');
         $tgCity        = trim($_POST['tg_city'] ?? '');
+        $tgWeight      = trim($_POST['tg_weight'] ?? '');
+        $tgParcelDesc  = trim($_POST['tg_parcel_desc'] ?? '');
         $priority = $_POST['priority'] ?? 'normal';
         $priority = in_array($priority, $allowedPriorities, true) ? $priority : 'normal';
         $dueDate = $_POST['due_date'] ?? '';
@@ -852,6 +854,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 if ($tgCity !== '') {
                     $notesParts[] = '[TG_CITY]:' . $tgCity;
+                }
+                if ($tgWeight !== '') {
+                    $notesParts[] = '[TG_WEIGHT]:' . $tgWeight;
+                }
+                if ($tgParcelDesc !== '') {
+                    $notesParts[] = '[TG_PARCEL_DESC]:' . $tgParcelDesc;
                 }
                 if ($details) {
                     $notesParts[] = $details;
@@ -1555,6 +1563,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $orderTitle    = trim($_POST['order_title'] ?? '');
                     $tgGovernorate = trim($_POST['tg_governorate'] ?? '');
                     $tgCity        = trim($_POST['tg_city'] ?? '');
+                    $tgWeight      = trim($_POST['tg_weight'] ?? '');
+                    $tgParcelDesc  = trim($_POST['tg_parcel_desc'] ?? '');
                     $assignees = isset($_POST['assigned_to']) && is_array($_POST['assigned_to'])
                         ? array_filter(array_map('intval', $_POST['assigned_to']))
                         : [];
@@ -1589,6 +1599,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                     if ($tgCity !== '') {
                         $notesParts[] = '[TG_CITY]:' . $tgCity;
+                    }
+                    if ($tgWeight !== '') {
+                        $notesParts[] = '[TG_WEIGHT]:' . $tgWeight;
+                    }
+                    if ($tgParcelDesc !== '') {
+                        $notesParts[] = '[TG_PARCEL_DESC]:' . $tgParcelDesc;
                     }
                     if ($details) $notesParts[] = $details;
                     if (!empty($products)) {
@@ -1746,6 +1762,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
             if (preg_match('/\[TG_CITY\]\s*:\s*([^\n]+)/', $notes, $m)) {
                 $tgCity = trim($m[1]);
             }
+            $tgWeight = '';
+            if (preg_match('/\[TG_WEIGHT\]\s*:\s*([^\n]+)/', $notes, $m)) {
+                $tgWeight = trim($m[1]);
+            }
+            $tgParcelDesc = '';
+            if (preg_match('/\[TG_PARCEL_DESC\]\s*:\s*([^\n]+)/', $notes, $m)) {
+                $tgParcelDesc = trim($m[1]);
+            }
             // استخراج العمال المخصصين
             if (preg_match('/\[ASSIGNED_WORKERS_IDS\]\s*:\s*([0-9,\s]+)/', $notes, $m)) {
                 $assignees = array_filter(array_map('intval', preg_split('/[\s,]+/', trim($m[1]), -1, PREG_SPLIT_NO_EMPTY)));
@@ -1764,6 +1788,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
                 $details = preg_replace('/\[ORDER_TITLE\]\s*:\s*[^\n]+/', '', $details);
                 $details = preg_replace('/\[TG_GOV\]\s*:\s*[^\n]+/', '', $details);
                 $details = preg_replace('/\[TG_CITY\]\s*:\s*[^\n]+/', '', $details);
+                $details = preg_replace('/\[TG_WEIGHT\]\s*:\s*[^\n]+/', '', $details);
+                $details = preg_replace('/\[TG_PARCEL_DESC\]\s*:\s*[^\n]+/', '', $details);
                 $details = preg_replace('/\n\s*\n\s*\n+/', "\n\n", trim($details));
             }
             // تنسيق تاريخ الاستحقاق لـ input type="date" (YYYY-MM-DD)
@@ -1793,7 +1819,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
                     'discount' => $discount,
                     'order_title' => $orderTitle,
                     'tg_governorate' => $tgGovernorate,
-                    'tg_city' => $tgCity
+                    'tg_city' => $tgCity,
+                    'tg_weight' => $tgWeight,
+                    'tg_parcel_desc' => $tgParcelDesc
                 ]
             ], JSON_UNESCAPED_UNICODE);
             exit;
@@ -2834,7 +2862,17 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             <button type="button" class="btn btn-outline-primary btn-sm mt-2" id="addProductBtn">
                                 <i class="bi bi-plus-circle me-1"></i>إضافة منتج آخر
                             </button>
-                         
+                            <div class="row g-2 mt-2 d-none" id="createTgParcelWrap">
+                                <div class="col-md-4">
+                                    <label class="form-label">الوزن (كجم)</label>
+                                    <input type="number" class="form-control" name="tg_weight" id="createTgWeight" step="0.01" min="0" placeholder="0.00">
+                                </div>
+                                <div class="col-md-8">
+                                    <label class="form-label">وصف الطرد</label>
+                                    <input type="text" class="form-control" name="tg_parcel_desc" id="createTgParcelDesc" placeholder="مثال: 3 كراتين عسل نحل...">
+                                </div>
+                            </div>
+
                         </div>
                         <div class="col-12 mt-2">
                             <label class="form-label"> ملاحظات </label>
@@ -3001,6 +3039,16 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             <button type="button" class="btn btn-outline-primary btn-sm mt-2" id="editAddProductBtn">
                                 <i class="bi bi-plus-circle me-1"></i>إضافة منتج آخر
                             </button>
+                            <div class="row g-2 mt-2 d-none" id="editTgParcelWrap">
+                                <div class="col-md-4">
+                                    <label class="form-label">الوزن (كجم)</label>
+                                    <input type="number" class="form-control" name="tg_weight" id="editTgWeight" step="0.01" min="0" placeholder="0.00">
+                                </div>
+                                <div class="col-md-8">
+                                    <label class="form-label">وصف الطرد</label>
+                                    <input type="text" class="form-control" name="tg_parcel_desc" id="editTgParcelDesc" placeholder="مثال: 3 كراتين عسل نحل...">
+                                </div>
+                            </div>
                         </div>
                         <div class="col-12 mt-2">
                             <label class="form-label"> ملاحظات </label>
@@ -3878,6 +3926,10 @@ window.openEditTaskModal = function(taskId) {
                     if (editCityHidden) editCityHidden.value = t.tg_city || '';
                     if (editCitySearch) editCitySearch.value = t.tg_city || '';
                 }
+                var editTgWeightEl = document.getElementById('editTgWeight');
+                if (editTgWeightEl) editTgWeightEl.value = t.tg_weight || '';
+                var editTgParcelDescEl = document.getElementById('editTgParcelDesc');
+                if (editTgParcelDescEl) editTgParcelDescEl.value = t.tg_parcel_desc || '';
                 if (typeof toggleEditTgFields === 'function') toggleEditTgFields();
                 var shippingEl = document.getElementById('editTaskShippingFees');
                 if (shippingEl && typeof t.shipping_fees === 'number') shippingEl.value = t.shipping_fees;
@@ -4299,7 +4351,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // إظهار/إخفاء حقلي المحافظة والمدينة عند اختيار تليجراف (نموذج الإنشاء)
     function toggleCreateTgFields() {
         var isTg = taskTypeSelect && taskTypeSelect.value === 'telegraph';
-        ['createGovWrap', 'createCityWrap'].forEach(function (id) {
+        ['createGovWrap', 'createCityWrap', 'createTgParcelWrap'].forEach(function (id) {
             var el = document.getElementById(id);
             if (el) { el.classList.toggle('d-none', !isTg); }
         });
@@ -4313,7 +4365,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var editTaskTypeEl = document.getElementById('editTaskType');
     function toggleEditTgFields() {
         var isTg = editTaskTypeEl && editTaskTypeEl.value === 'telegraph';
-        ['editGovWrap', 'editCityWrap'].forEach(function (id) {
+        ['editGovWrap', 'editCityWrap', 'editTgParcelWrap'].forEach(function (id) {
             var el = document.getElementById(id);
             if (el) { el.classList.toggle('d-none', !isTg); }
         });
