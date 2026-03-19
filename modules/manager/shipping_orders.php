@@ -4548,7 +4548,12 @@ function copyShippingCollectionResult(btn) {
 <!-- ===== جدول شحنات TelegraphEx ===== -->
 <div class="card shadow-sm mb-4" id="tgShipmentsCard">
     <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
-        <h5 class="mb-0"><i class="bi bi-truck me-2 text-primary"></i>شحنات TelegraphEx</h5>
+        <div class="d-flex align-items-center gap-2">
+            <h5 class="mb-0"><i class="bi bi-truck me-2 text-primary"></i>شحنات TelegraphEx</h5>
+            <button type="button" class="btn btn-sm btn-outline-primary" id="tgRefreshBtn" title="تحديث الشحنات">
+                <i class="bi bi-arrow-clockwise"></i>
+            </button>
+        </div>
         <span class="badge bg-secondary" id="tgPaginationBadge">
             <?php if (!empty($tgPagination)): ?>
                 <?php echo (int)($tgPagination['total'] ?? 0); ?> شحنة — صفحة
@@ -4709,6 +4714,10 @@ function copyShippingCollectionResult(btn) {
     </div>
 </div>
 
+<style>
+@keyframes tgSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.spin-animation { animation: tgSpin 0.8s linear infinite; }
+</style>
 <script>
 (function () {
     var tgCurrentPage = <?php echo (int)($tgPagination['currentPage'] ?? 1); ?>;
@@ -4978,6 +4987,29 @@ function copyShippingCollectionResult(btn) {
     }
 
     attachTgPageLinks();
+
+    // ===== زر التحديث =====
+    var tgRefreshBtn = document.getElementById('tgRefreshBtn');
+    if (tgRefreshBtn) {
+        tgRefreshBtn.addEventListener('click', function () {
+            var icon = this.querySelector('i');
+            if (icon) icon.classList.add('spin-animation');
+            this.disabled = true;
+            var self = this;
+            if (tgSearchMode) {
+                var inp = document.getElementById('tgSearchInput');
+                var term = inp ? inp.value.trim() : '';
+                if (term) { tgRunSearch(term); }
+                else { tgClearSearch(); }
+            } else {
+                tgLoadPage(tgCurrentPage);
+            }
+            setTimeout(function () {
+                if (icon) icon.classList.remove('spin-animation');
+                self.disabled = false;
+            }, 1500);
+        });
+    }
 
     // نسخ رقم الشحنة عند الضغط
     document.addEventListener('click', function (e) {
