@@ -6539,6 +6539,10 @@ function openFinancialNotesModal(userId, employeeName, month, year) {
     }
 }
 
+var _fnIsManager = <?php echo in_array($currentUser['role'] ?? '', ['manager', 'developer'], true) ? 'true' : 'false'; ?>;
+var _fnColSpan = _fnIsManager ? 5 : 4;
+var _fnColSpanCard = _fnIsManager ? 4 : 3;
+
 function financialNotesReload() {
     const userId = document.getElementById('financialNotesUserId')?.value;
     const month = document.getElementById('financialNotesMonth')?.value;
@@ -6547,10 +6551,10 @@ function financialNotesReload() {
     const apiUrl = '<?php echo getBasePath(); ?>/api/employee_financial_notes.php?user_id=' + encodeURIComponent(userId) + '&month=' + encodeURIComponent(month) + '&year=' + encodeURIComponent(year);
     const tbody = document.getElementById('financialNotesTableBody');
     const totalEl = document.getElementById('financialNotesTotal');
-    if (tbody) tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">جاري التحميل...</td></tr>';
+    if (tbody) tbody.innerHTML = '<tr><td colspan="' + _fnColSpan + '" class="text-center text-muted">جاري التحميل...</td></tr>';
     fetch(apiUrl).then(function(r) { return r.json(); }).then(function(data) {
         if (!data.success || !Array.isArray(data.items)) {
-            if (tbody) tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">لا توجد سجلات</td></tr>';
+            if (tbody) tbody.innerHTML = '<tr><td colspan="' + _fnColSpan + '" class="text-center text-muted">لا توجد سجلات</td></tr>';
             if (totalEl) totalEl.textContent = '0.00';
             return;
         }
@@ -6558,12 +6562,19 @@ function financialNotesReload() {
         data.items.forEach(function(item) {
             var dateStr = item.created_at ? item.created_at.replace(/^(\d{4})-(\d{2})-(\d{2}).*/, '$3/$2/$1') : '-';
             var amt = parseFloat(item.amount) || 0;
-            rows += '<tr><td>' + dateStr + '</td><td>' + amt.toFixed(2) + '</td><td>' + (item.notes ? escapeHtml(item.notes) : '-') + '</td><td>' + (item.created_by_name ? escapeHtml(item.created_by_name) : '-') + '</td></tr>';
+            rows += '<tr><td>' + dateStr + '</td><td>' + amt.toFixed(2) + '</td><td>' + (item.notes ? escapeHtml(item.notes) : '-') + '</td><td>' + (item.created_by_name ? escapeHtml(item.created_by_name) : '-') + '</td>';
+            if (_fnIsManager) {
+                rows += '<td class="text-nowrap">'
+                    + '<button class="btn btn-sm btn-outline-warning me-1" onclick="editFinancialNote(' + item.id + ', ' + amt + ', \'' + escapeHtml(item.notes || '').replace(/'/g, "\\'") + '\')" title="تعديل"><i class="bi bi-pencil"></i></button>'
+                    + '<button class="btn btn-sm btn-outline-danger" onclick="deleteFinancialNote(' + item.id + ')" title="حذف"><i class="bi bi-trash"></i></button>'
+                    + '</td>';
+            }
+            rows += '</tr>';
         });
-        if (tbody) tbody.innerHTML = rows || '<tr><td colspan="4" class="text-center text-muted">لا توجد سجلات</td></tr>';
+        if (tbody) tbody.innerHTML = rows || '<tr><td colspan="' + _fnColSpan + '" class="text-center text-muted">لا توجد سجلات</td></tr>';
         if (totalEl) totalEl.textContent = (data.total != null ? parseFloat(data.total).toFixed(2) : '0.00');
     }).catch(function() {
-        if (tbody) tbody.innerHTML = '<tr><td colspan="4" class="text-center text-danger">خطأ في التحميل</td></tr>';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="' + _fnColSpan + '" class="text-center text-danger">خطأ في التحميل</td></tr>';
         if (totalEl) totalEl.textContent = '0.00';
     });
 }
@@ -6576,10 +6587,10 @@ function financialNotesReloadCard() {
     const apiUrl = '<?php echo getBasePath(); ?>/api/employee_financial_notes.php?user_id=' + encodeURIComponent(userId) + '&month=' + encodeURIComponent(month) + '&year=' + encodeURIComponent(year);
     const tbody = document.getElementById('financialNotesTableBodyCard');
     const totalEl = document.getElementById('financialNotesTotalCard');
-    if (tbody) tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">جاري التحميل...</td></tr>';
+    if (tbody) tbody.innerHTML = '<tr><td colspan="' + _fnColSpanCard + '" class="text-center text-muted">جاري التحميل...</td></tr>';
     fetch(apiUrl).then(function(r) { return r.json(); }).then(function(data) {
         if (!data.success || !Array.isArray(data.items)) {
-            if (tbody) tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">لا توجد سجلات</td></tr>';
+            if (tbody) tbody.innerHTML = '<tr><td colspan="' + _fnColSpanCard + '" class="text-center text-muted">لا توجد سجلات</td></tr>';
             if (totalEl) totalEl.textContent = '0.00';
             return;
         }
@@ -6587,12 +6598,19 @@ function financialNotesReloadCard() {
         data.items.forEach(function(item) {
             var dateStr = item.created_at ? item.created_at.replace(/^(\d{4})-(\d{2})-(\d{2}).*/, '$3/$2/$1') : '-';
             var amt = parseFloat(item.amount) || 0;
-            rows += '<tr><td>' + dateStr + '</td><td>' + amt.toFixed(2) + '</td><td>' + (item.notes ? escapeHtml(item.notes) : '-') + '</td></tr>';
+            rows += '<tr><td>' + dateStr + '</td><td>' + amt.toFixed(2) + '</td><td>' + (item.notes ? escapeHtml(item.notes) : '-') + '</td>';
+            if (_fnIsManager) {
+                rows += '<td class="text-nowrap">'
+                    + '<button class="btn btn-sm btn-outline-warning me-1" onclick="editFinancialNote(' + item.id + ', ' + amt + ', \'' + escapeHtml(item.notes || '').replace(/'/g, "\\'") + '\')" title="تعديل"><i class="bi bi-pencil"></i></button>'
+                    + '<button class="btn btn-sm btn-outline-danger" onclick="deleteFinancialNote(' + item.id + ')" title="حذف"><i class="bi bi-trash"></i></button>'
+                    + '</td>';
+            }
+            rows += '</tr>';
         });
-        if (tbody) tbody.innerHTML = rows || '<tr><td colspan="3" class="text-center text-muted">لا توجد سجلات</td></tr>';
+        if (tbody) tbody.innerHTML = rows || '<tr><td colspan="' + _fnColSpanCard + '" class="text-center text-muted">لا توجد سجلات</td></tr>';
         if (totalEl) totalEl.textContent = (data.total != null ? parseFloat(data.total).toFixed(2) : '0.00');
     }).catch(function() {
-        if (tbody) tbody.innerHTML = '<tr><td colspan="3" class="text-center text-danger">خطأ في التحميل</td></tr>';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="' + _fnColSpanCard + '" class="text-center text-danger">خطأ في التحميل</td></tr>';
         if (totalEl) totalEl.textContent = '0.00';
     });
 }
@@ -6600,6 +6618,51 @@ function financialNotesReloadCard() {
 function closeFinancialNotesCard() {
     const card = document.getElementById('financialNotesCard');
     if (card) card.style.display = 'none';
+}
+
+function editFinancialNote(noteId, currentAmount, currentNotes) {
+    var newAmount = prompt('المبلغ:', currentAmount);
+    if (newAmount === null) return;
+    newAmount = parseFloat(newAmount);
+    if (isNaN(newAmount)) { alert('مبلغ غير صحيح'); return; }
+    var newNotes = prompt('ملاحظات:', currentNotes || '');
+    if (newNotes === null) return;
+    var basePath = '<?php echo getBasePath(); ?>';
+    var fd = new FormData();
+    fd.append('action', 'update');
+    fd.append('id', noteId);
+    fd.append('amount', newAmount);
+    fd.append('notes', newNotes);
+    fetch(basePath + '/api/employee_financial_notes.php', { method: 'POST', body: fd })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                financialNotesReload();
+                financialNotesReloadCard();
+            } else {
+                alert(data.message || 'فشل التعديل');
+            }
+        })
+        .catch(function() { alert('خطأ في الاتصال'); });
+}
+
+function deleteFinancialNote(noteId) {
+    if (!confirm('هل أنت متأكد من حذف هذا السجل؟')) return;
+    var basePath = '<?php echo getBasePath(); ?>';
+    var fd = new FormData();
+    fd.append('action', 'delete');
+    fd.append('id', noteId);
+    fetch(basePath + '/api/employee_financial_notes.php', { method: 'POST', body: fd })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                financialNotesReload();
+                financialNotesReloadCard();
+            } else {
+                alert(data.message || 'فشل الحذف');
+            }
+        })
+        .catch(function() { alert('خطأ في الاتصال'); });
 }
 
 function escapeHtml(text) {
@@ -7103,16 +7166,19 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <th>المبلغ</th>
                                 <th>ملاحظات</th>
                                 <th>المسجّل</th>
+                                <?php if (in_array($currentUser['role'] ?? '', ['manager', 'developer'], true)): ?>
+                                <th>إجراءات</th>
+                                <?php endif; ?>
                             </tr>
                         </thead>
                         <tbody id="financialNotesTableBody">
-                            <tr><td colspan="4" class="text-center text-muted">جاري التحميل...</td></tr>
+                            <tr><td colspan="<?php echo in_array($currentUser['role'] ?? '', ['manager', 'developer'], true) ? '5' : '4'; ?>" class="text-center text-muted">جاري التحميل...</td></tr>
                         </tbody>
                         <tfoot class="table-light">
                             <tr>
                                 <th colspan="1">الإجمالي</th>
                                 <th id="financialNotesTotal">0.00</th>
-                                <th colspan="2"></th>
+                                <th colspan="<?php echo in_array($currentUser['role'] ?? '', ['manager', 'developer'], true) ? '3' : '2'; ?>"></th>
                             </tr>
                         </tfoot>
                     </table>
@@ -7475,9 +7541,9 @@ document.addEventListener('DOMContentLoaded', function() {
         </div>
         <div class="table-responsive mb-3">
             <table class="table table-sm table-bordered">
-                <thead class="table-light"><tr><th>التاريخ</th><th>المبلغ</th><th>ملاحظات</th></tr></thead>
+                <thead class="table-light"><tr><th>التاريخ</th><th>المبلغ</th><th>ملاحظات</th><?php if (in_array($currentUser['role'] ?? '', ['manager', 'developer'], true)): ?><th>إجراءات</th><?php endif; ?></tr></thead>
                 <tbody id="financialNotesTableBodyCard"></tbody>
-                <tfoot class="table-light"><tr><th>الإجمالي</th><th id="financialNotesTotalCard">0.00</th><th></th></tr></tfoot>
+                <tfoot class="table-light"><tr><th>الإجمالي</th><th id="financialNotesTotalCard">0.00</th><th colspan="<?php echo in_array($currentUser['role'] ?? '', ['manager', 'developer'], true) ? '2' : '1'; ?>"></th></tr></tfoot>
             </table>
         </div>
         <form id="financialNotesAddFormCard" data-no-loading>

@@ -83,6 +83,70 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = trim($_POST['action'] ?? 'add');
+
+    // تعديل سجل (للمدير فقط)
+    if ($action === 'update') {
+        if (!in_array($currentUser['role'] ?? '', ['manager', 'developer'], true)) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'message' => 'غير مصرح - التعديل متاح للمدير فقط'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $noteId = intval($_POST['id'] ?? 0);
+        $amount = isset($_POST['amount']) ? (float) str_replace(',', '.', $_POST['amount']) : null;
+        $notes = isset($_POST['notes']) ? trim((string) $_POST['notes']) : null;
+
+        if ($noteId <= 0) {
+            echo json_encode(['success' => false, 'message' => 'معرف السجل غير صحيح'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        if ($amount === null) {
+            echo json_encode(['success' => false, 'message' => 'المبلغ مطلوب'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        try {
+            $db->execute(
+                "UPDATE employee_financial_notes SET amount = ?, notes = ? WHERE id = ?",
+                [$amount, $notes ?: null, $noteId]
+            );
+        } catch (Exception $e) {
+            error_log("employee_financial_notes update: " . $e->getMessage());
+            echo json_encode(['success' => false, 'message' => 'فشل التعديل'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        echo json_encode(['success' => true, 'message' => 'تم تعديل السجل بنجاح'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // حذف سجل (للمدير فقط)
+    if ($action === 'delete') {
+        if (!in_array($currentUser['role'] ?? '', ['manager', 'developer'], true)) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'message' => 'غير مصرح - الحذف متاح للمدير فقط'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $noteId = intval($_POST['id'] ?? 0);
+
+        if ($noteId <= 0) {
+            echo json_encode(['success' => false, 'message' => 'معرف السجل غير صحيح'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        try {
+            $db->execute("DELETE FROM employee_financial_notes WHERE id = ?", [$noteId]);
+        } catch (Exception $e) {
+            error_log("employee_financial_notes delete: " . $e->getMessage());
+            echo json_encode(['success' => false, 'message' => 'فشل الحذف'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        echo json_encode(['success' => true, 'message' => 'تم حذف السجل بنجاح'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // إضافة سجل جديد (الإجراء الافتراضي)
     $userId = intval($_POST['user_id'] ?? $_GET['user_id'] ?? 0);
     $month = intval($_POST['month'] ?? $_GET['month'] ?? date('n'));
     $year = intval($_POST['year'] ?? $_GET['year'] ?? date('Y'));
