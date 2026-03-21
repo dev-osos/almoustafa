@@ -358,7 +358,7 @@ try {
             'batch_id' => (int)($product['batch_id'] ?? 0),
             'batch_number' => htmlspecialchars($batchNumber),
             'product_id' => (int)($product['product_id'] ?? 0),
-            'product_name' => htmlspecialchars($productName),
+            'product_name' => (int)$product['id'] . ' - ' . htmlspecialchars($productName),
             'product_category' => htmlspecialchars($category),
             'production_date' => $productionDate,
             'quantity_produced' => $quantityProduced,
@@ -380,7 +380,7 @@ try {
         
         $externalResults[] = [
             'id' => (int)$product['id'],
-            'name' => htmlspecialchars($productName),
+            'name' => (int)$product['id'] . ' - ' . htmlspecialchars($productName),
             'category' => htmlspecialchars($category),
             'quantity' => $quantity,
             'unit' => htmlspecialchars($unit),

@@ -188,7 +188,7 @@ try {
             $balance = isset($customer['balance']) ? (float)$customer['balance'] : 0.0;
             
             // بناء نص العرض للنتيجة
-            $displayText = htmlspecialchars($customer['name'] ?? '');
+            $displayText = (int)$customerId . ' - ' . htmlspecialchars($customer['name'] ?? '');
             $subText = [];
             
             if (!empty($phones)) {

@@ -3811,7 +3811,7 @@ try {
                                 <option value="">اختر العميل</option>
                                 <?php foreach ($activeCustomers as $customer): ?>
                                     <option value="<?php echo (int)$customer['id']; ?>">
-                                        <?php echo htmlspecialchars($customer['name']); ?>
+                                        <?php echo (int)$customer['id'] . ' - ' . htmlspecialchars($customer['name']); ?>
                                         <?php if (!empty($customer['phone'])): ?>
                                             - <?php echo htmlspecialchars($customer['phone']); ?>
                                         <?php endif; ?>
@@ -5960,7 +5960,7 @@ function closeAddLocalCustomerCard() {
                         data-unit="${unit}"
                         data-batch-id="${batchId}"
                         data-product-type="${productType}">
-                    ${name} (المتاح: ${available} ${unit})
+                    ${product.id} - ${name} (المتاح: ${available} ${unit})
                 </option>
             `;
         }).join('');

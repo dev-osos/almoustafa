@@ -2021,7 +2021,7 @@ var dashboardWrapper = null;
                             foreach ($regions as $region):
                             ?>
                                 <option value="<?php echo $region['id']; ?>" <?php echo $regionFilter === $region['id'] ? 'selected' : ''; ?>>
-                                    <?php echo htmlspecialchars($region['name']); ?>
+                                    <?php echo (int)$region['id'] . ' - ' . htmlspecialchars($region['name']); ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>
@@ -2588,7 +2588,7 @@ function loadLocalCustomers(page) {
                                     $regions = $db->query("SELECT id, name FROM regions ORDER BY name ASC");
                                     foreach ($regions as $region):
                                     ?>
-                                        <option value="<?php echo $region['id']; ?>"><?php echo htmlspecialchars($region['name']); ?></option>
+                                        <option value="<?php echo $region['id']; ?>"><?php echo (int)$region['id'] . ' - ' . htmlspecialchars($region['name']); ?></option>
                                     <?php endforeach; ?>
                                 </select>
                                 <?php if (in_array($currentRole, ['manager', 'developer'], true)): ?>
@@ -2673,7 +2673,7 @@ function loadLocalCustomers(page) {
                             $regions = $db->query("SELECT id, name FROM regions ORDER BY name ASC");
                             foreach ($regions as $region):
                             ?>
-                                <option value="<?php echo $region['id']; ?>"><?php echo htmlspecialchars($region['name']); ?></option>
+                                <option value="<?php echo $region['id']; ?>"><?php echo (int)$region['id'] . ' - ' . htmlspecialchars($region['name']); ?></option>
                             <?php endforeach; ?>
                         </select>
                         <?php if (in_array($currentRole, ['manager', 'developer'], true)): ?>
@@ -7604,7 +7604,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 $regions = $db->query("SELECT id, name FROM regions ORDER BY name ASC");
                                 foreach ($regions as $region):
                                 ?>
-                                    <option value="<?php echo $region['id']; ?>"><?php echo htmlspecialchars($region['name']); ?></option>
+                                    <option value="<?php echo $region['id']; ?>"><?php echo (int)$region['id'] . ' - ' . htmlspecialchars($region['name']); ?></option>
                                 <?php endforeach; ?>
                             </select>
                             <?php if (in_array($currentRole, ['manager', 'developer', 'accountant'], true)): ?>
@@ -7676,7 +7676,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         $regions = $db->query("SELECT id, name FROM regions ORDER BY name ASC");
                         foreach ($regions as $region):
                         ?>
-                            <option value="<?php echo $region['id']; ?>"><?php echo htmlspecialchars($region['name']); ?></option>
+                            <option value="<?php echo $region['id']; ?>"><?php echo (int)$region['id'] . ' - ' . htmlspecialchars($region['name']); ?></option>
                         <?php endforeach; ?>
                     </select>
                     <?php if (in_array($currentRole, ['manager', 'developer'], true)): ?>

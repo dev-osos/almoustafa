@@ -2048,7 +2048,7 @@ if (isset($_GET['id'])) {
                     foreach ($customers as $customer): ?>
                         <option value="<?php echo $customer['id']; ?>" 
                                 <?php echo $customerValid && $selectedCustomerId == $customer['id'] ? 'selected' : ''; ?>>
-                            <?php echo htmlspecialchars($customer['name']); ?>
+                            <?php echo (int)$customer['id'] . ' - ' . htmlspecialchars($customer['name']); ?>
                         </option>
                     <?php endforeach; ?>
                 </select>
@@ -2368,7 +2368,7 @@ if (isset($_GET['id'])) {
                                         <option value="">اختر قالب المنتج</option>
                                         <?php foreach ($productTemplatesForDropdown as $template): ?>
                                             <option value="<?php echo htmlspecialchars($template['product_name'] ?? ''); ?>">
-                                                <?php echo htmlspecialchars($template['product_name'] ?? 'قالب #' . $template['id']); ?>
+                                                <?php echo (int)$template['id'] . ' - ' . htmlspecialchars($template['product_name'] ?? 'قالب #' . $template['id']); ?>
                                             </option>
                                         <?php endforeach; ?>
                                     </select>
@@ -2420,7 +2420,7 @@ if (isset($_GET['id'])) {
                             <option value="">اختر العميل</option>
                             <?php foreach ($companyCustomers as $customer): ?>
                                 <option value="<?php echo $customer['id']; ?>">
-                                    <?php echo htmlspecialchars($customer['name']); ?>
+                                    <?php echo (int)$customer['id'] . ' - ' . htmlspecialchars($customer['name']); ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>
@@ -2674,7 +2674,7 @@ document.getElementById('addItemBtn')?.addEventListener('click', function() {
     const newItem = document.createElement('div');
     newItem.className = 'order-item row mb-2';
     const templateOptions = <?php echo json_encode(array_map(function($t) { 
-        return ['value' => htmlspecialchars($t['product_name'] ?? '', ENT_QUOTES, 'UTF-8'), 'text' => htmlspecialchars($t['product_name'] ?? 'قالب #' . $t['id'], ENT_QUOTES, 'UTF-8')]; 
+        return ['value' => htmlspecialchars($t['product_name'] ?? '', ENT_QUOTES, 'UTF-8'), 'text' => (int)$t['id'] . ' - ' . htmlspecialchars($t['product_name'] ?? 'قالب #' . $t['id'], ENT_QUOTES, 'UTF-8')]; 
     }, $productTemplatesForDropdown), JSON_UNESCAPED_UNICODE | JSON_HEX_QUOT | JSON_HEX_APOS); ?>;
     let optionsHtml = '<option value="">اختر قالب المنتج</option>';
     if (templateOptions && Array.isArray(templateOptions)) {
@@ -3489,7 +3489,7 @@ document.getElementById('cardAddItemBtn')?.addEventListener('click', function() 
     const newItem = document.createElement('div');
     newItem.className = 'order-item row mb-2';
     const templateOptions = <?php echo json_encode(array_map(function($t) { 
-        return ['value' => htmlspecialchars($t['product_name'] ?? '', ENT_QUOTES, 'UTF-8'), 'text' => htmlspecialchars($t['product_name'] ?? 'قالب #' . $t['id'], ENT_QUOTES, 'UTF-8')]; 
+        return ['value' => htmlspecialchars($t['product_name'] ?? '', ENT_QUOTES, 'UTF-8'), 'text' => (int)$t['id'] . ' - ' . htmlspecialchars($t['product_name'] ?? 'قالب #' . $t['id'], ENT_QUOTES, 'UTF-8')]; 
     }, $productTemplatesForDropdown), JSON_UNESCAPED_UNICODE | JSON_HEX_QUOT | JSON_HEX_APOS); ?>;
     let optionsHtml = '<option value="">اختر قالب المنتج</option>';
     if (templateOptions && Array.isArray(templateOptions)) {
@@ -3689,7 +3689,7 @@ document.getElementById('cardAddCompanyItemBtn')?.addEventListener('click', func
     const newItem = document.createElement('div');
     newItem.className = 'order-item row mb-2';
     const templateOptions = <?php echo json_encode(array_map(function($t) { 
-        return ['value' => htmlspecialchars($t['product_name'] ?? '', ENT_QUOTES, 'UTF-8'), 'text' => htmlspecialchars($t['product_name'] ?? 'قالب #' . $t['id'], ENT_QUOTES, 'UTF-8')]; 
+        return ['value' => htmlspecialchars($t['product_name'] ?? '', ENT_QUOTES, 'UTF-8'), 'text' => (int)$t['id'] . ' - ' . htmlspecialchars($t['product_name'] ?? 'قالب #' . $t['id'], ENT_QUOTES, 'UTF-8')]; 
     }, $productTemplatesForDropdown), JSON_UNESCAPED_UNICODE | JSON_HEX_QUOT | JSON_HEX_APOS); ?>;
     let optionsHtml = '<option value="">اختر قالب المنتج</option>';
     if (templateOptions && Array.isArray(templateOptions)) {
