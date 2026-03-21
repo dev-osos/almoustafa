@@ -2075,6 +2075,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 <!-- قائمة العملاء -->
+ 
 <div class="card shadow-sm">
     <div class="card-header bg-primary text-white">
         <h5 class="mb-0">قائمة العملاء المحليين (<span id="customersCount"><?php echo $totalCustomers; ?></span>)</h5>
