@@ -2231,13 +2231,11 @@ document.addEventListener('DOMContentLoaded', function() {
         </div>
         
         <!-- Pagination -->
-        <?php
-        $paginationExtra = ($search ? '&search=' . urlencode($search) : '') . '&debt_status=' . urlencode($debtStatus) . ($regionFilter !== null ? '&region_id=' . (int)$regionFilter : '');
-        ?>
-        <nav id="customersPagination" aria-label="Page navigation" class="mt-3" style="<?php echo $totalPages <= 1 ? 'display: none;' : ''; ?>">
+        <div id="customersPagination" class="mt-3" style="<?php echo $totalPages <= 1 ? 'display: none;' : ''; ?>">
+            <nav aria-label="Page navigation">
             <ul class="pagination justify-content-center">
                 <li class="page-item <?php echo $pageNum <= 1 ? 'disabled' : ''; ?>">
-                    <a class="page-link" href="?page=local_customers&p=<?php echo $pageNum - 1; ?><?php echo $paginationExtra; ?>">
+                    <a class="page-link" href="javascript:void(0);" onclick="loadLocalCustomers(<?php echo $pageNum - 1; ?>)">
                         <i class="bi bi-chevron-right"></i>
                     </a>
                 </li>
@@ -2245,31 +2243,102 @@ document.addEventListener('DOMContentLoaded', function() {
                 $startPage = max(1, $pageNum - 2);
                 $endPage = min($totalPages, $pageNum + 2);
                 if ($startPage > 1): ?>
-                    <li class="page-item"><a class="page-link" href="?page=local_customers&p=1<?php echo $paginationExtra; ?>">1</a></li>
+                    <li class="page-item"><a class="page-link" href="javascript:void(0);" onclick="loadLocalCustomers(1)">1</a></li>
                     <?php if ($startPage > 2): ?>
                         <li class="page-item disabled"><span class="page-link">...</span></li>
                     <?php endif; ?>
                 <?php endif; ?>
                 <?php for ($i = $startPage; $i <= $endPage; $i++): ?>
                     <li class="page-item <?php echo $i == $pageNum ? 'active' : ''; ?>">
-                        <a class="page-link" href="?page=local_customers&p=<?php echo $i; ?><?php echo $paginationExtra; ?>"><?php echo $i; ?></a>
+                        <a class="page-link" href="javascript:void(0);" onclick="loadLocalCustomers(<?php echo $i; ?>)"><?php echo $i; ?></a>
                     </li>
                 <?php endfor; ?>
                 <?php if ($endPage < $totalPages): ?>
                     <?php if ($endPage < $totalPages - 1): ?>
                         <li class="page-item disabled"><span class="page-link">...</span></li>
                     <?php endif; ?>
-                    <li class="page-item"><a class="page-link" href="?page=local_customers&p=<?php echo $totalPages; ?><?php echo $paginationExtra; ?>"><?php echo $totalPages; ?></a></li>
+                    <li class="page-item"><a class="page-link" href="javascript:void(0);" onclick="loadLocalCustomers(<?php echo $totalPages; ?>)"><?php echo $totalPages; ?></a></li>
                 <?php endif; ?>
                 <li class="page-item <?php echo $pageNum >= $totalPages ? 'disabled' : ''; ?>">
-                    <a class="page-link" href="?page=local_customers&p=<?php echo $pageNum + 1; ?><?php echo $paginationExtra; ?>">
+                    <a class="page-link" href="javascript:void(0);" onclick="loadLocalCustomers(<?php echo $pageNum + 1; ?>)">
                         <i class="bi bi-chevron-left"></i>
                     </a>
                 </li>
             </ul>
-        </nav>
+            </nav>
+        </div>
     </div>
 </div>
+
+<script>
+// دالة تحميل صفحات العملاء المحليين بـ AJAX بدون إعادة تحميل الصفحة
+var _localCustomersCurrentPage = <?php echo (int)$pageNum; ?>;
+function loadLocalCustomers(page) {
+    var tableBody = document.getElementById('customersTableBody');
+    var paginationContainer = document.getElementById('customersPagination');
+    var countSpan = document.getElementById('customersCount');
+    var tableWrapper = document.querySelector('.dashboard-table-wrapper');
+    if (!tableBody) return;
+
+    _localCustomersCurrentPage = page;
+
+    // جمع الفلاتر الحالية من URL
+    var params = new URLSearchParams(window.location.search);
+    params.set('p', page);
+    // إزالة page parameter الخاص بالداشبورد من الـ API call
+    var apiParams = new URLSearchParams(params);
+    apiParams.delete('page');
+
+    // إظهار loading خفيف على الجدول فقط
+    if (tableWrapper) { tableWrapper.style.opacity = '0.5'; tableWrapper.style.pointerEvents = 'none'; }
+
+    var apiBase = (window.LOCAL_CUSTOMERS_CONFIG && window.LOCAL_CUSTOMERS_CONFIG.apiBase) ? window.LOCAL_CUSTOMERS_CONFIG.apiBase : '';
+    var apiUrl = apiBase + '/api/search_local_customers.php?' + apiParams.toString();
+
+    fetch(apiUrl, {
+        method: 'GET',
+        credentials: 'include',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        cache: 'no-cache'
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success) {
+            tableBody.innerHTML = data.tableRows;
+            if (paginationContainer) {
+                paginationContainer.innerHTML = data.pagination ? '<nav aria-label="Page navigation">' + data.pagination + '</nav>' : '';
+                paginationContainer.style.display = data.totalPages <= 1 ? 'none' : '';
+            }
+            if (countSpan) countSpan.textContent = data.totalCustomers;
+
+            // تحديث URL في المتصفح
+            params.set('p', page);
+            var newUrl = window.location.pathname + '?' + params.toString();
+            window.history.pushState({ localCustomersPage: page }, '', newUrl);
+
+            // إعادة تهيئة dropdowns
+            if (typeof window.reinitLocalCustomersTableActionsDropdowns === 'function') {
+                window.reinitLocalCustomersTableActionsDropdowns();
+            }
+            if (typeof bootstrap !== 'undefined' && bootstrap.Dropdown) {
+                tableBody.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(function(el) {
+                    new bootstrap.Dropdown(el);
+                });
+            }
+
+            // تمرير لأعلى الجدول
+            var tableEl = document.getElementById('localCustomersTable');
+            if (tableEl) tableEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    })
+    .catch(function(err) {
+        console.error('loadLocalCustomers error:', err);
+    })
+    .finally(function() {
+        if (tableWrapper) { tableWrapper.style.opacity = ''; tableWrapper.style.pointerEvents = ''; }
+    });
+}
+</script>
 
 <script>
 (function() {

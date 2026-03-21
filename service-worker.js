@@ -3,7 +3,7 @@
 // ============================================
 // Configuration
 // ============================================
-const CACHE_VERSION = 'v2.3.0'; // إصلاح مشكلة redirect بعد الانتقال لـ Hostinger
+const CACHE_VERSION = 'v2.4.0'; // إصلاح مشكلة redirect في PWA عند إعادة الفتح
 const PRECACHE_NAME = `albarakah-precache-${CACHE_VERSION}`;
 const STATIC_CACHE_NAME = `albarakah-static-${CACHE_VERSION}`;
 const CDN_CACHE_NAME = `albarakah-cdn-${CACHE_VERSION}`;
@@ -220,6 +220,13 @@ async function networkFirst(request, cacheName, isNavigation = false) {
           const cached = await cache.match(request);
           
           if (cached) {
+            // تجاهل الاستجابات المخزنة التي تحتوي على redirect (لا يجب أن تكون موجودة لكن احتياطياً)
+            if (cached.redirected) {
+              // حذف من الكاش وتجاهل
+              cache.delete(request).catch(() => {});
+              continue;
+            }
+
             // استخدام cache فوراً - هذا يسرع التحميل بشكل كبير
             // تحديث cache في الخلفية بدون انتظار
             fetchWithTimeout(request).then(async (networkResponse) => {
@@ -231,11 +238,19 @@ async function networkFirst(request, cacheName, isNavigation = false) {
                 } catch (cacheError) {
                   // Silently fail cache update
                 }
+              } else if (networkResponse.redirected) {
+                // إذا أعاد السيرفر redirect (مثلاً لصفحة تسجيل الدخول) امسح الكاش القديم
+                try {
+                  const cache = await caches.open(name);
+                  await cache.delete(request);
+                } catch (e) {
+                  // Silently fail
+                }
               }
             }).catch(() => {
               // Silently fail background update
             });
-            
+
             return cached;
           }
         } catch (e) {
@@ -251,7 +266,25 @@ async function networkFirst(request, cacheName, isNavigation = false) {
   // Network first strategy مع timeout أقصر لتسريع الاستجابة
   try {
     const response = await fetchWithTimeout(request);
-    
+
+    // إصلاح: عند طلب navigation إذا كانت الاستجابة redirected
+    // (مثلاً: الداشبورد يعيد توجيه لصفحة تسجيل الدخول بسبب انتهاء الجلسة)
+    // لا يمكن تقديمها عبر respondWith() - المتصفح يرفضها
+    // الحل: إنشاء redirect response نظيف يتعامل معه المتصفح بشكل طبيعي
+    if (isNavigation && response.redirected) {
+      // امسح الكاش القديم لهذا الطلب لأن الجلسة انتهت
+      if ('caches' in self) {
+        try {
+          const cache = await caches.open(cacheName);
+          await cache.delete(request);
+        } catch (e) {
+          // Silently fail
+        }
+      }
+      // إعادة توجيه المتصفح للرابط النهائي (صفحة تسجيل الدخول)
+      return Response.redirect(response.url, 302);
+    }
+
     // Cache successful, non-redirect responses (only if CacheStorage is available)
     // Safari يرفض تقديم redirect responses من الـ service worker
     if (response.status === 200 && response.ok && !response.redirected && ('caches' in self)) {
