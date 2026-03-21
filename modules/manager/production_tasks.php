@@ -1252,8 +1252,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     : 'تم إرسال المهمة بنجاح.';
                 $successMessage .= $tgShipmentMsg;
                 $userRole = ($currentUser['role'] ?? '') === 'accountant' ? 'accountant' : 'manager';
-                $printReceiptUrl = getRelativeUrl('print_task_receipt.php?id=' . (int) $taskId);
-                preventDuplicateSubmission($successMessage, [], $printReceiptUrl, $userRole);
+                preventDuplicateSubmission($successMessage, ['page' => 'production_tasks'], null, $userRole);
                 exit; // منع تنفيذ باقي الكود بعد إعادة التوجيه
             } catch (Exception $e) {
                 $db->rollback();
