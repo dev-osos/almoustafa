@@ -3872,8 +3872,10 @@ function buildEditProductRow(idx, product) {
     var unitVal = String(p.unit || 'قطعة').trim();
     var itemType = String(p.item_type || '').trim();
     var isRawMat = itemType === 'raw_material';
+    var isTemplate = itemType === 'template';
     var typeSelectorVal = ['external','template','raw_material'].indexOf(itemType) !== -1 ? itemType : '';
-    var unitList = isRawMat ? ['كيلو','جرام'] : ['كرتونة','عبوة','كيلو','جرام','شرينك','دسته','قطعة'];
+    var isExternal = itemType === 'external';
+    var unitList = isRawMat ? ['كيلو','جرام'] : (isTemplate ? ['قطعة','كرتونة'] : (isExternal ? ['كرتونة','شرينك','دسته','قطعة'] : ['كرتونة','عبوة','كيلو','جرام','شرينك','دسته','قطعة']));
     var unitOpts = unitList.map(function(u) {
         return '<option value="' + u + '"' + (u === unitVal ? ' selected' : '') + '>' + u + '</option>';
     }).join('');
@@ -3913,7 +3915,7 @@ function buildEditProductRow(idx, product) {
         '<div class="col-6 col-md-2"><label class="form-label small">الكمية</label>' +
         '<input type="number" class="form-control edit-product-qty" name="products[' + idx + '][quantity]" step="1" min="0" placeholder="0" value="' + qtyVal + '"></div>' +
         '<div class="col-6 col-md-2">' +
-        '<div class="category-wrap"' + (isRawMat ? ' style="display:none"' : '') + '><label class="form-label small">التصنيف</label>' +
+        '<div class="category-wrap"' + ((isRawMat || isTemplate) ? ' style="display:none"' : '') + '><label class="form-label small">التصنيف</label>' +
         '<select class="form-select form-select-sm edit-product-category" name="products[' + idx + '][category]">' + catOpts + '</select></div>' +
         '<div class="raw-qty-wrap"' + (!isRawMat ? ' style="display:none"' : '') + '>' +
         '<label class="form-label small text-info">الكمية المتاحة</label>' +
@@ -4903,22 +4905,9 @@ document.addEventListener('DOMContentLoaded', function () {
         return prefix ? prefix + ' - ' + name : name;
     }
 
-    // إظهار/إخفاء حقل التصنيف ↔ الكمية المتاحة حسب النوع
+    // إظهار/إخفاء حقل التصنيف ↔ الكمية المتاحة حسب النوع (للتوافق مع الكود القديم)
     function toggleRawMaterialQtyDisplay(row, isRawMaterial) {
-        var categoryWrap = row.querySelector('.category-wrap');
-        var rawQtyWrap = row.querySelector('.raw-qty-wrap');
-        if (!categoryWrap || !rawQtyWrap) return;
-        if (isRawMaterial) {
-            categoryWrap.classList.add('d-none');
-            rawQtyWrap.classList.remove('d-none');
-            rawQtyWrap.style.display = '';
-        } else {
-            categoryWrap.classList.remove('d-none');
-            categoryWrap.style.display = '';
-            rawQtyWrap.classList.add('d-none');
-            var qtyEl = rawQtyWrap.querySelector('.raw-material-qty-value');
-            if (qtyEl) { qtyEl.textContent = '—'; qtyEl.className = 'raw-material-qty-value fw-semibold text-info'; }
-        }
+        toggleCategoryAndQtyDisplay(row, isRawMaterial ? 'raw_material' : '');
     }
     // تحديث عرض الكمية المتاحة من الخامة المختارة
     function updateRawMaterialQtyDisplay(row, productName) {
@@ -4937,25 +4926,60 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    // تطبيق تقييد الوحدة للخامات (كيلو/جرام فقط)
-    function applyRawMaterialUnitRestriction(row, isRawMaterial) {
+    // تطبيق قيود الوحدة والحقول حسب نوع المنتج
+    function applyRawMaterialUnitRestriction(row, typeOrBool) {
+        // يقبل string (نوع المنتج) أو boolean (للتوافق مع الكود القديم)
+        var type = (typeOrBool === true) ? 'raw_material' : (typeOrBool === false ? '' : String(typeOrBool || ''));
         var unitSelect = row.querySelector('.product-unit-input') || row.querySelector('.edit-product-unit');
         if (!unitSelect) return;
         var currentUnit = unitSelect.value;
-        if (isRawMaterial) {
+        if (type === 'raw_material') {
             var defaultUnit = (currentUnit === 'جرام') ? 'جرام' : 'كيلو';
             unitSelect.innerHTML = '<option value="كيلو"' + (defaultUnit === 'كيلو' ? ' selected' : '') + '>كيلو</option>' +
                 '<option value="جرام"' + (defaultUnit === 'جرام' ? ' selected' : '') + '>جرام</option>';
             row.setAttribute('data-item-type', 'raw_material');
+        } else if (type === 'template') {
+            var tmplUnits = ['قطعة','كرتونة'];
+            var keepTmpl = tmplUnits.indexOf(currentUnit) !== -1 ? currentUnit : 'قطعة';
+            unitSelect.innerHTML = tmplUnits.map(function(u) {
+                return '<option value="' + u + '"' + (u === keepTmpl ? ' selected' : '') + '>' + u + '</option>';
+            }).join('');
+            row.setAttribute('data-item-type', 'template');
+        } else if (type === 'external') {
+            var extUnits = ['كرتونة','شرينك','دسته','قطعة'];
+            var keepExt = extUnits.indexOf(currentUnit) !== -1 ? currentUnit : 'قطعة';
+            unitSelect.innerHTML = extUnits.map(function(u) {
+                return '<option value="' + u + '"' + (u === keepExt ? ' selected' : '') + '>' + u + '</option>';
+            }).join('');
+            row.setAttribute('data-item-type', 'external');
         } else {
             var units = ['كرتونة','عبوة','كيلو','جرام','شرينك','دسته','قطعة'];
             var keepUnit = units.indexOf(currentUnit) !== -1 ? currentUnit : 'قطعة';
             unitSelect.innerHTML = units.map(function(u) {
                 return '<option value="' + u + '"' + (u === keepUnit ? ' selected' : '') + '>' + u + '</option>';
             }).join('');
-            row.setAttribute('data-item-type', '');
+            row.setAttribute('data-item-type', type);
         }
-        toggleRawMaterialQtyDisplay(row, isRawMaterial);
+        toggleCategoryAndQtyDisplay(row, type);
+    }
+    // تحكم في ظهور حقل التصنيف والكمية المتاحة حسب نوع المنتج
+    function toggleCategoryAndQtyDisplay(row, type) {
+        var categoryWrap = row.querySelector('.category-wrap');
+        var rawQtyWrap = row.querySelector('.raw-qty-wrap');
+        if (type === 'raw_material') {
+            if (categoryWrap) { categoryWrap.classList.add('d-none'); }
+            if (rawQtyWrap) { rawQtyWrap.classList.remove('d-none'); rawQtyWrap.style.display = ''; }
+        } else if (type === 'template') {
+            if (categoryWrap) { categoryWrap.classList.add('d-none'); }
+            if (rawQtyWrap) { rawQtyWrap.classList.add('d-none'); }
+        } else {
+            if (categoryWrap) { categoryWrap.classList.remove('d-none'); categoryWrap.style.display = ''; }
+            if (rawQtyWrap) {
+                rawQtyWrap.classList.add('d-none');
+                var qtyEl = rawQtyWrap.querySelector('.raw-material-qty-value');
+                if (qtyEl) { qtyEl.textContent = '—'; qtyEl.className = 'raw-material-qty-value fw-semibold text-info'; }
+            }
+        }
     }
 
     // دروب داون اسم المنتج: يفلتر حسب المدخلات ويسمح بالإدخال اليدوي أو الاختيار من القائمة
@@ -5041,7 +5065,7 @@ document.addEventListener('DOMContentLoaded', function () {
                             // مزامنة النوع مع الـ selector
                             var _typeSelector = _row.querySelector('.product-type-selector');
                             if (_typeSelector && itemDetailType) _typeSelector.value = itemDetailType;
-                            applyRawMaterialUnitRestriction(_row, itemDetailType === 'raw_material');
+                            applyRawMaterialUnitRestriction(_row, itemDetailType);
                             if (itemDetailType === 'raw_material') updateRawMaterialQtyDisplay(_row, item.name);
                             setTimeout(function() { if (typeof fetchProductPriceHistory === 'function') fetchProductPriceHistory(_row); }, 50);
                         }
@@ -5081,8 +5105,8 @@ document.addEventListener('DOMContentLoaded', function () {
             if (!row) return;
             var nameInput = row.querySelector('.product-name-input') || row.querySelector('.edit-product-name');
             var val = selectEl.value;
-            // تطبيق تقييد الوحدة عند اختيار الخامات
-            applyRawMaterialUnitRestriction(row, val === 'raw_material');
+            // تطبيق قيود الوحدة والحقول حسب النوع
+            applyRawMaterialUnitRestriction(row, val);
             // مسح اسم المنتج وفتح القائمة مفلترة
             if (nameInput) {
                 nameInput.value = '';
