@@ -186,7 +186,7 @@ $singleReceipt = count($receipts) === 1;
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo $singleReceipt ? 'إيصال مهمة - ' . (int)$receipts[0]['taskNumber'] : 'طباعة إيصالات (' . count($receipts) . ')'; ?></title>
+    <title><?php echo $singleReceipt ? 'إيصال أوردر رقم ' . (int)$receipts[0]['taskNumber'] : 'إيصالات أوردرات (' . count($receipts) . ')'; ?></title>
     <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
     <?php
     $iconsPath = file_exists(__DIR__ . '/assets/bootstrap-icons/bootstrap-icons.css') ? 'assets/bootstrap-icons/bootstrap-icons.css' : 'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css';
@@ -553,16 +553,18 @@ $singleReceipt = count($receipts) === 1;
         ?>
         <div class="receipt-sheet">
         <div class="receipt-sheet-inner">
-        <div style="text-align:center; margin-bottom: 8px;">
+        <div class="receipt-header">
             <?php
             $logoPath = __DIR__ . '/logo.png';
             if (file_exists($logoPath)):
             ?>
-            <img src="data:image/png;base64,<?php echo base64_encode(file_get_contents($logoPath)); ?>" alt="Al Moustafa" style="width:120px; height:auto;" />
+            <img src="data:image/png;base64,<?php echo base64_encode(file_get_contents($logoPath)); ?>" alt="Al Moustafa" style="width:120px; height:auto; display:block; margin: 0 auto 6px;" />
             <?php endif; ?>
+            <div class="company-name"><?php echo htmlspecialchars($companyName); ?></div>
+            <div class="receipt-type">إيصال أوردر</div>
         </div>
         <div class="task-number">
-            رقم الاوردر: <?php echo htmlspecialchars($taskNumber); ?>
+            رقم الأوردر: <?php echo htmlspecialchars($taskNumber); ?>
         </div>
         
         <table class="info-table customer-priority-row" style="margin: 12px 0;">

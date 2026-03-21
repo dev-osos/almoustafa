@@ -60,6 +60,14 @@ $delaySummary = calculateMonthlyDelaySummary($userId, $month);
 
 $userName = $user['full_name'] ?? $user['username'];
 $monthLabel = date('F Y', strtotime($month . '-01'));
+$arabicMonths = [
+    1 => 'يناير', 2 => 'فبراير', 3 => 'مارس', 4 => 'أبريل',
+    5 => 'مايو', 6 => 'يونيو', 7 => 'يوليو', 8 => 'أغسطس',
+    9 => 'سبتمبر', 10 => 'أكتوبر', 11 => 'نوفمبر', 12 => 'ديسمبر'
+];
+$monthNum = (int) date('n', strtotime($month . '-01'));
+$monthYear = date('Y', strtotime($month . '-01'));
+$monthLabelAr = ($arabicMonths[$monthNum] ?? $monthLabel) . ' ' . $monthYear;
 $companyName = defined('COMPANY_NAME') ? COMPANY_NAME : 'النظام';
 
 ?>
@@ -68,7 +76,7 @@ $companyName = defined('COMPANY_NAME') ? COMPANY_NAME : 'النظام';
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>تقرير الحضور والانصراف - <?php echo htmlspecialchars($userName); ?> - <?php echo $monthLabel; ?></title>
+    <title>سجل حضور <?php echo htmlspecialchars($userName); ?> - <?php echo $monthLabelAr; ?></title>
     <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -212,8 +220,8 @@ $companyName = defined('COMPANY_NAME') ? COMPANY_NAME : 'النظام';
     <div class="report-container">
         <div class="report-header">
             <div class="company"><?php echo htmlspecialchars($companyName); ?></div>
-            <h1>تقرير سجلات الحضور والانصراف</h1>
-            <div class="subtitle">للمستخدم خلال الشهر المحدد</div>
+            <h1>سجل الحضور والانصراف الشهري</h1>
+            <div class="subtitle"><?php echo htmlspecialchars($userName); ?> &mdash; <?php echo $monthLabelAr; ?></div>
         </div>
         <div class="info-block">
             <span>المستخدم:</span> <?php echo htmlspecialchars($userName); ?>
