@@ -2903,7 +2903,13 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                 <div class="product-row mb-3 p-3 border rounded" data-product-index="0">
                                     <div class="row g-2">
                                         <div class="col-12 col-md-3">
-                                            <label class="form-label small">المنتج</label>
+                                            <label class="form-label small">النوع</label>
+                                            <select class="form-select form-select-sm product-type-selector mb-1" name="products[0][item_type]">
+                                                <option value="">— اختر النوع —</option>
+                                                <option value="external">📦 منتجات خارجية</option>
+                                                <option value="template">🏭 منتجات المصنع</option>
+                                                <option value="raw_material">⚗️ خامات</option>
+                                            </select>
                                             <div class="product-name-wrap position-relative">
                                                 <input type="text" class="form-control product-name-input" name="products[0][name]" placeholder="اختر من القائمة" autocomplete="off" required>
                                                 <div class="product-template-dropdown d-none"></div>
@@ -2934,7 +2940,6 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                                 <option value="دسته">دسته</option>
                                                 <option value="قطعة" selected>قطعة</option>
                                             </select>
-                                            <input type="hidden" class="product-item-type-input" name="products[0][item_type]" value="">
                                         </div>
                                         <div class="col-6 col-md-2">
                                             <label class="form-label small">السعر</label>
@@ -3861,10 +3866,16 @@ function buildEditProductRow(idx, product) {
     var unitVal = String(p.unit || 'قطعة').trim();
     var itemType = String(p.item_type || '').trim();
     var isRawMat = itemType === 'raw_material';
+    var typeSelectorVal = ['external','template','raw_material'].indexOf(itemType) !== -1 ? itemType : '';
     var unitList = isRawMat ? ['كيلو','جرام'] : ['كرتونة','عبوة','كيلو','جرام','شرينك','دسته','قطعة'];
     var unitOpts = unitList.map(function(u) {
         return '<option value="' + u + '"' + (u === unitVal ? ' selected' : '') + '>' + u + '</option>';
     }).join('');
+    var typeSelectorOpts =
+        '<option value=""' + (typeSelectorVal === '' ? ' selected' : '') + '>— اختر النوع —</option>' +
+        '<option value="external"' + (typeSelectorVal === 'external' ? ' selected' : '') + '>📦 منتجات خارجية</option>' +
+        '<option value="template"' + (typeSelectorVal === 'template' ? ' selected' : '') + '>🏭 منتجات المصنع</option>' +
+        '<option value="raw_material"' + (typeSelectorVal === 'raw_material' ? ' selected' : '') + '>⚗️ خامات</option>';
     var quCats = (typeof __quCategories !== 'undefined' && Array.isArray(__quCategories)) ? __quCategories : [];
     var catVal = String(p.category || '').trim();
     var catOpts = '<option value="">— اختر التصنيف —</option>' + quCats.map(function(qc) {
@@ -3877,7 +3888,9 @@ function buildEditProductRow(idx, product) {
     var nameVal = String(p.name || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     return '<div class="product-row mb-3 p-3 border rounded edit-product-row" data-edit-product-index="' + idx + '" data-item-type="' + (isRawMat ? 'raw_material' : '') + '">' +
         '<div class="row g-2">' +
-        '<div class="col-12 col-md-3"><label class="form-label small">المنتج</label>' +
+        '<div class="col-12 col-md-3">' +
+        '<label class="form-label small">النوع</label>' +
+        '<select class="form-select form-select-sm product-type-selector mb-1" name="products[' + idx + '][item_type]">' + typeSelectorOpts + '</select>' +
         '<div class="product-name-wrap position-relative">' +
         '<input type="text" class="form-control edit-product-name" name="products[' + idx + '][name]" placeholder="اختر من القائمة" autocomplete="off" list="templateSuggestions" value="' + nameVal + '">' +
         '</div></div>' +
@@ -3886,8 +3899,7 @@ function buildEditProductRow(idx, product) {
         '<div class="col-6 col-md-2"><label class="form-label small">التصنيف</label>' +
         '<select class="form-select form-select-sm edit-product-category" name="products[' + idx + '][category]">' + catOpts + '</select></div>' +
         '<div class="col-6 col-md-2"><label class="form-label small">الوحدة</label>' +
-        '<select class="form-select form-select-sm edit-product-unit" name="products[' + idx + '][unit]">' + unitOpts + '</select>' +
-        '<input type="hidden" class="product-item-type-input" name="products[' + idx + '][item_type]" value="' + (isRawMat ? 'raw_material' : '') + '"></div>' +
+        '<select class="form-select form-select-sm edit-product-unit" name="products[' + idx + '][unit]">' + unitOpts + '</select></div>' +
         '<div class="col-6 col-md-2"><label class="form-label small">السعر</label>' +
         '<input type="number" class="form-control edit-product-price" name="products[' + idx + '][price]" step="0.01" min="0" placeholder="0.00" value="' + priceVal + '"></div>' +
         '<div class="col-6 col-md-2"><label class="form-label small">الإجمالي</label>' +
@@ -4874,22 +4886,19 @@ document.addEventListener('DOMContentLoaded', function () {
     // تطبيق تقييد الوحدة للخامات (كيلو/جرام فقط)
     function applyRawMaterialUnitRestriction(row, isRawMaterial) {
         var unitSelect = row.querySelector('.product-unit-input') || row.querySelector('.edit-product-unit');
-        var itemTypeInput = row.querySelector('.product-item-type-input');
         if (!unitSelect) return;
         var currentUnit = unitSelect.value;
         if (isRawMaterial) {
             var defaultUnit = (currentUnit === 'جرام') ? 'جرام' : 'كيلو';
             unitSelect.innerHTML = '<option value="كيلو"' + (defaultUnit === 'كيلو' ? ' selected' : '') + '>كيلو</option>' +
                 '<option value="جرام"' + (defaultUnit === 'جرام' ? ' selected' : '') + '>جرام</option>';
-            if (itemTypeInput) itemTypeInput.value = 'raw_material';
             row.setAttribute('data-item-type', 'raw_material');
         } else {
             var units = ['كرتونة','عبوة','كيلو','جرام','شرينك','دسته','قطعة'];
-            var keepUnit = units.includes(currentUnit) ? currentUnit : 'قطعة';
+            var keepUnit = units.indexOf(currentUnit) !== -1 ? currentUnit : 'قطعة';
             unitSelect.innerHTML = units.map(function(u) {
                 return '<option value="' + u + '"' + (u === keepUnit ? ' selected' : '') + '>' + u + '</option>';
             }).join('');
-            if (itemTypeInput) itemTypeInput.value = '';
             row.setAttribute('data-item-type', '');
         }
     }
@@ -4926,7 +4935,16 @@ document.addEventListener('DOMContentLoaded', function () {
         function showDropdown() {
             var q = (inputEl.value || '').trim();
             var detailed = window.__productTemplatesDetailed || [];
-            var filtered = q ? templates.filter(function(t) { return matchTemplate(t, q); }) : templates.slice(0, 50);
+            // فلترة حسب النوع المختار
+            var typeFilter = '';
+            var typeSelector = inputEl.closest('.product-row') ? inputEl.closest('.product-row').querySelector('.product-type-selector') : null;
+            if (typeSelector) typeFilter = typeSelector.value || '';
+            var candidates = typeFilter !== '' ? templates.filter(function(t) {
+                var d = getProductDetail(t);
+                if (!d) return typeFilter === 'template';
+                return d.type === typeFilter;
+            }) : templates;
+            var filtered = q ? candidates.filter(function(t) { return matchTemplate(t, q); }) : candidates.slice(0, 100);
             dropEl.innerHTML = '';
             if (filtered.length === 0) {
                 dropEl.classList.add('d-none');
@@ -4964,7 +4982,11 @@ document.addEventListener('DOMContentLoaded', function () {
                         inputEl.focus();
                         var _row = inputEl.closest('.product-row');
                         if (_row) {
-                            applyRawMaterialUnitRestriction(_row, item.detail && item.detail.type === 'raw_material');
+                            var itemDetailType = item.detail ? (item.detail.type || '') : '';
+                            // مزامنة النوع مع الـ selector
+                            var _typeSelector = _row.querySelector('.product-type-selector');
+                            if (_typeSelector && itemDetailType) _typeSelector.value = itemDetailType;
+                            applyRawMaterialUnitRestriction(_row, itemDetailType === 'raw_material');
                             setTimeout(function() { if (typeof fetchProductPriceHistory === 'function') fetchProductPriceHistory(_row); }, 50);
                         }
                     });
@@ -4995,8 +5017,28 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
     })();
+    // تهيئة حقل اختيار النوع
+    function initTypeSelector(selectEl) {
+        if (!selectEl || selectEl.dataset.typeSelectorInited === '1') return;
+        selectEl.addEventListener('change', function() {
+            var row = selectEl.closest('.product-row');
+            if (!row) return;
+            var nameInput = row.querySelector('.product-name-input') || row.querySelector('.edit-product-name');
+            var val = selectEl.value;
+            // تطبيق تقييد الوحدة عند اختيار الخامات
+            applyRawMaterialUnitRestriction(row, val === 'raw_material');
+            // مسح اسم المنتج وفتح القائمة مفلترة
+            if (nameInput) {
+                nameInput.value = '';
+                nameInput.focus();
+                nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+        });
+        selectEl.dataset.typeSelectorInited = '1';
+    }
     function initAllProductNameDropdowns() {
         document.querySelectorAll('.product-name-input').forEach(initProductNameDropdown);
+        document.querySelectorAll('.product-type-selector').forEach(initTypeSelector);
     }
 
     // تحميل الاقتراحات عند تحميل الصفحة
@@ -5031,9 +5073,15 @@ document.addEventListener('DOMContentLoaded', function () {
         newRow.innerHTML = `
             <div class="row g-2">
                 <div class="col-12 col-md-3">
-                    <label class="form-label small">اسم المنتج</label>
+                    <label class="form-label small">النوع</label>
+                    <select class="form-select form-select-sm product-type-selector mb-1" name="products[${productIndex}][item_type]">
+                        <option value="">— اختر النوع —</option>
+                        <option value="external">📦 منتجات خارجية</option>
+                        <option value="template">🏭 منتجات المصنع</option>
+                        <option value="raw_material">⚗️ خامات</option>
+                    </select>
                     <div class="product-name-wrap position-relative">
-                        <input type="text" class="form-control product-name-input" name="products[${productIndex}][name]" placeholder="أدخل اسم المنتج أو القالب أو اختر من القائمة" autocomplete="off">
+                        <input type="text" class="form-control product-name-input" name="products[${productIndex}][name]" placeholder="اختر من القائمة" autocomplete="off">
                         <div class="product-template-dropdown d-none"></div>
                     </div>
                 </div>
@@ -5060,7 +5108,6 @@ document.addEventListener('DOMContentLoaded', function () {
                         <option value="دسته">دسته</option>
                         <option value="قطعة" selected>قطعة</option>
                     </select>
-                    <input type="hidden" class="product-item-type-input" name="products[${productIndex}][item_type]" value="">
                 </div>
                 <div class="col-6 col-md-2">
                     <label class="form-label small">السعر</label>
@@ -5085,6 +5132,8 @@ document.addEventListener('DOMContentLoaded', function () {
         updateRemoveButtons();
         var newNameInput = newRow.querySelector('.product-name-input');
         if (newNameInput) initProductNameDropdown(newNameInput);
+        var newTypeSelector = newRow.querySelector('.product-type-selector');
+        if (newTypeSelector) initTypeSelector(newTypeSelector);
         
         // إضافة مستمع الحدث لزر الحذف
         newRow.querySelector('.remove-product-btn').addEventListener('click', function() {
