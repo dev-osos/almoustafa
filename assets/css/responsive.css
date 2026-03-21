@@ -40,35 +40,45 @@
     }
     
     .topbar-center {
-        display: none;
-    }
-    
-    .topbar-left {
         flex: 1;
         min-width: 0;
+        max-width: 140px;
     }
-    
+
+    .topbar-left {
+        flex: 0 0 auto;
+        min-width: 0;
+    }
+
     .topbar-right {
         gap: var(--spacing-xs);
         flex-shrink: 0;
         min-width: auto;
     }
-    
+
     .topbar-action {
         width: 36px;
         height: 36px;
         font-size: 14px;
     }
-    
+
     .topbar-user {
         width: 36px;
         height: 36px;
         font-size: 12px;
     }
-    
-    /* إخفاء بعض العناصر غير الضرورية على الشاشات الصغيرة */
+
+    /* البحث: يظهر مضغوطاً على الهاتف */
     .topbar-search {
-        display: none;
+        display: block;
+        max-width: 100%;
+    }
+
+    .topbar-search input {
+        font-size: 12px;
+        height: 30px;
+        padding-top: 3px;
+        padding-bottom: 3px;
     }
     
     .breadcrumb-nav {

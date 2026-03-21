@@ -38,12 +38,13 @@ $offset = ($pageNum - 1) * $perPage;
 
 // البحث والفلترة
 $filters = [
-    'customer_id' => $_GET['customer_id'] ?? '',
-    'status' => $_GET['status'] ?? '',
-    'date_from' => $_GET['date_from'] ?? '',
-    'date_to' => $_GET['date_to'] ?? '',
-    'payment_method' => $_GET['payment_method'] ?? '',
-    'collected_by' => $_GET['collected_by'] ?? ''
+    'customer_id'      => $_GET['customer_id'] ?? '',
+    'status'           => $_GET['status'] ?? '',
+    'date_from'        => $_GET['date_from'] ?? '',
+    'date_to'          => $_GET['date_to'] ?? '',
+    'payment_method'   => $_GET['payment_method'] ?? '',
+    'collected_by'     => $_GET['collected_by'] ?? '',
+    'search_reference' => $_GET['search_reference'] ?? '',
 ];
 
 $filters = array_filter($filters, function($value) {
@@ -460,6 +461,13 @@ if (!empty($filters['collected_by'])) {
     $countSql .= " AND collected_by = ?";
     $params[] = $filters['collected_by'];
     $countParams[] = $filters['collected_by'];
+}
+
+if (!empty($filters['search_reference'])) {
+    $sql .= " AND c.reference_number = ?";
+    $countSql .= " AND reference_number = ?";
+    $params[] = $filters['search_reference'];
+    $countParams[] = $filters['search_reference'];
 }
 
 $totalResult = $db->queryOne($countSql, $countParams);

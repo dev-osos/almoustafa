@@ -257,7 +257,16 @@
         }
         
         .topbar-center {
-            display: none; /* إخفاء البحث على الشاشات الصغيرة جداً */
+            flex: 1;
+            min-width: 0;
+            max-width: 130px; /* بحث مضغوط على الهاتف */
+        }
+
+        .topbar-search input {
+            font-size: 11px;
+            height: 28px;
+            padding-top: 2px;
+            padding-bottom: 2px;
         }
     }
     

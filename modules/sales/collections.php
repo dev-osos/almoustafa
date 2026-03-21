@@ -44,8 +44,9 @@ $filters = [
     'status' => $_GET['status'] ?? '',
     'date_from' => $_GET['date_from'] ?? '',
     'date_to' => $_GET['date_to'] ?? '',
-    'payment_method' => $_GET['payment_method'] ?? '',
-    'collected_by' => $_GET['collected_by'] ?? ''
+    'payment_method'   => $_GET['payment_method'] ?? '',
+    'collected_by'     => $_GET['collected_by'] ?? '',
+    'search_reference' => $_GET['search_reference'] ?? '',
 ];
 
 // إذا كان المستخدم مندوب مبيعات، عرض فقط تحصيلاته
@@ -385,6 +386,11 @@ if (!empty($filters['payment_method'])) {
 if (!empty($filters['collected_by']) && $currentUser['role'] !== 'sales') {
     $sql .= " AND c.collected_by = ?";
     $params[] = $filters['collected_by'];
+}
+
+if (!empty($filters['search_reference'])) {
+    $sql .= " AND c.reference_number = ?";
+    $params[] = $filters['search_reference'];
 }
 
 // حساب العدد الإجمالي

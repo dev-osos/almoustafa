@@ -3681,20 +3681,17 @@ if (ob_get_level() > 0) {
             
             <div class="topbar-center">
                 <div class="topbar-search">
-                    <label for="globalSearch" class="visually-hidden">
-                        <?php echo isset($lang['search']) ? $lang['search'] : 'بحث'; ?>
-                    </label>
+                    <label for="globalSearch" class="visually-hidden">بحث بالرقم المرجعي</label>
                     <i class="bi bi-search" aria-hidden="true"></i>
-                    <input type="text" 
-                           placeholder="<?php echo isset($lang['search']) ? $lang['search'] : 'بحث'; ?>" 
+                    <input type="text"
+                           placeholder="رقم مرجعي..."
                            id="globalSearch"
-                           aria-label="<?php echo isset($lang['search']) ? $lang['search'] : 'بحث'; ?>"
+                           aria-label="بحث بالرقم المرجعي"
                            autocomplete="off"
-                           aria-describedby="search-help">
-                    <span class="search-shortcut" aria-hidden="true">⌘K</span>
-                    <span id="search-help" class="visually-hidden">
-                        <?php echo isset($lang['search_help']) ? $lang['search_help'] : 'استخدم للبحث في النظام'; ?>
-                    </span>
+                           inputmode="text"
+                           aria-describedby="search-ref-help">
+                    <span class="search-shortcut d-none d-md-inline" aria-hidden="true">⌘K</span>
+                    <span id="search-ref-help" class="visually-hidden">أدخل الرقم المرجعي للمعاملة ثم اضغط Enter للانتقال إليها</span>
                 </div>
             </div>
             
