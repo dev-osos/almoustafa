@@ -781,6 +781,15 @@ if ($usePackagingTable) {
             error_log('Packaging alias column error: ' . $aliasError->getMessage());
         }
     }
+    $weightColumnCheck = $db->queryOne("SHOW COLUMNS FROM packaging_materials LIKE 'weight'");
+    if (empty($weightColumnCheck)) {
+        try {
+            $db->execute("ALTER TABLE `packaging_materials` ADD COLUMN `weight` DECIMAL(10,3) DEFAULT NULL AFTER `unit_price`");
+            $db->execute("ALTER TABLE `packaging_materials` ADD COLUMN `weight_unit` VARCHAR(20) DEFAULT NULL AFTER `weight`");
+        } catch (Throwable $weightError) {
+            error_log('Packaging weight column error: ' . $weightError->getMessage());
+        }
+    }
 }
 
 // إنشاء جدول تسجيل التلفيات إذا لم يكن موجوداً
@@ -940,6 +949,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (empty($aliasColumnCheck)) {
                         $db->execute("ALTER TABLE `packaging_materials` ADD COLUMN `alias` VARCHAR(255) DEFAULT NULL AFTER `name`");
                     }
+                    $weightColumnCheck = $db->queryOne("SHOW COLUMNS FROM packaging_materials LIKE 'weight'");
+                    if (empty($weightColumnCheck)) {
+                        $db->execute("ALTER TABLE `packaging_materials` ADD COLUMN `weight` DECIMAL(10,3) DEFAULT NULL AFTER `unit_price`");
+                        $db->execute("ALTER TABLE `packaging_materials` ADD COLUMN `weight_unit` VARCHAR(20) DEFAULT NULL AFTER `weight`");
+                    }
                 } catch (Throwable $aliasInitError) {
                     $error = 'تعذّر تجهيز جدول أدوات التعبئة: ' . $aliasInitError->getMessage();
                 }
@@ -972,6 +986,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $unitPrice = 0.0;
             $unitValue = 'قطعة';
 
+            $weightRaw = $_POST['weight'] ?? '';
+            $weightUnitValue = trim((string)($_POST['weight_unit'] ?? ''));
+            $weightValue = null;
+            if ($weightRaw !== '' && is_numeric($weightRaw) && floatval($weightRaw) > 0) {
+                $weightValue = round(floatval($weightRaw), 3);
+            }
+            if ($weightValue === null) {
+                $weightUnitValue = '';
+            }
+
             if (empty($error)) {
                 if (preg_match('/\s/u', $materialCode)) {
                     $error = 'كود الأداة يجب ألا يحتوي على مسافات.';
@@ -998,9 +1022,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                         try {
                             $insertResult = $db->execute(
-                                "INSERT INTO packaging_materials 
-                                 (material_id, name, alias, type, specifications, quantity, unit, unit_price, status, created_at) 
-                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())",
+                                "INSERT INTO packaging_materials
+                                 (material_id, name, alias, type, specifications, quantity, unit, unit_price, weight, weight_unit, status, created_at)
+                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())",
                                 [
                                     $materialCode,
                                     $name,
@@ -1010,6 +1034,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     $initialQuantity,
                                     $unitValue,
                                     $unitPrice,
+                                    $weightValue,
+                                    $weightUnitValue !== '' ? $weightUnitValue : null,
                                     $statusValue
                                 ]
                             );
@@ -1545,6 +1571,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $materialCode = trim($_POST['material_code'] ?? '');
             $specificationsValue = trim($_POST['specifications'] ?? '');
             $statusValue = $_POST['status'] ?? 'active';
+            $weightRaw = $_POST['weight'] ?? '';
+            $weightUnitValue = trim((string)($_POST['weight_unit'] ?? ''));
+            $weightValue = null;
+            if ($weightRaw !== '' && is_numeric($weightRaw) && floatval($weightRaw) > 0) {
+                $weightValue = round(floatval($weightRaw), 3);
+            }
+            if ($weightValue === null) {
+                $weightUnitValue = '';
+            }
 
             $allowedStatuses = ['active', 'inactive'];
             if (!in_array($statusValue, $allowedStatuses, true)) {
@@ -1571,7 +1606,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                         $db->execute(
                             "UPDATE packaging_materials
-                             SET name = ?, type = ?, unit = ?, material_id = ?, specifications = ?, status = ?, updated_at = NOW()
+                             SET name = ?, type = ?, unit = ?, material_id = ?, specifications = ?, weight = ?, weight_unit = ?, status = ?, updated_at = NOW()
                              WHERE id = ?",
                             [
                                 $name,
@@ -1579,6 +1614,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 $unitValue !== '' ? $unitValue : null,
                                 $materialCode !== '' ? $materialCode : null,
                                 $specificationsValue !== '' ? $specificationsValue : null,
+                                $weightValue,
+                                $weightUnitValue !== '' ? $weightUnitValue : null,
                                 $statusValue,
                                 $materialId
                             ]
@@ -1870,6 +1907,8 @@ if (isset($_GET['ajax']) && isset($_GET['material_id'])) {
             'unit' => $materialRow['unit'] ?? '',
             'quantity' => isset($materialRow['quantity']) ? floatval($materialRow['quantity']) : null,
             'status' => $materialRow['status'] ?? 'active',
+            'weight' => isset($materialRow['weight']) ? floatval($materialRow['weight']) : null,
+            'weight_unit' => $materialRow['weight_unit'] ?? null,
         ];
 
         foreach (['supplier_id', 'reorder_point', 'lead_time_days', 'unit_price'] as $optionalKey) {
@@ -2723,6 +2762,13 @@ document.addEventListener('DOMContentLoaded', function() {
                                     <?php if (!empty($material['specifications'])): ?>
                                         <div style="font-size: 0.75rem; color: #6c757d; margin-top: 2px;"><?php echo htmlspecialchars($material['specifications']); ?></div>
                                     <?php endif; ?>
+                                    <?php if (!empty($material['weight']) && floatval($material['weight']) > 0): ?>
+                                        <div style="font-size: 0.75rem; color: #6f42c1; margin-top: 2px;">
+                                            <i class="bi bi-box-seam"></i>
+                                            <?php echo rtrim(rtrim(number_format(floatval($material['weight']), 3), '0'), '.'); ?>
+                                            <?php echo htmlspecialchars($material['weight_unit'] ?? ''); ?>
+                                        </div>
+                                    <?php endif; ?>
                                     <?php if (!empty($material['material_id'])): ?>
                                         <div style="font-size: 0.7rem; color: #0dcaf0; margin-top: 2px;"><?php echo htmlspecialchars($material['material_id']); ?></div>
                                     <?php endif; ?>
@@ -2836,6 +2882,13 @@ document.addEventListener('DOMContentLoaded', function() {
                                     <?php endif; ?>
                                     <?php if (!empty($material['specifications'])): ?>
                                         <small class="text-muted d-block"><?php echo htmlspecialchars($material['specifications']); ?></small>
+                                    <?php endif; ?>
+                                    <?php if (!empty($material['weight']) && floatval($material['weight']) > 0): ?>
+                                        <small class="d-block" style="color: #6f42c1;">
+                                            <i class="bi bi-box-seam"></i>
+                                            <?php echo rtrim(rtrim(number_format(floatval($material['weight']), 3), '0'), '.'); ?>
+                                            <?php echo htmlspecialchars($material['weight_unit'] ?? ''); ?>
+                                        </small>
                                     <?php endif; ?>
                                     <?php if (!empty($material['material_id'])): ?>
                                         <small class="text-info d-block"><?php echo htmlspecialchars($material['material_id']); ?></small>
@@ -3061,6 +3114,28 @@ document.addEventListener('DOMContentLoaded', function() {
                                    name="alias"
                                    maxlength="255"
                                    placeholder="اسم مختصر للأداة">
+                        </div>
+                    </div>
+                    <div class="row g-3 mt-0">
+                        <div class="col-md-6">
+                            <label class="form-label">الوزن (اختياري)</label>
+                            <input type="number"
+                                   class="form-control"
+                                   name="weight"
+                                   step="0.001"
+                                   min="0"
+                                   placeholder="مثال: 2">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">وحدة الوزن</label>
+                            <select class="form-select" name="weight_unit">
+                                <option value="">بدون وزن</option>
+                                <option value="كيلوجرام">كيلوجرام</option>
+                                <option value="جرام">جرام</option>
+                                <option value="ملليلتر">ملليلتر</option>
+                                <option value="لتر">لتر</option>
+                            </select>
+                            <small class="text-muted">مثال: ٢ كيلوجرام أكياس</small>
                         </div>
                     </div>
                 </div>
@@ -3461,7 +3536,24 @@ document.addEventListener('DOMContentLoaded', function() {
                 <textarea class="form-control" name="specifications" id="edit_material_specifications" rows="3" maxlength="500"></textarea>
             </div>
 
-            <div class="mb-3">
+            <div class="row g-3 mt-0">
+                <div class="col-md-6">
+                    <label class="form-label">الوزن</label>
+                    <input type="number" class="form-control" name="weight" id="edit_material_weight" step="0.001" min="0" placeholder="مثال: 2">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">وحدة الوزن</label>
+                    <select class="form-select" name="weight_unit" id="edit_material_weight_unit">
+                        <option value="">بدون وزن</option>
+                        <option value="كيلوجرام">كيلوجرام</option>
+                        <option value="جرام">جرام</option>
+                        <option value="ملليلتر">ملليلتر</option>
+                        <option value="لتر">لتر</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="mb-3 mt-3">
                 <label class="form-label">الكمية الحالية (للقراءة فقط)</label>
                 <div class="form-control-plaintext fw-semibold" id="edit_material_quantity_display">-</div>
                 <small class="text-muted">لتعديل الكمية يرجى استخدام أزرار "إضافة كمية" أو "تسجيل تالف".</small>
@@ -4266,6 +4358,8 @@ function openEditModalFromData(material) {
     const specsInput = document.getElementById('edit_material_specifications');
     const statusSelect = document.getElementById('edit_material_status');
     const quantityDisplay = document.getElementById('edit_material_quantity_display');
+    const weightInput = document.getElementById('edit_material_weight');
+    const weightUnitSelect = document.getElementById('edit_material_weight_unit');
 
     materialIdInput.value = material.id ?? '';
     nameInput.value = material.name ?? '';
@@ -4276,6 +4370,15 @@ function openEditModalFromData(material) {
     unitInput.value = material.unit ?? '';
     codeInput.value = material.material_id ?? '';
     specsInput.value = material.specifications ?? '';
+
+    if (weightInput) {
+        weightInput.value = material.weight ? parseFloat(material.weight) : '';
+    }
+    if (weightUnitSelect) {
+        const wUnit = material.weight_unit ?? '';
+        const availableWeightUnits = Array.from(weightUnitSelect.options).map(o => o.value);
+        weightUnitSelect.value = availableWeightUnits.includes(wUnit) ? wUnit : '';
+    }
 
     if (statusSelect) {
         const availableStatuses = Array.from(statusSelect.options).map(option => option.value);
