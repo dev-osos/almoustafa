@@ -560,8 +560,6 @@ $singleReceipt = count($receipts) === 1;
             ?>
             <img src="data:image/png;base64,<?php echo base64_encode(file_get_contents($logoPath)); ?>" alt="Al Moustafa" style="width:120px; height:auto; display:block; margin: 0 auto 6px;" />
             <?php endif; ?>
-            <div class="company-name"><?php echo htmlspecialchars($companyName); ?></div>
-            <div class="receipt-type">إيصال أوردر</div>
         </div>
         <div class="task-number">
             رقم الأوردر: <?php echo htmlspecialchars($taskNumber); ?>
