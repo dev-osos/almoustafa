@@ -553,6 +553,14 @@ $singleReceipt = count($receipts) === 1;
         ?>
         <div class="receipt-sheet">
         <div class="receipt-sheet-inner">
+        <div style="text-align:center; margin-bottom: 8px;">
+            <?php
+            $logoPath = __DIR__ . '/5906671525383834908.jpg';
+            if (file_exists($logoPath)):
+            ?>
+            <img src="data:image/jpeg;base64,<?php echo base64_encode(file_get_contents($logoPath)); ?>" alt="Al Moustafa" style="width:120px; height:auto;" />
+            <?php endif; ?>
+        </div>
         <div class="task-number">
             رقم الاوردر: <?php echo htmlspecialchars($taskNumber); ?>
         </div>
