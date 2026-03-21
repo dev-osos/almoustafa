@@ -2921,13 +2921,19 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                             <small class="product-effective-qty-hint text-muted d-none" id="product-effective-qty-hint-0"></small>
                                         </div>
                                         <div class="col-6 col-md-2">
-                                            <label class="form-label small">التصنيف</label>
-                                            <select class="form-select form-select-sm product-category-input" name="products[0][category]" id="product-category-0">
-                                                <option value="">— اختر التصنيف —</option>
-                                                <?php foreach ($quCategoriesForTask as $qc): ?>
-                                                <option value="<?php echo htmlspecialchars($qc['type'], ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($qc['type'], ENT_QUOTES, 'UTF-8'); ?></option>
-                                                <?php endforeach; ?>
-                                            </select>
+                                            <div class="category-wrap">
+                                                <label class="form-label small">التصنيف</label>
+                                                <select class="form-select form-select-sm product-category-input" name="products[0][category]" id="product-category-0">
+                                                    <option value="">— اختر التصنيف —</option>
+                                                    <?php foreach ($quCategoriesForTask as $qc): ?>
+                                                    <option value="<?php echo htmlspecialchars($qc['type'], ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($qc['type'], ENT_QUOTES, 'UTF-8'); ?></option>
+                                                    <?php endforeach; ?>
+                                                </select>
+                                            </div>
+                                            <div class="raw-qty-wrap d-none">
+                                                <label class="form-label small text-info">الكمية المتاحة</label>
+                                                <div class="raw-material-qty-value fw-semibold text-info">—</div>
+                                            </div>
                                         </div>
                                         <div class="col-6 col-md-2">
                                             <label class="form-label small">الوحدة</label>
@@ -3882,6 +3888,16 @@ function buildEditProductRow(idx, product) {
         var t = (qc.type || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
         return '<option value="' + t + '"' + (t === catVal ? ' selected' : '') + '>' + t + '</option>';
     }).join('');
+    var initRawQty = '—';
+    var initRawQtyClass = 'raw-material-qty-value fw-semibold text-info';
+    if (isRawMat && p.name) {
+        var _rmDetail = (typeof getProductDetail === 'function') ? getProductDetail(p.name) : null;
+        if (_rmDetail && _rmDetail.available_qty !== undefined) {
+            var _qty = parseFloat(_rmDetail.available_qty);
+            initRawQty = _qty.toLocaleString('ar-EG', {maximumFractionDigits: 3}) + ' كيلو';
+            initRawQtyClass = 'raw-material-qty-value fw-semibold ' + (_qty > 0 ? 'text-success' : 'text-danger');
+        }
+    }
     var qtyVal = (p.quantity !== null && p.quantity !== undefined && p.quantity !== '') ? String(p.quantity) : '';
     var priceVal = (p.price !== null && p.price !== undefined && p.price !== '') ? String(p.price) : '';
     var lineTotalVal = (p.line_total !== null && p.line_total !== undefined && p.line_total !== '') ? String(p.line_total) : '';
@@ -3896,8 +3912,12 @@ function buildEditProductRow(idx, product) {
         '</div></div>' +
         '<div class="col-6 col-md-2"><label class="form-label small">الكمية</label>' +
         '<input type="number" class="form-control edit-product-qty" name="products[' + idx + '][quantity]" step="1" min="0" placeholder="0" value="' + qtyVal + '"></div>' +
-        '<div class="col-6 col-md-2"><label class="form-label small">التصنيف</label>' +
+        '<div class="col-6 col-md-2">' +
+        '<div class="category-wrap"' + (isRawMat ? ' style="display:none"' : '') + '><label class="form-label small">التصنيف</label>' +
         '<select class="form-select form-select-sm edit-product-category" name="products[' + idx + '][category]">' + catOpts + '</select></div>' +
+        '<div class="raw-qty-wrap"' + (!isRawMat ? ' style="display:none"' : '') + '>' +
+        '<label class="form-label small text-info">الكمية المتاحة</label>' +
+        '<div class="' + initRawQtyClass + '">' + initRawQty + '</div></div></div>' +
         '<div class="col-6 col-md-2"><label class="form-label small">الوحدة</label>' +
         '<select class="form-select form-select-sm edit-product-unit" name="products[' + idx + '][unit]">' + unitOpts + '</select></div>' +
         '<div class="col-6 col-md-2"><label class="form-label small">السعر</label>' +
@@ -4883,6 +4903,38 @@ document.addEventListener('DOMContentLoaded', function () {
         return prefix ? prefix + ' - ' + name : name;
     }
 
+    // إظهار/إخفاء حقل التصنيف ↔ الكمية المتاحة حسب النوع
+    function toggleRawMaterialQtyDisplay(row, isRawMaterial) {
+        var categoryWrap = row.querySelector('.category-wrap');
+        var rawQtyWrap = row.querySelector('.raw-qty-wrap');
+        if (!categoryWrap || !rawQtyWrap) return;
+        if (isRawMaterial) {
+            categoryWrap.style.display = 'none';
+            rawQtyWrap.style.display = '';
+        } else {
+            categoryWrap.style.display = '';
+            rawQtyWrap.style.display = 'none';
+            var qtyEl = rawQtyWrap.querySelector('.raw-material-qty-value');
+            if (qtyEl) { qtyEl.textContent = '—'; qtyEl.className = 'raw-material-qty-value fw-semibold text-info'; }
+        }
+    }
+    // تحديث عرض الكمية المتاحة من الخامة المختارة
+    function updateRawMaterialQtyDisplay(row, productName) {
+        var rawQtyWrap = row.querySelector('.raw-qty-wrap');
+        if (!rawQtyWrap) return;
+        var qtyEl = rawQtyWrap.querySelector('.raw-material-qty-value');
+        if (!qtyEl) return;
+        var detail = getProductDetail(productName);
+        if (detail && detail.type === 'raw_material' && detail.available_qty !== undefined) {
+            var qty = parseFloat(detail.available_qty);
+            qtyEl.textContent = qty.toLocaleString('ar-EG', {maximumFractionDigits: 3}) + ' كيلو';
+            qtyEl.className = 'raw-material-qty-value fw-semibold ' + (qty > 0 ? 'text-success' : 'text-danger');
+        } else {
+            qtyEl.textContent = '—';
+            qtyEl.className = 'raw-material-qty-value fw-semibold text-info';
+        }
+    }
+
     // تطبيق تقييد الوحدة للخامات (كيلو/جرام فقط)
     function applyRawMaterialUnitRestriction(row, isRawMaterial) {
         var unitSelect = row.querySelector('.product-unit-input') || row.querySelector('.edit-product-unit');
@@ -4901,6 +4953,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }).join('');
             row.setAttribute('data-item-type', '');
         }
+        toggleRawMaterialQtyDisplay(row, isRawMaterial);
     }
 
     // دروب داون اسم المنتج: يفلتر حسب المدخلات ويسمح بالإدخال اليدوي أو الاختيار من القائمة
@@ -4987,6 +5040,7 @@ document.addEventListener('DOMContentLoaded', function () {
                             var _typeSelector = _row.querySelector('.product-type-selector');
                             if (_typeSelector && itemDetailType) _typeSelector.value = itemDetailType;
                             applyRawMaterialUnitRestriction(_row, itemDetailType === 'raw_material');
+                            if (itemDetailType === 'raw_material') updateRawMaterialQtyDisplay(_row, item.name);
                             setTimeout(function() { if (typeof fetchProductPriceHistory === 'function') fetchProductPriceHistory(_row); }, 50);
                         }
                     });
@@ -5091,11 +5145,17 @@ document.addEventListener('DOMContentLoaded', function () {
                     <small class="product-effective-qty-hint text-muted d-none" id="product-effective-qty-hint-${productIndex}"></small>
                 </div>
                 <div class="col-6 col-md-2">
-                    <label class="form-label small">التصنيف</label>
-                    <select class="form-select form-select-sm product-category-input" name="products[${productIndex}][category]" id="product-category-${productIndex}">
-                        <option value="">— اختر التصنيف —</option>
-                        ${categoryOptions}
-                    </select>
+                    <div class="category-wrap">
+                        <label class="form-label small">التصنيف</label>
+                        <select class="form-select form-select-sm product-category-input" name="products[${productIndex}][category]" id="product-category-${productIndex}">
+                            <option value="">— اختر التصنيف —</option>
+                            ${categoryOptions}
+                        </select>
+                    </div>
+                    <div class="raw-qty-wrap d-none">
+                        <label class="form-label small text-info">الكمية المتاحة</label>
+                        <div class="raw-material-qty-value fw-semibold text-info">—</div>
+                    </div>
                 </div>
                 <div class="col-6 col-md-2">
                     <label class="form-label small">الوحدة</label>
