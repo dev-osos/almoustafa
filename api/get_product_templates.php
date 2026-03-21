@@ -350,6 +350,40 @@ try {
         error_log('Error fetching raw materials for product templates: ' . $e->getMessage());
     }
 
+    // 9. أدوات التعبئة
+    try {
+        if (!empty($db->queryOne("SHOW TABLES LIKE 'packaging_materials'"))) {
+            $rows = $db->query("
+                SELECT id, material_id, name, type AS material_type, specifications, quantity, unit
+                FROM packaging_materials
+                WHERE status = 'active' AND name IS NOT NULL AND name != ''
+                ORDER BY name ASC
+            ");
+            foreach ($rows as $row) {
+                $id    = (int)$row['id'];
+                $name  = trim($row['name'] ?? '');
+                $specs = trim($row['specifications'] ?? '');
+                $label = $name . ($specs !== '' ? ' - ' . $specs : '');
+                if ($label === '' || isset($seenNames[$label])) continue;
+                $seenNames[$label] = true;
+                $templates[] = $label;
+                $templatesDetailed[] = [
+                    'id'            => $id,
+                    'name'          => $label,
+                    'code'          => trim($row['material_id'] ?? ''),
+                    'type'          => 'packaging',
+                    'section'       => trim($row['material_type'] ?? 'أدوات التعبئة'),
+                    'stock_id'      => $id,
+                    'stock_table'   => 'packaging_materials',
+                    'available_qty' => round((float)($row['quantity'] ?? 0), 2),
+                    'unit'          => trim($row['unit'] ?? 'قطعة'),
+                ];
+            }
+        }
+    } catch (Exception $e) {
+        error_log('Error fetching packaging materials for product templates: ' . $e->getMessage());
+    }
+
     // ترتيب أبجدياً
     sort($templates);
     $templates = array_values($templates);
