@@ -555,7 +555,7 @@ $singleReceipt = count($receipts) === 1;
         <div class="receipt-sheet-inner">
         <div style="text-align:center; margin-bottom: 8px;">
             <?php
-            $logoPath = __DIR__ . '/5906671525383834908.png';
+            $logoPath = __DIR__ . '/logo.png';
             if (file_exists($logoPath)):
             ?>
             <img src="data:image/png;base64,<?php echo base64_encode(file_get_contents($logoPath)); ?>" alt="Al Moustafa" style="width:120px; height:auto;" />
