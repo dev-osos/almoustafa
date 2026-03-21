@@ -1,16 +1,11 @@
-# Apache Configuration for InfinityFree
+# Apache Configuration for Hostinger
 RewriteEngine On
 
-# إعادة توجيه HTTP إلى HTTPS - إجبار استخدام HTTPS
-# تحسين للتعامل مع الخوادم خلف البروكسي (مثل InfinityFree)
-# فقط أعد التوجيه إذا كنا متأكدين 100% أننا على HTTP وليس HTTPS
-# التحقق من جميع المؤشرات قبل إعادة التوجيه لمنع الحلقة
-# ملاحظة: إذا استمرت مشكلة "ERR_TOO_MANY_REDIRECTS"، قم بتعطيل هذا القسم
-# عن طريق إضافة # في بداية كل سطر من السطور التالية
-RewriteCond %{HTTPS} off
+# إعادة توجيه HTTP إلى HTTPS - متوافق مع Hostinger
+# Hostinger يستخدم proxy عكسي ويمرر X-Forwarded-Proto
+# نتحقق فقط من X-Forwarded-Proto لأن Hostinger ينهي SSL عند الـ proxy
 RewriteCond %{HTTP:X-Forwarded-Proto} !https
-RewriteCond %{HTTP:X-Forwarded-SSL} !on  
-RewriteCond %{SERVER_PORT} !^443$
+RewriteCond %{HTTPS} off
 # منع إعادة التوجيه إذا كان الطلب لملفات ثابتة أو API
 RewriteCond %{REQUEST_URI} !^/api/
 RewriteCond %{REQUEST_URI} !\.(css|js|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|json|webp)$
@@ -73,7 +68,7 @@ RewriteRule ^(.*)$ index.php [QSA,L]
     Header set Referrer-Policy "strict-origin-when-cross-origin"
     
     # Content-Security-Policy محسّن
-    Header set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://code.jquery.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; img-src 'self' data: https: blob:; font-src 'self' data: https://cdn.jsdelivr.net https://fonts.gstatic.com https://fonts.googleapis.com; connect-src 'self' https://cdn.jsdelivr.net https://code.jquery.com https://api.qrserver.com https://errors.infinityfree.net https://fonts.googleapis.com https://fonts.gstatic.com; frame-src 'self' https://www.google.com https://maps.google.com; frame-ancestors 'self';"
+    Header set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://code.jquery.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; img-src 'self' data: https: blob:; font-src 'self' data: https://cdn.jsdelivr.net https://fonts.gstatic.com https://fonts.googleapis.com; connect-src 'self' https://cdn.jsdelivr.net https://code.jquery.com https://api.qrserver.com https://fonts.googleapis.com https://fonts.gstatic.com; frame-src 'self' https://www.google.com https://maps.google.com; frame-ancestors 'self';"
     
     # Permissions-Policy محسّن - السماح بالصلاحيات المطلوبة
     # ملاحظة: notifications تم إزالته من Feature-Policy لأنه غير مدعوم في Feature-Policy

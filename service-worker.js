@@ -3,7 +3,7 @@
 // ============================================
 // Configuration
 // ============================================
-const CACHE_VERSION = 'v2.2.1'; // إصلاح redirect لصفحة أوردرات الإنتاج في كروم
+const CACHE_VERSION = 'v2.3.0'; // إصلاح مشكلة redirect بعد الانتقال لـ Hostinger
 const PRECACHE_NAME = `albarakah-precache-${CACHE_VERSION}`;
 const STATIC_CACHE_NAME = `albarakah-static-${CACHE_VERSION}`;
 const CDN_CACHE_NAME = `albarakah-cdn-${CACHE_VERSION}`;
@@ -180,15 +180,14 @@ async function cacheFirst(request, cacheName) {
     // Not in cache, fetch from network
     const response = await fetch(request);
     
-    // Only cache successful responses
-    if (response.status === 200 && response.ok) {
+    // Only cache successful, non-redirect responses
+    if (response.status === 200 && response.ok && !response.redirected) {
       const responseClone = response.clone();
         cache.put(request, responseClone).catch(() => {
           // Silently fail caching - don't block response
-          // Don't log to console
         });
     }
-    
+
     return response;
   } catch (error) {
     // If cache operations fail, fallback to network only
@@ -224,7 +223,7 @@ async function networkFirst(request, cacheName, isNavigation = false) {
             // استخدام cache فوراً - هذا يسرع التحميل بشكل كبير
             // تحديث cache في الخلفية بدون انتظار
             fetchWithTimeout(request).then(async (networkResponse) => {
-              if (networkResponse.status === 200 && networkResponse.ok) {
+              if (networkResponse.status === 200 && networkResponse.ok && !networkResponse.redirected) {
                 try {
                   const cache = await caches.open(name);
                   const responseClone = networkResponse.clone();
@@ -253,21 +252,20 @@ async function networkFirst(request, cacheName, isNavigation = false) {
   try {
     const response = await fetchWithTimeout(request);
     
-    // Cache successful responses (only if CacheStorage is available)
-    if (response.status === 200 && response.ok && ('caches' in self)) {
+    // Cache successful, non-redirect responses (only if CacheStorage is available)
+    // Safari يرفض تقديم redirect responses من الـ service worker
+    if (response.status === 200 && response.ok && !response.redirected && ('caches' in self)) {
       try {
         const cache = await caches.open(cacheName);
         const responseClone = response.clone();
         cache.put(request, responseClone).catch(() => {
           // Silently fail caching - don't block response
-          // Don't log to console
         });
       } catch (cacheError) {
         // Cache error shouldn't block response
-        // Silently handle all cache errors - don't log to console
       }
     }
-    
+
     return response;
   } catch (error) {
     // Network failed, try cache
@@ -430,8 +428,8 @@ self.addEventListener('activate', (event) => {
 
         await Promise.allSettled(deletePromises);
         
-        // Claim clients (optional - can be removed if causing issues)
-        // await self.clients.claim();
+        // Claim clients فوراً لضمان أن الـ SW الجديد يسيطر ويمسح الكاش القديم
+        await self.clients.claim();
       } catch (error) {
         // If CacheStorage fails completely, continue without cleanup
         // Silently handle errors - don't log to console
