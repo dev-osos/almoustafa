@@ -7060,7 +7060,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     // إضافة المنطقة الجديدة إلى select
                     var newOption = document.createElement('option');
                     newOption.value = data.region.id;
-                    newOption.textContent = data.region.name;
+                    newOption.textContent = data.region.id + ' - ' + data.region.name;
                     newOption.selected = true;
                     
                     if (addLocalCustomerRegionSelect) {

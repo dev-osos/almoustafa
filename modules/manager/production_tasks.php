@@ -4141,8 +4141,8 @@ document.addEventListener('DOMContentLoaded', function() {
             inputEl.addEventListener('input', function() { if (hiddenIdEl) hiddenIdEl.value = ''; showEditDrop(inputEl, hiddenIdEl, dropEl, list, getLabel, matcher); });
             inputEl.addEventListener('focus', function() { showEditDrop(inputEl, hiddenIdEl, dropEl, list, getLabel, matcher); });
         }
-        initEditSearch(localSearch, localId, localDrop, localCustomers, function(c) { return c.name + (c.phone ? ' — ' + c.phone : ''); }, matchLocal);
-        initEditSearch(repSearch, null, repDrop, repCustomers, function(c) { return c.rep_name ? c.name + ' (' + c.rep_name + ')' : c.name; }, matchRep);
+        initEditSearch(localSearch, localId, localDrop, localCustomers, function(c) { return c.id + ' - ' + c.name + (c.phone ? ' — ' + c.phone : ''); }, matchLocal);
+        initEditSearch(repSearch, null, repDrop, repCustomers, function(c) { return c.id + ' - ' + (c.rep_name ? c.name + ' (' + c.rep_name + ')' : c.name); }, matchRep);
 
         // تفعيل زر السجل عند اختيار عميل مسجل
         if (localId) {
@@ -4407,8 +4407,8 @@ document.addEventListener('DOMContentLoaded', function () {
             });
         }
 
-        initCustomerSearch(localSearch, localId, localDrop, localCustomers, function(c) { return c.name + (c.phone ? ' — ' + c.phone : ''); }, matchLocalCustomer);
-        initCustomerSearch(repSearch, repId, repDrop, repCustomers, function(c) { return c.rep_name ? c.name + ' (' + c.rep_name + ')' : c.name; }, matchRepCustomer);
+        initCustomerSearch(localSearch, localId, localDrop, localCustomers, function(c) { return c.id + ' - ' + c.name + (c.phone ? ' — ' + c.phone : ''); }, matchLocalCustomer);
+        initCustomerSearch(repSearch, repId, repDrop, repCustomers, function(c) { return c.id + ' - ' + (c.rep_name ? c.name + ' (' + c.rep_name + ')' : c.name); }, matchRepCustomer);
 
         document.addEventListener('click', function(e) {
             if (!e.target.closest('.search-wrap')) {
@@ -4554,7 +4554,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 filtered.forEach(function(item) {
                     var el = document.createElement('div');
                     el.className = opts.itemClass;
-                    el.textContent = item.name;
+                    el.textContent = (item.code || item.id || '') + ' - ' + item.name;
                     el.dataset.code = item.code || '';
                     el.addEventListener('mousedown', function(e) {
                         e.preventDefault();

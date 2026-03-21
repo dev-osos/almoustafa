@@ -2305,7 +2305,7 @@ if (isset($_GET['id'])) {
                                     );
                                     foreach ($currentUserCustomers as $customer): ?>
                                         <option value="<?php echo $customer['id']; ?>">
-                                            <?php echo htmlspecialchars($customer['name']); ?>
+                                            <?php echo (int)$customer['id'] . ' - ' . htmlspecialchars($customer['name']); ?>
                                         </option>
                                     <?php endforeach; ?>
                                 <?php else: ?>
@@ -3121,7 +3121,7 @@ function loadSalesRepCustomers(salesRepId) {
             data.customers.forEach(function(customer) {
                 const option = document.createElement('option');
                 option.value = customer.id;
-                option.textContent = customer.name;
+                option.textContent = customer.id + ' - ' + customer.name;
                 existingCustomerSelect.appendChild(option);
             });
             
@@ -3657,7 +3657,7 @@ function loadCardSalesRepCustomers(salesRepId) {
             data.customers.forEach(function(customer) {
                 const option = document.createElement('option');
                 option.value = customer.id;
-                option.textContent = customer.name;
+                option.textContent = customer.id + ' - ' + customer.name;
                 cardExistingCustomerSelect.appendChild(option);
             });
             

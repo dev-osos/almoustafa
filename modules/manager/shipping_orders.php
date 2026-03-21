@@ -7430,7 +7430,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const option = document.createElement('option');
                 option.value = newCustomerId;
                 option.selected = true;
-                let optionText = newCustomerName;
+                let optionText = newCustomerId + ' - ' + newCustomerName;
                 if (newCustomerPhone) {
                     optionText += ' - ' + newCustomerPhone;
                 }
