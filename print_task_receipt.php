@@ -558,7 +558,7 @@ $singleReceipt = count($receipts) === 1;
             $logoPath = __DIR__ . '/5906671525383834908.png';
             if (file_exists($logoPath)):
             ?>
-            <img src="data:image/jpeg;base64,<?php echo base64_encode(file_get_contents($logoPath)); ?>" alt="Al Moustafa" style="width:120px; height:auto;" />
+            <img src="data:image/png;base64,<?php echo base64_encode(file_get_contents($logoPath)); ?>" alt="Al Moustafa" style="width:120px; height:auto;" />
             <?php endif; ?>
         </div>
         <div class="task-number">
