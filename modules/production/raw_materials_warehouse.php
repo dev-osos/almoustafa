@@ -2756,6 +2756,28 @@ try {
     error_log("Error adding form_payload column to unified_product_templates: " . $e->getMessage());
 }
 
+// إضافة عمود template_code (كود مميز من 3 أرقام) لـ unified_product_templates
+try {
+    $templateCodeColumn = $db->queryOne("SHOW COLUMNS FROM unified_product_templates LIKE 'template_code'");
+    if (empty($templateCodeColumn)) {
+        $db->execute("ALTER TABLE `unified_product_templates` ADD COLUMN `template_code` varchar(3) DEFAULT NULL COMMENT 'كود مميز من 3 أرقام' AFTER `product_name`");
+        $db->execute("CREATE UNIQUE INDEX `idx_unified_template_code` ON `unified_product_templates` (`template_code`)");
+        // توليد أكواد للقوالب الموجودة
+        $existingTemplates = $db->query("SELECT id FROM unified_product_templates WHERE template_code IS NULL");
+        $usedCodes = [];
+        foreach ($existingTemplates as $t) {
+            do {
+                $code = str_pad((string)random_int(100, 999), 3, '0', STR_PAD_LEFT);
+            } while (in_array($code, $usedCodes, true));
+            $usedCodes[] = $code;
+            $db->execute("UPDATE unified_product_templates SET template_code = ? WHERE id = ?", [$code, $t['id']]);
+        }
+        error_log('Column template_code added to unified_product_templates and codes generated');
+    }
+} catch (Exception $e) {
+    error_log("template_code column addition error for unified_product_templates (non-critical): " . $e->getMessage());
+}
+
 // جدول المواد الخام للقوالب
 $templateRawMaterialsCheck = $db->queryOne("SHOW TABLES LIKE 'template_raw_materials'");
 if (empty($templateRawMaterialsCheck)) {

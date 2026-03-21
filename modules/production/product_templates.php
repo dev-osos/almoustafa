@@ -334,7 +334,29 @@ try {
         } catch (Exception $colError) {
             error_log("Column addition error (non-critical): " . $colError->getMessage());
         }
-        
+
+        // إضافة عمود template_code (كود مميز من 3 أرقام) إذا لم يكن موجوداً
+        try {
+            $templateCodeColumn = $db->queryOne("SHOW COLUMNS FROM product_templates LIKE 'template_code'");
+            if (empty($templateCodeColumn)) {
+                $db->execute("ALTER TABLE `product_templates` ADD COLUMN `template_code` varchar(3) DEFAULT NULL COMMENT 'كود مميز من 3 أرقام' AFTER `product_name`");
+                $db->execute("CREATE UNIQUE INDEX `idx_template_code` ON `product_templates` (`template_code`)");
+                // توليد أكواد للقوالب الموجودة
+                $existingTemplates = $db->query("SELECT id FROM product_templates WHERE template_code IS NULL");
+                $usedCodes = [];
+                foreach ($existingTemplates as $t) {
+                    do {
+                        $code = str_pad((string)random_int(100, 999), 3, '0', STR_PAD_LEFT);
+                    } while (in_array($code, $usedCodes, true));
+                    $usedCodes[] = $code;
+                    $db->execute("UPDATE product_templates SET template_code = ? WHERE id = ?", [$code, $t['id']]);
+                }
+                error_log('Column template_code added to product_templates and codes generated');
+            }
+        } catch (Exception $colError) {
+            error_log("template_code column addition error (non-critical): " . $colError->getMessage());
+        }
+
         // التحقق من وجود الجداول المرتبطة حتى لو كان product_templates موجوداً
         $packagingTableCheck = $db->queryOne("SHOW TABLES LIKE 'product_template_packaging'");
         if (empty($packagingTableCheck)) {
@@ -663,10 +685,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $customCartonQuantityColumnExists = !empty($db->queryOne("SHOW COLUMNS FROM product_templates LIKE 'custom_carton_quantity'"));
                 $customCartonTypeIdColumnExists = !empty($db->queryOne("SHOW COLUMNS FROM product_templates LIKE 'custom_carton_type_id'"));
                 
+                // توليد كود مميز من 3 أرقام للقالب الجديد
+                $templateCode = null;
+                $templateCodeColumnExists = !empty($db->queryOne("SHOW COLUMNS FROM product_templates LIKE 'template_code'"));
+                if ($templateCodeColumnExists) {
+                    $existingCodes = array_column($db->query("SELECT template_code FROM product_templates WHERE template_code IS NOT NULL"), 'template_code');
+                    $maxAttempts = 50;
+                    for ($i = 0; $i < $maxAttempts; $i++) {
+                        $code = str_pad((string)random_int(100, 999), 3, '0', STR_PAD_LEFT);
+                        if (!in_array($code, $existingCodes, true)) {
+                            $templateCode = $code;
+                            break;
+                        }
+                    }
+                }
+
                 // بناء الاستعلام ديناميكيًا بناءً على وجود الأعمدة
                 $columns = ['product_name', 'honey_quantity', 'created_by', 'status', 'template_type', 'main_supplier_id', 'notes', 'details_json'];
                 $placeholders = ['?', '0', '?', "'active'", '?', 'NULL', 'NULL', '?'];
                 $values = [$productName, $currentUser['id'], 'legacy', $templateDetailsJson];
+
+                // إضافة template_code إن كان العمود موجودًا
+                if ($templateCodeColumnExists && $templateCode !== null) {
+                    $columns[] = 'template_code';
+                    $placeholders[] = '?';
+                    $values[] = $templateCode;
+                }
                 
                 // إضافة unit_price إن كان موجودًا
                 if ($unitPrice !== null) {
@@ -1249,6 +1293,7 @@ foreach ($templates as &$template) {
 
     $template['details_payload'] = [
         'id'                 => $templateId,
+        'template_code'      => $template['template_code'] ?? null,
         'product_name'       => $template['product_name'],
         'status'             => $template['status'],
         'status_label'       => $statusLabel,
@@ -1811,7 +1856,7 @@ $baseUrl = getRelativeUrl('dashboard/manager.php?page=product_templates');
             $statusBadgeClass = $template['status'] === 'active' ? 'bg-success' : 'bg-secondary';
             $statusLabel = $template['status_label'] ?? ($template['status'] === 'active' ? 'نشط' : 'غير نشط');
             $createdAtLabel = $template['created_at_label'] ?? formatDate($template['created_at']);
-            $templateSearchText = $template['product_name'] ?? '';
+            $templateSearchText = ($template['template_code'] ?? '') . ' ' . ($template['product_name'] ?? '');
             ?>
             <div class="col-6 col-md-6 col-lg-4 template-list-item" data-search="<?php echo htmlspecialchars($templateSearchText, ENT_QUOTES, 'UTF-8'); ?>">
                 <div class="card shadow-sm h-100 template-card" style="border-top: 4px solid <?php echo $cardAccentColor; ?>; transition: transform 0.2s, box-shadow 0.2s;">
@@ -1820,6 +1865,9 @@ $baseUrl = getRelativeUrl('dashboard/manager.php?page=product_templates');
                         <div class="template-icon" style="<?php echo $iconStyle; ?>" title="<?php echo htmlspecialchars($primaryMaterialName ?: 'نوع المادة غير محدد'); ?>">
                             <i class="bi <?php echo htmlspecialchars($materialIconTheme['icon']); ?>"></i>
                         </div>
+                        <?php if (!empty($template['template_code'])): ?>
+                            <span class="badge bg-primary-subtle text-primary mb-1" style="font-size: 0.75rem;">#<?php echo htmlspecialchars($template['template_code']); ?></span>
+                        <?php endif; ?>
                         <h4 class="template-product-name">
                             <?php echo htmlspecialchars($template['product_name']); ?>
                         </h4>
