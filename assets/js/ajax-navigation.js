@@ -1451,6 +1451,64 @@
         const link = event.target.closest('a');
         if (!link) return;
 
+        // تنقل سلس لترقيم صفحات العملاء المحليين بدون ريفريش للمحتوى
+        const customersPagination = link.closest('#customersPagination');
+        if (customersPagination && link.classList.contains('page-link') && !link.closest('.page-item.disabled') && !link.closest('.page-item.active')) {
+            const href = link.getAttribute('href') || link.href || '';
+            if (href && href.indexOf('page=local_customers') !== -1) {
+                event.preventDefault();
+                event.stopPropagation();
+                var tableBody = document.getElementById('customersTableBody');
+                var countSpan = document.getElementById('customersCount');
+                var loadingEl = document.getElementById('customersTableLoading');
+                var tableWrapper = document.querySelector('.dashboard-table-wrapper');
+                if (loadingEl) loadingEl.style.display = '';
+                if (tableWrapper) tableWrapper.style.opacity = '0.5';
+                var fetchUrl = href;
+                if (fetchUrl.indexOf('http') !== 0) {
+                    fetchUrl = window.location.origin + window.location.pathname + fetchUrl;
+                }
+                fetch(fetchUrl, { headers: { 'X-Requested-With': 'XMLHttpRequest' }, cache: 'no-cache' })
+                    .then(function(r) { return r.text(); })
+                    .then(function(html) {
+                        var parser = new DOMParser();
+                        var doc = parser.parseFromString(html, 'text/html');
+                        var newBody = doc.getElementById('customersTableBody');
+                        if (newBody && tableBody) tableBody.innerHTML = newBody.innerHTML;
+                        var newPag = doc.getElementById('customersPagination');
+                        if (newPag && customersPagination) {
+                            customersPagination.innerHTML = newPag.innerHTML;
+                            customersPagination.style.display = newPag.style.display || '';
+                        }
+                        var newCount = doc.getElementById('customersCount');
+                        if (newCount && countSpan) countSpan.textContent = newCount.textContent;
+                        try {
+                            var u = new URL(fetchUrl, window.location.origin);
+                            window.history.pushState({ url: u.pathname + '?' + u.searchParams.toString() }, '', u.pathname + '?' + u.searchParams.toString());
+                            currentUrl = window.location.href;
+                        } catch (e) {}
+                        // إعادة تهيئة dropdowns الجدول
+                        if (typeof window.reinitLocalCustomersTableActionsDropdowns === 'function') {
+                            window.reinitLocalCustomersTableActionsDropdowns();
+                        }
+                        if (typeof bootstrap !== 'undefined' && bootstrap.Dropdown && tableBody) {
+                            tableBody.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(function(el) {
+                                new bootstrap.Dropdown(el);
+                            });
+                        }
+                        // تمرير لأعلى الجدول
+                        var tableCard = document.querySelector('#localCustomersTable');
+                        if (tableCard) tableCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    })
+                    .catch(function() { window.location.href = href; })
+                    .finally(function() {
+                        if (loadingEl) loadingEl.style.display = 'none';
+                        if (tableWrapper) tableWrapper.style.opacity = '';
+                    });
+                return;
+            }
+        }
+
         // تنقل سلس لترقيم الحركات المالية (خزنة الشركة / صفحة المحاسب) بدون ريفريش للمحتوى
         const transactionsContainer = link.closest('#company-cash-transactions-list') || link.closest('#accountant-financial-transactions-list');
         if (transactionsContainer && link.classList.contains('page-link') && !link.closest('.page-item.disabled')) {
