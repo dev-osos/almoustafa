@@ -4955,7 +4955,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 items.forEach(function(item) {
                     var div = document.createElement('div');
                     div.className = 'product-template-item';
-                    var prefix = item.detail ? (item.detail.code || '') : '';
+                    var prefix = item.detail ? (item.detail.code || item.detail.id || '') : '';
                     var sectionLabel = (item.detail && item.detail.section) ? ' <span class="text-muted small">— ' + escHtml(item.detail.section) + '</span>' : '';
                     div.innerHTML = (prefix ? makeIdBadge(prefix) : '') + escHtml(item.name) + sectionLabel;
                     div.addEventListener('click', function() {
