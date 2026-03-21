@@ -4909,11 +4909,13 @@ document.addEventListener('DOMContentLoaded', function () {
         var rawQtyWrap = row.querySelector('.raw-qty-wrap');
         if (!categoryWrap || !rawQtyWrap) return;
         if (isRawMaterial) {
-            categoryWrap.style.display = 'none';
+            categoryWrap.classList.add('d-none');
+            rawQtyWrap.classList.remove('d-none');
             rawQtyWrap.style.display = '';
         } else {
+            categoryWrap.classList.remove('d-none');
             categoryWrap.style.display = '';
-            rawQtyWrap.style.display = 'none';
+            rawQtyWrap.classList.add('d-none');
             var qtyEl = rawQtyWrap.querySelector('.raw-material-qty-value');
             if (qtyEl) { qtyEl.textContent = '—'; qtyEl.className = 'raw-material-qty-value fw-semibold text-info'; }
         }
