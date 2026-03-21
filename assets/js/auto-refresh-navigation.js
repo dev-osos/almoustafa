@@ -343,26 +343,16 @@
             link.removeAttribute('data-navigating');
         }, 1000);
         
-        // كشف نوع الاتصال
-        const isMobileData = detectConnectionType();
-        
-        // عند استخدام بيانات الهاتف، استخدام AJAX navigation لتسريع التنقل
-        if (isMobileData) {
-            // محاولة استخدام AJAX navigation
-            if (tryAjaxNavigation(targetUrl)) {
-                // نجح AJAX navigation - لا حاجة لإعادة التحميل الكاملة
-                return;
-            }
+        // محاولة استخدام AJAX navigation دائماً لتجنب إعادة تحميل الصفحة
+        if (tryAjaxNavigation(targetUrl)) {
+            // نجح AJAX navigation - لا حاجة لإعادة التحميل الكاملة
+            return;
         }
-        
-        // عند استخدام WiFi أو فشل AJAX navigation، استخدام الطريقة القديمة
-        // تعيين علامة في sessionStorage للإشارة إلى أننا ننتقل من الشريط الجانبي
+
+        // فشل AJAX navigation - استخدام الطريقة القديمة كـ fallback
         sessionStorage.setItem('sidebar_navigation', 'true');
         sessionStorage.setItem('sidebar_navigation_url', targetUrl);
-        // إزالة علامة إعادة التحميل السابقة
         sessionStorage.removeItem(REFRESH_FLAG_KEY);
-        
-        // الانتقال إلى الصفحة الجديدة (سيتم إظهار التنبيه وإعادة التحميل في الصفحة الجديدة)
         window.location.href = targetUrl;
     }
     
