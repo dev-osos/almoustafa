@@ -257,9 +257,15 @@
         }
         
         .topbar-center {
+            display: flex !important;
             flex: 1;
             min-width: 0;
             max-width: 130px; /* بحث مضغوط على الهاتف */
+        }
+
+        .topbar-search {
+            display: flex !important;
+            width: 100%;
         }
 
         .topbar-search input {

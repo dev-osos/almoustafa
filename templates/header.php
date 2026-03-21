@@ -805,6 +805,7 @@ if (ob_get_level() > 0) {
         
         window.APP_CONFIG = window.APP_CONFIG || {};
         window.APP_CONFIG.passwordMinLength = <?php echo json_encode(getPasswordMinLength(), JSON_UNESCAPED_UNICODE); ?>;
+        window.APP_CONFIG.searchRefApiUrl = <?php echo json_encode(rtrim(getBasePath(), '/') . '/api/search_by_reference.php', JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
         
         // دالة للتحقق من تحميل جميع stylesheets
         window.stylesheetsLoaded = false;

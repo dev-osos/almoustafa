@@ -792,17 +792,12 @@ if (window.__mainJsLoaded) {
             isSearching = true;
             setSearchState('loading');
 
-            // تحديد base path (يدعم التطبيق المثبت في مسار فرعي)
-            const basePath = (function () {
-                const scripts = document.querySelectorAll('script[src]');
-                for (let s of scripts) {
-                    const m = s.src.match(/^(https?:\/\/[^/]+)(\/[^/]+\/)?assets\//);
-                    if (m) return m[2] ? m[2].replace(/\/$/, '') : '';
-                }
-                return '';
-            })();
+            // استخدام URL الـ API المُحقن من PHP (أو fallback بسيط)
+            const apiBase = (window.APP_CONFIG && window.APP_CONFIG.searchRefApiUrl)
+                ? window.APP_CONFIG.searchRefApiUrl
+                : '/api/search_by_reference.php';
 
-            const apiUrl = basePath + '/api/search_by_reference.php?ref=' + encodeURIComponent(ref);
+            const apiUrl = apiBase + '?ref=' + encodeURIComponent(ref);
 
             fetch(apiUrl, { credentials: 'same-origin' })
                 .then(function (r) { return r.json(); })

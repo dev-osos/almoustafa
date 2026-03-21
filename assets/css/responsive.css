@@ -40,6 +40,7 @@
     }
     
     .topbar-center {
+        display: flex !important;
         flex: 1;
         min-width: 0;
         max-width: 140px;
@@ -70,8 +71,9 @@
 
     /* البحث: يظهر مضغوطاً على الهاتف */
     .topbar-search {
-        display: block;
+        display: flex !important;
         max-width: 100%;
+        width: 100%;
     }
 
     .topbar-search input {
