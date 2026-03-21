@@ -4118,7 +4118,7 @@ document.addEventListener('DOMContentLoaded', function() {
             filtered.forEach(function(c) {
                 var div = document.createElement('div');
                 div.className = 'search-dropdown-item-task';
-                div.textContent = getLabel(c);
+                div.innerHTML = makeIdBadge(c.id) + escHtml(c.name) + (c.phone ? ' <span class="text-muted small">— ' + escHtml(c.phone) + '</span>' : '');
                 div.dataset.id = c.id;
                 div.dataset.name = c.name;
                 div.dataset.phone = (c.phone || '').toString();
@@ -4210,10 +4210,10 @@ window.openOrderReceiptModal = function(orderId) {
                 var rows = items.map(function(it) {
                     var qty = typeof it.quantity === 'number' ? it.quantity : parseFloat(it.quantity) || 0;
                     var un = (it.unit || 'قطعة').trim();
-                    var pLabel = (it.product_name || '-');
+                    var pName = it.product_name || '-';
                     var pDetail = getProductDetail(it.product_name);
-                    if (pDetail) { var pPrefix = pDetail.code || pDetail.id || ''; if (pPrefix) pLabel = pPrefix + ' - ' + pLabel; }
-                    return '<tr><td>' + pLabel + '</td><td class="text-end">' + qty + ' ' + un + '</td></tr>';
+                    var pCell = pDetail && (pDetail.code || pDetail.id) ? makeIdBadge(pDetail.code || pDetail.id) + escHtml(pName) : escHtml(pName);
+                    return '<tr><td>' + pCell + '</td><td class="text-end">' + qty + ' ' + un + '</td></tr>';
                 }).join('');
                 bodyEl.innerHTML =
                     '<div class="border rounded p-3 mb-3 bg-light"><h6 class="mb-2">بيانات الطلب</h6>' +
@@ -4270,10 +4270,10 @@ window.openTaskReceiptModal = function(taskId) {
                 var rows = data.items.map(function(it) {
                     var qty = typeof it.quantity === 'number' ? it.quantity : parseFloat(it.quantity) || 0;
                     var un = (it.unit || 'قطعة').trim();
-                    var pLabel = (it.product_name || '-');
+                    var pName = it.product_name || '-';
                     var pDetail = getProductDetail(it.product_name);
-                    if (pDetail) { var pPrefix = pDetail.code || pDetail.id || ''; if (pPrefix) pLabel = pPrefix + ' - ' + pLabel; }
-                    return '<tr><td>' + pLabel + '</td><td class="text-end">' + qty + ' ' + un + '</td></tr>';
+                    var pCell = pDetail && (pDetail.code || pDetail.id) ? makeIdBadge(pDetail.code || pDetail.id) + escHtml(pName) : escHtml(pName);
+                    return '<tr><td>' + pCell + '</td><td class="text-end">' + qty + ' ' + un + '</td></tr>';
                 }).join('');
                 bodyEl.innerHTML = '<table class="table table-sm table-bordered mb-0"><thead class="table-light"><tr><th>المنتج</th><th class="text-end">الكمية</th></tr></thead><tbody>' + rows + '</tbody></table>';
                 bodyEl.style.display = 'block';
@@ -4381,7 +4381,7 @@ document.addEventListener('DOMContentLoaded', function () {
             filtered.forEach(function(c) {
                 var div = document.createElement('div');
                 div.className = 'search-dropdown-item-task';
-                div.textContent = getLabel(c);
+                div.innerHTML = makeIdBadge(c.id) + escHtml(c.name) + (c.phone ? ' <span class="text-muted small">— ' + escHtml(c.phone) + '</span>' : '') + (c.rep_name ? ' <span class="text-muted small">(' + escHtml(c.rep_name) + ')</span>' : '');
                 div.dataset.id = c.id;
                 div.dataset.name = c.name;
                 div.dataset.phone = (c.phone || '').toString();
@@ -4507,6 +4507,15 @@ document.addEventListener('DOMContentLoaded', function () {
         editTaskTypeEl.addEventListener('change', toggleEditTgFields);
     }
 
+    // ===== دوال مساعدة مشتركة =====
+    function makeIdBadge(id) {
+        if (!id && id !== 0) return '';
+        return '<span class="almostafa-id-badge">' + String(id) + '</span> ';
+    }
+    function escHtml(str) {
+        return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
     // ===== نظام autocomplete للمحافظات والمدن + جلب المدن ديناميكياً =====
     (function() {
         var GOV_LIST = <?php $govJson = json_decode(file_get_contents(__DIR__ . '/../../gov.json'), true); echo json_encode($govJson['data']['listZonesDropdown'] ?? []); ?>;
@@ -4516,6 +4525,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         var style = document.createElement('style');
         style.textContent = [
+            '.almostafa-id-badge{display:inline-block;padding:1px 6px;border-radius:4px;background:#e0f2fe;color:#0369a1;border:1px solid #7dd3fc;font-size:0.72em;font-weight:700;font-family:monospace;vertical-align:middle;white-space:nowrap;}',
             '.gov-dropdown,.city-dropdown{position:absolute;top:100%;right:0;left:0;z-index:1055;background:#fff;border:1px solid #ced4da;border-radius:0 0 .375rem .375rem;max-height:220px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.12);}',
             '.gov-dropdown .gov-item,.city-dropdown .city-item{padding:.45rem .75rem;cursor:pointer;font-size:.9rem;}',
             '.gov-dropdown .gov-item:hover,.gov-dropdown .gov-item.active,.city-dropdown .city-item:hover,.city-dropdown .city-item.active{background:#e9f0ff;color:#0d6efd;}',
@@ -4561,7 +4571,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 filtered.forEach(function(item) {
                     var el = document.createElement('div');
                     el.className = opts.itemClass;
-                    el.textContent = (item.code || item.id || '') + ' - ' + item.name;
+                    var prefix = item.code || item.id || '';
+                    el.innerHTML = (prefix ? makeIdBadge(prefix) : '') + escHtml(item.name);
                     el.dataset.code = item.code || '';
                     el.addEventListener('mousedown', function(e) {
                         e.preventDefault();
@@ -4913,7 +4924,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     var div = document.createElement('div');
                     div.className = 'product-template-item';
                     var prefix = item.detail ? (item.detail.code || item.detail.id || '') : '';
-                    div.textContent = prefix ? prefix + ' - ' + item.name : item.name;
+                    div.innerHTML = (prefix ? makeIdBadge(prefix) : '') + escHtml(item.name);
                     div.addEventListener('click', function() {
                         inputEl.value = item.name;
                         dropEl.classList.add('d-none');
@@ -5497,10 +5508,10 @@ document.addEventListener('DOMContentLoaded', function () {
                         order.products.forEach(function(p) {
                             var qty   = p.quantity != null ? p.quantity + ' ' + (p.unit || '') : '—';
                             var price = p.price != null ? parseFloat(p.price).toFixed(2) + ' ج.م' : '—';
-                            var pLabel = p.name || '-';
-                            var pDetail = getProductDetail(p.name);
-                            if (pDetail) { var pPrefix = pDetail.code || pDetail.id || ''; if (pPrefix) pLabel = pPrefix + ' - ' + pLabel; }
-                            html += '<tr><td>' + pLabel + '</td><td class="text-center">' + qty + '</td><td class="text-center">' + price + '</td></tr>';
+                            var pName2 = p.name || '-';
+                            var pDetail2 = getProductDetail(p.name);
+                            var pCell2 = pDetail2 && (pDetail2.code || pDetail2.id) ? makeIdBadge(pDetail2.code || pDetail2.id) + escHtml(pName2) : escHtml(pName2);
+                            html += '<tr><td>' + pCell2 + '</td><td class="text-center">' + qty + '</td><td class="text-center">' + price + '</td></tr>';
                         });
                         html += '</tbody></table></div>';
                     } else {
@@ -6167,10 +6178,10 @@ function loadEditCustomerHistory(customerIdVal, customerName) {
                 if (order.products && order.products.length > 0) {
                     html += '<div class="table-responsive"><table class="table table-sm mb-1 small"><thead class="table-light"><tr><th>المنتج</th><th class="text-center">الكمية</th><th class="text-center">السعر</th></tr></thead><tbody>';
                     order.products.forEach(function(p) {
-                        var pLabel = p.name || '-';
-                        var pDetail = getProductDetail(p.name);
-                        if (pDetail) { var pPrefix = pDetail.code || pDetail.id || ''; if (pPrefix) pLabel = pPrefix + ' - ' + pLabel; }
-                        html += '<tr><td>' + pLabel + '</td><td class="text-center">' + (p.quantity != null ? p.quantity + ' ' + (p.unit || '') : '—') + '</td><td class="text-center">' + (p.price != null ? parseFloat(p.price).toFixed(2) + ' ج.م' : '—') + '</td></tr>';
+                        var pName3 = p.name || '-';
+                        var pDetail3 = getProductDetail(p.name);
+                        var pCell3 = pDetail3 && (pDetail3.code || pDetail3.id) ? makeIdBadge(pDetail3.code || pDetail3.id) + escHtml(pName3) : escHtml(pName3);
+                        html += '<tr><td>' + pCell3 + '</td><td class="text-center">' + (p.quantity != null ? p.quantity + ' ' + (p.unit || '') : '—') + '</td><td class="text-center">' + (p.price != null ? parseFloat(p.price).toFixed(2) + ' ج.م' : '—') + '</td></tr>';
                     });
                     html += '</tbody></table></div>';
                 } else { html += '<div class="px-2 pb-2 text-muted small">لا تفاصيل منتجات</div>'; }

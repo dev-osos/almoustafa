@@ -6,6 +6,24 @@
 (function() {
     'use strict';
 
+    // إضافة CSS للـ badge
+    (function injectBadgeStyle() {
+        if (document.getElementById('almostafa-id-badge-style')) return;
+        var s = document.createElement('style');
+        s.id = 'almostafa-id-badge-style';
+        s.textContent = '.almostafa-id-badge{display:inline-block;padding:1px 6px;border-radius:4px;background:#e0f2fe;color:#0369a1;border:1px solid #7dd3fc;font-size:0.72em;font-weight:700;font-family:monospace;vertical-align:middle;margin-left:4px;white-space:nowrap;}';
+        document.head.appendChild(s);
+    })();
+
+    function makeIdBadge(id) {
+        if (!id && id !== 0) return '';
+        return '<span class="almostafa-id-badge">' + id + '</span>';
+    }
+
+    function escHtml(str) {
+        return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
     var PLACEHOLDER = 'بحث عن عميل...';
     var DATA_INITED = 'data-customer-search-inited';
     var WRAPPER_CLASS = 'customer-select-search-wrapper';
@@ -69,12 +87,24 @@
             opts.forEach(function(opt) {
                 var text = opt.textContent.trim();
                 if (f && text.toLowerCase().indexOf(f) === -1) return;
+                // فصل الـ ID عن الاسم (صيغة: "123 - الاسم")
+                var dashIdx = text.indexOf(' - ');
+                var badgeHtml = '';
+                var displayName = text;
+                if (dashIdx > 0) {
+                    var idPart = text.substring(0, dashIdx).trim();
+                    var namePart = text.substring(dashIdx + 3).trim();
+                    if (/^\d+$/.test(idPart)) {
+                        badgeHtml = makeIdBadge(idPart);
+                        displayName = namePart;
+                    }
+                }
                 var li = document.createElement('li');
                 li.setAttribute('role', 'option');
                 li.setAttribute('data-value', opt.value);
                 li.className = 'px-3 py-2 cursor-pointer customer-select-option';
                 li.style.cursor = 'pointer';
-                li.textContent = text;
+                li.innerHTML = badgeHtml + escHtml(displayName);
                 li.addEventListener('click', function() {
                     selectEl.value = opt.value;
                     input.value = text;

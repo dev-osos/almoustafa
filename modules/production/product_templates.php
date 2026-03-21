@@ -1866,7 +1866,7 @@ $baseUrl = getRelativeUrl('dashboard/manager.php?page=product_templates');
                             <i class="bi <?php echo htmlspecialchars($materialIconTheme['icon']); ?>"></i>
                         </div>
                         <?php if (!empty($template['template_code'])): ?>
-                            <span class="badge bg-primary-subtle text-primary mb-1" style="font-size: 0.75rem;">#<?php echo htmlspecialchars($template['template_code']); ?></span>
+                            <span class="almostafa-id-badge mb-1 d-inline-block"><?php echo htmlspecialchars($template['template_code']); ?></span>
                         <?php endif; ?>
                         <h4 class="template-product-name">
                             <?php echo htmlspecialchars($template['product_name']); ?>
@@ -1987,6 +1987,21 @@ if (file_exists($specificationsModulePath)) {
 <?php endif; ?>
 
 <style>
+/* بادج الـ ID السماوي */
+.almostafa-id-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: #e0f2fe;
+    color: #0369a1;
+    border: 1px solid #7dd3fc;
+    font-size: 0.72em;
+    font-weight: 700;
+    font-family: monospace;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
 /* أنماط أزرار التنقل بين الأقسام */
 .section-navigation {
     margin-bottom: 1.5rem;
