@@ -127,6 +127,102 @@ try {
         error_log('Error fetching external products for templates: ' . $e->getMessage());
     }
 
+    // جلب الخامات من مخزن الخامات
+    try {
+        // العسل
+        if (!empty($db->queryOne("SHOW TABLES LIKE 'honey_stock'"))) {
+            $honeyVarieties = $db->query("SELECT DISTINCT honey_variety FROM honey_stock WHERE honey_variety IS NOT NULL AND honey_variety != '' ORDER BY honey_variety ASC");
+            foreach ($honeyVarieties as $row) {
+                $variety = trim($row['honey_variety'] ?? '');
+                if ($variety === '') continue;
+                foreach (['عسل خام - ' . $variety, 'عسل مصفى - ' . $variety] as $matName) {
+                    if (!isset($seenNames[$matName])) {
+                        $seenNames[$matName] = true;
+                        $templates[] = $matName;
+                        $templatesDetailed[] = ['id' => 0, 'name' => $matName, 'code' => null, 'type' => 'raw_material'];
+                    }
+                }
+            }
+        }
+        // زيت الزيتون
+        if (!empty($db->queryOne("SHOW TABLES LIKE 'olive_oil_stock'"))) {
+            $matName = 'زيت زيتون';
+            if (!isset($seenNames[$matName])) {
+                $seenNames[$matName] = true;
+                $templates[] = $matName;
+                $templatesDetailed[] = ['id' => 0, 'name' => $matName, 'code' => null, 'type' => 'raw_material'];
+            }
+        }
+        // شمع العسل
+        if (!empty($db->queryOne("SHOW TABLES LIKE 'beeswax_stock'"))) {
+            $matName = 'شمع العسل';
+            if (!isset($seenNames[$matName])) {
+                $seenNames[$matName] = true;
+                $templates[] = $matName;
+                $templatesDetailed[] = ['id' => 0, 'name' => $matName, 'code' => null, 'type' => 'raw_material'];
+            }
+        }
+        // المكسرات
+        if (!empty($db->queryOne("SHOW TABLES LIKE 'nuts_stock'"))) {
+            $nutTypes = $db->query("SELECT DISTINCT nut_type FROM nuts_stock WHERE nut_type IS NOT NULL AND nut_type != '' ORDER BY nut_type ASC");
+            foreach ($nutTypes as $row) {
+                $matName = trim($row['nut_type'] ?? '');
+                if ($matName !== '' && !isset($seenNames[$matName])) {
+                    $seenNames[$matName] = true;
+                    $templates[] = $matName;
+                    $templatesDetailed[] = ['id' => 0, 'name' => $matName, 'code' => null, 'type' => 'raw_material'];
+                }
+            }
+        }
+        // السمسم
+        if (!empty($db->queryOne("SHOW TABLES LIKE 'sesame_stock'"))) {
+            $matName = 'سمسم';
+            if (!isset($seenNames[$matName])) {
+                $seenNames[$matName] = true;
+                $templates[] = $matName;
+                $templatesDetailed[] = ['id' => 0, 'name' => $matName, 'code' => null, 'type' => 'raw_material'];
+            }
+        }
+        // البلح
+        if (!empty($db->queryOne("SHOW TABLES LIKE 'date_stock'"))) {
+            $dateTypes = $db->query("SELECT DISTINCT date_type FROM date_stock WHERE date_type IS NOT NULL AND date_type != '' ORDER BY date_type ASC");
+            foreach ($dateTypes as $row) {
+                $matName = trim($row['date_type'] ?? '');
+                if ($matName !== '' && !isset($seenNames[$matName])) {
+                    $seenNames[$matName] = true;
+                    $templates[] = $matName;
+                    $templatesDetailed[] = ['id' => 0, 'name' => $matName, 'code' => null, 'type' => 'raw_material'];
+                }
+            }
+        }
+        // التلبينات
+        if (!empty($db->queryOne("SHOW TABLES LIKE 'turbine_stock'"))) {
+            $turbineTypes = $db->query("SELECT DISTINCT turbine_type FROM turbine_stock WHERE turbine_type IS NOT NULL AND turbine_type != '' ORDER BY turbine_type ASC");
+            foreach ($turbineTypes as $row) {
+                $matName = trim($row['turbine_type'] ?? '');
+                if ($matName !== '' && !isset($seenNames[$matName])) {
+                    $seenNames[$matName] = true;
+                    $templates[] = $matName;
+                    $templatesDetailed[] = ['id' => 0, 'name' => $matName, 'code' => null, 'type' => 'raw_material'];
+                }
+            }
+        }
+        // العطارة
+        if (!empty($db->queryOne("SHOW TABLES LIKE 'herbal_stock'"))) {
+            $herbalTypes = $db->query("SELECT DISTINCT herbal_type FROM herbal_stock WHERE herbal_type IS NOT NULL AND herbal_type != '' ORDER BY herbal_type ASC");
+            foreach ($herbalTypes as $row) {
+                $matName = trim($row['herbal_type'] ?? '');
+                if ($matName !== '' && !isset($seenNames[$matName])) {
+                    $seenNames[$matName] = true;
+                    $templates[] = $matName;
+                    $templatesDetailed[] = ['id' => 0, 'name' => $matName, 'code' => null, 'type' => 'raw_material'];
+                }
+            }
+        }
+    } catch (Exception $e) {
+        error_log('Error fetching raw materials for product templates: ' . $e->getMessage());
+    }
+
     // ترتيب أبجدياً
     sort($templates);
     $templates = array_values($templates);

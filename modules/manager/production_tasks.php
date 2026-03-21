@@ -726,7 +726,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'category' => $productCategory !== '' ? $productCategory : null,
                     'effective_quantity' => $effectiveQuantity,
                     'price' => $productPrice,
-                    'line_total' => $productLineTotal
+                    'line_total' => $productLineTotal,
+                    'item_type' => trim($productData['item_type'] ?? '')
                 ];
             }
         }
@@ -1679,7 +1680,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $unit = in_array(trim($p['unit'] ?? 'قطعة'), ['قطعة','كرتونة','عبوة','شرينك','دسته','جرام','كيلو'], true) ? trim($p['unit']) : 'قطعة';
                             $price = isset($p['price']) && $p['price'] !== '' ? (float)str_replace(',', '.', $p['price']) : null;
                             $lineTotal = isset($p['line_total']) && $p['line_total'] !== '' ? (float)str_replace(',', '.', $p['line_total']) : null;
-                            $products[] = ['name' => $name, 'quantity' => $qty, 'unit' => $unit, 'price' => $price, 'line_total' => $lineTotal];
+                            $products[] = ['name' => $name, 'quantity' => $qty, 'unit' => $unit, 'price' => $price, 'line_total' => $lineTotal, 'item_type' => trim($p['item_type'] ?? '')];
                         }
                     }
                     $notesParts = [];
@@ -1803,7 +1804,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
                             'quantity' => isset($p['quantity']) ? (is_numeric($p['quantity']) ? (float)$p['quantity'] : null) : null,
                             'unit' => trim((string)($p['unit'] ?? 'قطعة')) ?: 'قطعة',
                             'price' => isset($p['price']) && $p['price'] !== '' && $p['price'] !== null ? (is_numeric($p['price']) ? (float)$p['price'] : null) : null,
-                            'line_total' => isset($p['line_total']) && $p['line_total'] !== '' && $p['line_total'] !== null && is_numeric($p['line_total']) ? (float)$p['line_total'] : null
+                            'line_total' => isset($p['line_total']) && $p['line_total'] !== '' && $p['line_total'] !== null && is_numeric($p['line_total']) ? (float)$p['line_total'] : null,
+                            'item_type' => trim((string)($p['item_type'] ?? ''))
                         ];
                     }
                 }
@@ -2932,6 +2934,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                                 <option value="دسته">دسته</option>
                                                 <option value="قطعة" selected>قطعة</option>
                                             </select>
+                                            <input type="hidden" class="product-item-type-input" name="products[0][item_type]" value="">
                                         </div>
                                         <div class="col-6 col-md-2">
                                             <label class="form-label small">السعر</label>
@@ -3854,9 +3857,12 @@ var __quData = <?php echo json_encode($quDataForTask, JSON_UNESCAPED_UNICODE); ?
 
 var editProductIndex = 0;
 function buildEditProductRow(idx, product) {
-    var p = product || { name: '', quantity: '', unit: 'قطعة', price: '', line_total: '' };
+    var p = product || { name: '', quantity: '', unit: 'قطعة', price: '', line_total: '', item_type: '' };
     var unitVal = String(p.unit || 'قطعة').trim();
-    var unitOpts = ['كرتونة','عبوة','كيلو','جرام','شرينك','دسته','قطعة'].map(function(u) {
+    var itemType = String(p.item_type || '').trim();
+    var isRawMat = itemType === 'raw_material';
+    var unitList = isRawMat ? ['كيلو','جرام'] : ['كرتونة','عبوة','كيلو','جرام','شرينك','دسته','قطعة'];
+    var unitOpts = unitList.map(function(u) {
         return '<option value="' + u + '"' + (u === unitVal ? ' selected' : '') + '>' + u + '</option>';
     }).join('');
     var quCats = (typeof __quCategories !== 'undefined' && Array.isArray(__quCategories)) ? __quCategories : [];
@@ -3869,7 +3875,7 @@ function buildEditProductRow(idx, product) {
     var priceVal = (p.price !== null && p.price !== undefined && p.price !== '') ? String(p.price) : '';
     var lineTotalVal = (p.line_total !== null && p.line_total !== undefined && p.line_total !== '') ? String(p.line_total) : '';
     var nameVal = String(p.name || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    return '<div class="product-row mb-3 p-3 border rounded edit-product-row" data-edit-product-index="' + idx + '">' +
+    return '<div class="product-row mb-3 p-3 border rounded edit-product-row" data-edit-product-index="' + idx + '" data-item-type="' + (isRawMat ? 'raw_material' : '') + '">' +
         '<div class="row g-2">' +
         '<div class="col-12 col-md-3"><label class="form-label small">المنتج</label>' +
         '<div class="product-name-wrap position-relative">' +
@@ -3880,7 +3886,8 @@ function buildEditProductRow(idx, product) {
         '<div class="col-6 col-md-2"><label class="form-label small">التصنيف</label>' +
         '<select class="form-select form-select-sm edit-product-category" name="products[' + idx + '][category]">' + catOpts + '</select></div>' +
         '<div class="col-6 col-md-2"><label class="form-label small">الوحدة</label>' +
-        '<select class="form-select form-select-sm edit-product-unit" name="products[' + idx + '][unit]">' + unitOpts + '</select></div>' +
+        '<select class="form-select form-select-sm edit-product-unit" name="products[' + idx + '][unit]">' + unitOpts + '</select>' +
+        '<input type="hidden" class="product-item-type-input" name="products[' + idx + '][item_type]" value="' + (isRawMat ? 'raw_material' : '') + '"></div>' +
         '<div class="col-6 col-md-2"><label class="form-label small">السعر</label>' +
         '<input type="number" class="form-control edit-product-price" name="products[' + idx + '][price]" step="0.01" min="0" placeholder="0.00" value="' + priceVal + '"></div>' +
         '<div class="col-6 col-md-2"><label class="form-label small">الإجمالي</label>' +
@@ -4864,6 +4871,29 @@ document.addEventListener('DOMContentLoaded', function () {
         return prefix ? prefix + ' - ' + name : name;
     }
 
+    // تطبيق تقييد الوحدة للخامات (كيلو/جرام فقط)
+    function applyRawMaterialUnitRestriction(row, isRawMaterial) {
+        var unitSelect = row.querySelector('.product-unit-input') || row.querySelector('.edit-product-unit');
+        var itemTypeInput = row.querySelector('.product-item-type-input');
+        if (!unitSelect) return;
+        var currentUnit = unitSelect.value;
+        if (isRawMaterial) {
+            var defaultUnit = (currentUnit === 'جرام') ? 'جرام' : 'كيلو';
+            unitSelect.innerHTML = '<option value="كيلو"' + (defaultUnit === 'كيلو' ? ' selected' : '') + '>كيلو</option>' +
+                '<option value="جرام"' + (defaultUnit === 'جرام' ? ' selected' : '') + '>جرام</option>';
+            if (itemTypeInput) itemTypeInput.value = 'raw_material';
+            row.setAttribute('data-item-type', 'raw_material');
+        } else {
+            var units = ['كرتونة','عبوة','كيلو','جرام','شرينك','دسته','قطعة'];
+            var keepUnit = units.includes(currentUnit) ? currentUnit : 'قطعة';
+            unitSelect.innerHTML = units.map(function(u) {
+                return '<option value="' + u + '"' + (u === keepUnit ? ' selected' : '') + '>' + u + '</option>';
+            }).join('');
+            if (itemTypeInput) itemTypeInput.value = '';
+            row.setAttribute('data-item-type', '');
+        }
+    }
+
     // دروب داون اسم المنتج: يفلتر حسب المدخلات ويسمح بالإدخال اليدوي أو الاختيار من القائمة
     function initProductNameDropdown(inputEl) {
         if (!inputEl || inputEl.dataset.productDropdownInited === '1') return;
@@ -4905,10 +4935,13 @@ document.addEventListener('DOMContentLoaded', function () {
             // تجميع حسب النوع
             var externals = [];
             var templateItems = [];
+            var rawMaterials = [];
             filtered.forEach(function(name) {
                 var detail = getProductDetail(name);
                 if (detail && detail.type === 'external') {
                     externals.push({ name: name, detail: detail });
+                } else if (detail && detail.type === 'raw_material') {
+                    rawMaterials.push({ name: name, detail: detail });
                 } else {
                     templateItems.push({ name: name, detail: detail });
                 }
@@ -4929,13 +4962,17 @@ document.addEventListener('DOMContentLoaded', function () {
                         dropEl.classList.add('d-none');
                         inputEl.focus();
                         var _row = inputEl.closest('.product-row');
-                        if (_row) setTimeout(function() { if (typeof fetchProductPriceHistory === 'function') fetchProductPriceHistory(_row); }, 50);
+                        if (_row) {
+                            applyRawMaterialUnitRestriction(_row, item.detail && item.detail.type === 'raw_material');
+                            setTimeout(function() { if (typeof fetchProductPriceHistory === 'function') fetchProductPriceHistory(_row); }, 50);
+                        }
                     });
                     dropEl.appendChild(div);
                 });
             }
             addSection('📦 المنتجات الخارجية', externals);
             addSection('🏭 قوالب المنتجات', templateItems);
+            addSection('⚗️ الخامات', rawMaterials);
             dropEl.classList.remove('d-none');
         }
         function hideDropdown() {
@@ -5022,6 +5059,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         <option value="دسته">دسته</option>
                         <option value="قطعة" selected>قطعة</option>
                     </select>
+                    <input type="hidden" class="product-item-type-input" name="products[${productIndex}][item_type]" value="">
                 </div>
                 <div class="col-6 col-md-2">
                     <label class="form-label small">السعر</label>
