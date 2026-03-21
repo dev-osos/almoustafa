@@ -127,96 +127,138 @@ try {
         error_log('Error fetching external products for templates: ' . $e->getMessage());
     }
 
-    // جلب الخامات من مخزن الخامات
+    // جلب الخامات من مخزن الخامات (كل سجل فردي مع كود 4 أرقام ثابت)
+    // الكود مشتق من hash الجدول+ID ليكون ثابتاً دون الحاجة لتخزينه
+    $rawMaterialCodeSeen = []; // لمنع تكرار الكود
+    function makeRawMaterialCode(string $tableKey, int $id): string {
+        $hash = abs(crc32($tableKey . '_' . $id));
+        $code = str_pad((string)(($hash % 9000) + 1000), 4, '0', STR_PAD_LEFT);
+        return $code;
+    }
+    function addRawMaterial(string $label, string $tableKey, int $stockId, string $section,
+        array &$templates, array &$templatesDetailed, array &$seenNames): void {
+        if ($label === '' || isset($seenNames[$label])) return;
+        $seenNames[$label] = true;
+        $templates[] = $label;
+        $templatesDetailed[] = [
+            'id'         => 0,
+            'name'       => $label,
+            'code'       => makeRawMaterialCode($tableKey, $stockId),
+            'type'       => 'raw_material',
+            'section'    => $section,
+            'stock_id'   => $stockId,
+            'stock_table'=> $tableKey,
+        ];
+    }
     try {
         // العسل
         if (!empty($db->queryOne("SHOW TABLES LIKE 'honey_stock'"))) {
-            $honeyVarieties = $db->query("SELECT DISTINCT honey_variety FROM honey_stock WHERE honey_variety IS NOT NULL AND honey_variety != '' ORDER BY honey_variety ASC");
-            foreach ($honeyVarieties as $row) {
-                $variety = trim($row['honey_variety'] ?? '');
-                if ($variety === '') continue;
-                foreach (['عسل خام - ' . $variety, 'عسل مصفى - ' . $variety] as $matName) {
-                    if (!isset($seenNames[$matName])) {
-                        $seenNames[$matName] = true;
-                        $templates[] = $matName;
-                        $templatesDetailed[] = ['id' => 0, 'name' => $matName, 'code' => null, 'type' => 'raw_material'];
-                    }
-                }
+            $rows = $db->query("SELECT id, honey_variety FROM honey_stock ORDER BY id ASC");
+            foreach ($rows as $row) {
+                $variety = trim($row['honey_variety'] ?? 'غير محدد');
+                $id = (int)$row['id'];
+                addRawMaterial('عسل خام - ' . $variety, 'honey_stock_raw', $id, 'العسل', $templates, $templatesDetailed, $seenNames);
+                addRawMaterial('عسل مصفى - ' . $variety, 'honey_stock_filtered', $id, 'العسل', $templates, $templatesDetailed, $seenNames);
             }
         }
         // زيت الزيتون
         if (!empty($db->queryOne("SHOW TABLES LIKE 'olive_oil_stock'"))) {
-            $matName = 'زيت زيتون';
-            if (!isset($seenNames[$matName])) {
-                $seenNames[$matName] = true;
-                $templates[] = $matName;
-                $templatesDetailed[] = ['id' => 0, 'name' => $matName, 'code' => null, 'type' => 'raw_material'];
+            $hasSupplier = !empty($db->queryOne("SHOW COLUMNS FROM olive_oil_stock LIKE 'supplier_id'"));
+            $selectSql = $hasSupplier
+                ? "SELECT oos.id, s.name AS supplier_name FROM olive_oil_stock oos LEFT JOIN suppliers s ON oos.supplier_id = s.id ORDER BY oos.id ASC"
+                : "SELECT id, NULL AS supplier_name FROM olive_oil_stock ORDER BY id ASC";
+            $rows = $db->query($selectSql);
+            foreach ($rows as $row) {
+                $id = (int)$row['id'];
+                $label = !empty($row['supplier_name']) ? 'زيت زيتون - ' . $row['supplier_name'] : 'زيت زيتون #' . $id;
+                addRawMaterial($label, 'olive_oil_stock', $id, 'زيت الزيتون', $templates, $templatesDetailed, $seenNames);
             }
         }
         // شمع العسل
         if (!empty($db->queryOne("SHOW TABLES LIKE 'beeswax_stock'"))) {
-            $matName = 'شمع العسل';
-            if (!isset($seenNames[$matName])) {
-                $seenNames[$matName] = true;
-                $templates[] = $matName;
-                $templatesDetailed[] = ['id' => 0, 'name' => $matName, 'code' => null, 'type' => 'raw_material'];
+            $hasSupplier = !empty($db->queryOne("SHOW COLUMNS FROM beeswax_stock LIKE 'supplier_id'"));
+            $selectSql = $hasSupplier
+                ? "SELECT bs.id, s.name AS supplier_name FROM beeswax_stock bs LEFT JOIN suppliers s ON bs.supplier_id = s.id ORDER BY bs.id ASC"
+                : "SELECT id, NULL AS supplier_name FROM beeswax_stock ORDER BY id ASC";
+            $rows = $db->query($selectSql);
+            foreach ($rows as $row) {
+                $id = (int)$row['id'];
+                $label = !empty($row['supplier_name']) ? 'شمع العسل - ' . $row['supplier_name'] : 'شمع العسل #' . $id;
+                addRawMaterial($label, 'beeswax_stock', $id, 'شمع العسل', $templates, $templatesDetailed, $seenNames);
             }
         }
-        // المكسرات
+        // المكسرات (مفردة)
         if (!empty($db->queryOne("SHOW TABLES LIKE 'nuts_stock'"))) {
-            $nutTypes = $db->query("SELECT DISTINCT nut_type FROM nuts_stock WHERE nut_type IS NOT NULL AND nut_type != '' ORDER BY nut_type ASC");
-            foreach ($nutTypes as $row) {
-                $matName = trim($row['nut_type'] ?? '');
-                if ($matName !== '' && !isset($seenNames[$matName])) {
-                    $seenNames[$matName] = true;
-                    $templates[] = $matName;
-                    $templatesDetailed[] = ['id' => 0, 'name' => $matName, 'code' => null, 'type' => 'raw_material'];
-                }
+            $rows = $db->query("SELECT ns.id, ns.nut_type, s.name AS supplier_name FROM nuts_stock ns LEFT JOIN suppliers s ON ns.supplier_id = s.id ORDER BY ns.id ASC");
+            foreach ($rows as $row) {
+                $id = (int)$row['id'];
+                $label = !empty($row['supplier_name'])
+                    ? ($row['nut_type'] ?? 'مكسرات') . ' - ' . $row['supplier_name']
+                    : ($row['nut_type'] ?? 'مكسرات') . ' #' . $id;
+                addRawMaterial($label, 'nuts_stock', $id, 'المكسرات', $templates, $templatesDetailed, $seenNames);
+            }
+        }
+        // المكسرات (خلطة)
+        if (!empty($db->queryOne("SHOW TABLES LIKE 'mixed_nuts'"))) {
+            $rows = $db->query("SELECT mn.id, mn.batch_name, s.name AS supplier_name FROM mixed_nuts mn LEFT JOIN suppliers s ON mn.supplier_id = s.id ORDER BY mn.id ASC");
+            foreach ($rows as $row) {
+                $id = (int)$row['id'];
+                $batchName = trim($row['batch_name'] ?? '');
+                $label = 'خلطة مكسرات' . ($batchName !== '' ? ': ' . $batchName : ' #' . $id);
+                if (!empty($row['supplier_name'])) $label .= ' - ' . $row['supplier_name'];
+                addRawMaterial($label, 'mixed_nuts', $id, 'المكسرات', $templates, $templatesDetailed, $seenNames);
             }
         }
         // السمسم
         if (!empty($db->queryOne("SHOW TABLES LIKE 'sesame_stock'"))) {
-            $matName = 'سمسم';
-            if (!isset($seenNames[$matName])) {
-                $seenNames[$matName] = true;
-                $templates[] = $matName;
-                $templatesDetailed[] = ['id' => 0, 'name' => $matName, 'code' => null, 'type' => 'raw_material'];
+            $hasSupplier = !empty($db->queryOne("SHOW COLUMNS FROM sesame_stock LIKE 'supplier_id'"));
+            $selectSql = $hasSupplier
+                ? "SELECT ss.id, s.name AS supplier_name FROM sesame_stock ss LEFT JOIN suppliers s ON ss.supplier_id = s.id ORDER BY ss.id ASC"
+                : "SELECT id, NULL AS supplier_name FROM sesame_stock ORDER BY id ASC";
+            $rows = $db->query($selectSql);
+            foreach ($rows as $row) {
+                $id = (int)$row['id'];
+                $label = !empty($row['supplier_name']) ? 'سمسم - ' . $row['supplier_name'] : 'سمسم #' . $id;
+                addRawMaterial($label, 'sesame_stock', $id, 'السمسم', $templates, $templatesDetailed, $seenNames);
+            }
+        }
+        // الطحينة
+        if (!empty($db->queryOne("SHOW TABLES LIKE 'tahini_stock'"))) {
+            $rows = $db->query("SELECT ts.id, s.name AS supplier_name FROM tahini_stock ts LEFT JOIN suppliers s ON ts.supplier_id = s.id ORDER BY ts.id ASC");
+            foreach ($rows as $row) {
+                $id = (int)$row['id'];
+                $label = !empty($row['supplier_name']) ? 'طحينة - ' . $row['supplier_name'] : 'طحينة #' . $id;
+                addRawMaterial($label, 'tahini_stock', $id, 'السمسم', $templates, $templatesDetailed, $seenNames);
             }
         }
         // البلح
         if (!empty($db->queryOne("SHOW TABLES LIKE 'date_stock'"))) {
-            $dateTypes = $db->query("SELECT DISTINCT date_type FROM date_stock WHERE date_type IS NOT NULL AND date_type != '' ORDER BY date_type ASC");
-            foreach ($dateTypes as $row) {
-                $matName = trim($row['date_type'] ?? '');
-                if ($matName !== '' && !isset($seenNames[$matName])) {
-                    $seenNames[$matName] = true;
-                    $templates[] = $matName;
-                    $templatesDetailed[] = ['id' => 0, 'name' => $matName, 'code' => null, 'type' => 'raw_material'];
-                }
+            $rows = $db->query("SELECT id, date_type FROM date_stock ORDER BY id ASC");
+            foreach ($rows as $row) {
+                $id = (int)$row['id'];
+                $type = trim($row['date_type'] ?? 'غير محدد');
+                $label = $type !== '' ? $type : 'بلح #' . $id;
+                addRawMaterial($label, 'date_stock', $id, 'البلح', $templates, $templatesDetailed, $seenNames);
             }
         }
         // التلبينات
         if (!empty($db->queryOne("SHOW TABLES LIKE 'turbine_stock'"))) {
-            $turbineTypes = $db->query("SELECT DISTINCT turbine_type FROM turbine_stock WHERE turbine_type IS NOT NULL AND turbine_type != '' ORDER BY turbine_type ASC");
-            foreach ($turbineTypes as $row) {
-                $matName = trim($row['turbine_type'] ?? '');
-                if ($matName !== '' && !isset($seenNames[$matName])) {
-                    $seenNames[$matName] = true;
-                    $templates[] = $matName;
-                    $templatesDetailed[] = ['id' => 0, 'name' => $matName, 'code' => null, 'type' => 'raw_material'];
-                }
+            $rows = $db->query("SELECT id, turbine_type FROM turbine_stock ORDER BY id ASC");
+            foreach ($rows as $row) {
+                $id = (int)$row['id'];
+                $type = trim($row['turbine_type'] ?? 'غير محدد');
+                $label = $type !== '' ? $type : 'تلبينة #' . $id;
+                addRawMaterial($label, 'turbine_stock', $id, 'التلبينات', $templates, $templatesDetailed, $seenNames);
             }
         }
         // العطارة
         if (!empty($db->queryOne("SHOW TABLES LIKE 'herbal_stock'"))) {
-            $herbalTypes = $db->query("SELECT DISTINCT herbal_type FROM herbal_stock WHERE herbal_type IS NOT NULL AND herbal_type != '' ORDER BY herbal_type ASC");
-            foreach ($herbalTypes as $row) {
-                $matName = trim($row['herbal_type'] ?? '');
-                if ($matName !== '' && !isset($seenNames[$matName])) {
-                    $seenNames[$matName] = true;
-                    $templates[] = $matName;
-                    $templatesDetailed[] = ['id' => 0, 'name' => $matName, 'code' => null, 'type' => 'raw_material'];
-                }
+            $rows = $db->query("SELECT id, herbal_type FROM herbal_stock ORDER BY id ASC");
+            foreach ($rows as $row) {
+                $id = (int)$row['id'];
+                $type = trim($row['herbal_type'] ?? 'غير محدد');
+                $label = $type !== '' ? $type : 'عطارة #' . $id;
+                addRawMaterial($label, 'herbal_stock', $id, 'العطاره', $templates, $templatesDetailed, $seenNames);
             }
         }
     } catch (Exception $e) {
