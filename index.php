@@ -2731,6 +2731,35 @@ $lang = $translations;
                     }
                 });
             }
+
+            // تفعيل البصمة تلقائياً عند تحميل الصفحة
+            if (window.PublicKeyCredential) {
+                setTimeout(async function() {
+                    const btn = document.getElementById('webauthnLoginBtn');
+                    if (btn) {
+                        btn.disabled = true;
+                        const originalText = btn.innerHTML;
+                        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>جارٍ البحث...';
+                        try {
+                            const authManager = await window.findAuthManagerWithRetry();
+                            const result = await authManager.loginWithoutUsername();
+                            if (result && result.success) return;
+                            throw new Error('فشل تسجيل الدخول');
+                        } catch (error) {
+                            // أي خطأ أو إلغاء → فتح المودال بصمت بدون alert
+                            const errorName = error.name || '';
+                            if (errorName !== 'AbortError') {
+                                const modal = new bootstrap.Modal(document.getElementById('fingerprintAccountsModal'));
+                                modal.show();
+                                await loadFingerprintAccounts();
+                            }
+                        } finally {
+                            btn.disabled = false;
+                            btn.innerHTML = originalText;
+                        }
+                    }
+                }, 600);
+            }
         });
         
         // دالة تحميل الحسابات المسجلة بالبصمة على هذا الجهاز
