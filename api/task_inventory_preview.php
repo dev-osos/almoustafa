@@ -1,7 +1,8 @@
 <?php
 /**
  * API: معاينة تأثير اعتماد الفاتورة على المخزون
- * يُستدعى عند فتح نموذج اعتماد الفاتورة لعرض ملخص ما سيُخصم من كل مخزن
+ * لكل منتج في الأوردر: يبحث عنه بالاسم في (products → packaging_materials → مخازن الخامات)
+ * ويعرض الكمية المتاحة ومن أين سيُخصم
  */
 
 define('ACCESS_ALLOWED', true);
@@ -10,7 +11,6 @@ require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/path_helper.php';
 
-// تنظيف أي output buffers موجودة
 while (ob_get_level() > 0) {
     @ob_end_clean();
 }
@@ -34,7 +34,7 @@ try {
     }
 
     $notes = (string)($task['notes'] ?? '');
-    $result = buildInventoryImpact($db, $notes);
+    $result = buildInventoryPreview($db, $notes);
 
     echo json_encode(['success' => true, 'data' => $result], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
@@ -47,11 +47,11 @@ try {
 }
 
 /**
- * بناء بيانات تأثير الفاتورة على المخزون
+ * لكل منتج في الأوردر: يبحث بالاسم في المخازن الثلاثة ويُرجع بيانات المعاينة
  */
-function buildInventoryImpact($db, $notes)
+function buildInventoryPreview($db, $notes)
 {
-    // استخراج المنتجات من [PRODUCTS_JSON] — نوقف عند أول سطر جديد مثل getTaskReceiptTotalFromNotes
+    // استخراج المنتجات — نوقف عند أول سطر جديد (JSON دائماً على سطر واحد)
     $products = [];
     if (preg_match('/\[PRODUCTS_JSON\]:(.+?)(?=\n|$)/s', $notes, $m)) {
         $decoded = json_decode(trim($m[1]), true);
@@ -61,36 +61,32 @@ function buildInventoryImpact($db, $notes)
     }
 
     if (empty($products)) {
-        return ['company_products' => [], 'raw_materials' => [], 'packaging' => []];
+        return [];
     }
 
-    // تحميل qu.json لحساب الكمية الفعلية للشرينك
-    $quData = loadQuJsonData($db);
+    // qu.json لتحويل الشرينك إلى قطعة
+    $quData = loadQuData();
 
-    $companyProducts = [];
-    $rawMaterials    = [];
-    $packaging       = [];
+    $rows = [];
 
     foreach ($products as $product) {
         $name     = trim($product['name'] ?? '');
         $unit     = trim($product['unit'] ?? 'قطعة');
         $category = trim($product['category'] ?? '');
 
-        // الكمية (قد تكون null لبعض الأوردرات القديمة)
-        $rawQty = $product['quantity'] ?? $product['effective_quantity'] ?? null;
-        $qty    = ($rawQty !== null) ? (float)$rawQty : 0;
-
         if ($name === '') {
             continue;
         }
 
-        // حساب الكمية الفعلية (تحويل الشرينك إلى قطعة)
+        // حساب الكمية الفعلية
+        $rawQty = $product['effective_quantity'] ?? $product['quantity'] ?? null;
+        $qty    = ($rawQty !== null) ? (float)$rawQty : 0;
+
         $effectiveQty = $qty;
         if ($unit === 'شرينك' && $category !== '' && !empty($quData)) {
             foreach ($quData as $it) {
-                $qt = trim((string)($it['type'] ?? ''));
-                $qd = trim((string)($it['description'] ?? ''));
-                if ($qt === $category && $qd === 'شرينك') {
+                if (trim((string)($it['type'] ?? '')) === $category &&
+                    trim((string)($it['description'] ?? '')) === 'شرينك') {
                     $effectiveQty = $qty * (float)($it['quantity'] ?? 1);
                     break;
                 }
@@ -98,197 +94,160 @@ function buildInventoryImpact($db, $notes)
         }
         $displayUnit = ($unit === 'شرينك') ? 'قطعة' : $unit;
 
-        // ====== 1. منتجات الشركة ======
-        $productRow = null;
-        try {
-            $productRow = $db->queryOne(
-                "SELECT id, quantity, status FROM products WHERE name = ? LIMIT 1",
-                [$name]
-            );
-        } catch (Exception $e) { /* skip */ }
+        // البحث بالاسم في المخازن بالترتيب
+        $found = findProductInWarehouses($db, $name);
 
-        if ($productRow) {
-            $available = (float)$productRow['quantity'];
-            $companyProducts[] = [
-                'name'      => $name,
-                'needed'    => $effectiveQty,
-                'unit'      => $displayUnit,
-                'available' => $available,
-                'sufficient'=> ($effectiveQty <= 0) ? true : ($available >= $effectiveQty),
-            ];
-        } elseif ($effectiveQty > 0) {
-            // المنتج غير موجود في جدول products — يظهر في المعاينة بحالة مجهولة
-            $companyProducts[] = [
-                'name'      => $name,
-                'needed'    => $effectiveQty,
-                'unit'      => $displayUnit,
-                'available' => null,
-                'sufficient'=> null,
-            ];
-        }
-
-        // ====== 2. البحث عن القالب لاستخراج الخامات وأدوات التعبئة ======
-        $templateId = null;
-        $isUnified  = false;
-
-        // أولاً: البحث في unified_product_templates
-        try {
-            $uCheck = $db->queryOne("SHOW TABLES LIKE 'unified_product_templates'");
-            if (!empty($uCheck)) {
-                $tpl = $db->queryOne(
-                    "SELECT id FROM unified_product_templates WHERE product_name = ? LIMIT 1",
-                    [$name]
-                );
-                if ($tpl) {
-                    $templateId = (int)$tpl['id'];
-                    $isUnified  = true;
-                }
-            }
-        } catch (Exception $e) { /* skip */ }
-
-        // ثانياً: البحث في product_templates
-        if (!$templateId) {
-            try {
-                $ptCheck = $db->queryOne("SHOW TABLES LIKE 'product_templates'");
-                if (!empty($ptCheck)) {
-                    $tpl = $db->queryOne(
-                        "SELECT id FROM product_templates WHERE product_name = ? LIMIT 1",
-                        [$name]
-                    );
-                    if ($tpl) {
-                        $templateId = (int)$tpl['id'];
-                        $isUnified  = false;
-                    }
-                }
-            } catch (Exception $e) { /* skip */ }
-        }
-
-        if (!$templateId) {
-            continue; // لا يوجد قالب، نتجاوز
-        }
-
-        // ====== 3. الخامات من القالب ======
-        if ($isUnified) {
-            try {
-                $rmCheck = $db->queryOne("SHOW TABLES LIKE 'template_raw_materials'");
-                if (!empty($rmCheck)) {
-                    $raws = $db->query(
-                        "SELECT material_type, material_name, honey_variety, quantity, unit
-                         FROM template_raw_materials WHERE template_id = ?",
-                        [$templateId]
-                    ) ?? [];
-                    foreach ($raws as $rm) {
-                        $neededQty = (float)$rm['quantity'] * $effectiveQty;
-                        $available = getRawMaterialStock($db, $rm['material_type'], $rm['material_name'], $rm['honey_variety'] ?? null);
-                        $rawMaterials[] = [
-                            'name'      => $rm['material_name'],
-                            'type'      => $rm['material_type'],
-                            'needed'    => $neededQty,
-                            'unit'      => $rm['unit'],
-                            'available' => $available,
-                            'sufficient'=> ($available !== null) ? ($available >= $neededQty) : null,
-                        ];
-                    }
-                }
-            } catch (Exception $e) { /* skip */ }
-        } else {
-            try {
-                $ptrmCheck = $db->queryOne("SHOW TABLES LIKE 'product_template_raw_materials'");
-                if (!empty($ptrmCheck)) {
-                    $raws = $db->query(
-                        "SELECT material_name, quantity_per_unit, unit
-                         FROM product_template_raw_materials WHERE template_id = ?",
-                        [$templateId]
-                    ) ?? [];
-                    foreach ($raws as $rm) {
-                        $neededQty = (float)$rm['quantity_per_unit'] * $effectiveQty;
-                        $rawMaterials[] = [
-                            'name'      => $rm['material_name'],
-                            'type'      => null,
-                            'needed'    => $neededQty,
-                            'unit'      => $rm['unit'],
-                            'available' => null,
-                            'sufficient'=> null,
-                        ];
-                    }
-                }
-            } catch (Exception $e) { /* skip */ }
-        }
-
-        // ====== 4. أدوات التعبئة من القالب ======
-        if ($isUnified) {
-            try {
-                $tpCheck = $db->queryOne("SHOW TABLES LIKE 'template_packaging'");
-                if (!empty($tpCheck)) {
-                    $pkgs = $db->query(
-                        "SELECT tp.packaging_material_id,
-                                COALESCE(tp.packaging_name, pm.name, CONCAT('أداة #', tp.packaging_material_id)) as pname,
-                                tp.quantity_per_unit,
-                                pm.quantity as available
-                         FROM template_packaging tp
-                         LEFT JOIN packaging_materials pm ON tp.packaging_material_id = pm.id
-                         WHERE tp.template_id = ?",
-                        [$templateId]
-                    ) ?? [];
-                    foreach ($pkgs as $pkg) {
-                        $neededQty = (float)$pkg['quantity_per_unit'] * $effectiveQty;
-                        $available = ($pkg['available'] !== null) ? (float)$pkg['available'] : null;
-                        $packaging[] = [
-                            'id'        => (int)$pkg['packaging_material_id'],
-                            'name'      => $pkg['pname'],
-                            'needed'    => $neededQty,
-                            'available' => $available,
-                            'sufficient'=> ($available !== null) ? ($available >= $neededQty) : null,
-                        ];
-                    }
-                }
-            } catch (Exception $e) { /* skip */ }
-        } else {
-            try {
-                $ptpCheck = $db->queryOne("SHOW TABLES LIKE 'product_template_packaging'");
-                if (!empty($ptpCheck)) {
-                    $pkgs = $db->query(
-                        "SELECT ptp.packaging_material_id, ptp.packaging_name, ptp.quantity_per_unit,
-                                pm.quantity as available
-                         FROM product_template_packaging ptp
-                         LEFT JOIN packaging_materials pm ON ptp.packaging_material_id = pm.id
-                         WHERE ptp.template_id = ?",
-                        [$templateId]
-                    ) ?? [];
-                    foreach ($pkgs as $pkg) {
-                        $neededQty = (float)$pkg['quantity_per_unit'] * $effectiveQty;
-                        $available = ($pkg['available'] !== null) ? (float)$pkg['available'] : null;
-                        $packaging[] = [
-                            'id'        => (int)$pkg['packaging_material_id'],
-                            'name'      => $pkg['packaging_name'],
-                            'needed'    => $neededQty,
-                            'available' => $available,
-                            'sufficient'=> ($available !== null) ? ($available >= $neededQty) : null,
-                        ];
-                    }
-                }
-            } catch (Exception $e) { /* skip */ }
-        }
+        $rows[] = [
+            'name'      => $name,
+            'needed'    => $effectiveQty,
+            'unit'      => $displayUnit,
+            'source'    => $found['source'],      // 'products' | 'packaging' | 'raw' | null
+            'source_label' => $found['label'],    // نص المصدر للعرض
+            'available' => $found['available'],   // float أو null
+            'sufficient'=> ($found['available'] !== null && $effectiveQty > 0)
+                               ? ($found['available'] >= $effectiveQty)
+                               : null,
+        ];
     }
 
-    return [
-        'company_products' => $companyProducts,
-        'raw_materials'    => $rawMaterials,
-        'packaging'        => $packaging,
-    ];
+    return $rows;
 }
 
 /**
- * قراءة qu.json لتحويل الشرينك إلى قطعة
+ * يبحث عن المنتج بالاسم في: products → packaging_materials → honey_stock (بالنوع) → derivatives/nuts
+ * يُرجع: ['source'=>..., 'label'=>..., 'available'=>float|null]
  */
-function loadQuJsonData($db)
+function findProductInWarehouses($db, $name)
+{
+    $notFound = ['source' => null, 'label' => 'غير موجود في المخزون', 'available' => null];
+
+    // ====== 1. منتجات الشركة ======
+    try {
+        $row = $db->queryOne(
+            "SELECT quantity FROM products WHERE name = ? LIMIT 1",
+            [$name]
+        );
+        if ($row !== null) {
+            return [
+                'source'    => 'products',
+                'label'     => 'منتجات الشركة',
+                'available' => (float)$row['quantity'],
+            ];
+        }
+    } catch (Exception $e) { /* skip */ }
+
+    // ====== 2. مخزن أدوات التعبئة ======
+    try {
+        $pkgCheck = $db->queryOne("SHOW TABLES LIKE 'packaging_materials'");
+        if (!empty($pkgCheck)) {
+            $row = $db->queryOne(
+                "SELECT quantity FROM packaging_materials WHERE (name = ? OR specifications = ?) AND status = 'active' LIMIT 1",
+                [$name, $name]
+            );
+            if ($row !== null) {
+                return [
+                    'source'    => 'packaging',
+                    'label'     => 'مخزن أدوات التعبئة',
+                    'available' => (float)$row['quantity'],
+                ];
+            }
+        }
+    } catch (Exception $e) { /* skip */ }
+
+    // ====== 3. مخزن الخامات (بحث مبسط بالاسم) ======
+
+    // عسل — البحث بالنوع في honey_variety
+    try {
+        $hCheck = $db->queryOne("SHOW TABLES LIKE 'honey_stock'");
+        if (!empty($hCheck)) {
+            // بحث في الخام
+            $row = $db->queryOne(
+                "SELECT COALESCE(SUM(raw_honey_quantity), 0) as total FROM honey_stock WHERE honey_variety = ?",
+                [$name]
+            );
+            if ($row && (float)$row['total'] > 0) {
+                return [
+                    'source'    => 'raw',
+                    'label'     => 'مخزن الخامات (عسل خام)',
+                    'available' => (float)$row['total'],
+                ];
+            }
+            // بحث في المصفى
+            $row = $db->queryOne(
+                "SELECT COALESCE(SUM(filtered_honey_quantity), 0) as total FROM honey_stock WHERE honey_variety = ?",
+                [$name]
+            );
+            if ($row && (float)$row['total'] > 0) {
+                return [
+                    'source'    => 'raw',
+                    'label'     => 'مخزن الخامات (عسل مصفى)',
+                    'available' => (float)$row['total'],
+                ];
+            }
+        }
+    } catch (Exception $e) { /* skip */ }
+
+    // مشتقات — البحث بالنوع
+    try {
+        $dCheck = $db->queryOne("SHOW TABLES LIKE 'derivatives_stock'");
+        if (!empty($dCheck)) {
+            $row = $db->queryOne(
+                "SELECT COALESCE(SUM(weight), 0) as total FROM derivatives_stock WHERE derivative_type = ?",
+                [$name]
+            );
+            if ($row && (float)$row['total'] > 0) {
+                return [
+                    'source'    => 'raw',
+                    'label'     => 'مخزن الخامات (مشتقات)',
+                    'available' => (float)$row['total'],
+                ];
+            }
+        }
+    } catch (Exception $e) { /* skip */ }
+
+    // مكسرات — البحث بالنوع
+    try {
+        $nCheck = $db->queryOne("SHOW TABLES LIKE 'nuts_stock'");
+        if (!empty($nCheck)) {
+            $row = $db->queryOne(
+                "SELECT COALESCE(SUM(quantity), 0) as total FROM nuts_stock WHERE nut_type = ?",
+                [$name]
+            );
+            if ($row && (float)$row['total'] > 0) {
+                return [
+                    'source'    => 'raw',
+                    'label'     => 'مخزن الخامات (مكسرات)',
+                    'available' => (float)$row['total'],
+                ];
+            }
+        }
+    } catch (Exception $e) { /* skip */ }
+
+    // زيت زيتون (جدول واحد فقط)
+    try {
+        $oCheck = $db->queryOne("SHOW TABLES LIKE 'olive_oil_stock'");
+        if (!empty($oCheck) && (stripos($name, 'زيت') !== false || stripos($name, 'زيتون') !== false)) {
+            $row = $db->queryOne("SELECT COALESCE(SUM(quantity), 0) as total FROM olive_oil_stock");
+            if ($row && (float)$row['total'] > 0) {
+                return [
+                    'source'    => 'raw',
+                    'label'     => 'مخزن الخامات (زيت زيتون)',
+                    'available' => (float)$row['total'],
+                ];
+            }
+        }
+    } catch (Exception $e) { /* skip */ }
+
+    return $notFound;
+}
+
+function loadQuData()
 {
     $paths = [];
     if (defined('ROOT_PATH')) {
         $paths[] = rtrim(ROOT_PATH, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'qu.json';
     }
     $paths[] = __DIR__ . '/../qu.json';
-
     foreach ($paths as $path) {
         if (is_readable($path)) {
             $raw = @file_get_contents($path);
@@ -301,57 +260,4 @@ function loadQuJsonData($db)
         }
     }
     return [];
-}
-
-/**
- * جلب الكمية المتاحة من مخازن الخامات بناءً على نوع الخامة
- */
-function getRawMaterialStock($db, $materialType, $materialName, $honeyVariety = null)
-{
-    try {
-        switch ($materialType) {
-            case 'honey_raw':
-                $row = $db->queryOne("SELECT COALESCE(SUM(raw_honey_quantity), 0) as total FROM honey_stock");
-                return (float)($row['total'] ?? 0);
-
-            case 'honey_filtered':
-                if ($honeyVariety) {
-                    $row = $db->queryOne(
-                        "SELECT COALESCE(SUM(filtered_honey_quantity), 0) as total FROM honey_stock WHERE honey_variety = ?",
-                        [$honeyVariety]
-                    );
-                } else {
-                    $row = $db->queryOne("SELECT COALESCE(SUM(filtered_honey_quantity), 0) as total FROM honey_stock");
-                }
-                return (float)($row['total'] ?? 0);
-
-            case 'olive_oil':
-                $row = $db->queryOne("SELECT COALESCE(SUM(quantity), 0) as total FROM olive_oil_stock");
-                return (float)($row['total'] ?? 0);
-
-            case 'beeswax':
-                $row = $db->queryOne("SELECT COALESCE(SUM(weight), 0) as total FROM beeswax_stock");
-                return (float)($row['total'] ?? 0);
-
-            case 'derivatives':
-                $row = $db->queryOne(
-                    "SELECT COALESCE(SUM(weight), 0) as total FROM derivatives_stock WHERE derivative_type = ?",
-                    [$materialName]
-                );
-                return (float)($row['total'] ?? 0);
-
-            case 'nuts':
-                $row = $db->queryOne(
-                    "SELECT COALESCE(SUM(quantity), 0) as total FROM nuts_stock WHERE nut_type = ?",
-                    [$materialName]
-                );
-                return (float)($row['total'] ?? 0);
-
-            default:
-                return null;
-        }
-    } catch (Exception $e) {
-        error_log('getRawMaterialStock error: ' . $e->getMessage());
-        return null;
-    }
 }

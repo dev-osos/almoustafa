@@ -542,200 +542,101 @@ function deductTaskProductsFromStock($db, $notes)
         if ($effectiveQty === null || $effectiveQty <= 0) {
             continue;
         }
-        $templateName = trim($product['name'] ?? '');
-        if ($templateName === '') {
+        $name = trim($product['name'] ?? '');
+        if ($name === '') {
             continue;
         }
 
         // ====== 1. خصم من منتجات الشركة ======
         try {
-            $productRow = $db->queryOne(
-                "SELECT id, quantity FROM products WHERE name = ? AND status = 'active' LIMIT 1 FOR UPDATE",
-                [$templateName]
+            $row = $db->queryOne(
+                "SELECT id FROM products WHERE name = ? LIMIT 1 FOR UPDATE",
+                [$name]
             );
-        } catch (Exception $e) {
-            error_log('production_tasks deductTaskProductsFromStock: ' . $e->getMessage());
-            continue;
-        }
-        if (!$productRow) {
-            continue;
-        }
-        $resolvedProductId = (int)$productRow['id'];
-        $currentQuantity = (float)($productRow['quantity'] ?? 0);
-        if ($currentQuantity < $effectiveQty) {
-            throw new InvalidArgumentException(
-                'الكمية المتاحة لـ «' . $templateName . '» غير كافية. المتاح: ' . $currentQuantity . '، المطلوب للخصم: ' . $effectiveQty . '.'
-            );
-        }
-        $db->execute(
-            "UPDATE products SET quantity = quantity - ? WHERE id = ?",
-            [$effectiveQty, $resolvedProductId]
-        );
-
-        // ====== 2. البحث عن القالب لخصم الخامات وأدوات التعبئة ======
-        $templateId = null;
-        $isUnified  = false;
-        try {
-            $uCheck = $db->queryOne("SHOW TABLES LIKE 'unified_product_templates'");
-            if (!empty($uCheck)) {
-                $tpl = $db->queryOne(
-                    "SELECT id FROM unified_product_templates WHERE product_name = ? LIMIT 1",
-                    [$templateName]
-                );
-                if ($tpl) { $templateId = (int)$tpl['id']; $isUnified = true; }
+            if ($row !== null) {
+                $db->execute("UPDATE products SET quantity = quantity - ? WHERE id = ?", [$effectiveQty, (int)$row['id']]);
+                continue;
             }
-        } catch (Exception $e) { /* skip */ }
+        } catch (Exception $e) {
+            error_log('deductTaskProductsFromStock products error (' . $name . '): ' . $e->getMessage());
+        }
 
-        if (!$templateId) {
-            try {
-                $ptCheck = $db->queryOne("SHOW TABLES LIKE 'product_templates'");
-                if (!empty($ptCheck)) {
-                    $tpl = $db->queryOne(
-                        "SELECT id FROM product_templates WHERE product_name = ? LIMIT 1",
-                        [$templateName]
-                    );
-                    if ($tpl) { $templateId = (int)$tpl['id']; $isUnified = false; }
+        // ====== 2. خصم من مخزن أدوات التعبئة ======
+        try {
+            $pkgCheck = $db->queryOne("SHOW TABLES LIKE 'packaging_materials'");
+            if (!empty($pkgCheck)) {
+                $row = $db->queryOne(
+                    "SELECT id FROM packaging_materials WHERE (name = ? OR specifications = ?) AND status = 'active' LIMIT 1 FOR UPDATE",
+                    [$name, $name]
+                );
+                if ($row !== null) {
+                    $db->execute("UPDATE packaging_materials SET quantity = quantity - ?, updated_at = NOW() WHERE id = ?", [$effectiveQty, (int)$row['id']]);
+                    continue;
                 }
-            } catch (Exception $e) { /* skip */ }
+            }
+        } catch (Exception $e) {
+            error_log('deductTaskProductsFromStock packaging error (' . $name . '): ' . $e->getMessage());
         }
 
-        if (!$templateId) {
-            continue; // لا قالب، تجاوز خصم الخامات والتعبئة
-        }
-
-        // ====== 3. خصم الخامات من مخزن الخامات ======
-        _deductRawMaterialsForTemplate($db, $templateId, $isUnified, $effectiveQty, $templateName);
-
-        // ====== 4. خصم أدوات التعبئة من مخزن التعبئة ======
-        _deductPackagingForTemplate($db, $templateId, $isUnified, $effectiveQty, $templateName);
-    }
-}
-
-/**
- * خصم الخامات المرتبطة بقالب منتج من مخازن الخامات المناسبة
- */
-function _deductRawMaterialsForTemplate($db, $templateId, $isUnified, $effectiveQty, $productName)
-{
-    try {
-        if ($isUnified) {
-            $rmCheck = $db->queryOne("SHOW TABLES LIKE 'template_raw_materials'");
-            if (empty($rmCheck)) return;
-            $raws = $db->query(
-                "SELECT material_type, material_name, honey_variety, quantity, unit
-                 FROM template_raw_materials WHERE template_id = ?",
-                [$templateId]
-            ) ?? [];
-        } else {
-            $rmCheck = $db->queryOne("SHOW TABLES LIKE 'product_template_raw_materials'");
-            if (empty($rmCheck)) return;
-            $raws = $db->query(
-                "SELECT NULL as material_type, material_name, NULL as honey_variety, quantity_per_unit as quantity, unit
-                 FROM product_template_raw_materials WHERE template_id = ?",
-                [$templateId]
-            ) ?? [];
-        }
-
-        foreach ($raws as $rm) {
-            $neededQty    = (float)$rm['quantity'] * $effectiveQty;
-            $materialType = $rm['material_type'] ?? null;
-            $materialName = trim($rm['material_name'] ?? '');
-            $honeyVariety = $rm['honey_variety'] ?? null;
-
-            if ($neededQty <= 0 || $materialName === '') continue;
-
-            _deductFromRawMaterialTable($db, $materialType, $materialName, $honeyVariety, $neededQty, $productName);
-        }
-    } catch (Exception $e) {
-        error_log('_deductRawMaterialsForTemplate error (' . $productName . '): ' . $e->getMessage());
-    }
-}
-
-/**
- * خصم كمية من جدول الخامة المناسب بناءً على نوعها
- */
-function _deductFromRawMaterialTable($db, $materialType, $materialName, $honeyVariety, $neededQty, $productName)
-{
-    try {
-        switch ($materialType) {
-            case 'honey_raw':
-                _deductFromRowsWaterfall(
-                    $db,
-                    "SELECT id, raw_honey_quantity as qty FROM honey_stock WHERE raw_honey_quantity > 0 ORDER BY raw_honey_quantity DESC",
-                    [],
-                    "UPDATE honey_stock SET raw_honey_quantity = raw_honey_quantity - ? WHERE id = ?",
-                    $neededQty
-                );
-                break;
-
-            case 'honey_filtered':
-                if ($honeyVariety) {
-                    _deductFromRowsWaterfall(
-                        $db,
-                        "SELECT id, filtered_honey_quantity as qty FROM honey_stock WHERE honey_variety = ? AND filtered_honey_quantity > 0 ORDER BY filtered_honey_quantity DESC",
-                        [$honeyVariety],
-                        "UPDATE honey_stock SET filtered_honey_quantity = filtered_honey_quantity - ? WHERE id = ?",
-                        $neededQty
-                    );
-                } else {
-                    _deductFromRowsWaterfall(
-                        $db,
-                        "SELECT id, filtered_honey_quantity as qty FROM honey_stock WHERE filtered_honey_quantity > 0 ORDER BY filtered_honey_quantity DESC",
-                        [],
-                        "UPDATE honey_stock SET filtered_honey_quantity = filtered_honey_quantity - ? WHERE id = ?",
-                        $neededQty
-                    );
+        // ====== 3. مخزن الخامات — بحث بالاسم/النوع ======
+        try {
+            $hCheck = $db->queryOne("SHOW TABLES LIKE 'honey_stock'");
+            if (!empty($hCheck)) {
+                $tot = $db->queryOne("SELECT COALESCE(SUM(raw_honey_quantity),0) as t FROM honey_stock WHERE honey_variety = ?", [$name]);
+                if ($tot && (float)$tot['t'] > 0) {
+                    _deductFromRowsWaterfall($db, "SELECT id, raw_honey_quantity as qty FROM honey_stock WHERE honey_variety = ? AND raw_honey_quantity > 0 ORDER BY raw_honey_quantity DESC", [$name], "UPDATE honey_stock SET raw_honey_quantity = raw_honey_quantity - ? WHERE id = ?", $effectiveQty);
+                    continue;
                 }
-                break;
-
-            case 'olive_oil':
-                _deductFromRowsWaterfall(
-                    $db,
-                    "SELECT id, quantity as qty FROM olive_oil_stock WHERE quantity > 0 ORDER BY quantity DESC",
-                    [],
-                    "UPDATE olive_oil_stock SET quantity = quantity - ? WHERE id = ?",
-                    $neededQty
-                );
-                break;
-
-            case 'beeswax':
-                _deductFromRowsWaterfall(
-                    $db,
-                    "SELECT id, weight as qty FROM beeswax_stock WHERE weight > 0 ORDER BY weight DESC",
-                    [],
-                    "UPDATE beeswax_stock SET weight = weight - ? WHERE id = ?",
-                    $neededQty
-                );
-                break;
-
-            case 'derivatives':
-                _deductFromRowsWaterfall(
-                    $db,
-                    "SELECT id, weight as qty FROM derivatives_stock WHERE derivative_type = ? AND weight > 0 ORDER BY weight DESC",
-                    [$materialName],
-                    "UPDATE derivatives_stock SET weight = weight - ? WHERE id = ?",
-                    $neededQty
-                );
-                break;
-
-            case 'nuts':
-                _deductFromRowsWaterfall(
-                    $db,
-                    "SELECT id, quantity as qty FROM nuts_stock WHERE nut_type = ? AND quantity > 0 ORDER BY quantity DESC",
-                    [$materialName],
-                    "UPDATE nuts_stock SET quantity = quantity - ? WHERE id = ?",
-                    $neededQty
-                );
-                break;
-
-            default:
-                // نوع غير معروف أو null (قوالب تقليدية) — تسجيل فقط
-                if ($materialType) {
-                    error_log("_deductFromRawMaterialTable: نوع غير مدعوم '$materialType' للمنتج '$productName'");
+                $tot = $db->queryOne("SELECT COALESCE(SUM(filtered_honey_quantity),0) as t FROM honey_stock WHERE honey_variety = ?", [$name]);
+                if ($tot && (float)$tot['t'] > 0) {
+                    _deductFromRowsWaterfall($db, "SELECT id, filtered_honey_quantity as qty FROM honey_stock WHERE honey_variety = ? AND filtered_honey_quantity > 0 ORDER BY filtered_honey_quantity DESC", [$name], "UPDATE honey_stock SET filtered_honey_quantity = filtered_honey_quantity - ? WHERE id = ?", $effectiveQty);
+                    continue;
                 }
-                break;
+            }
+        } catch (Exception $e) {
+            error_log('deductTaskProductsFromStock honey error (' . $name . '): ' . $e->getMessage());
         }
-    } catch (Exception $e) {
-        error_log('_deductFromRawMaterialTable error (' . $materialType . '/' . $materialName . '): ' . $e->getMessage());
+
+        try {
+            $dCheck = $db->queryOne("SHOW TABLES LIKE 'derivatives_stock'");
+            if (!empty($dCheck)) {
+                $tot = $db->queryOne("SELECT COALESCE(SUM(weight),0) as t FROM derivatives_stock WHERE derivative_type = ?", [$name]);
+                if ($tot && (float)$tot['t'] > 0) {
+                    _deductFromRowsWaterfall($db, "SELECT id, weight as qty FROM derivatives_stock WHERE derivative_type = ? AND weight > 0 ORDER BY weight DESC", [$name], "UPDATE derivatives_stock SET weight = weight - ? WHERE id = ?", $effectiveQty);
+                    continue;
+                }
+            }
+        } catch (Exception $e) {
+            error_log('deductTaskProductsFromStock derivatives error (' . $name . '): ' . $e->getMessage());
+        }
+
+        try {
+            $nCheck = $db->queryOne("SHOW TABLES LIKE 'nuts_stock'");
+            if (!empty($nCheck)) {
+                $tot = $db->queryOne("SELECT COALESCE(SUM(quantity),0) as t FROM nuts_stock WHERE nut_type = ?", [$name]);
+                if ($tot && (float)$tot['t'] > 0) {
+                    _deductFromRowsWaterfall($db, "SELECT id, quantity as qty FROM nuts_stock WHERE nut_type = ? AND quantity > 0 ORDER BY quantity DESC", [$name], "UPDATE nuts_stock SET quantity = quantity - ? WHERE id = ?", $effectiveQty);
+                    continue;
+                }
+            }
+        } catch (Exception $e) {
+            error_log('deductTaskProductsFromStock nuts error (' . $name . '): ' . $e->getMessage());
+        }
+
+        try {
+            $oCheck = $db->queryOne("SHOW TABLES LIKE 'olive_oil_stock'");
+            if (!empty($oCheck) && (stripos($name, 'زيت') !== false || stripos($name, 'زيتون') !== false)) {
+                $tot = $db->queryOne("SELECT COALESCE(SUM(quantity),0) as t FROM olive_oil_stock");
+                if ($tot && (float)$tot['t'] > 0) {
+                    _deductFromRowsWaterfall($db, "SELECT id, quantity as qty FROM olive_oil_stock WHERE quantity > 0 ORDER BY quantity DESC", [], "UPDATE olive_oil_stock SET quantity = quantity - ? WHERE id = ?", $effectiveQty);
+                    continue;
+                }
+            }
+        } catch (Exception $e) {
+            error_log('deductTaskProductsFromStock olive_oil error (' . $name . '): ' . $e->getMessage());
+        }
+
+        error_log('deductTaskProductsFromStock: المنتج «' . $name . '» غير موجود في أي مخزن');
     }
 }
 
@@ -754,45 +655,6 @@ function _deductFromRowsWaterfall($db, $selectSql, $selectParams, $updateSql, $n
         $deduct = min($remaining, $available);
         $db->execute($updateSql, [$deduct, (int)$row['id']]);
         $remaining -= $deduct;
-    }
-}
-
-/**
- * خصم أدوات التعبئة المرتبطة بقالب منتج من جدول packaging_materials
- */
-function _deductPackagingForTemplate($db, $templateId, $isUnified, $effectiveQty, $productName)
-{
-    try {
-        $pmCheck = $db->queryOne("SHOW TABLES LIKE 'packaging_materials'");
-        if (empty($pmCheck)) return;
-
-        if ($isUnified) {
-            $tpCheck = $db->queryOne("SHOW TABLES LIKE 'template_packaging'");
-            if (empty($tpCheck)) return;
-            $pkgs = $db->query(
-                "SELECT packaging_material_id, quantity_per_unit FROM template_packaging WHERE template_id = ?",
-                [$templateId]
-            ) ?? [];
-        } else {
-            $ptpCheck = $db->queryOne("SHOW TABLES LIKE 'product_template_packaging'");
-            if (empty($ptpCheck)) return;
-            $pkgs = $db->query(
-                "SELECT packaging_material_id, quantity_per_unit FROM product_template_packaging WHERE template_id = ?",
-                [$templateId]
-            ) ?? [];
-        }
-
-        foreach ($pkgs as $pkg) {
-            $pkgId     = (int)$pkg['packaging_material_id'];
-            $neededQty = (float)$pkg['quantity_per_unit'] * $effectiveQty;
-            if ($pkgId <= 0 || $neededQty <= 0) continue;
-            $db->execute(
-                "UPDATE packaging_materials SET quantity = GREATEST(quantity - ?, 0), updated_at = NOW() WHERE id = ?",
-                [$neededQty, $pkgId]
-            );
-        }
-    } catch (Exception $e) {
-        error_log('_deductPackagingForTemplate error (' . $productName . '): ' . $e->getMessage());
     }
 }
 

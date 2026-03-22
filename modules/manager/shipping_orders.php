@@ -3814,62 +3814,10 @@ $statusLabels = [
 $hasProducts = !empty($availableProducts);
 $hasShippingCompanies = !empty($shippingCompanies);
 
-// ===== جلب شحنات TelegraphEx =====
+// ===== شحنات TelegraphEx — تُحمَّل عبر AJAX بعد تحميل الصفحة =====
 $tgShipments = [];
 $tgPagination = [];
 $tgError = '';
-$tgInitialPage = max(1, (int)($_GET['tg_page'] ?? 1));
-try {
-    $tgQuery = 'query ListShipments($first: Int, $page: Int, $input: ListShipmentsFilterInput) {
-  listShipments(first: $first, page: $page, input: $input) {
-    data {
-      code status { name code } date recipientName
-      recipientZone { id name } recipientSubzone { name }
-      price amount refNumber recipientMobile id cancelled
-      branch { id name } type { name code }
-      collected totalAmount allDueFees deliveryFees returnFees
-      paymentType { code } deliveryType { name }
-    }
-    paginatorInfo { total count currentPage lastPage perPage }
-  }
-}';
-    $tgPayload = json_encode([
-        'operationName' => 'ListShipments',
-        'variables'     => ['first' => 20, 'page' => $tgInitialPage, 'input' => (object)[]],
-        'query'         => $tgQuery,
-    ]);
-    $ch = curl_init('https://system.telegraphex.com:8443/graphql');
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_POST           => true,
-        CURLOPT_POSTFIELDS     => $tgPayload,
-        CURLOPT_TIMEOUT        => 10,
-        CURLOPT_HTTPHEADER     => [
-            'Content-Type: application/json',
-            'Accept: */*',
-            'authorization: Bearer 244917|ZzSXzdfFKcLnxRwsTbEhRlSsv9OjRRIDvknDEKVc86ec3127',
-            'x-app-version: 5.2.2',
-            'x-client-name: PHP-Server',
-            'x-client-type: WEB',
-        ],
-    ]);
-    $tgResponse = curl_exec($ch);
-    $tgCurlErr  = curl_error($ch);
-    curl_close($ch);
-    if ($tgCurlErr) {
-        $tgError = 'خطأ في الاتصال: ' . $tgCurlErr;
-    } else {
-        $tgDecoded = json_decode($tgResponse, true);
-        if (!empty($tgDecoded['data']['listShipments']['data'])) {
-            $tgShipments  = $tgDecoded['data']['listShipments']['data'];
-            $tgPagination = $tgDecoded['data']['listShipments']['paginatorInfo'] ?? [];
-        } elseif (!empty($tgDecoded['errors'])) {
-            $tgError = $tgDecoded['errors'][0]['message'] ?? 'خطأ من TelegraphEx';
-        }
-    }
-} catch (Throwable $tgEx) {
-    $tgError = 'استثناء: ' . $tgEx->getMessage();
-}
 ?>
 
 <?php if ($error): ?>
@@ -4786,40 +4734,10 @@ function copyShippingCollectionResult(btn) {
                     </tr>
                 </thead>
                 <tbody id="tgShipmentsBody">
-                    <?php if ($tgError): ?>
-                        <tr><td colspan="7" class="text-center text-danger py-3">
-                            <i class="bi bi-exclamation-triangle-fill me-1"></i><?php echo htmlspecialchars($tgError); ?>
-                        </td></tr>
-                    <?php elseif (empty($tgShipments)): ?>
-                        <tr><td colspan="7" class="text-center text-muted py-4">
-                            <i class="bi bi-inbox fs-4 d-block mb-2"></i>لا توجد شحنات
-                        </td></tr>
-                    <?php else: ?>
-                        <?php foreach ($tgShipments as $tgs): ?>
-                            <?php
-                                $tgsStatusCode = $tgs['status']['code'] ?? '';
-                                $tgsStatusBadge = match($tgsStatusCode) {
-                                    'DTR'   => 'bg-success',
-                                    'PKD'   => 'bg-warning text-dark',
-                                    'CNL'   => 'bg-secondary',
-                                    default => 'bg-info text-dark',
-                                };
-                            ?>
-                            <tr>
-                                <td class="fw-semibold text-nowrap"><span class="tg-copy-code" title="انقر للنسخ" style="cursor:pointer"><?php echo htmlspecialchars($tgs['code'] ?? '-'); ?></span></td>
-                                <td class="text-muted text-nowrap"><?php echo htmlspecialchars(!empty($tgs['date']) ? date('Y-m-d H:i', strtotime($tgs['date'])) : '-'); ?></td>
-                                <td><?php echo htmlspecialchars($tgs['recipientName'] ?? '-'); ?></td>
-                                <td class="text-nowrap"><?php echo htmlspecialchars($tgs['recipientZone']['name'] ?? '-'); ?></td>
-                                <td class="text-nowrap">
-                                    <span class="badge <?php echo $tgsStatusBadge; ?>">
-                                        <?php echo htmlspecialchars($tgs['status']['name'] ?? $tgsStatusCode); ?>
-                                    </span>
-                                </td>
-                                <td class="text-end text-nowrap"><?php echo number_format((float)($tgs['price'] ?? 0), 2); ?></td>
-                                <td class="text-end text-nowrap"><?php echo number_format((float)($tgs['amount'] ?? 0), 2); ?></td>
-                            </tr>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
+                    <tr><td colspan="7" class="text-center text-muted py-4">
+                        <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                        جاري تحميل الشحنات...
+                    </td></tr>
                 </tbody>
             </table>
             </div><!-- /inner horizontal scroll -->
@@ -5155,6 +5073,9 @@ function copyShippingCollectionResult(btn) {
     }
 
     attachTgPageLinks();
+
+    // تحميل الصفحة الأولى تلقائياً عند فتح الصفحة بدلاً من انتظار PHP
+    tgLoadPage(1);
 
     // ===== زر التحديث =====
     var tgRefreshBtn = document.getElementById('tgRefreshBtn');
