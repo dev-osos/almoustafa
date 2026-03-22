@@ -2919,8 +2919,12 @@ document.addEventListener('DOMContentLoaded', function() {
                             </div>
                             
                             <?php
-                                $materialQuantity = isset($material['quantity']) ? (float)$material['quantity'] : 0.0;
-                                $useButtonDisabled = $materialQuantity <= 0;
+                                $isWeightUnitM = ($material['unit'] ?? '') === 'وزن';
+                                $wuM = trim($material['weight_unit'] ?? '');
+                                $mobileStockValue = $isWeightUnitM
+                                    ? (float)($material['weight'] ?? 0)
+                                    : (float)($material['quantity'] ?? 0);
+                                $useButtonDisabled = $mobileStockValue <= 0;
                                 $mobileQuantityElementId = 'material-quantity-' . $material['id'] . '-mobile';
                             ?>
                             <div class="row g-2 mb-2">
@@ -2932,19 +2936,15 @@ document.addEventListener('DOMContentLoaded', function() {
                                     <small class="text-muted d-block">الكمية:</small>
                                     <strong
                                         id="<?php echo htmlspecialchars($mobileQuantityElementId, ENT_QUOTES, 'UTF-8'); ?>"
-                                        class="text-<?php echo $materialQuantity > 0 ? 'success' : 'danger'; ?>"
-                                        data-value="<?php echo number_format($materialQuantity, 4, '.', ''); ?>"
+                                        class="text-<?php echo $mobileStockValue > 0 ? 'success' : 'danger'; ?>"
+                                        data-value="<?php echo number_format($mobileStockValue, 4, '.', ''); ?>"
                                         data-unit-label="<?php echo htmlspecialchars($material['unit'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
                                         data-append-unit="1">
-                                        <?php
-                                            $unitM = $material['unit'] ?? '';
-                                            $wuM = trim($material['weight_unit'] ?? '');
-                                            if ($unitM === 'وزن' || $wuM !== '') {
-                                                echo number_format($materialQuantity, 3) . ($wuM ? ' ' . htmlspecialchars($wuM) : '');
-                                            } else {
-                                                echo number_format($materialQuantity, 0) . ' قطعة';
-                                            }
-                                        ?>
+                                        <?php if ($isWeightUnitM): ?>
+                                            <?php echo number_format($mobileStockValue, 3) . ($wuM ? ' ' . htmlspecialchars($wuM) : ''); ?>
+                                        <?php else: ?>
+                                            <?php echo number_format($mobileStockValue, 0) . ' قطعة'; ?>
+                                        <?php endif; ?>
                                     </strong>
                                 </div>
                             </div>
@@ -2957,7 +2957,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                     data-name="<?php echo htmlspecialchars($material['name'], ENT_QUOTES, 'UTF-8'); ?>"
                                     data-unit="<?php echo htmlspecialchars(!empty($material['unit']) ? $material['unit'] : 'وحدة', ENT_QUOTES, 'UTF-8'); ?>"
                                     data-weight-unit="<?php echo htmlspecialchars($material['weight_unit'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
-                                    data-quantity="<?php echo number_format($materialQuantity, 4, '.', ''); ?>"
+                                    data-quantity="<?php echo number_format($mobileStockValue, 4, '.', ''); ?>"
                                     data-quantity-target="<?php echo htmlspecialchars($mobileQuantityElementId, ENT_QUOTES, 'UTF-8'); ?>"
                                     data-use-quantity="1"
                                     onclick="usePackagingMaterial(this)"
