@@ -430,33 +430,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         while (ob_get_level()) { ob_end_clean(); }
         header('Content-Type: application/json; charset=utf-8');
         try {
-            $orderNumber = trim($_POST['order_number'] ?? '');
+            $invoiceNumber = trim($_POST['order_number'] ?? '');
             $companyId = isset($_POST['company_id']) ? (int)$_POST['company_id'] : 0;
-            // الأرقام تُخزَّن بشكل 5 خانات مع أصفار (مثل 00480)
-            if (ctype_digit($orderNumber) && strlen($orderNumber) < 5) {
-                $orderNumber = str_pad($orderNumber, 5, '0', STR_PAD_LEFT);
-            }
-            if ($orderNumber === '' || $companyId <= 0) {
+            if ($invoiceNumber === '' || $companyId <= 0) {
                 echo json_encode(['success' => false, 'error' => 'بيانات غير صالحة.'], JSON_UNESCAPED_UNICODE);
                 exit;
             }
-            $returnOrder = $db->queryOne(
-                "SELECT sco.id, sco.order_number, sco.total_amount, sco.status, sco.shipping_company_id, sc.name AS company_name
-                 FROM shipping_company_orders sco
-                 LEFT JOIN shipping_companies sc ON sco.shipping_company_id = sc.id
-                 WHERE sco.order_number = ?",
-                [$orderNumber]
+            $hasTaskIdCol = $db->queryOne("SHOW COLUMNS FROM shipping_company_paper_invoices LIKE 'task_id'");
+            $selectCols = "id, shipping_company_id, invoice_number, total_amount";
+            if (!empty($hasTaskIdCol)) $selectCols .= ", task_id";
+            $paperInv = $db->queryOne(
+                "SELECT $selectCols FROM shipping_company_paper_invoices WHERE invoice_number = ? AND shipping_company_id = ?",
+                [$invoiceNumber, $companyId]
             );
-            if (!$returnOrder) {
-                echo json_encode(['success' => false, 'error' => 'لم يتم العثور على طلب برقم: ' . $orderNumber], JSON_UNESCAPED_UNICODE);
-            } elseif ((int)$returnOrder['shipping_company_id'] !== $companyId) {
-                echo json_encode(['success' => false, 'error' => 'هذا الطلب يخص شركة: ' . ($returnOrder['company_name'] ?? 'غير معروفة') . ' (ID=' . $returnOrder['shipping_company_id'] . ') وليس الشركة المحددة (ID=' . $companyId . ')'], JSON_UNESCAPED_UNICODE);
+            if (!$paperInv) {
+                echo json_encode(['success' => false, 'error' => 'لم يتم العثور على فاتورة ورقية برقم: ' . $invoiceNumber . ' لهذه الشركة.'], JSON_UNESCAPED_UNICODE);
             } else {
+                $products = [];
+                $taskId = !empty($hasTaskIdCol) ? (int)($paperInv['task_id'] ?? 0) : 0;
+                if ($taskId > 0) {
+                    $task = $db->queryOne("SELECT notes FROM tasks WHERE id = ?", [$taskId]);
+                    if ($task && !empty($task['notes'])) {
+                        if (preg_match('/\[PRODUCTS_JSON\]:(.+?)(?=\n|$)/', $task['notes'], $pMatches)) {
+                            $decoded = json_decode(trim($pMatches[1]), true);
+                            if (is_array($decoded)) {
+                                foreach ($decoded as $p) {
+                                    if (!empty($p['id'])) {
+                                        $products[] = [
+                                            'id'       => (int)$p['id'],
+                                            'name'     => $p['name'] ?? '',
+                                            'quantity' => (float)($p['quantity'] ?? 0),
+                                            'unit'     => $p['unit'] ?? 'قطعة',
+                                        ];
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 echo json_encode([
-                    'success' => true,
-                    'order_id' => (int)$returnOrder['id'],
-                    'total_amount' => (float)$returnOrder['total_amount'],
-                    'status' => $returnOrder['status'],
+                    'success'          => true,
+                    'paper_invoice_id' => (int)$paperInv['id'],
+                    'total_amount'     => (float)$paperInv['total_amount'],
+                    'products'         => $products,
                 ], JSON_UNESCAPED_UNICODE);
             }
         } catch (Throwable $e) {
@@ -2272,126 +2288,183 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($action === 'register_shipping_return') {
-        $orderId = isset($_POST['order_id']) ? (int)$_POST['order_id'] : 0;
-        $companyId = isset($_POST['company_id']) ? (int)$_POST['company_id'] : 0;
-        $returnFees = isset($_POST['return_fees']) ? cleanFinancialValue($_POST['return_fees'], true) : 0;
+        $orderId       = isset($_POST['order_id']) ? (int)$_POST['order_id'] : 0;
+        $paperInvId    = isset($_POST['paper_invoice_id']) ? (int)$_POST['paper_invoice_id'] : 0;
+        $companyId     = isset($_POST['company_id']) ? (int)$_POST['company_id'] : 0;
+        $returnFees    = isset($_POST['return_fees']) ? cleanFinancialValue($_POST['return_fees'], true) : 0;
         $transactionStarted = false;
 
         try {
-            if ($orderId <= 0 || $companyId <= 0) {
+            if (($orderId <= 0 && $paperInvId <= 0) || $companyId <= 0) {
                 throw new InvalidArgumentException('بيانات الطلب غير صالحة.');
             }
 
             $db->beginTransaction();
             $transactionStarted = true;
 
-            $returnOrder = $db->queryOne(
-                "SELECT id, order_number, shipping_company_id, total_amount, status FROM shipping_company_orders WHERE id = ? AND shipping_company_id = ? FOR UPDATE",
-                [$orderId, $companyId]
-            );
-            if (!$returnOrder) {
-                throw new InvalidArgumentException('طلب الشحن غير موجود.');
-            }
-            if ($returnOrder['status'] === 'cancelled') {
-                throw new InvalidArgumentException('لا يمكن تسجيل مرتجع لطلب ملغي.');
-            }
+            // --- وضع الفاتورة الورقية ---
+            if ($paperInvId > 0) {
+                $hasTaskIdCol = $db->queryOne("SHOW COLUMNS FROM shipping_company_paper_invoices LIKE 'task_id'");
+                $piCols = "id, shipping_company_id, invoice_number, total_amount";
+                if (!empty($hasTaskIdCol)) $piCols .= ", task_id";
+                $paperInv = $db->queryOne(
+                    "SELECT $piCols FROM shipping_company_paper_invoices WHERE id = ? AND shipping_company_id = ? FOR UPDATE",
+                    [$paperInvId, $companyId]
+                );
+                if (!$paperInv) throw new InvalidArgumentException('الفاتورة الورقية غير موجودة.');
 
-            $returnCompany = $db->queryOne(
-                "SELECT id, name, balance FROM shipping_companies WHERE id = ? FOR UPDATE",
-                [$companyId]
-            );
-            if (!$returnCompany) {
-                throw new InvalidArgumentException('شركة الشحن غير موجودة.');
-            }
+                $returnCompany = $db->queryOne(
+                    "SELECT id, name, balance FROM shipping_companies WHERE id = ? FOR UPDATE",
+                    [$companyId]
+                );
+                if (!$returnCompany) throw new InvalidArgumentException('شركة الشحن غير موجودة.');
 
-            $orderTotal = (float)$returnOrder['total_amount'];
-            $returnFees = (float)($returnFees ?? 0);
-            $totalDeduction = $orderTotal + $returnFees;
-            $currentBalance = (float)($returnCompany['balance'] ?? 0);
-            $newBalance = max(0, round($currentBalance - $totalDeduction, 2));
-            $orderNumber = $returnOrder['order_number'] ?? $orderId;
+                $orderTotal     = (float)$paperInv['total_amount'];
+                $returnFees     = (float)($returnFees ?? 0);
+                $totalDeduction = $orderTotal + $returnFees;
+                $currentBalance = (float)($returnCompany['balance'] ?? 0);
+                $newBalance     = max(0, round($currentBalance - $totalDeduction, 2));
+                $orderNumber    = $paperInv['invoice_number'] ?? $paperInvId;
 
-            // خصم الإجمالي + رسوم الإرجاع من ديون الشركة
-            $db->execute(
-                "UPDATE shipping_companies SET balance = ?, updated_by = ?, updated_at = NOW() WHERE id = ?",
-                [$newBalance, $currentUser['id'] ?? null, $companyId]
-            );
-
-            // تسجيل قيمة المرتجع في كشف الحساب
-            $db->execute(
-                "INSERT INTO shipping_company_deductions (shipping_company_id, amount, notes, created_by) VALUES (?, ?, ?, ?)",
-                [$companyId, $orderTotal, 'مرتجع بضاعة - طلب #' . $orderNumber, $currentUser['id'] ?? null]
-            );
-
-            // تسجيل رسوم الإرجاع إذا كانت موجودة
-            if ($returnFees > 0) {
+                $db->execute(
+                    "UPDATE shipping_companies SET balance = ?, updated_by = ?, updated_at = NOW() WHERE id = ?",
+                    [$newBalance, $currentUser['id'] ?? null, $companyId]
+                );
                 $db->execute(
                     "INSERT INTO shipping_company_deductions (shipping_company_id, amount, notes, created_by) VALUES (?, ?, ?, ?)",
-                    [$companyId, $returnFees, 'رسوم إرجاع - طلب #' . $orderNumber, $currentUser['id'] ?? null]
+                    [$companyId, $orderTotal, 'مرتجع بضاعة - فاتورة #' . $orderNumber, $currentUser['id'] ?? null]
                 );
-            }
+                if ($returnFees > 0) {
+                    $db->execute(
+                        "INSERT INTO shipping_company_deductions (shipping_company_id, amount, notes, created_by) VALUES (?, ?, ?, ?)",
+                        [$companyId, $returnFees, 'رسوم إرجاع - فاتورة #' . $orderNumber, $currentUser['id'] ?? null]
+                    );
+                }
 
-            // إعادة كميات المنتجات إلى المخزن الرئيسي
-            $returnOrderItems = $db->query(
-                "SELECT product_id, batch_id, quantity FROM shipping_company_order_items WHERE order_id = ?",
-                [$orderId]
-            );
-            $returnMovementNote = 'إرجاع منتجات - مرتجع طلب شحن #' . $orderNumber;
-
-            foreach ($returnOrderItems as $item) {
-                $productId = (int)($item['product_id'] ?? 0);
-                $batchId = isset($item['batch_id']) && $item['batch_id'] > 0 ? (int)$item['batch_id'] : null;
-                $quantity = (float)($item['quantity'] ?? 0);
-                $actualProductId = $productId;
-                $fpData = null;
-
-                if ($batchId) {
-                    try {
-                        $fpData = $db->queryOne("
-                            SELECT fp.quantity_produced,
-                                COALESCE(fp.product_id, bn.product_id) AS actual_product_id
-                            FROM finished_products fp
-                            LEFT JOIN batch_numbers bn ON fp.batch_number = bn.batch_number
-                            WHERE fp.id = ?
-                        ", [$batchId]);
-                        if ($fpData) {
-                            $actualProductId = (int)($fpData['actual_product_id'] ?? $productId);
+                // إعادة كميات المنتجات من tasks.notes
+                $taskId = !empty($hasTaskIdCol) ? (int)($paperInv['task_id'] ?? 0) : 0;
+                $returnMovementNote = 'مرتجع فاتورة ورقية #' . $orderNumber;
+                if ($taskId > 0) {
+                    $task = $db->queryOne("SELECT notes FROM tasks WHERE id = ?", [$taskId]);
+                    if ($task && !empty($task['notes'])) {
+                        if (preg_match('/\[PRODUCTS_JSON\]:(.+?)(?=\n|$)/', $task['notes'], $pMatches)) {
+                            $decoded = json_decode(trim($pMatches[1]), true);
+                            if (is_array($decoded)) {
+                                foreach ($decoded as $p) {
+                                    $productId = (int)($p['id'] ?? 0);
+                                    $qty       = (float)($p['quantity'] ?? 0);
+                                    if ($productId > 0 && $qty > 0) {
+                                        recordInventoryMovement(
+                                            $productId,
+                                            $mainWarehouse['id'] ?? null,
+                                            'in',
+                                            $qty,
+                                            'paper_invoice_return',
+                                            $paperInvId,
+                                            $returnMovementNote,
+                                            $currentUser['id'] ?? null
+                                        );
+                                    }
+                                }
+                            }
                         }
-                    } catch (Throwable $fpErr) {
-                        error_log('register_shipping_return: fpData error: ' . $fpErr->getMessage());
                     }
                 }
 
-                recordInventoryMovement(
-                    $actualProductId,
-                    $mainWarehouse['id'] ?? null,
-                    'in',
-                    $quantity,
-                    'shipping_return',
-                    $orderId,
-                    $returnMovementNote,
+                logAudit(
                     $currentUser['id'] ?? null,
-                    $batchId
+                    'register_shipping_return',
+                    'paper_invoice',
+                    $paperInvId,
+                    null,
+                    ['invoice_number' => $orderNumber, 'company_id' => $companyId, 'order_total' => $orderTotal, 'return_fees' => $returnFees, 'total_deduction' => $totalDeduction]
                 );
 
-                if ($batchId && $fpData) {
-                    try {
-                        $newQty = (float)($fpData['quantity_produced'] ?? 0) + $quantity;
-                        $db->execute("UPDATE finished_products SET quantity_produced = ? WHERE id = ?", [$newQty, $batchId]);
-                    } catch (Throwable $fpUpdateErr) {
-                        error_log('register_shipping_return: fp quantity update error: ' . $fpUpdateErr->getMessage());
+            // --- وضع أوردر الشحن (الطريقة القديمة) ---
+            } else {
+                $returnOrder = $db->queryOne(
+                    "SELECT id, order_number, shipping_company_id, total_amount, status FROM shipping_company_orders WHERE id = ? AND shipping_company_id = ? FOR UPDATE",
+                    [$orderId, $companyId]
+                );
+                if (!$returnOrder) throw new InvalidArgumentException('طلب الشحن غير موجود.');
+                if ($returnOrder['status'] === 'cancelled') throw new InvalidArgumentException('لا يمكن تسجيل مرتجع لطلب ملغي.');
+
+                $returnCompany = $db->queryOne(
+                    "SELECT id, name, balance FROM shipping_companies WHERE id = ? FOR UPDATE",
+                    [$companyId]
+                );
+                if (!$returnCompany) throw new InvalidArgumentException('شركة الشحن غير موجودة.');
+
+                $orderTotal     = (float)$returnOrder['total_amount'];
+                $returnFees     = (float)($returnFees ?? 0);
+                $totalDeduction = $orderTotal + $returnFees;
+                $currentBalance = (float)($returnCompany['balance'] ?? 0);
+                $newBalance     = max(0, round($currentBalance - $totalDeduction, 2));
+                $orderNumber    = $returnOrder['order_number'] ?? $orderId;
+
+                $db->execute(
+                    "UPDATE shipping_companies SET balance = ?, updated_by = ?, updated_at = NOW() WHERE id = ?",
+                    [$newBalance, $currentUser['id'] ?? null, $companyId]
+                );
+                $db->execute(
+                    "INSERT INTO shipping_company_deductions (shipping_company_id, amount, notes, created_by) VALUES (?, ?, ?, ?)",
+                    [$companyId, $orderTotal, 'مرتجع بضاعة - طلب #' . $orderNumber, $currentUser['id'] ?? null]
+                );
+                if ($returnFees > 0) {
+                    $db->execute(
+                        "INSERT INTO shipping_company_deductions (shipping_company_id, amount, notes, created_by) VALUES (?, ?, ?, ?)",
+                        [$companyId, $returnFees, 'رسوم إرجاع - طلب #' . $orderNumber, $currentUser['id'] ?? null]
+                    );
+                }
+
+                $returnOrderItems  = $db->query(
+                    "SELECT product_id, batch_id, quantity FROM shipping_company_order_items WHERE order_id = ?",
+                    [$orderId]
+                );
+                $returnMovementNote = 'إرجاع منتجات - مرتجع طلب شحن #' . $orderNumber;
+                foreach ($returnOrderItems as $item) {
+                    $productId      = (int)($item['product_id'] ?? 0);
+                    $batchId        = isset($item['batch_id']) && $item['batch_id'] > 0 ? (int)$item['batch_id'] : null;
+                    $quantity       = (float)($item['quantity'] ?? 0);
+                    $actualProductId = $productId;
+                    $fpData         = null;
+                    if ($batchId) {
+                        try {
+                            $fpData = $db->queryOne("
+                                SELECT fp.quantity_produced,
+                                    COALESCE(fp.product_id, bn.product_id) AS actual_product_id
+                                FROM finished_products fp
+                                LEFT JOIN batch_numbers bn ON fp.batch_number = bn.batch_number
+                                WHERE fp.id = ?
+                            ", [$batchId]);
+                            if ($fpData) $actualProductId = (int)($fpData['actual_product_id'] ?? $productId);
+                        } catch (Throwable $fpErr) {
+                            error_log('register_shipping_return: fpData error: ' . $fpErr->getMessage());
+                        }
+                    }
+                    recordInventoryMovement(
+                        $actualProductId, $mainWarehouse['id'] ?? null, 'in', $quantity,
+                        'shipping_return', $orderId, $returnMovementNote, $currentUser['id'] ?? null, $batchId
+                    );
+                    if ($batchId && $fpData) {
+                        try {
+                            $newQty = (float)($fpData['quantity_produced'] ?? 0) + $quantity;
+                            $db->execute("UPDATE finished_products SET quantity_produced = ? WHERE id = ?", [$newQty, $batchId]);
+                        } catch (Throwable $fpUpdateErr) {
+                            error_log('register_shipping_return: fp quantity update error: ' . $fpUpdateErr->getMessage());
+                        }
                     }
                 }
-            }
 
-            logAudit(
-                $currentUser['id'] ?? null,
-                'register_shipping_return',
-                'shipping_order',
-                $orderId,
-                null,
-                ['order_number' => $orderNumber, 'company_id' => $companyId, 'order_total' => $orderTotal, 'return_fees' => $returnFees, 'total_deduction' => $totalDeduction]
-            );
+                logAudit(
+                    $currentUser['id'] ?? null,
+                    'register_shipping_return',
+                    'shipping_order',
+                    $orderId,
+                    null,
+                    ['order_number' => $orderNumber, 'company_id' => $companyId, 'order_total' => $orderTotal, 'return_fees' => $returnFees, 'total_deduction' => $totalDeduction]
+                );
+            }
 
             $db->commit();
             $transactionStarted = false;
@@ -5556,14 +5629,15 @@ function copyShippingCollectionResult(btn) {
             <input type="hidden" name="action" value="register_shipping_return">
             <input type="hidden" name="company_id" id="returnCardCompanyId">
             <input type="hidden" name="order_id" id="returnCardOrderId">
+            <input type="hidden" name="paper_invoice_id" id="returnCardPaperInvoiceId">
             <div class="mb-3">
                 <div class="fw-semibold text-muted small">شركة الشحن</div>
                 <div class="fs-6 fw-bold" id="returnCardCompanyName">-</div>
             </div>
             <div class="mb-3">
-                <label class="form-label" for="returnCardOrderNumber">رقم الطلب <span class="text-danger">*</span></label>
+                <label class="form-label" for="returnCardOrderNumber">رقم الفاتورة الورقية <span class="text-danger">*</span></label>
                 <div class="input-group">
-                    <input type="text" class="form-control" id="returnCardOrderNumber" placeholder="أدخل رقم الطلب" required>
+                    <input type="text" class="form-control" id="returnCardOrderNumber" placeholder="أدخل رقم الفاتورة الورقية" required>
                     <button type="button" class="btn btn-outline-secondary" onclick="lookupOrderForReturn('card')">
                         <i class="bi bi-search"></i>
                     </button>
@@ -5576,6 +5650,10 @@ function copyShippingCollectionResult(btn) {
                     <input type="number" class="form-control bg-light" id="returnCardTotalAmount" step="0.01" readonly placeholder="سيتم جلبه بعد البحث">
                     <span class="input-group-text">ج.م</span>
                 </div>
+            </div>
+            <div class="mb-3 d-none" id="returnCardProductsSection">
+                <label class="form-label fw-semibold"><i class="bi bi-box-seam me-1"></i>المنتجات في الفاتورة</label>
+                <div id="returnCardProductsList" class="border rounded p-2 bg-light small"></div>
             </div>
             <div class="mb-3">
                 <label class="form-label" for="returnCardReturnFees">رسوم الإرجاع</label>
@@ -6005,6 +6083,12 @@ function showRegisterReturnByIdName(companyId, companyName, balance) {
     document.getElementById('returnCardOrderNumber').value = '';
     document.getElementById('returnCardTotalAmount').value = '';
     document.getElementById('returnCardReturnFees').value = '0';
+    var piEl = document.getElementById('returnCardPaperInvoiceId');
+    if (piEl) piEl.value = '';
+    var prodSec = document.getElementById('returnCardProductsSection');
+    if (prodSec) prodSec.classList.add('d-none');
+    var prodList = document.getElementById('returnCardProductsList');
+    if (prodList) prodList.innerHTML = '';
     var submitBtnEl = document.getElementById('returnCardSubmitBtn');
     if (submitBtnEl) submitBtnEl.disabled = true;
     var summaryEl = document.getElementById('returnCardSummary');
@@ -6058,12 +6142,35 @@ function lookupOrderForReturn(context) {
                 if (errorEl) { errorEl.textContent = data.error || 'لم يتم العثور على الطلب.'; errorEl.classList.remove('d-none'); }
                 if (totalEl) totalEl.value = '';
                 if (orderIdEl) orderIdEl.value = '';
+                var piEl2 = document.getElementById(prefix + 'PaperInvoiceId');
+                if (piEl2) piEl2.value = '';
+                var pSec2 = document.getElementById(prefix + 'ProductsSection');
+                if (pSec2) pSec2.classList.add('d-none');
                 if (submitBtn) submitBtn.disabled = true;
                 updateReturnSummary(context);
                 return;
             }
             if (totalEl) totalEl.value = parseFloat(data.total_amount || 0).toFixed(2);
-            if (orderIdEl) orderIdEl.value = data.order_id;
+            // paper_invoice_id أو order_id
+            if (orderIdEl) orderIdEl.value = data.order_id || '';
+            var piEl = document.getElementById(prefix + 'PaperInvoiceId');
+            if (piEl) piEl.value = data.paper_invoice_id || '';
+            // عرض المنتجات إن وُجدت
+            var prodSec = document.getElementById(prefix + 'ProductsSection');
+            var prodList = document.getElementById(prefix + 'ProductsList');
+            if (prodList && data.products && data.products.length > 0) {
+                var html = '<ul class="mb-0 ps-3">';
+                data.products.forEach(function(p) {
+                    html += '<li>' + (p.name || '').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                          + ' — ' + (p.quantity || 0) + ' ' + (p.unit || 'قطعة') + '</li>';
+                });
+                html += '</ul>';
+                prodList.innerHTML = html;
+                if (prodSec) prodSec.classList.remove('d-none');
+            } else {
+                if (prodSec) prodSec.classList.add('d-none');
+                if (prodList) prodList.innerHTML = '';
+            }
             if (submitBtn) submitBtn.disabled = false;
             updateReturnSummary(context);
         })
@@ -7805,15 +7912,17 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         registerReturnFormCard.addEventListener('submit', function(e) {
             e.preventDefault();
-            var orderIdVal = document.getElementById('returnCardOrderId').value;
-            if (!orderIdVal) {
-                showShippingToast('يرجى البحث عن الطلب أولاً.', 'danger');
+            var orderIdVal   = document.getElementById('returnCardOrderId').value;
+            var paperInvVal  = document.getElementById('returnCardPaperInvoiceId') ? document.getElementById('returnCardPaperInvoiceId').value : '';
+            if (!orderIdVal && !paperInvVal) {
+                showShippingToast('يرجى البحث عن الفاتورة أولاً.', 'danger');
                 return false;
             }
             var formData = new FormData();
             formData.append('action', 'register_shipping_return');
             formData.append('company_id', document.getElementById('returnCardCompanyId').value);
-            formData.append('order_id', orderIdVal);
+            if (paperInvVal) formData.append('paper_invoice_id', paperInvVal);
+            if (orderIdVal)  formData.append('order_id', orderIdVal);
             formData.append('return_fees', document.getElementById('returnCardReturnFees').value || '0');
             var submitBtn = document.getElementById('returnCardSubmitBtn');
             if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>جاري التسجيل...'; }
