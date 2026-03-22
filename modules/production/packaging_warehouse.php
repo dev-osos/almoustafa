@@ -3050,7 +3050,6 @@ document.addEventListener('DOMContentLoaded', function() {
                                    name="material_id"
                                    id="create_material_code"
                                    value="<?php echo htmlspecialchars($nextMaterialCode, ENT_QUOTES, 'UTF-8'); ?>">
-                            <small class="text-muted">يتم إنشاء الكود تلقائياً لضمان عدم تكراره.</small>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-bold">اسم الأداة <span class="text-danger">*</span></label>
@@ -3077,19 +3076,14 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <small class="text-muted">لم يتم العثور على أنواع مسجلة. يرجى إضافة الأنواع من جدول أنواع الأدوات.</small>
                             <?php endif; ?>
                         </div>
-                        <div class="col-md-6">
-                            <label class="form-label">الحالة</label>
-                            <select class="form-select" name="status">
-                                <option value="active" selected>نشطة</option>
-                                <option value="inactive">غير نشطة</option>
-                            </select>
-                        </div>
                     </div>
                     <div class="row g-3 mt-0">
                         <div class="col-md-6">
                             <label class="form-label">الوحدة</label>
-                            <div class="form-control-plaintext fw-semibold">قطعة</div>
-                            <input type="hidden" name="unit" value="قطعة">
+                            <select class="form-select" name="unit" id="addToolUnit" onchange="toggleWeightFields(this.value)">
+                                <option value="قطعة" selected>قطعة</option>
+                                <option value="وزن">وزن</option>
+                            </select>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">الكمية الابتدائية</label>
@@ -3106,19 +3100,9 @@ document.addEventListener('DOMContentLoaded', function() {
                             <small class="text-muted">يمكن تعديل الكمية لاحقاً من خلال زر "إضافة كمية".</small>
                         </div>
                     </div>
-                    <div class="row g-3 mt-0">
+                    <div class="row g-3 mt-0" id="addToolWeightFields" style="display:none;">
                         <div class="col-md-6">
-                            <label class="form-label">الاسم المستعار (اختياري)</label>
-                            <input type="text"
-                                   class="form-control"
-                                   name="alias"
-                                   maxlength="255"
-                                   placeholder="اسم مختصر للأداة">
-                        </div>
-                    </div>
-                    <div class="row g-3 mt-0">
-                        <div class="col-md-6">
-                            <label class="form-label">الوزن (اختياري)</label>
+                            <label class="form-label">الوزن</label>
                             <input type="number"
                                    class="form-control"
                                    name="weight"
@@ -3129,7 +3113,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         <div class="col-md-6">
                             <label class="form-label">وحدة الوزن</label>
                             <select class="form-select" name="weight_unit">
-                                <option value="">بدون وزن</option>
+                                <option value="">اختر الوحدة</option>
                                 <option value="كيلوجرام">كيلوجرام</option>
                                 <option value="جرام">جرام</option>
                                 <option value="ملليلتر">ملليلتر</option>
@@ -3592,6 +3576,17 @@ document.addEventListener('DOMContentLoaded', function() {
 </div>
 
 <script>
+function toggleWeightFields(value) {
+    const fields = document.getElementById('addToolWeightFields');
+    if (!fields) return;
+    if (value === 'وزن') {
+        fields.style.display = '';
+    } else {
+        fields.style.display = 'none';
+        fields.querySelectorAll('input, select').forEach(el => el.value = '');
+    }
+}
+
 const aliasApiUrl = '<?php echo getRelativeUrl('api/update_packaging_alias.php'); ?>';
 const nextCodeApiUrl = '<?php echo getRelativeUrl('production.php?page=packaging_warehouse&ajax=next_code'); ?>';
 
