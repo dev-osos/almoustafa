@@ -500,7 +500,7 @@ function deductTaskProductsFromStock($db, $notes)
     if ($notes === '') {
         return;
     }
-    if (!preg_match('/\[PRODUCTS_JSON\]:\s*(.+)(?=\n\n\[|\z)/s', $notes, $m)) {
+    if (!preg_match('/\[PRODUCTS_JSON\]:(.+?)(?=\n|$)/s', $notes, $m)) {
         return;
     }
     $products = json_decode(trim($m[1]), true);
@@ -6108,10 +6108,11 @@ function buildInventoryPreviewTable(data) {
             '<thead class="table-light"><tr><th>المنتج</th><th class="text-center">المطلوب</th><th class="text-center">المتاح</th><th class="text-center">الحالة</th></tr></thead><tbody>';
         data.company_products.forEach(function(p) {
             var rowCls = (p.sufficient === false) ? 'table-danger' : '';
+            var availTxtP = (p.available === null || p.available === undefined) ? '—' : fmtQty(p.available) + ' ' + (p.unit || '');
             html += '<tr class="' + rowCls + '">' +
                 '<td>' + (p.name || '—') + '</td>' +
                 '<td class="text-center">' + fmtQty(p.needed) + ' ' + (p.unit || '') + '</td>' +
-                '<td class="text-center">' + fmtQty(p.available) + ' ' + (p.unit || '') + '</td>' +
+                '<td class="text-center">' + availTxtP + '</td>' +
                 '<td class="text-center">' + suffBadge(p.sufficient) + '</td>' +
                 '</tr>';
         });

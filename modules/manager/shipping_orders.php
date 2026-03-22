@@ -5608,8 +5608,8 @@ function copyShippingCollectionResult(btn) {
     </div>
 </div>
 
-<!-- Card للموبايل - تسجيل مرتجع -->
-<div class="card shadow-sm mb-4 d-md-none" id="registerReturnCard" style="display: none !important;">
+<!-- بطاقة تسجيل مرتجع -->
+<div class="card shadow-sm mb-4" id="registerReturnCard" style="display: none;">
     <div class="card-header bg-danger text-white">
         <h5 class="mb-0"><i class="bi bi-arrow-return-right me-2"></i>تسجيل مرتجع</h5>
     </div>
@@ -6059,41 +6059,22 @@ function closeDeductFromShippingCard() {
 }
 
 function showRegisterReturnByIdName(companyId, companyName, balance) {
-    if (isMobile()) {
-        var card = document.getElementById('registerReturnCard');
-        if (!card) return;
-        document.getElementById('returnCardCompanyId').value = companyId;
-        document.getElementById('returnCardCompanyName').textContent = companyName || '-';
-        document.getElementById('returnCardOrderId').value = '';
-        document.getElementById('returnCardOrderNumber').value = '';
-        document.getElementById('returnCardTotalAmount').value = '';
-        document.getElementById('returnCardReturnFees').value = '0';
-        document.getElementById('returnCardSubmitBtn').disabled = true;
-        document.getElementById('returnCardSummary').classList.add('d-none');
-        var alertEl = document.getElementById('returnCardAlert');
-        if (alertEl) { alertEl.className = 'alert d-none'; alertEl.textContent = ''; }
-        var errEl = document.getElementById('returnCardOrderError');
-        if (errEl) { errEl.className = 'text-danger small mt-1 d-none'; errEl.textContent = ''; }
-        card.style.removeProperty('display');
-        setTimeout(function() { scrollToElement(card); }, 50);
-    } else {
-        var modal = document.getElementById('registerReturnModal');
-        if (!modal) return;
-        document.getElementById('returnModalCompanyId').value = companyId;
-        document.getElementById('returnModalCompanyName').textContent = companyName || '-';
-        document.getElementById('returnModalOrderId').value = '';
-        document.getElementById('returnModalOrderNumber').value = '';
-        document.getElementById('returnModalTotalAmount').value = '';
-        document.getElementById('returnModalReturnFees').value = '0';
-        document.getElementById('returnModalSubmitBtn').disabled = true;
-        document.getElementById('returnModalSummary').classList.add('d-none');
-        var alertEl = document.getElementById('returnModalAlert');
-        if (alertEl) { alertEl.className = 'alert d-none'; alertEl.textContent = ''; }
-        var errEl = document.getElementById('returnModalOrderError');
-        if (errEl) { errEl.className = 'text-danger small mt-1 d-none'; errEl.textContent = ''; }
-        var modalInstance = new bootstrap.Modal(modal);
-        modalInstance.show();
-    }
+    var card = document.getElementById('registerReturnCard');
+    if (!card) return;
+    document.getElementById('returnCardCompanyId').value = companyId;
+    document.getElementById('returnCardCompanyName').textContent = companyName || '-';
+    document.getElementById('returnCardOrderId').value = '';
+    document.getElementById('returnCardOrderNumber').value = '';
+    document.getElementById('returnCardTotalAmount').value = '';
+    document.getElementById('returnCardReturnFees').value = '0';
+    document.getElementById('returnCardSubmitBtn').disabled = true;
+    document.getElementById('returnCardSummary').classList.add('d-none');
+    var alertEl = document.getElementById('returnCardAlert');
+    if (alertEl) { alertEl.className = 'alert d-none'; alertEl.textContent = ''; }
+    var errEl = document.getElementById('returnCardOrderError');
+    if (errEl) { errEl.className = 'text-danger small mt-1 d-none'; errEl.textContent = ''; }
+    card.style.display = '';
+    setTimeout(function() { scrollToElement(card); }, 50);
 }
 
 function closeRegisterReturnCard() {

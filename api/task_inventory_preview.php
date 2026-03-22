@@ -51,9 +51,9 @@ try {
  */
 function buildInventoryImpact($db, $notes)
 {
-    // استخراج المنتجات من [PRODUCTS_JSON]
+    // استخراج المنتجات من [PRODUCTS_JSON] — نوقف عند أول سطر جديد مثل getTaskReceiptTotalFromNotes
     $products = [];
-    if (preg_match('/\[PRODUCTS_JSON\]:\s*(.+?)(?=\n\n\[|\z)/s', $notes, $m)) {
+    if (preg_match('/\[PRODUCTS_JSON\]:(.+?)(?=\n|$)/s', $notes, $m)) {
         $decoded = json_decode(trim($m[1]), true);
         if (is_array($decoded)) {
             $products = $decoded;
@@ -73,11 +73,14 @@ function buildInventoryImpact($db, $notes)
 
     foreach ($products as $product) {
         $name     = trim($product['name'] ?? '');
-        $qty      = (float)($product['quantity'] ?? 0);
         $unit     = trim($product['unit'] ?? 'قطعة');
         $category = trim($product['category'] ?? '');
 
-        if ($name === '' || $qty <= 0) {
+        // الكمية (قد تكون null لبعض الأوردرات القديمة)
+        $rawQty = $product['quantity'] ?? $product['effective_quantity'] ?? null;
+        $qty    = ($rawQty !== null) ? (float)$rawQty : 0;
+
+        if ($name === '') {
             continue;
         }
 
@@ -99,7 +102,7 @@ function buildInventoryImpact($db, $notes)
         $productRow = null;
         try {
             $productRow = $db->queryOne(
-                "SELECT id, quantity FROM products WHERE name = ? AND status = 'active' LIMIT 1",
+                "SELECT id, quantity, status FROM products WHERE name = ? LIMIT 1",
                 [$name]
             );
         } catch (Exception $e) { /* skip */ }
@@ -111,7 +114,16 @@ function buildInventoryImpact($db, $notes)
                 'needed'    => $effectiveQty,
                 'unit'      => $displayUnit,
                 'available' => $available,
-                'sufficient'=> $available >= $effectiveQty,
+                'sufficient'=> ($effectiveQty <= 0) ? true : ($available >= $effectiveQty),
+            ];
+        } elseif ($effectiveQty > 0) {
+            // المنتج غير موجود في جدول products — يظهر في المعاينة بحالة مجهولة
+            $companyProducts[] = [
+                'name'      => $name,
+                'needed'    => $effectiveQty,
+                'unit'      => $displayUnit,
+                'available' => null,
+                'sufficient'=> null,
             ];
         }
 
