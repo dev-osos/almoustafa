@@ -3039,12 +3039,6 @@ document.addEventListener('DOMContentLoaded', function() {
                                        id="create_material_code_display"
                                        value="<?php echo htmlspecialchars($nextMaterialCode, ENT_QUOTES, 'UTF-8'); ?>"
                                        readonly>
-                                <button type="button"
-                                        class="btn btn-outline-secondary"
-                                        id="refresh_material_code_btn"
-                                        title="تحديث الكود">
-                                    <i class="bi bi-arrow-repeat"></i>
-                                </button>
                             </div>
                             <input type="hidden"
                                    name="material_id"
