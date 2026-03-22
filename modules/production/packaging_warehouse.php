@@ -1140,9 +1140,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($usePackagingTable) {
                 $material = $db->queryOne(
-                    "SELECT id, material_id, name, quantity, unit 
-                     FROM packaging_materials 
-                     WHERE id = ? AND status = 'active' 
+                    "SELECT id, material_id, name, quantity, unit, weight, weight_unit
+                     FROM packaging_materials
+                     WHERE id = ? AND status = 'active'
                      FOR UPDATE",
                     [$materialId]
                 );
@@ -1150,9 +1150,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $unitColumnCheck = $db->queryOne("SHOW COLUMNS FROM products LIKE 'unit'");
                 $selectColumns = $unitColumnCheck ? 'id, name, quantity, unit' : 'id, name, quantity';
                 $material = $db->queryOne(
-                    "SELECT {$selectColumns} 
-                     FROM products 
-                     WHERE id = ? AND status = 'active' 
+                    "SELECT {$selectColumns}
+                     FROM products
+                     WHERE id = ? AND status = 'active'
                      FOR UPDATE",
                     [$materialId]
                 );
@@ -1165,7 +1165,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 throw new Exception('أداة التعبئة غير موجودة أو غير مفعّلة.');
             }
 
-            $quantityBefore = (float)($material['quantity'] ?? 0);
+            $isWeightBased = ($material['unit'] ?? '') === 'وزن';
+            $quantityBefore = $isWeightBased
+                ? (float)($material['weight'] ?? 0)
+                : (float)($material['quantity'] ?? 0);
+
             if ($quantityBefore < $useQuantity) {
                 throw new Exception('الكمية المتاحة أقل من المطلوب للاستخدام.');
             }
@@ -1174,16 +1178,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($usePackagingTable) {
                 $db->execute(
-                    "UPDATE packaging_materials 
-                     SET quantity = ?, updated_at = NOW() 
-                     WHERE id = ?",
+                    $isWeightBased
+                        ? "UPDATE packaging_materials SET weight = ?, updated_at = NOW() WHERE id = ?"
+                        : "UPDATE packaging_materials SET quantity = ?, updated_at = NOW() WHERE id = ?",
                     [$quantityAfter, $materialId]
                 );
             } else {
                 $db->execute(
-                    "UPDATE products 
-                     SET quantity = ? 
-                     WHERE id = ?",
+                    "UPDATE products SET quantity = ? WHERE id = ?",
                     [$quantityAfter, $materialId]
                 );
             }
@@ -2796,27 +2798,27 @@ document.addEventListener('DOMContentLoaded', function() {
                                 </td>
                                 <td style="padding: 0.4rem 0.25rem; font-size: 0.8rem;"><?php echo htmlspecialchars($material['type'] ?? $material['category'] ?? '-'); ?></td>
                                 <?php
-                                    $materialQuantity = isset($material['quantity']) ? (float)$material['quantity'] : 0.0;
-                                    $useButtonDisabled = $materialQuantity <= 0;
+                                    $isWeightUnit = ($material['unit'] ?? '') === 'وزن';
+                                    $wu = trim($material['weight_unit'] ?? '');
+                                    $stockValue = $isWeightUnit
+                                        ? (float)($material['weight'] ?? 0)
+                                        : (float)($material['quantity'] ?? 0);
+                                    $useButtonDisabled = $stockValue <= 0;
                                     $quantityElementId = 'material-quantity-' . $material['id'];
                                 ?>
                                 <td style="padding: 0.4rem 0.25rem;">
                                     <div
                                         id="<?php echo htmlspecialchars($quantityElementId, ENT_QUOTES, 'UTF-8'); ?>"
                                         style="font-weight: 600; font-size: 0.875rem;"
-                                        class="text-<?php echo $materialQuantity > 0 ? 'success' : 'danger'; ?>"
-                                        data-value="<?php echo number_format($materialQuantity, 4, '.', ''); ?>"
+                                        class="text-<?php echo $stockValue > 0 ? 'success' : 'danger'; ?>"
+                                        data-value="<?php echo number_format($stockValue, 4, '.', ''); ?>"
                                         data-unit-label="<?php echo htmlspecialchars($material['unit'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
                                         data-append-unit="0">
-                                        <?php
-                                            $unit = $material['unit'] ?? '';
-                                            $wu = trim($material['weight_unit'] ?? '');
-                                            if ($unit === 'وزن' || $wu !== '') {
-                                                echo number_format($materialQuantity, 3) . ($wu ? ' ' . htmlspecialchars($wu) : '');
-                                            } else {
-                                                echo number_format($materialQuantity, 0) . ' قطعة';
-                                            }
-                                        ?>
+                                        <?php if ($isWeightUnit): ?>
+                                            <?php echo number_format($stockValue, 3) . ($wu ? ' ' . htmlspecialchars($wu) : ''); ?>
+                                        <?php else: ?>
+                                            <?php echo number_format($stockValue, 0) . ' قطعة'; ?>
+                                        <?php endif; ?>
                                     </div>
                                 </td>
                                 <td style="padding: 0.4rem 0.25rem;">
@@ -2828,7 +2830,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                             data-name="<?php echo htmlspecialchars($material['name'], ENT_QUOTES, 'UTF-8'); ?>"
                                             data-unit="<?php echo htmlspecialchars(!empty($material['unit']) ? $material['unit'] : 'وحدة', ENT_QUOTES, 'UTF-8'); ?>"
                                             data-weight-unit="<?php echo htmlspecialchars($material['weight_unit'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
-                                            data-quantity="<?php echo number_format($materialQuantity, 4, '.', ''); ?>"
+                                            data-quantity="<?php echo number_format($stockValue, 4, '.', ''); ?>"
                                             data-quantity-target="<?php echo htmlspecialchars($quantityElementId, ENT_QUOTES, 'UTF-8'); ?>"
                                             data-use-quantity="1"
                                             onclick="usePackagingMaterial(this)"
