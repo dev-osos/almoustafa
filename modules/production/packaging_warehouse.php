@@ -1434,6 +1434,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $materialId = intval($_POST['material_id'] ?? 0);
         $damagedQuantity = isset($_POST['damaged_quantity']) ? round(floatval($_POST['damaged_quantity']), 4) : 0.0;
         $reason = trim($_POST['reason'] ?? '');
+        $damageField = trim($_POST['damage_field'] ?? '') === 'weight' ? 'weight' : 'quantity';
 
         if ($materialId <= 0) {
             $error = 'معرّف الأداة غير صحيح.';
@@ -1447,7 +1448,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 if ($usePackagingTable) {
                     $material = $db->queryOne(
-                        "SELECT id, name, quantity, unit FROM packaging_materials WHERE id = ? AND status = 'active' FOR UPDATE",
+                        "SELECT id, name, quantity, unit, weight, weight_unit FROM packaging_materials WHERE id = ? AND status = 'active' FOR UPDATE",
                         [$materialId]
                     );
                 } else {
@@ -1466,27 +1467,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     throw new Exception('أداة التعبئة غير موجودة أو غير مفعّلة.');
                 }
 
-                $quantityBefore = floatval($material['quantity'] ?? 0);
-                if ($damagedQuantity > $quantityBefore) {
-                    throw new Exception('الكمية التالفة تتجاوز الكمية المتاحة.');
-                }
-
-                $quantityAfter = max($quantityBefore - $damagedQuantity, 0);
-
-                if ($usePackagingTable) {
-                    $db->execute(
-                        "UPDATE packaging_materials 
-                         SET quantity = ?, updated_at = NOW() 
-                         WHERE id = ?",
-                        [$quantityAfter, $materialId]
-                    );
+                if ($damageField === 'weight') {
+                    $quantityBefore = floatval($material['weight'] ?? 0);
+                    if ($damagedQuantity > $quantityBefore) {
+                        throw new Exception('الوزن التالف يتجاوز الوزن المتاح.');
+                    }
+                    $quantityAfter = max(round($quantityBefore - $damagedQuantity, 4), 0);
+                    if ($usePackagingTable) {
+                        $db->execute(
+                            "UPDATE packaging_materials SET weight = ?, updated_at = NOW() WHERE id = ?",
+                            [$quantityAfter, $materialId]
+                        );
+                    }
                 } else {
-                    $db->execute(
-                        "UPDATE products 
-                         SET quantity = ? 
-                         WHERE id = ?",
-                        [$quantityAfter, $materialId]
-                    );
+                    $quantityBefore = floatval($material['quantity'] ?? 0);
+                    if ($damagedQuantity > $quantityBefore) {
+                        throw new Exception('الكمية التالفة تتجاوز الكمية المتاحة.');
+                    }
+                    $quantityAfter = max($quantityBefore - $damagedQuantity, 0);
+                    if ($usePackagingTable) {
+                        $db->execute(
+                            "UPDATE packaging_materials SET quantity = ?, updated_at = NOW() WHERE id = ?",
+                            [$quantityAfter, $materialId]
+                        );
+                    } else {
+                        $db->execute(
+                            "UPDATE products SET quantity = ? WHERE id = ?",
+                            [$quantityAfter, $materialId]
+                        );
+                    }
                 }
 
                 $db->execute(
@@ -1500,7 +1509,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $quantityBefore,
                         $damagedQuantity,
                         $quantityAfter,
-                        $material['unit'] ?? null,
+                        $damageField === 'weight' ? ($material['weight_unit'] ?? 'وزن') : ($material['unit'] ?? null),
                         mb_substr($reason, 0, 500, 'UTF-8'),
                         $currentUser['id']
                     ]
@@ -2898,6 +2907,8 @@ document.addEventListener('DOMContentLoaded', function() {
                                                 data-name="<?php echo htmlspecialchars($material['name'], ENT_QUOTES, 'UTF-8'); ?>"
                                                 data-unit="<?php echo htmlspecialchars(!empty($material['unit']) ? $material['unit'] : 'وحدة', ENT_QUOTES, 'UTF-8'); ?>"
                                                 data-quantity="<?php echo number_format($materialQuantity, 4, '.', ''); ?>"
+                                                data-material-weight="<?php echo number_format(floatval($material['weight'] ?? 0), 4, '.', ''); ?>"
+                                                data-weight-unit="<?php echo htmlspecialchars($material['weight_unit'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
                                                 onclick="openRecordDamageModal(this)"
                                                 title=""
                                                 style="padding: 0.2rem 0.4rem; font-size: 0.75rem;">
@@ -3029,6 +3040,8 @@ document.addEventListener('DOMContentLoaded', function() {
                                         data-name="<?php echo htmlspecialchars($material['name'], ENT_QUOTES, 'UTF-8'); ?>"
                                         data-unit="<?php echo htmlspecialchars(!empty($material['unit']) ? $material['unit'] : 'وحدة', ENT_QUOTES, 'UTF-8'); ?>"
                                         data-quantity="<?php echo number_format($materialQuantity, 4, '.', ''); ?>"
+                                        data-material-weight="<?php echo number_format(floatval($material['weight'] ?? 0), 4, '.', ''); ?>"
+                                        data-weight-unit="<?php echo htmlspecialchars($material['weight_unit'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
                                         onclick="openRecordDamageModal(this)">
                                     <i class="bi bi-exclamation-octagon me-2"></i>
                                 </button>
@@ -3610,8 +3623,8 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
 </div>
 
-<!-- Card تسجيل تالف - للموبايل فقط -->
-<div class="card shadow-sm mb-4 d-md-none" id="recordDamageCard" style="display: none;">
+<!-- Card تسجيل تالف قطع -->
+<div class="card shadow-sm mb-4" id="recordDamageCard" style="display: none;">
     <div class="card-header bg-danger text-white">
         <h5 class="mb-0"><i class="bi bi-exclamation-octagon me-2"></i>تسجيل تالف لأداة التعبئة</h5>
     </div>
@@ -3657,6 +3670,61 @@ document.addEventListener('DOMContentLoaded', function() {
             <div class="d-flex gap-2">
                 <button type="submit" class="btn btn-danger">تسجيل التالف</button>
                 <button type="button" class="btn btn-secondary" onclick="closeRecordDamageCard()">إلغاء</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Card تسجيل تالف وزن -->
+<div class="card shadow-sm mb-4" id="recordDamageWeightCard" style="display: none;">
+    <div class="card-header bg-danger text-white">
+        <h5 class="mb-0"><i class="bi bi-exclamation-octagon me-2"></i>تسجيل تالف (وزن)</h5>
+    </div>
+    <div class="card-body">
+        <form method="POST" id="recordDamageWeightForm">
+            <input type="hidden" name="action" value="record_packaging_damage">
+            <input type="hidden" name="damage_field" value="weight">
+            <input type="hidden" name="material_id" id="damage_weight_material_id">
+
+            <div class="mb-3">
+                <label class="form-label fw-bold">أداة التعبئة</label>
+                <div class="form-control-plaintext fw-semibold" id="damage_weight_material_name">-</div>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label fw-bold">الوزن الحالي</label>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-secondary fs-6" id="damage_weight_existing_val">0</span>
+                    <span class="text-muted small" id="damage_weight_existing_unit"></span>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label fw-bold">الوزن التالف <span class="text-danger">*</span></label>
+                <div class="input-group">
+                    <input type="number"
+                           step="0.001"
+                           min="0.001"
+                           class="form-control"
+                           name="damaged_quantity"
+                           id="damage_weight_amount_input"
+                           required
+                           placeholder="0.000">
+                    <span class="input-group-text" id="damage_weight_unit_display"></span>
+                </div>
+                <small class="text-muted">سيتم خصم هذا الوزن من الوزن الحالي.</small>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label fw-bold">سبب التلف <span class="text-danger">*</span></label>
+                <textarea class="form-control" name="reason" id="damage_weight_reason" rows="2" required placeholder="اذكر سبب التلف"></textarea>
+            </div>
+
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-danger">
+                    <i class="bi bi-check-circle me-2"></i>تسجيل التالف
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="closeRecordDamageWeightCard()">إلغاء</button>
             </div>
         </form>
     </div>
@@ -4445,100 +4513,121 @@ function openRecordDamageModal(trigger) {
     if (typeof closeAllForms === 'function') {
         closeAllForms();
     }
-    
+
     const dataset = trigger?.dataset || {};
     const materialId = dataset.id || '';
     const materialName = dataset.name || '-';
     const unit = dataset.unit || 'وحدة';
     const existingQuantity = parseFloat(dataset.quantity || '0') || 0;
+    const materialWeight = parseFloat(dataset.materialWeight || '0') || 0;
+    const weightUnit = (dataset.weightUnit || '').trim();
 
-    if (!materialId) {
-        console.warn('Material id is missing for damage modal trigger.');
+    if (!materialId) return;
+
+    const data = { materialId, materialName, unit, existingQuantity, materialWeight, weightUnit };
+
+    if (materialWeight > 0) {
+        _showDamageTypeSelectCard(trigger, data);
         return;
     }
-    
-    const isMobileDevice = isMobile();
-    
-    if (isMobileDevice) {
-        // على الموبايل: استخدام Card
-        const card = document.getElementById('recordDamageCard');
-        const form = document.getElementById('recordDamageFormCard');
-        if (!card || !form) {
-            return;
-        }
-        
-        form.reset();
-        
-        const materialIdInput = document.getElementById('damage_material_id_card');
-        const nameElement = document.getElementById('damage_material_name_card');
-        const existingElement = document.getElementById('damage_existing_card');
-        const unitElement = document.getElementById('damage_unit_card');
-        const unitSuffix = document.getElementById('damage_unit_suffix_card');
-        const quantityInput = document.getElementById('damage_quantity_input_card');
-        const reasonInput = document.getElementById('damage_reason_input_card');
-        
-        if (materialIdInput) materialIdInput.value = materialId;
-        if (nameElement) nameElement.textContent = materialName;
-        if (existingElement) {
-            existingElement.textContent = existingQuantity.toLocaleString('ar-EG', {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2
-            });
-        }
-        if (unitElement) unitElement.textContent = unit;
-        if (unitSuffix) unitSuffix.textContent = unit;
-        if (quantityInput) quantityInput.value = '';
-        if (reasonInput) reasonInput.value = '';
-        
-        card.style.display = 'block';
-        setTimeout(function() {
-            scrollToElement(card);
-            if (quantityInput) {
-                quantityInput.focus();
-                quantityInput.select();
-            }
-        }, 50);
-    } else {
-        // على الكمبيوتر: استخدام Modal
-        const modalElement = document.getElementById('recordDamageModal');
-        const form = document.getElementById('recordDamageForm');
-        if (!modalElement || !form) {
-            return;
-        }
 
-        form.reset();
+    _openDamagePiecesCard(data);
+}
 
-        const materialIdInput = document.getElementById('damage_material_id');
-        const nameElement = document.getElementById('damage_material_name');
-        const existingElement = document.getElementById('damage_existing');
-        const unitElement = document.getElementById('damage_unit');
-        const unitSuffix = document.getElementById('damage_unit_suffix');
-        const quantityInput = document.getElementById('damage_quantity_input');
-        const reasonInput = document.getElementById('damage_reason_input');
+function _showDamageTypeSelectCard(trigger, data) {
+    document.querySelectorAll('.damage-type-select-card').forEach(el => el.remove());
 
-        if (materialIdInput) materialIdInput.value = materialId;
-        if (nameElement) nameElement.textContent = materialName;
-        if (existingElement) {
-            existingElement.textContent = existingQuantity.toLocaleString('ar-EG', {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2
-            });
-        }
-        if (unitElement) unitElement.textContent = unit;
-        if (unitSuffix) unitSuffix.textContent = unit;
-        if (quantityInput) quantityInput.value = '';
-        if (reasonInput) reasonInput.value = '';
+    const wLabel = data.weightUnit || '';
+    const weightFormatted = data.materialWeight.toLocaleString('ar-EG', {minimumFractionDigits: 0, maximumFractionDigits: 3});
 
-        const modal = new bootstrap.Modal(modalElement);
-        modal.show();
+    const card = document.createElement('div');
+    card.className = 'damage-type-select-card card border-danger shadow-sm mt-3 mb-2';
+    card.style.cssText = 'border-width:2px !important;';
+    card.innerHTML = `
+        <div class="card-header bg-danger text-white py-2 d-flex justify-content-between align-items-center">
+            <span class="fw-semibold"><i class="bi bi-exclamation-octagon me-1"></i>ماذا تريد أن تسجّل تالفاً؟</span>
+            <button type="button" class="btn-close btn-close-white btn-sm" onclick="this.closest('.damage-type-select-card').remove()"></button>
+        </div>
+        <div class="card-body py-3">
+            <p class="text-muted small mb-3">${data.materialName}</p>
+            <div class="d-grid gap-2">
+                <button type="button" class="btn btn-outline-danger btn-damage-pieces-choice">
+                    <i class="bi bi-boxes me-2"></i>تالف قطع
+                    <small class="d-block text-muted mt-1">الحالي: ${data.existingQuantity.toLocaleString('ar-EG', {maximumFractionDigits:0})} ${data.unit}</small>
+                </button>
+                <button type="button" class="btn btn-outline-warning btn-damage-weight-choice">
+                    <i class="bi bi-box-seam me-2"></i>تالف وزن
+                    <small class="d-block text-muted mt-1">الحالي: ${weightFormatted}${wLabel ? ' ' + wLabel : ''}</small>
+                </button>
+            </div>
+        </div>`;
 
-        setTimeout(() => {
-            if (quantityInput) {
-                quantityInput.focus();
-                quantityInput.select();
-            }
-        }, 250);
-    }
+    const mobileCard = trigger.closest('.packaging-mobile-card');
+    const cardBody = mobileCard ? mobileCard.querySelector('.card-body') : null;
+    const insertTarget = cardBody || trigger.closest('td') || trigger.parentElement;
+    insertTarget.appendChild(card);
+
+    card.querySelector('.btn-damage-pieces-choice').addEventListener('click', () => {
+        card.remove();
+        _openDamagePiecesCard(data);
+    });
+    card.querySelector('.btn-damage-weight-choice').addEventListener('click', () => {
+        card.remove();
+        _openDamageWeightCard(data);
+    });
+
+    setTimeout(() => card.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 100);
+}
+
+function _openDamagePiecesCard(data) {
+    const card = document.getElementById('recordDamageCard');
+    const form = document.getElementById('recordDamageFormCard');
+    if (!card || !form) return;
+
+    form.reset();
+    const f = id => document.getElementById(id);
+    if (f('damage_material_id_card')) f('damage_material_id_card').value = data.materialId;
+    if (f('damage_material_name_card')) f('damage_material_name_card').textContent = data.materialName;
+    if (f('damage_existing_card')) f('damage_existing_card').textContent =
+        data.existingQuantity.toLocaleString('ar-EG', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    if (f('damage_unit_card')) f('damage_unit_card').textContent = data.unit;
+    if (f('damage_unit_suffix_card')) f('damage_unit_suffix_card').textContent = data.unit;
+
+    card.style.display = 'block';
+    setTimeout(() => {
+        scrollToElement(card);
+        const inp = f('damage_quantity_input_card');
+        if (inp) { inp.focus(); inp.select(); }
+    }, 50);
+}
+
+function _openDamageWeightCard(data) {
+    const card = document.getElementById('recordDamageWeightCard');
+    const form = document.getElementById('recordDamageWeightForm');
+    if (!card || !form) return;
+
+    form.reset();
+    const f = id => document.getElementById(id);
+    const wLabel = data.weightUnit || '';
+    const weightFormatted = data.materialWeight.toLocaleString('ar-EG', {minimumFractionDigits: 0, maximumFractionDigits: 3});
+
+    if (f('damage_weight_material_id')) f('damage_weight_material_id').value = data.materialId;
+    if (f('damage_weight_material_name')) f('damage_weight_material_name').textContent = data.materialName;
+    if (f('damage_weight_existing_val')) f('damage_weight_existing_val').textContent = weightFormatted;
+    if (f('damage_weight_existing_unit')) f('damage_weight_existing_unit').textContent = wLabel;
+    if (f('damage_weight_unit_display')) f('damage_weight_unit_display').textContent = wLabel;
+
+    card.style.display = 'block';
+    setTimeout(() => {
+        scrollToElement(card);
+        const inp = f('damage_weight_amount_input');
+        if (inp) { inp.focus(); inp.select(); }
+    }, 50);
+}
+
+function closeRecordDamageWeightCard() {
+    const card = document.getElementById('recordDamageWeightCard');
+    if (card) card.style.display = 'none';
 }
 
 // ===== دوال إغلاق Cards =====
