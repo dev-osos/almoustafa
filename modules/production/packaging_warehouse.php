@@ -2743,7 +2743,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 <table class="table table-striped table-sm packaging-table" style="font-size: 0.875rem;">
                     <thead>
                         <tr>
-                            <th style="width: 40px; padding: 0.5rem 0.25rem;">#</th>
+                            <th style="width: 70px; padding: 0.5rem 0.25rem;">#</th>
                             <th style="padding: 0.5rem 0.25rem;">اسم الأداة</th>
                             <th style="width: 100px; padding: 0.5rem 0.25rem;">الفئة</th>
                             <th style="width: 120px; padding: 0.5rem 0.25rem;">الكمية المتاحة</th>
@@ -2755,7 +2755,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             $rowCategory = trim((string)($material['type'] ?? $material['category'] ?? ''));
                         ?>
                             <tr data-category="<?php echo htmlspecialchars($rowCategory, ENT_QUOTES, 'UTF-8'); ?>">
-                                <td style="padding: 0.4rem 0.25rem;"><?php echo $offset + $index + 1; ?></td>
+                                <td style="padding: 0.4rem 0.25rem; font-size: 0.75rem; color: #0dcaf0; font-weight: 600;"><?php echo htmlspecialchars($material['material_id'] ?? ''); ?></td>
                                 <td style="padding: 0.4rem 0.25rem; line-height: 1.3;">
                                     <div style="font-weight: 600; font-size: 0.875rem;"><?php echo htmlspecialchars($material['name']); ?></div>
                                     <?php if (!empty($material['specifications'])): ?>
@@ -2767,9 +2767,6 @@ document.addEventListener('DOMContentLoaded', function() {
                                             <?php echo rtrim(rtrim(number_format(floatval($material['weight']), 3), '0'), '.'); ?>
                                             <?php echo htmlspecialchars($material['weight_unit'] ?? ''); ?>
                                         </div>
-                                    <?php endif; ?>
-                                    <?php if (!empty($material['material_id'])): ?>
-                                        <div style="font-size: 0.7rem; color: #0dcaf0; margin-top: 2px;"><?php echo htmlspecialchars($material['material_id']); ?></div>
                                     <?php endif; ?>
                                     <?php if ($usePackagingTable): ?>
                                         <form class="alias-inline-form mt-2" data-material-id="<?php echo $material['id']; ?>">
@@ -2889,11 +2886,8 @@ document.addEventListener('DOMContentLoaded', function() {
                                             <?php echo htmlspecialchars($material['weight_unit'] ?? ''); ?>
                                         </small>
                                     <?php endif; ?>
-                                    <?php if (!empty($material['material_id'])): ?>
-                                        <small class="text-info d-block"><?php echo htmlspecialchars($material['material_id']); ?></small>
-                                    <?php endif; ?>
                                 </div>
-                                <span class="badge bg-primary">#<?php echo $offset + $index + 1; ?></span>
+                                <span class="badge bg-info text-dark"><?php echo htmlspecialchars($material['material_id'] ?? ''); ?></span>
                             </div>
                             
                             <?php
