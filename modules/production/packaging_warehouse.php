@@ -2810,9 +2810,9 @@ document.addEventListener('DOMContentLoaded', function() {
                                         data-append-unit="0">
                                         <?php
                                             $unit = $material['unit'] ?? '';
-                                            if ($unit === 'وزن') {
-                                                $wu = htmlspecialchars($material['weight_unit'] ?? '');
-                                                echo number_format($materialQuantity, 3) . ($wu ? ' ' . $wu : '');
+                                            $wu = trim($material['weight_unit'] ?? '');
+                                            if ($unit === 'وزن' || $wu !== '') {
+                                                echo number_format($materialQuantity, 3) . ($wu ? ' ' . htmlspecialchars($wu) : '');
                                             } else {
                                                 echo number_format($materialQuantity, 0) . ' قطعة';
                                             }
@@ -2918,7 +2918,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             
                             <?php
                                 $materialQuantity = isset($material['quantity']) ? (float)$material['quantity'] : 0.0;
-                                $useButtonDisabled = $materialQuantity < 1;
+                                $useButtonDisabled = $materialQuantity <= 0;
                                 $mobileQuantityElementId = 'material-quantity-' . $material['id'] . '-mobile';
                             ?>
                             <div class="row g-2 mb-2">
@@ -2934,8 +2934,15 @@ document.addEventListener('DOMContentLoaded', function() {
                                         data-value="<?php echo number_format($materialQuantity, 4, '.', ''); ?>"
                                         data-unit-label="<?php echo htmlspecialchars($material['unit'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
                                         data-append-unit="1">
-                                        <?php echo number_format($materialQuantity, 2); ?>
-                                        <?php echo htmlspecialchars($material['unit'] ?? ''); ?>
+                                        <?php
+                                            $unitM = $material['unit'] ?? '';
+                                            $wuM = trim($material['weight_unit'] ?? '');
+                                            if ($unitM === 'وزن' || $wuM !== '') {
+                                                echo number_format($materialQuantity, 3) . ($wuM ? ' ' . htmlspecialchars($wuM) : '');
+                                            } else {
+                                                echo number_format($materialQuantity, 0) . ' قطعة';
+                                            }
+                                        ?>
                                     </strong>
                                 </div>
                             </div>
