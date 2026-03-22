@@ -2157,67 +2157,6 @@ foreach ($factoryProducts as $product) {
     </div>
 </div>
 
-<!-- Modal تعديل منتج خارجي -->
-<!-- Modal للكمبيوتر فقط -->
-<div class="modal fade d-none d-md-block" id="editExternalProductModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title"><i class="bi bi-pencil me-2"></i>تعديل منتج خارجي</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <form method="POST" id="editExternalProductForm">
-                <input type="hidden" name="action" value="update_external_product">
-                <input type="hidden" name="product_id" id="edit_product_id">
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label">اسم المنتج <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" name="product_name" id="edit_product_name" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">الصنف <span class="text-danger">*</span></label>
-                        <select class="form-control" name="category_id" id="edit_category_id" required>
-                            <option value="">اختر الصنف</option>
-                            <?php if (!empty($productCategories)): ?>
-                                <?php foreach ($productCategories as $cat): ?>
-                                    <option value="<?php echo intval($cat['id']); ?>"><?php echo htmlspecialchars($cat['name']); ?></option>
-                                <?php endforeach; ?>
-                            <?php else: ?>
-                                <option value="1">عسل</option>
-                                <option value="2">زيت زيتون</option>
-                                <option value="3">كريمات</option>
-                                <option value="4">زيوت</option>
-                                <option value="5">اخري</option>
-                            <?php endif; ?>
-                        </select>
-                    </div>
-                    <div class="mb-3" id="edit_custom_category_div" style="display: none;">
-                        <label class="form-label">أدخل الصنف يدوياً <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" name="custom_category" id="edit_custom_category" placeholder="أدخل اسم الصنف">
-                    </div>
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">الكمية</label>
-                            <input type="number" step="0.01" class="form-control" name="quantity" id="edit_quantity" min="0">
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">الوحدة</label>
-                            <input type="text" class="form-control" name="unit" id="edit_unit">
-                        </div>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">سعر الوحدة</label>
-                        <input type="number" step="0.01" class="form-control" name="unit_price" id="edit_unit_price" min="0">
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
-                    <button type="submit" class="btn btn-primary-custom">حفظ التغييرات</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
 
 <!-- Modal تعديل صنف منتج المصنع -->
 <!-- Modal للكمبيوتر فقط -->
@@ -2521,8 +2460,8 @@ foreach ($factoryProducts as $product) {
     </div>
 </div>
 
-<!-- Card للموبايل - تعديل منتج خارجي -->
-<div class="card shadow-sm mb-4 d-md-none" id="editExternalProductCard" style="display: none;">
+<!-- Card تعديل منتج خارجي -->
+<div class="card shadow-sm mb-4" id="editExternalProductCard" style="display: none;">
     <div class="card-header bg-primary text-white">
         <h5 class="mb-0"><i class="bi bi-pencil me-2"></i>تعديل منتج خارجي</h5>
     </div>
@@ -2724,8 +2663,7 @@ function closeAllForms() {
     });
     
     const modals = [
-        'addExternalProductModal', 
-        'editExternalProductModal', 
+        'addExternalProductModal',
         'deleteExternalProductModal',
         'batchDetailsModal',
         'printBarcodesModal',
@@ -3767,64 +3705,29 @@ function initEditExternalButtons() {
             const price = this.dataset.price;
             const category = this.dataset.category || '';
             
-            document.getElementById('edit_product_id').value = id;
             closeAllForms();
-            
-            if (isMobile()) {
-                // على الموبايل: استخدام Card
-                const card = document.getElementById('editExternalProductCard');
-                if (card) {
-                    document.getElementById('editCard_product_id').value = id;
-                    document.getElementById('editCard_product_name').value = name;
-                    document.getElementById('editCard_quantity').value = quantity;
-                    document.getElementById('editCard_unit').value = unit;
-                    document.getElementById('editCard_unit_price').value = price;
-                    
-                    // تحديد الصنف
-                    const categorySelect = document.getElementById('editCard_category_id');
-                    if (categorySelect && category) {
-                        for (let i = 0; i < categorySelect.options.length; i++) {
-                            if (categorySelect.options[i].textContent.trim() === category.trim()) {
-                                categorySelect.selectedIndex = i;
-                                break;
-                            }
-                        }
-                    }
-                    
-                    card.style.display = 'block';
-                    setTimeout(function() {
-                        scrollToElement(card);
-                    }, 50);
-                }
-            } else {
-                // على الكمبيوتر: استخدام Modal
-                document.getElementById('edit_product_id').value = id;
-                document.getElementById('edit_product_name').value = name;
-                document.getElementById('edit_quantity').value = quantity;
-                document.getElementById('edit_unit').value = unit;
-                document.getElementById('edit_unit_price').value = price;
-                
-                // تحديد الصنف
-                const categorySelect = document.getElementById('edit_category_id');
+            const card = document.getElementById('editExternalProductCard');
+            if (card) {
+                document.getElementById('editCard_product_id').value = id;
+                document.getElementById('editCard_product_name').value = name;
+                document.getElementById('editCard_quantity').value = quantity;
+                document.getElementById('editCard_unit').value = unit;
+                document.getElementById('editCard_unit_price').value = price;
+                const categorySelect = document.getElementById('editCard_category_id');
                 if (categorySelect && category) {
                     for (let i = 0; i < categorySelect.options.length; i++) {
                         if (categorySelect.options[i].textContent.trim() === category.trim()) {
                             categorySelect.selectedIndex = i;
-                            // إظهار حقل الإدخال اليدوي إذا كان "اخري"
                             if (categorySelect.options[i].textContent.trim() === 'اخري') {
-                                const customDiv = document.getElementById('edit_custom_category_div');
+                                const customDiv = document.getElementById('editCard_custom_category_div');
                                 if (customDiv) customDiv.style.display = 'block';
                             }
                             break;
                         }
                     }
                 }
-                
-                if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
-                    new bootstrap.Modal(document.getElementById('editExternalProductModal')).show();
-                } else {
-                    console.error('Bootstrap Modal not available');
-                }
+                card.style.display = 'block';
+                setTimeout(function() { scrollToElement(card); }, 50);
             }
         });
     });
