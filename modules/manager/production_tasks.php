@@ -3895,11 +3895,12 @@ function buildEditProductRow(idx, product) {
     }).join('');
     var initRawQty = '—';
     var initRawQtyClass = 'raw-material-qty-value fw-semibold text-info';
-    if (isRawMat && p.name) {
+    if ((isRawMat || isPackaging || isTemplate) && p.name) {
         var _rmDetail = (typeof getProductDetail === 'function') ? getProductDetail(p.name) : null;
         if (_rmDetail && _rmDetail.available_qty !== undefined) {
             var _qty = parseFloat(_rmDetail.available_qty);
-            initRawQty = _qty.toLocaleString('ar-EG', {maximumFractionDigits: 3}) + ' كيلو';
+            var _qtyUnit = isPackaging ? (_rmDetail.unit || 'قطعة') : (isTemplate ? 'قطعة' : 'كيلو');
+            initRawQty = _qty.toLocaleString('ar-EG', {maximumFractionDigits: 3}) + ' ' + _qtyUnit;
             initRawQtyClass = 'raw-material-qty-value fw-semibold ' + (_qty > 0 ? 'text-success' : 'text-danger');
         }
     }
@@ -3920,7 +3921,7 @@ function buildEditProductRow(idx, product) {
         '<div class="col-6 col-md-2">' +
         '<div class="category-wrap"' + ((isRawMat || isTemplate || isPackaging) ? ' style="display:none"' : '') + '><label class="form-label small">التصنيف</label>' +
         '<select class="form-select form-select-sm edit-product-category" name="products[' + idx + '][category]">' + catOpts + '</select></div>' +
-        '<div class="raw-qty-wrap"' + ((!isRawMat && !isPackaging) ? ' style="display:none"' : '') + '>' +
+        '<div class="raw-qty-wrap"' + ((!isRawMat && !isPackaging && !isTemplate) ? ' style="display:none"' : '') + '>' +
         '<label class="form-label small text-info">الكمية المتاحة</label>' +
         '<div class="' + initRawQtyClass + '">' + initRawQty + '</div></div></div>' +
         '<div class="col-6 col-md-2"><label class="form-label small">الوحدة</label>' +
@@ -4919,9 +4920,9 @@ document.addEventListener('DOMContentLoaded', function () {
         var qtyEl = rawQtyWrap.querySelector('.raw-material-qty-value');
         if (!qtyEl) return;
         var detail = getProductDetail(productName);
-        if (detail && (detail.type === 'raw_material' || detail.type === 'packaging') && detail.available_qty !== undefined) {
+        if (detail && (detail.type === 'raw_material' || detail.type === 'packaging' || detail.type === 'template') && detail.available_qty !== undefined) {
             var qty = parseFloat(detail.available_qty);
-            var qtyUnit = (detail.type === 'packaging') ? (detail.unit || 'قطعة') : 'كيلو';
+            var qtyUnit = (detail.type === 'packaging') ? (detail.unit || 'قطعة') : (detail.type === 'template' ? 'قطعة' : 'كيلو');
             qtyEl.textContent = qty.toLocaleString('ar-EG', {maximumFractionDigits: 3}) + ' ' + qtyUnit;
             qtyEl.className = 'raw-material-qty-value fw-semibold ' + (qty > 0 ? 'text-success' : 'text-danger');
         } else {
@@ -4977,12 +4978,9 @@ document.addEventListener('DOMContentLoaded', function () {
     function toggleCategoryAndQtyDisplay(row, type) {
         var categoryWrap = row.querySelector('.category-wrap');
         var rawQtyWrap = row.querySelector('.raw-qty-wrap');
-        if (type === 'raw_material' || type === 'packaging') {
+        if (type === 'raw_material' || type === 'packaging' || type === 'template') {
             if (categoryWrap) { categoryWrap.classList.add('d-none'); }
             if (rawQtyWrap) { rawQtyWrap.classList.remove('d-none'); rawQtyWrap.style.display = ''; }
-        } else if (type === 'template') {
-            if (categoryWrap) { categoryWrap.classList.add('d-none'); }
-            if (rawQtyWrap) { rawQtyWrap.classList.add('d-none'); }
         } else {
             if (categoryWrap) { categoryWrap.classList.remove('d-none'); categoryWrap.style.display = ''; }
             if (rawQtyWrap) {
@@ -5080,7 +5078,7 @@ document.addEventListener('DOMContentLoaded', function () {
                             var _typeSelector = _row.querySelector('.product-type-selector');
                             if (_typeSelector && itemDetailType) _typeSelector.value = itemDetailType;
                             applyRawMaterialUnitRestriction(_row, itemDetailType);
-                            if (itemDetailType === 'raw_material' || itemDetailType === 'packaging') updateRawMaterialQtyDisplay(_row, item.name);
+                            if (itemDetailType === 'raw_material' || itemDetailType === 'packaging' || itemDetailType === 'template') updateRawMaterialQtyDisplay(_row, item.name);
                             setTimeout(function() { if (typeof fetchProductPriceHistory === 'function') fetchProductPriceHistory(_row); }, 50);
                         }
                     });

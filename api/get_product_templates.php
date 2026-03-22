@@ -43,12 +43,19 @@ try {
         $unifiedTemplatesCheck = $db->queryOne("SHOW TABLES LIKE 'unified_product_templates'");
         if (!empty($unifiedTemplatesCheck)) {
             $hasTemplateCode = !empty($db->queryOne("SHOW COLUMNS FROM unified_product_templates LIKE 'template_code'"));
-            $selectCols = $hasTemplateCode ? 'id, product_name, template_code' : 'id, product_name';
+            $selectCols = $hasTemplateCode ? 'upt.id, upt.product_name, upt.template_code' : 'upt.id, upt.product_name';
             $unifiedTemplates = $db->query("
-                SELECT {$selectCols}
-                FROM unified_product_templates
-                WHERE status = 'active'
-                ORDER BY product_name ASC
+                SELECT {$selectCols},
+                       COALESCE(pr.qty, 0) AS available_qty
+                FROM unified_product_templates upt
+                LEFT JOIN (
+                    SELECT name, SUM(quantity) AS qty
+                    FROM products
+                    WHERE status = 'active' AND (product_type = 'internal' OR product_type IS NULL)
+                    GROUP BY name
+                ) pr ON pr.name = upt.product_name
+                WHERE upt.status = 'active'
+                ORDER BY upt.product_name ASC
             ");
             foreach ($unifiedTemplates as $template) {
                 $templateName = trim($template['product_name'] ?? '');
@@ -56,10 +63,11 @@ try {
                     $seenNames[$templateName] = true;
                     $templates[] = $templateName;
                     $templatesDetailed[] = [
-                        'id'   => (int)$template['id'],
-                        'name' => $templateName,
-                        'code' => $template['template_code'] ?? null,
-                        'type' => 'template',
+                        'id'            => (int)$template['id'],
+                        'name'          => $templateName,
+                        'code'          => $template['template_code'] ?? null,
+                        'type'          => 'template',
+                        'available_qty' => round((float)($template['available_qty'] ?? 0), 2),
                     ];
                 }
             }
@@ -73,12 +81,19 @@ try {
         $templatesCheck = $db->queryOne("SHOW TABLES LIKE 'product_templates'");
         if (!empty($templatesCheck)) {
             $hasTemplateCode = !empty($db->queryOne("SHOW COLUMNS FROM product_templates LIKE 'template_code'"));
-            $selectCols = $hasTemplateCode ? 'id, product_name, template_code' : 'id, product_name';
+            $selectCols = $hasTemplateCode ? 'pt.id, pt.product_name, pt.template_code' : 'pt.id, pt.product_name';
             $productTemplates = $db->query("
-                SELECT {$selectCols}
-                FROM product_templates
-                WHERE status = 'active'
-                ORDER BY product_name ASC
+                SELECT {$selectCols},
+                       COALESCE(pr.qty, 0) AS available_qty
+                FROM product_templates pt
+                LEFT JOIN (
+                    SELECT name, SUM(quantity) AS qty
+                    FROM products
+                    WHERE status = 'active' AND (product_type = 'internal' OR product_type IS NULL)
+                    GROUP BY name
+                ) pr ON pr.name = pt.product_name
+                WHERE pt.status = 'active'
+                ORDER BY pt.product_name ASC
             ");
             foreach ($productTemplates as $template) {
                 $templateName = trim($template['product_name'] ?? '');
@@ -86,10 +101,11 @@ try {
                     $seenNames[$templateName] = true;
                     $templates[] = $templateName;
                     $templatesDetailed[] = [
-                        'id'   => (int)$template['id'],
-                        'name' => $templateName,
-                        'code' => $template['template_code'] ?? null,
-                        'type' => 'template',
+                        'id'            => (int)$template['id'],
+                        'name'          => $templateName,
+                        'code'          => $template['template_code'] ?? null,
+                        'type'          => 'template',
+                        'available_qty' => round((float)($template['available_qty'] ?? 0), 2),
                     ];
                 }
             }
