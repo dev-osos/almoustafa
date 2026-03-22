@@ -2816,6 +2816,8 @@ document.addEventListener('DOMContentLoaded', function() {
                                         data-append-unit="0">
                                         <?php if ($isWeightUnit): ?>
                                             <?php echo number_format($stockValue, 3) . ($wu ? ' ' . htmlspecialchars($wu) : ''); ?>
+                                        <?php elseif (!empty($material['weight']) && floatval($material['weight']) > 0): ?>
+                                            <?php echo rtrim(rtrim(number_format(floatval($material['weight']), 3), '0'), '.') . ($wu ? ' ' . htmlspecialchars($wu) : ''); ?>
                                         <?php else: ?>
                                             <?php echo number_format($stockValue, 0) . ' قطعة'; ?>
                                         <?php endif; ?>
@@ -2942,6 +2944,8 @@ document.addEventListener('DOMContentLoaded', function() {
                                         data-append-unit="1">
                                         <?php if ($isWeightUnitM): ?>
                                             <?php echo number_format($mobileStockValue, 3) . ($wuM ? ' ' . htmlspecialchars($wuM) : ''); ?>
+                                        <?php elseif (!empty($material['weight']) && floatval($material['weight']) > 0): ?>
+                                            <?php echo rtrim(rtrim(number_format(floatval($material['weight']), 3), '0'), '.') . ($wuM ? ' ' . htmlspecialchars($wuM) : ''); ?>
                                         <?php else: ?>
                                             <?php echo number_format($mobileStockValue, 0) . ' قطعة'; ?>
                                         <?php endif; ?>
