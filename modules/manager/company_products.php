@@ -2096,66 +2096,7 @@ foreach ($factoryProducts as $product) {
     </div>
 </div>
 
-<!-- Modal إضافة منتج خارجي -->
-<!-- Modal للكمبيوتر فقط -->
-<div class="modal fade d-none d-md-block" id="addExternalProductModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title"><i class="bi bi-plus-circle me-2"></i>إضافة منتج خارجي جديد</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <form method="POST" id="addExternalProductForm">
-                <input type="hidden" name="action" value="create_external_product">
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label">اسم المنتج <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" name="product_name" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">الصنف <span class="text-danger">*</span></label>
-                        <select class="form-control" name="category_id" id="add_category_id" required>
-                            <option value="">اختر الصنف</option>
-                            <?php if (!empty($productCategories)): ?>
-                                <?php foreach ($productCategories as $cat): ?>
-                                    <option value="<?php echo intval($cat['id']); ?>"><?php echo htmlspecialchars($cat['name']); ?></option>
-                                <?php endforeach; ?>
-                            <?php else: ?>
-                                <option value="1">عسل</option>
-                                <option value="2">زيت زيتون</option>
-                                <option value="3">كريمات</option>
-                                <option value="4">زيوت</option>
-                                <option value="5">اخري</option>
-                            <?php endif; ?>
-                        </select>
-                    </div>
-                    <div class="mb-3" id="add_custom_category_div" style="display: none;">
-                        <label class="form-label">أدخل الصنف يدوياً <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" name="custom_category" id="add_custom_category" placeholder="أدخل اسم الصنف">
-                    </div>
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">الكمية</label>
-                            <input type="number" step="0.01" class="form-control" name="quantity" value="0" min="0">
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">الوحدة</label>
-                            <input type="text" class="form-control" name="unit" value="قطعة">
-                        </div>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">سعر الوحدة</label>
-                        <input type="number" step="0.01" class="form-control" name="unit_price" value="0" min="0">
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
-                    <button type="submit" class="btn btn-primary-custom">حفظ</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
+
 
 
 <!-- Modal تعديل صنف منتج المصنع -->
@@ -2270,64 +2211,7 @@ foreach ($factoryProducts as $product) {
     </div>
 </div>
 
-<!-- Modal إضافة كمية لمنتج خارجي -->
-<div class="modal fade d-none d-md-block" id="addQuantityExternalModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header bg-secondary text-white">
-                <h5 class="modal-title"><i class="bi bi-plus-circle me-2"></i>إضافة كمية للمنتج الخارجي</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <form method="POST" id="addQuantityExternalForm">
-                <input type="hidden" name="action" value="add_quantity_external_product">
-                <input type="hidden" name="product_id" id="add_quantity_external_product_id">
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label">المنتج</label>
-                        <input type="text" class="form-control" id="add_quantity_external_product_name" readonly>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">الكمية الحالية</label>
-                        <input type="text" class="form-control" id="add_quantity_external_current_qty" readonly>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">الكمية المضافة <span class="text-danger">*</span></label>
-                        <input type="number" step="0.01" min="0.01" class="form-control" name="quantity_to_add" id="add_quantity_external_to_add" required placeholder="أدخل الكمية">
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
-                    <button type="submit" class="btn btn-secondary text-white">إضافة</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
 
-<!-- Modal حذف منتج خارجي -->
-<!-- Modal للكمبيوتر فقط -->
-<div class="modal fade d-none d-md-block" id="deleteExternalProductModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header bg-danger text-white">
-                <h5 class="modal-title"><i class="bi bi-exclamation-triangle me-2"></i>تأكيد الحذف</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <form method="POST">
-                <input type="hidden" name="action" value="delete_external_product">
-                <input type="hidden" name="product_id" id="delete_product_id">
-                <div class="modal-body">
-                    <p>هل أنت متأكد من حذف المنتج <strong id="delete_product_name"></strong>؟</p>
-                    <p class="text-danger mb-0"><small>لا يمكن التراجع عن هذه العملية.</small></p>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
-                    <button type="submit" class="btn btn-danger">حذف</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
 
 <!-- Modal طباعة الباركود -->
 <!-- Modal للكمبيوتر فقط -->
@@ -2406,7 +2290,7 @@ foreach ($factoryProducts as $product) {
 </div>
 
 <!-- Card للموبايل - إضافة منتج خارجي -->
-<div class="card shadow-sm mb-4 d-md-none" id="addExternalProductCard" style="display: none;">
+<div class="card shadow-sm mb-4" id="addExternalProductCard" style="display: none;">
     <div class="card-header bg-primary text-white">
         <h5 class="mb-0"><i class="bi bi-plus-circle me-2"></i>إضافة منتج خارجي جديد</h5>
     </div>
@@ -2517,7 +2401,7 @@ foreach ($factoryProducts as $product) {
 </div>
 
 <!-- Card للموبايل - حذف منتج خارجي -->
-<div class="card shadow-sm mb-4 d-md-none" id="deleteExternalProductCard" style="display: none;">
+<div class="card shadow-sm mb-4" id="deleteExternalProductCard" style="display: none;">
     <div class="card-header bg-danger text-white">
         <h5 class="mb-0"><i class="bi bi-exclamation-triangle me-2"></i>تأكيد الحذف</h5>
     </div>
@@ -2536,7 +2420,7 @@ foreach ($factoryProducts as $product) {
 </div>
 
 <!-- Card للموبايل - إضافة كمية لمنتج خارجي -->
-<div class="card shadow-sm mb-4 d-md-none" id="addQuantityExternalCard" style="display: none;">
+<div class="card shadow-sm mb-4" id="addQuantityExternalCard" style="display: none;">
     <div class="card-header bg-secondary text-white">
         <h5 class="mb-0"><i class="bi bi-plus-circle me-2"></i>إضافة كمية للمنتج الخارجي</h5>
     </div>
@@ -2663,14 +2547,11 @@ function closeAllForms() {
     });
     
     const modals = [
-        'addExternalProductModal',
-        'deleteExternalProductModal',
         'batchDetailsModal',
         'printBarcodesModal',
         'editFactoryProductCategoryModal',
         'editFactoryProductPriceModal',
         'addQuantityFactoryModal',
-        'addQuantityExternalModal'
     ];
     modals.forEach(function(modalId) {
         const modal = document.getElementById(modalId);
@@ -2685,21 +2566,10 @@ function closeAllForms() {
 
 function showAddExternalProductModal() {
     closeAllForms();
-    
-    if (isMobile()) {
-        const card = document.getElementById('addExternalProductCard');
-        if (card) {
-            card.style.display = 'block';
-            setTimeout(function() {
-                scrollToElement(card);
-            }, 50);
-        }
-    } else {
-        const modal = document.getElementById('addExternalProductModal');
-        if (modal) {
-            const modalInstance = new bootstrap.Modal(modal);
-            modalInstance.show();
-        }
+    const card = document.getElementById('addExternalProductCard');
+    if (card) {
+        card.style.display = 'block';
+        setTimeout(function() { scrollToElement(card); }, 50);
     }
 }
 
@@ -3739,29 +3609,12 @@ function initEditExternalButtons() {
             const name = this.dataset.name;
             
             closeAllForms();
-            
-            if (isMobile()) {
-                // على الموبايل: استخدام Card
-                const card = document.getElementById('deleteExternalProductCard');
-                if (card) {
-                    document.getElementById('deleteCard_product_id').value = id;
-                    document.getElementById('deleteCard_product_name').textContent = name;
-                    
-                    card.style.display = 'block';
-                    setTimeout(function() {
-                        scrollToElement(card);
-                    }, 50);
-                }
-            } else {
-                // على الكمبيوتر: استخدام Modal
-                document.getElementById('delete_product_id').value = id;
-                document.getElementById('delete_product_name').textContent = name;
-                
-                if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
-                    new bootstrap.Modal(document.getElementById('deleteExternalProductModal')).show();
-                } else {
-                    console.error('Bootstrap Modal not available');
-                }
+            const card = document.getElementById('deleteExternalProductCard');
+            if (card) {
+                document.getElementById('deleteCard_product_id').value = id;
+                document.getElementById('deleteCard_product_name').textContent = name;
+                card.style.display = 'block';
+                setTimeout(function() { scrollToElement(card); }, 50);
             }
         });
     });
@@ -4469,30 +4322,15 @@ function initEditExternalButtons() {
             const productId = addQtyExternalBtn.getAttribute('data-product-id');
             const productName = addQtyExternalBtn.getAttribute('data-product-name');
             const currentQty = addQtyExternalBtn.getAttribute('data-quantity') || '0';
-            if (isMobile()) {
-                const card = document.getElementById('addQuantityExternalCard');
-                if (card) {
-                    closeAllForms();
-                    document.getElementById('addQtyExtCard_product_id').value = productId || '';
-                    document.getElementById('addQtyExtCard_product_name').value = productName || '';
-                    document.getElementById('addQtyExtCard_current_qty').value = currentQty;
-                    document.getElementById('addQtyExtCard_to_add').value = '';
-                    card.style.display = 'block';
-                    setTimeout(function() { scrollToElement(card); }, 50);
-                }
-            } else {
-                const productIdEl = document.getElementById('add_quantity_external_product_id');
-                const productNameEl = document.getElementById('add_quantity_external_product_name');
-                const currentQtyEl = document.getElementById('add_quantity_external_current_qty');
-                const toAddEl = document.getElementById('add_quantity_external_to_add');
-                if (productId && productIdEl && productNameEl && currentQtyEl && toAddEl) {
-                    productIdEl.value = productId;
-                    productNameEl.value = productName || '';
-                    currentQtyEl.value = currentQty;
-                    toAddEl.value = '';
-                    const modal = new bootstrap.Modal(document.getElementById('addQuantityExternalModal'));
-                    modal.show();
-                }
+            const card = document.getElementById('addQuantityExternalCard');
+            if (card) {
+                closeAllForms();
+                document.getElementById('addQtyExtCard_product_id').value = productId || '';
+                document.getElementById('addQtyExtCard_product_name').value = productName || '';
+                document.getElementById('addQtyExtCard_current_qty').value = currentQty;
+                document.getElementById('addQtyExtCard_to_add').value = '';
+                card.style.display = 'block';
+                setTimeout(function() { scrollToElement(card); }, 50);
             }
         }
     });
