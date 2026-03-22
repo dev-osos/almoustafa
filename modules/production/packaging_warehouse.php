@@ -1286,6 +1286,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'add_packaging_quantity') {
         $materialId = intval($_POST['material_id'] ?? 0);
         $additionalQuantity = isset($_POST['additional_quantity']) ? round(floatval($_POST['additional_quantity']), 4) : 0.0;
+        $additionalWeight = isset($_POST['additional_weight']) && $_POST['additional_weight'] !== '' ? round(floatval($_POST['additional_weight']), 4) : 0.0;
         $notes = trim($_POST['notes'] ?? '');
 
         if ($materialId <= 0) {
@@ -1298,7 +1299,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 if ($usePackagingTable) {
                     $material = $db->queryOne(
-                        "SELECT id, name, quantity, unit FROM packaging_materials WHERE id = ? AND status = 'active' FOR UPDATE",
+                        "SELECT id, name, quantity, unit, weight, weight_unit FROM packaging_materials WHERE id = ? AND status = 'active' FOR UPDATE",
                         [$materialId]
                     );
                 } else {
@@ -1327,17 +1328,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $quantityAfter = $quantityBefore + $additionalQuantity;
                 $unitLabel = $material['unit'] ?? 'وحدة';
 
+                $weightBefore = floatval($material['weight'] ?? 0);
+                $weightAfter = $additionalWeight > 0 ? round($weightBefore + $additionalWeight, 4) : null;
+
                 if ($usePackagingTable) {
-                    $db->execute(
-                        "UPDATE packaging_materials 
-                         SET quantity = ?, updated_at = NOW() 
-                         WHERE id = ?",
-                        [$quantityAfter, $materialId]
-                    );
+                    if ($weightAfter !== null) {
+                        $db->execute(
+                            "UPDATE packaging_materials
+                             SET quantity = ?, weight = ?, updated_at = NOW()
+                             WHERE id = ?",
+                            [$quantityAfter, $weightAfter, $materialId]
+                        );
+                    } else {
+                        $db->execute(
+                            "UPDATE packaging_materials
+                             SET quantity = ?, updated_at = NOW()
+                             WHERE id = ?",
+                            [$quantityAfter, $materialId]
+                        );
+                    }
                 } else {
                     $db->execute(
-                        "UPDATE products 
-                         SET quantity = ? 
+                        "UPDATE products
+                         SET quantity = ?
                          WHERE id = ?",
                         [$quantityAfter, $materialId]
                     );
@@ -1347,6 +1360,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'quantity_after' => $quantityAfter,
                     'added_quantity' => $additionalQuantity
                 ];
+                if ($additionalWeight > 0) {
+                    $auditDetailsAfter['weight_before'] = $weightBefore;
+                    $auditDetailsAfter['added_weight'] = $additionalWeight;
+                    $auditDetailsAfter['weight_after'] = $weightAfter;
+                }
 
                 if ($notes !== '') {
                     $auditDetailsAfter['notes'] = mb_substr($notes, 0, 500, 'UTF-8');
@@ -2868,6 +2886,8 @@ document.addEventListener('DOMContentLoaded', function() {
                                                 data-name="<?php echo htmlspecialchars($material['name'], ENT_QUOTES, 'UTF-8'); ?>"
                                                 data-unit="<?php echo htmlspecialchars(!empty($material['unit']) ? $material['unit'] : 'وحدة', ENT_QUOTES, 'UTF-8'); ?>"
                                                 data-quantity="<?php echo number_format($materialQuantity, 4, '.', ''); ?>"
+                                                data-material-weight="<?php echo number_format(floatval($material['weight'] ?? 0), 4, '.', ''); ?>"
+                                                data-weight-unit="<?php echo htmlspecialchars($material['weight_unit'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
                                                 onclick="openAddQuantityModal(this)"
                                                 title=""
                                                 style="padding: 0.2rem 0.4rem; font-size: 0.75rem;">
@@ -2999,6 +3019,8 @@ document.addEventListener('DOMContentLoaded', function() {
                                         data-name="<?php echo htmlspecialchars($material['name'], ENT_QUOTES, 'UTF-8'); ?>"
                                         data-unit="<?php echo htmlspecialchars(!empty($material['unit']) ? $material['unit'] : 'وحدة', ENT_QUOTES, 'UTF-8'); ?>"
                                         data-quantity="<?php echo number_format($materialQuantity, 4, '.', ''); ?>"
+                                        data-material-weight="<?php echo number_format(floatval($material['weight'] ?? 0), 4, '.', ''); ?>"
+                                        data-weight-unit="<?php echo htmlspecialchars($material['weight_unit'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
                                         onclick="openAddQuantityModal(this)">
                                     <i class="bi bi-plus-circle me-2"></i>
                                 </button>
@@ -3268,6 +3290,26 @@ document.addEventListener('DOMContentLoaded', function() {
                         <small class="text-muted">سيتم جمع الكمية المدخلة مع الموجود حالياً في المخزون.</small>
                     </div>
 
+                    <div class="mb-3 d-none" id="add_weight_section">
+                        <label class="form-label fw-bold">الوزن المضاف</label>
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            <small class="text-muted">الوزن الحالي:</small>
+                            <span class="badge bg-secondary" id="add_weight_existing">0</span>
+                            <span class="text-muted small" id="add_weight_unit_label"></span>
+                        </div>
+                        <div class="input-group">
+                            <input type="number"
+                                   step="0.001"
+                                   min="0.001"
+                                   class="form-control"
+                                   name="additional_weight"
+                                   id="add_weight_input"
+                                   placeholder="0.000">
+                            <span class="input-group-text" id="add_weight_unit_suffix"></span>
+                        </div>
+                        <small class="text-muted">سيتم جمع الوزن المدخل مع الوزن الحالي للأداة.</small>
+                    </div>
+
                     <div class="mb-3">
                         <label class="form-label fw-bold">المورد <span class="text-danger">*</span></label>
                         <select class="form-select" name="supplier_id" id="add_quantity_supplier_id" required>
@@ -3480,6 +3522,26 @@ document.addEventListener('DOMContentLoaded', function() {
                     <span class="input-group-text" id="add_quantity_unit_suffix_card"></span>
                 </div>
                 <small class="text-muted">سيتم جمع الكمية المدخلة مع الموجود حالياً في المخزون.</small>
+            </div>
+
+            <div class="mb-3 d-none" id="add_weight_section_card">
+                <label class="form-label fw-bold">الوزن المضاف</label>
+                <div class="d-flex align-items-center gap-2 mb-1">
+                    <small class="text-muted">الوزن الحالي:</small>
+                    <span class="badge bg-secondary" id="add_weight_existing_card">0</span>
+                    <span class="text-muted small" id="add_weight_unit_label_card"></span>
+                </div>
+                <div class="input-group">
+                    <input type="number"
+                           step="0.001"
+                           min="0.001"
+                           class="form-control"
+                           name="additional_weight"
+                           id="add_weight_input_card"
+                           placeholder="0.000">
+                    <span class="input-group-text" id="add_weight_unit_suffix_card"></span>
+                </div>
+                <small class="text-muted">سيتم جمع الوزن المدخل مع الوزن الحالي للأداة.</small>
             </div>
 
             <div class="mb-3">
@@ -4235,14 +4297,20 @@ function openAddQuantityModal(trigger) {
     const materialName = dataset.name || '-';
     const unit = dataset.unit || 'وحدة';
     const existingQuantity = parseFloat(dataset.quantity || '0') || 0;
+    const materialWeight = parseFloat(dataset.materialWeight || '0') || 0;
+    const weightUnit = (dataset.weightUnit || '').trim();
 
     if (!materialId) {
         console.warn('Material id is missing for add quantity modal trigger.');
         return;
     }
-    
+
+    const weightFormatted = materialWeight > 0
+        ? materialWeight.toLocaleString('ar-EG', {minimumFractionDigits: 0, maximumFractionDigits: 3})
+        : '0';
+
     const isMobileDevice = isMobile();
-    
+
     if (isMobileDevice) {
         // على الموبايل: استخدام Card
         const card = document.getElementById('addQuantityCard');
@@ -4250,16 +4318,21 @@ function openAddQuantityModal(trigger) {
         if (!card || !form) {
             return;
         }
-        
+
         form.reset();
-        
+
         const materialIdInput = document.getElementById('add_quantity_material_id_card');
         const nameElement = document.getElementById('add_quantity_material_name_card');
         const existingElement = document.getElementById('add_quantity_existing_card');
         const unitElement = document.getElementById('add_quantity_unit_card');
         const unitSuffix = document.getElementById('add_quantity_unit_suffix_card');
         const quantityInput = document.getElementById('add_quantity_input_card');
-        
+        const weightSection = document.getElementById('add_weight_section_card');
+        const weightExisting = document.getElementById('add_weight_existing_card');
+        const weightUnitLabel = document.getElementById('add_weight_unit_label_card');
+        const weightUnitSuffix = document.getElementById('add_weight_unit_suffix_card');
+        const weightInput = document.getElementById('add_weight_input_card');
+
         if (materialIdInput) materialIdInput.value = materialId;
         if (nameElement) nameElement.textContent = materialName;
         if (existingElement) {
@@ -4271,7 +4344,19 @@ function openAddQuantityModal(trigger) {
         if (unitElement) unitElement.textContent = unit;
         if (unitSuffix) unitSuffix.textContent = unit;
         if (quantityInput) quantityInput.value = '';
-        
+
+        if (weightSection) {
+            if (materialWeight > 0) {
+                weightSection.classList.remove('d-none');
+                if (weightExisting) weightExisting.textContent = weightFormatted + (weightUnit ? ' ' + weightUnit : '');
+                if (weightUnitLabel) weightUnitLabel.textContent = weightUnit;
+                if (weightUnitSuffix) weightUnitSuffix.textContent = weightUnit;
+                if (weightInput) weightInput.value = '';
+            } else {
+                weightSection.classList.add('d-none');
+            }
+        }
+
         card.style.display = 'block';
         setTimeout(function() {
             scrollToElement(card);
@@ -4294,6 +4379,11 @@ function openAddQuantityModal(trigger) {
         const unitElement = document.getElementById('add_quantity_unit');
         const unitSuffix = document.getElementById('add_quantity_unit_suffix');
         const quantityInput = document.getElementById('add_quantity_input');
+        const weightSection = document.getElementById('add_weight_section');
+        const weightExisting = document.getElementById('add_weight_existing');
+        const weightUnitLabel = document.getElementById('add_weight_unit_label');
+        const weightUnitSuffix = document.getElementById('add_weight_unit_suffix');
+        const weightInput = document.getElementById('add_weight_input');
 
         if (form) {
             form.reset();
@@ -4310,6 +4400,18 @@ function openAddQuantityModal(trigger) {
         if (unitElement) unitElement.textContent = unit;
         if (unitSuffix) unitSuffix.textContent = unit;
         if (quantityInput) quantityInput.value = '';
+
+        if (weightSection) {
+            if (materialWeight > 0) {
+                weightSection.classList.remove('d-none');
+                if (weightExisting) weightExisting.textContent = weightFormatted + (weightUnit ? ' ' + weightUnit : '');
+                if (weightUnitLabel) weightUnitLabel.textContent = weightUnit;
+                if (weightUnitSuffix) weightUnitSuffix.textContent = weightUnit;
+                if (weightInput) weightInput.value = '';
+            } else {
+                weightSection.classList.add('d-none');
+            }
+        }
 
         const modal = new bootstrap.Modal(modalElement);
         modal.show();
