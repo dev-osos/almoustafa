@@ -2550,8 +2550,6 @@ $packagingReportGeneratedAt = $packagingReport['generated_at'] ?? date('Y-m-d H:
                     <option value="">الافتراضي (الاسم)</option>
                     <option value="qty_asc"  <?php echo $filters['sort_by'] === 'qty_asc'  ? 'selected' : ''; ?>>الأقل مخزونًا أولاً</option>
                     <option value="qty_desc" <?php echo $filters['sort_by'] === 'qty_desc' ? 'selected' : ''; ?>>الأكثر مخزونًا أولاً</option>
-                    <option value="name_asc" <?php echo $filters['sort_by'] === 'name_asc' ? 'selected' : ''; ?>>الاسم (أ → ي)</option>
-                    <option value="name_desc"<?php echo $filters['sort_by'] === 'name_desc'? 'selected' : ''; ?>>الاسم (ي → أ)</option>
                 </select>
             </div>
             <div class="col-md-4 d-flex align-items-end">
