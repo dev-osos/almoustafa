@@ -3116,8 +3116,6 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <option value="">اختر الوحدة</option>
                                 <option value="كيلوجرام">كيلوجرام</option>
                                 <option value="جرام">جرام</option>
-                                <option value="ملليلتر">ملليلتر</option>
-                                <option value="لتر">لتر</option>
                             </select>
                             <small class="text-muted">مثال: ٢ كيلوجرام أكياس</small>
                         </div>
