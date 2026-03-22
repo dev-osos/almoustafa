@@ -3880,6 +3880,10 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 function _promptUseWeightModal(trigger, materialName, availableWeight, weightUnit) {
+    const isMobileView = window.innerWidth < 768;
+    if (isMobileView) {
+        return _promptUseWeightInline(trigger, availableWeight, weightUnit);
+    }
     return new Promise((resolve) => {
         const modal = document.getElementById('useWeightModal');
         if (!modal) { resolve(null); return; }
@@ -3935,6 +3939,91 @@ function _promptUseWeightModal(trigger, materialName, availableWeight, weightUni
 
         bsModal.show();
         setTimeout(() => input.focus(), 300);
+    });
+}
+
+function _promptUseWeightInline(trigger, availableWeight, weightUnit) {
+    return new Promise((resolve) => {
+        // أزل أي بطاقة وزن مفتوحة مسبقاً
+        document.querySelectorAll('.use-weight-inline-card').forEach(el => el.remove());
+
+        const wLabel = weightUnit || '';
+        const availableFormatted = availableWeight.toLocaleString('ar-EG', {minimumFractionDigits: 0, maximumFractionDigits: 3});
+
+        const card = document.createElement('div');
+        card.className = 'use-weight-inline-card card border-primary mt-3 shadow-sm';
+        card.style.cssText = 'border-width: 2px !important;';
+        card.innerHTML = `
+            <div class="card-header bg-primary text-white py-2 d-flex justify-content-between align-items-center">
+                <span class="fw-semibold"><i class="bi bi-check2-circle me-1"></i>استخدام وزن</span>
+                <button type="button" class="btn-close btn-close-white btn-sm use-weight-cancel-btn"></button>
+            </div>
+            <div class="card-body pb-2">
+                <div class="mb-2 small text-muted">
+                    المتاح: <strong class="text-success">${availableFormatted}${wLabel ? ' ' + wLabel : ''}</strong>
+                </div>
+                <div class="input-group mb-2">
+                    <input type="number"
+                           class="form-control use-weight-inline-input"
+                           step="0.001" min="0.001"
+                           max="${availableWeight}"
+                           placeholder="0.000"
+                           autocomplete="off"
+                           inputmode="decimal">
+                    ${wLabel ? `<span class="input-group-text">${wLabel}</span>` : ''}
+                </div>
+                <div class="d-grid gap-2">
+                    <button type="button" class="btn btn-primary use-weight-confirm-btn">
+                        <i class="bi bi-check2-circle me-1"></i>تأكيد الخصم
+                    </button>
+                </div>
+            </div>`;
+
+        // أدرج البطاقة بعد زر الاستخدام مباشرةً داخل كرت الأداة
+        const mobileCard = trigger.closest('.packaging-mobile-card');
+        const cardBody = mobileCard ? mobileCard.querySelector('.card-body') : null;
+        const insertTarget = cardBody || trigger.parentElement;
+        insertTarget.appendChild(card);
+
+        const input = card.querySelector('.use-weight-inline-input');
+        const confirmBtn = card.querySelector('.use-weight-confirm-btn');
+        const cancelBtn = card.querySelector('.use-weight-cancel-btn');
+
+        let resolved = false;
+        const doResolve = (val) => {
+            if (resolved) return;
+            resolved = true;
+            card.remove();
+            resolve(val);
+        };
+
+        confirmBtn.addEventListener('click', () => {
+            const val = parseFloat(input.value);
+            if (isNaN(val) || val <= 0) {
+                input.classList.add('is-invalid');
+                input.focus();
+                return;
+            }
+            if (val > availableWeight) {
+                input.classList.add('is-invalid');
+                input.focus();
+                return;
+            }
+            input.classList.remove('is-invalid');
+            doResolve(val);
+        });
+
+        cancelBtn.addEventListener('click', () => doResolve(null));
+
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') confirmBtn.click();
+        });
+
+        // اسكرول للبطاقة وركّز على الحقل
+        setTimeout(() => {
+            card.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+            input.focus();
+        }, 100);
     });
 }
 
