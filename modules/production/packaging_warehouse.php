@@ -1748,8 +1748,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // تحميل قائمة أدوات التعبئة بعد معالجة الطلبات
 if ($usePackagingTable) {
     $packagingMaterials = $db->query(
-        "SELECT id, material_id, name, alias, type, specifications, quantity, unit, status, created_at, updated_at
-         FROM packaging_materials 
+        "SELECT id, material_id, name, alias, type, specifications, quantity, unit, weight, weight_unit, status, created_at, updated_at
+         FROM packaging_materials
          WHERE status = 'active'
          ORDER BY name"
     );
