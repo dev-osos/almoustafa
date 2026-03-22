@@ -2758,7 +2758,6 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <td style="padding: 0.4rem 0.25rem;"><?php echo $offset + $index + 1; ?></td>
                                 <td style="padding: 0.4rem 0.25rem; line-height: 1.3;">
                                     <div style="font-weight: 600; font-size: 0.875rem;"><?php echo htmlspecialchars($material['name']); ?></div>
-                                    <?php $aliasValue = trim((string)($material['alias'] ?? '')); ?>
                                     <?php if (!empty($material['specifications'])): ?>
                                         <div style="font-size: 0.75rem; color: #6c757d; margin-top: 2px;"><?php echo htmlspecialchars($material['specifications']); ?></div>
                                     <?php endif; ?>
