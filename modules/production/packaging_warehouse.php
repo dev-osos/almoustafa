@@ -3290,26 +3290,6 @@ document.addEventListener('DOMContentLoaded', function() {
                         <small class="text-muted">سيتم جمع الكمية المدخلة مع الموجود حالياً في المخزون.</small>
                     </div>
 
-                    <div class="mb-3 d-none" id="add_weight_section">
-                        <label class="form-label fw-bold">الوزن المضاف</label>
-                        <div class="d-flex align-items-center gap-2 mb-1">
-                            <small class="text-muted">الوزن الحالي:</small>
-                            <span class="badge bg-secondary" id="add_weight_existing">0</span>
-                            <span class="text-muted small" id="add_weight_unit_label"></span>
-                        </div>
-                        <div class="input-group">
-                            <input type="number"
-                                   step="0.001"
-                                   min="0.001"
-                                   class="form-control"
-                                   name="additional_weight"
-                                   id="add_weight_input"
-                                   placeholder="0.000">
-                            <span class="input-group-text" id="add_weight_unit_suffix"></span>
-                        </div>
-                        <small class="text-muted">سيتم جمع الوزن المدخل مع الوزن الحالي للأداة.</small>
-                    </div>
-
                     <div class="mb-3">
                         <label class="form-label fw-bold">المورد <span class="text-danger">*</span></label>
                         <select class="form-select" name="supplier_id" id="add_quantity_supplier_id" required>
@@ -3485,8 +3465,8 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
 </div>
 
-<!-- Card إضافة كمية - للموبايل فقط -->
-<div class="card shadow-sm mb-4 d-md-none" id="addQuantityCard" style="display: none;">
+<!-- Card إضافة قطع -->
+<div class="card shadow-sm mb-4" id="addQuantityCard" style="display: none;">
     <div class="card-header bg-primary text-white">
         <h5 class="mb-0"><i class="bi bi-plus-circle me-2"></i>إضافة كمية لأداة التعبئة</h5>
     </div>
@@ -3524,26 +3504,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 <small class="text-muted">سيتم جمع الكمية المدخلة مع الموجود حالياً في المخزون.</small>
             </div>
 
-            <div class="mb-3 d-none" id="add_weight_section_card">
-                <label class="form-label fw-bold">الوزن المضاف</label>
-                <div class="d-flex align-items-center gap-2 mb-1">
-                    <small class="text-muted">الوزن الحالي:</small>
-                    <span class="badge bg-secondary" id="add_weight_existing_card">0</span>
-                    <span class="text-muted small" id="add_weight_unit_label_card"></span>
-                </div>
-                <div class="input-group">
-                    <input type="number"
-                           step="0.001"
-                           min="0.001"
-                           class="form-control"
-                           name="additional_weight"
-                           id="add_weight_input_card"
-                           placeholder="0.000">
-                    <span class="input-group-text" id="add_weight_unit_suffix_card"></span>
-                </div>
-                <small class="text-muted">سيتم جمع الوزن المدخل مع الوزن الحالي للأداة.</small>
-            </div>
-
             <div class="mb-3">
                 <label class="form-label fw-bold">المورد <span class="text-danger">*</span></label>
                 <select class="form-select" name="supplier_id" id="add_quantity_supplier_id_card" required>
@@ -3574,6 +3534,77 @@ document.addEventListener('DOMContentLoaded', function() {
                     <i class="bi bi-check-circle me-2"></i>حفظ الكمية
                 </button>
                 <button type="button" class="btn btn-secondary" onclick="closeAddQuantityCard()">إلغاء</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Card إضافة وزن -->
+<div class="card shadow-sm mb-4" id="addWeightCard" style="display: none;">
+    <div class="card-header bg-success text-white">
+        <h5 class="mb-0"><i class="bi bi-plus-circle me-2"></i>إضافة وزن لأداة التعبئة</h5>
+    </div>
+    <div class="card-body">
+        <form method="POST" id="addWeightForm">
+            <input type="hidden" name="action" value="add_packaging_quantity">
+            <input type="hidden" name="additional_quantity" value="0">
+            <input type="hidden" name="material_id" id="add_weight_material_id">
+
+            <div class="mb-3">
+                <label class="form-label fw-bold">أداة التعبئة</label>
+                <div class="form-control-plaintext fw-semibold" id="add_weight_material_name">-</div>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label fw-bold">الوزن الحالي</label>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-secondary fs-6" id="add_weight_existing_val">0</span>
+                    <span class="text-muted small" id="add_weight_existing_unit"></span>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label fw-bold">الوزن المضاف <span class="text-danger">*</span></label>
+                <div class="input-group">
+                    <input type="number"
+                           step="0.001"
+                           min="0.001"
+                           class="form-control"
+                           name="additional_weight"
+                           id="add_weight_amount_input"
+                           required
+                           placeholder="0.000">
+                    <span class="input-group-text" id="add_weight_unit_display"></span>
+                </div>
+                <small class="text-muted">سيتم إضافة هذا الوزن للوزن الحالي.</small>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label fw-bold">المورد <span class="text-danger">*</span></label>
+                <select class="form-select" name="supplier_id" id="add_weight_supplier_id" required>
+                    <option value="">اختر المورد</option>
+                    <?php foreach ($packagingSuppliers as $supplier): ?>
+                        <option value="<?php echo $supplier['id']; ?>" <?php echo ($defaultSupplierId === $supplier['id']) ? 'selected' : ''; ?>>
+                            <?php echo htmlspecialchars($supplier['name']); ?>
+                            <?php if (!empty($supplier['supplier_code'])): ?>
+                                (<?php echo htmlspecialchars($supplier['supplier_code']); ?>)
+                            <?php endif; ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label fw-bold">ملاحظات (اختياري)</label>
+                <textarea class="form-control" name="notes" rows="2" maxlength="500"
+                          placeholder="مثال: إضافة من شحنة جديدة."></textarea>
+            </div>
+
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-success">
+                    <i class="bi bi-check-circle me-2"></i>حفظ الوزن
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="closeAddWeightCard()">إلغاء</button>
             </div>
         </form>
     </div>
@@ -4291,7 +4322,7 @@ function openAddQuantityModal(trigger) {
     if (typeof closeAllForms === 'function') {
         closeAllForms();
     }
-    
+
     const dataset = trigger?.dataset || {};
     const materialId = dataset.id || '';
     const materialName = dataset.name || '-';
@@ -4300,129 +4331,114 @@ function openAddQuantityModal(trigger) {
     const materialWeight = parseFloat(dataset.materialWeight || '0') || 0;
     const weightUnit = (dataset.weightUnit || '').trim();
 
-    if (!materialId) {
-        console.warn('Material id is missing for add quantity modal trigger.');
+    if (!materialId) return;
+
+    const data = { materialId, materialName, unit, existingQuantity, materialWeight, weightUnit };
+
+    // إذا كانت الأداة لها وزن → بطاقة اختيار أولاً
+    if (materialWeight > 0) {
+        _showAddTypeSelectCard(trigger, data);
         return;
     }
 
-    const weightFormatted = materialWeight > 0
-        ? materialWeight.toLocaleString('ar-EG', {minimumFractionDigits: 0, maximumFractionDigits: 3})
-        : '0';
+    // لا يوجد وزن → مباشرة بطاقة إضافة قطع
+    _openAddPiecesCard(data);
+}
 
-    const isMobileDevice = isMobile();
+function _showAddTypeSelectCard(trigger, data) {
+    document.querySelectorAll('.add-type-select-card').forEach(el => el.remove());
 
-    if (isMobileDevice) {
-        // على الموبايل: استخدام Card
-        const card = document.getElementById('addQuantityCard');
-        const form = document.getElementById('addQuantityFormCard');
-        if (!card || !form) {
-            return;
-        }
+    const wLabel = data.weightUnit || '';
+    const weightFormatted = data.materialWeight.toLocaleString('ar-EG', {minimumFractionDigits: 0, maximumFractionDigits: 3});
 
-        form.reset();
+    const card = document.createElement('div');
+    card.className = 'add-type-select-card card border-success shadow-sm mt-3 mb-2';
+    card.style.cssText = 'border-width:2px !important;';
+    card.innerHTML = `
+        <div class="card-header bg-success text-white py-2 d-flex justify-content-between align-items-center">
+            <span class="fw-semibold"><i class="bi bi-plus-circle me-1"></i>ماذا تريد أن تضيف؟</span>
+            <button type="button" class="btn-close btn-close-white btn-sm" onclick="this.closest('.add-type-select-card').remove()"></button>
+        </div>
+        <div class="card-body py-3">
+            <p class="text-muted small mb-3">${data.materialName}</p>
+            <div class="d-grid gap-2">
+                <button type="button" class="btn btn-outline-primary btn-add-pieces-choice">
+                    <i class="bi bi-boxes me-2"></i>إضافة قطع
+                    <small class="d-block text-muted mt-1">الحالي: ${data.existingQuantity.toLocaleString('ar-EG', {maximumFractionDigits:0})} ${data.unit}</small>
+                </button>
+                <button type="button" class="btn btn-outline-success btn-add-weight-choice">
+                    <i class="bi bi-box-seam me-2"></i>إضافة وزن
+                    <small class="d-block text-muted mt-1">الحالي: ${weightFormatted}${wLabel ? ' ' + wLabel : ''}</small>
+                </button>
+            </div>
+        </div>`;
 
-        const materialIdInput = document.getElementById('add_quantity_material_id_card');
-        const nameElement = document.getElementById('add_quantity_material_name_card');
-        const existingElement = document.getElementById('add_quantity_existing_card');
-        const unitElement = document.getElementById('add_quantity_unit_card');
-        const unitSuffix = document.getElementById('add_quantity_unit_suffix_card');
-        const quantityInput = document.getElementById('add_quantity_input_card');
-        const weightSection = document.getElementById('add_weight_section_card');
-        const weightExisting = document.getElementById('add_weight_existing_card');
-        const weightUnitLabel = document.getElementById('add_weight_unit_label_card');
-        const weightUnitSuffix = document.getElementById('add_weight_unit_suffix_card');
-        const weightInput = document.getElementById('add_weight_input_card');
+    const mobileCard = trigger.closest('.packaging-mobile-card');
+    const cardBody = mobileCard ? mobileCard.querySelector('.card-body') : null;
+    const insertTarget = cardBody || trigger.closest('td') || trigger.parentElement;
+    insertTarget.appendChild(card);
 
-        if (materialIdInput) materialIdInput.value = materialId;
-        if (nameElement) nameElement.textContent = materialName;
-        if (existingElement) {
-            existingElement.textContent = existingQuantity.toLocaleString('ar-EG', {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2
-            });
-        }
-        if (unitElement) unitElement.textContent = unit;
-        if (unitSuffix) unitSuffix.textContent = unit;
-        if (quantityInput) quantityInput.value = '';
+    card.querySelector('.btn-add-pieces-choice').addEventListener('click', () => {
+        card.remove();
+        _openAddPiecesCard(data);
+    });
+    card.querySelector('.btn-add-weight-choice').addEventListener('click', () => {
+        card.remove();
+        _openAddWeightCard(data);
+    });
 
-        if (weightSection) {
-            if (materialWeight > 0) {
-                weightSection.classList.remove('d-none');
-                if (weightExisting) weightExisting.textContent = weightFormatted + (weightUnit ? ' ' + weightUnit : '');
-                if (weightUnitLabel) weightUnitLabel.textContent = weightUnit;
-                if (weightUnitSuffix) weightUnitSuffix.textContent = weightUnit;
-                if (weightInput) weightInput.value = '';
-            } else {
-                weightSection.classList.add('d-none');
-            }
-        }
+    setTimeout(() => card.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 100);
+}
 
-        card.style.display = 'block';
-        setTimeout(function() {
-            scrollToElement(card);
-            if (quantityInput) {
-                quantityInput.focus();
-                quantityInput.select();
-            }
-        }, 50);
-    } else {
-        // على الكمبيوتر: استخدام Modal
-        const modalElement = document.getElementById('addQuantityModal');
-        const form = document.getElementById('addQuantityForm');
-        if (!modalElement || !form) {
-            return;
-        }
+function _openAddPiecesCard(data) {
+    const card = document.getElementById('addQuantityCard');
+    const form = document.getElementById('addQuantityFormCard');
+    if (!card || !form) return;
 
-        const materialIdInput = document.getElementById('add_quantity_material_id');
-        const nameElement = document.getElementById('add_quantity_material_name');
-        const existingElement = document.getElementById('add_quantity_existing');
-        const unitElement = document.getElementById('add_quantity_unit');
-        const unitSuffix = document.getElementById('add_quantity_unit_suffix');
-        const quantityInput = document.getElementById('add_quantity_input');
-        const weightSection = document.getElementById('add_weight_section');
-        const weightExisting = document.getElementById('add_weight_existing');
-        const weightUnitLabel = document.getElementById('add_weight_unit_label');
-        const weightUnitSuffix = document.getElementById('add_weight_unit_suffix');
-        const weightInput = document.getElementById('add_weight_input');
+    form.reset();
+    const f = id => document.getElementById(id);
+    if (f('add_quantity_material_id_card')) f('add_quantity_material_id_card').value = data.materialId;
+    if (f('add_quantity_material_name_card')) f('add_quantity_material_name_card').textContent = data.materialName;
+    if (f('add_quantity_existing_card')) f('add_quantity_existing_card').textContent =
+        data.existingQuantity.toLocaleString('ar-EG', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    if (f('add_quantity_unit_card')) f('add_quantity_unit_card').textContent = data.unit;
+    if (f('add_quantity_unit_suffix_card')) f('add_quantity_unit_suffix_card').textContent = data.unit;
 
-        if (form) {
-            form.reset();
-        }
+    card.style.display = 'block';
+    setTimeout(() => {
+        scrollToElement(card);
+        const inp = f('add_quantity_input_card');
+        if (inp) { inp.focus(); inp.select(); }
+    }, 50);
+}
 
-        if (materialIdInput) materialIdInput.value = materialId;
-        if (nameElement) nameElement.textContent = materialName;
-        if (existingElement) {
-            existingElement.textContent = existingQuantity.toLocaleString('ar-EG', {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2
-            });
-        }
-        if (unitElement) unitElement.textContent = unit;
-        if (unitSuffix) unitSuffix.textContent = unit;
-        if (quantityInput) quantityInput.value = '';
+function _openAddWeightCard(data) {
+    const card = document.getElementById('addWeightCard');
+    const form = document.getElementById('addWeightForm');
+    if (!card || !form) return;
 
-        if (weightSection) {
-            if (materialWeight > 0) {
-                weightSection.classList.remove('d-none');
-                if (weightExisting) weightExisting.textContent = weightFormatted + (weightUnit ? ' ' + weightUnit : '');
-                if (weightUnitLabel) weightUnitLabel.textContent = weightUnit;
-                if (weightUnitSuffix) weightUnitSuffix.textContent = weightUnit;
-                if (weightInput) weightInput.value = '';
-            } else {
-                weightSection.classList.add('d-none');
-            }
-        }
+    form.reset();
+    const f = id => document.getElementById(id);
+    const wLabel = data.weightUnit || '';
+    const weightFormatted = data.materialWeight.toLocaleString('ar-EG', {minimumFractionDigits: 0, maximumFractionDigits: 3});
 
-        const modal = new bootstrap.Modal(modalElement);
-        modal.show();
+    if (f('add_weight_material_id')) f('add_weight_material_id').value = data.materialId;
+    if (f('add_weight_material_name')) f('add_weight_material_name').textContent = data.materialName;
+    if (f('add_weight_existing_val')) f('add_weight_existing_val').textContent = weightFormatted;
+    if (f('add_weight_existing_unit')) f('add_weight_existing_unit').textContent = wLabel;
+    if (f('add_weight_unit_display')) f('add_weight_unit_display').textContent = wLabel;
 
-        setTimeout(() => {
-            if (quantityInput) {
-                quantityInput.focus();
-                quantityInput.select();
-            }
-        }, 250);
-    }
+    card.style.display = 'block';
+    setTimeout(() => {
+        scrollToElement(card);
+        const inp = f('add_weight_amount_input');
+        if (inp) { inp.focus(); inp.select(); }
+    }, 50);
+}
+
+function closeAddWeightCard() {
+    const card = document.getElementById('addWeightCard');
+    if (card) card.style.display = 'none';
 }
 
 function openRecordDamageModal(trigger) {
