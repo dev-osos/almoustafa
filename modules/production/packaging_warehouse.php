@@ -1124,7 +1124,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Cache-Control: no-cache, must-revalidate');
 
         $materialId = intval($_POST['material_id'] ?? 0);
-        $useQuantity = 1.0;
+        $useQuantity = isset($_POST['use_quantity']) ? max(0.0, (float)$_POST['use_quantity']) : 1.0;
+        if ($useQuantity <= 0) $useQuantity = 1.0;
 
         if ($materialId <= 0) {
             echo json_encode([
@@ -2826,11 +2827,12 @@ document.addEventListener('DOMContentLoaded', function() {
                                             data-id="<?php echo $material['id']; ?>"
                                             data-name="<?php echo htmlspecialchars($material['name'], ENT_QUOTES, 'UTF-8'); ?>"
                                             data-unit="<?php echo htmlspecialchars(!empty($material['unit']) ? $material['unit'] : 'وحدة', ENT_QUOTES, 'UTF-8'); ?>"
+                                            data-weight-unit="<?php echo htmlspecialchars($material['weight_unit'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
                                             data-quantity="<?php echo number_format($materialQuantity, 4, '.', ''); ?>"
                                             data-quantity-target="<?php echo htmlspecialchars($quantityElementId, ENT_QUOTES, 'UTF-8'); ?>"
                                             data-use-quantity="1"
                                             onclick="usePackagingMaterial(this)"
-                                            title="استخدام وحدة واحدة"
+                                            title="<?php echo ($material['unit'] ?? '') === 'وزن' ? 'استخدام وزن محدد' : 'استخدام وحدة واحدة'; ?>"
                                             style="padding: 0.2rem 0.4rem; font-size: 0.75rem;"
                                             <?php echo $useButtonDisabled ? ' disabled' : ''; ?>
                                             aria-label="استخدام الأداة">
@@ -2945,6 +2947,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                     data-id="<?php echo $material['id']; ?>"
                                     data-name="<?php echo htmlspecialchars($material['name'], ENT_QUOTES, 'UTF-8'); ?>"
                                     data-unit="<?php echo htmlspecialchars(!empty($material['unit']) ? $material['unit'] : 'وحدة', ENT_QUOTES, 'UTF-8'); ?>"
+                                    data-weight-unit="<?php echo htmlspecialchars($material['weight_unit'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
                                     data-quantity="<?php echo number_format($materialQuantity, 4, '.', ''); ?>"
                                     data-quantity-target="<?php echo htmlspecialchars($mobileQuantityElementId, ENT_QUOTES, 'UTF-8'); ?>"
                                     data-use-quantity="1"
@@ -3819,16 +3822,31 @@ async function usePackagingMaterial(trigger) {
 
     const materialName = trigger.dataset.name || 'أداة التعبئة';
     const unitLabel = (trigger.dataset.unit || 'وحدة').trim() || 'وحدة';
-    const useQuantity = parseFloat(trigger.dataset.useQuantity || '1') || 1;
-    const isIntegerQuantity = Math.abs(useQuantity - Math.round(useQuantity)) < 1e-9;
-    const quantityDisplay = useQuantity.toLocaleString('ar-EG', {
-        minimumFractionDigits: isIntegerQuantity ? 0 : 2,
-        maximumFractionDigits: isIntegerQuantity ? 0 : 2
-    });
-    const confirmationMessage = `سيتم خصم ${quantityDisplay} ${unitLabel} من "${materialName}". هل تريد المتابعة؟`;
+    const weightUnit = (trigger.dataset.weightUnit || '').trim();
+    const availableQty = parseFloat(trigger.dataset.quantity || '0');
+    const isWeight = unitLabel === 'وزن';
 
-    if (!window.confirm(confirmationMessage)) {
-        return;
+    let useQuantity;
+    if (isWeight) {
+        const weightLabel = weightUnit || 'وحدة الوزن';
+        const input = window.prompt(
+            `أدخل الكمية المراد استخدامها من "${materialName}" (${weightLabel}):\nالمتاح: ${availableQty.toLocaleString('ar-EG', {maximumFractionDigits: 3})} ${weightLabel}`
+        );
+        if (input === null) return;
+        useQuantity = parseFloat(input);
+        if (isNaN(useQuantity) || useQuantity <= 0) {
+            alert('الكمية غير صحيحة.');
+            return;
+        }
+        if (useQuantity > availableQty) {
+            alert(`الكمية المدخلة (${useQuantity}) أكبر من المتاح (${availableQty}).`);
+            return;
+        }
+    } else {
+        useQuantity = parseFloat(trigger.dataset.useQuantity || '1') || 1;
+        if (!window.confirm(`سيتم خصم قطعة واحدة من "${materialName}". هل تريد المتابعة؟`)) {
+            return;
+        }
     }
 
     const originalHtml = trigger.innerHTML;
@@ -3849,7 +3867,8 @@ async function usePackagingMaterial(trigger) {
             },
             body: new URLSearchParams({
                 action: 'use_packaging_material',
-                material_id: materialId
+                material_id: materialId,
+                use_quantity: useQuantity
             })
         });
 
