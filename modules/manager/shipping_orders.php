@@ -426,6 +426,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    if ($action === 'get_order_for_return' && $isAjax) {
+        $orderNumber = trim($_POST['order_number'] ?? '');
+        $companyId = isset($_POST['company_id']) ? (int)$_POST['company_id'] : 0;
+        header('Content-Type: application/json; charset=utf-8');
+        if ($orderNumber === '' || $companyId <= 0) {
+            echo json_encode(['success' => false, 'error' => 'بيانات غير صالحة.'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $returnOrder = $db->queryOne(
+            "SELECT id, order_number, total_amount, status FROM shipping_company_orders WHERE order_number = ? AND shipping_company_id = ?",
+            [$orderNumber, $companyId]
+        );
+        if (!$returnOrder) {
+            echo json_encode(['success' => false, 'error' => 'لم يتم العثور على الطلب. تأكد من رقم الطلب وأن الطلب يخص هذه الشركة.'], JSON_UNESCAPED_UNICODE);
+        } else {
+            echo json_encode([
+                'success' => true,
+                'order_id' => (int)$returnOrder['id'],
+                'total_amount' => (float)$returnOrder['total_amount'],
+                'status' => $returnOrder['status'],
+            ], JSON_UNESCAPED_UNICODE);
+        }
+        exit;
+    }
+
     if ($action === 'tg_shipments' && $isAjax) {
         $tgPage = max(1, (int)($_POST['tg_page'] ?? 1));
         $tgQ = 'query ListShipments($first: Int, $page: Int, $input: ListShipmentsFilterInput) {
@@ -2231,6 +2256,168 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    if ($action === 'register_shipping_return') {
+        $orderId = isset($_POST['order_id']) ? (int)$_POST['order_id'] : 0;
+        $companyId = isset($_POST['company_id']) ? (int)$_POST['company_id'] : 0;
+        $returnFees = isset($_POST['return_fees']) ? cleanFinancialValue($_POST['return_fees'], true) : 0;
+        $transactionStarted = false;
+
+        try {
+            if ($orderId <= 0 || $companyId <= 0) {
+                throw new InvalidArgumentException('بيانات الطلب غير صالحة.');
+            }
+
+            $db->beginTransaction();
+            $transactionStarted = true;
+
+            $returnOrder = $db->queryOne(
+                "SELECT id, order_number, shipping_company_id, total_amount, status FROM shipping_company_orders WHERE id = ? AND shipping_company_id = ? FOR UPDATE",
+                [$orderId, $companyId]
+            );
+            if (!$returnOrder) {
+                throw new InvalidArgumentException('طلب الشحن غير موجود.');
+            }
+            if ($returnOrder['status'] === 'cancelled') {
+                throw new InvalidArgumentException('لا يمكن تسجيل مرتجع لطلب ملغي.');
+            }
+
+            $returnCompany = $db->queryOne(
+                "SELECT id, name, balance FROM shipping_companies WHERE id = ? FOR UPDATE",
+                [$companyId]
+            );
+            if (!$returnCompany) {
+                throw new InvalidArgumentException('شركة الشحن غير موجودة.');
+            }
+
+            $orderTotal = (float)$returnOrder['total_amount'];
+            $returnFees = (float)($returnFees ?? 0);
+            $totalDeduction = $orderTotal + $returnFees;
+            $currentBalance = (float)($returnCompany['balance'] ?? 0);
+            $newBalance = max(0, round($currentBalance - $totalDeduction, 2));
+            $orderNumber = $returnOrder['order_number'] ?? $orderId;
+
+            // خصم الإجمالي + رسوم الإرجاع من ديون الشركة
+            $db->execute(
+                "UPDATE shipping_companies SET balance = ?, updated_by = ?, updated_at = NOW() WHERE id = ?",
+                [$newBalance, $currentUser['id'] ?? null, $companyId]
+            );
+
+            // تسجيل قيمة المرتجع في كشف الحساب
+            $db->execute(
+                "INSERT INTO shipping_company_deductions (shipping_company_id, amount, notes, created_by) VALUES (?, ?, ?, ?)",
+                [$companyId, $orderTotal, 'مرتجع بضاعة - طلب #' . $orderNumber, $currentUser['id'] ?? null]
+            );
+
+            // تسجيل رسوم الإرجاع إذا كانت موجودة
+            if ($returnFees > 0) {
+                $db->execute(
+                    "INSERT INTO shipping_company_deductions (shipping_company_id, amount, notes, created_by) VALUES (?, ?, ?, ?)",
+                    [$companyId, $returnFees, 'رسوم إرجاع - طلب #' . $orderNumber, $currentUser['id'] ?? null]
+                );
+            }
+
+            // إعادة كميات المنتجات إلى المخزن الرئيسي
+            $returnOrderItems = $db->query(
+                "SELECT product_id, batch_id, quantity FROM shipping_company_order_items WHERE order_id = ?",
+                [$orderId]
+            );
+            $returnMovementNote = 'إرجاع منتجات - مرتجع طلب شحن #' . $orderNumber;
+
+            foreach ($returnOrderItems as $item) {
+                $productId = (int)($item['product_id'] ?? 0);
+                $batchId = isset($item['batch_id']) && $item['batch_id'] > 0 ? (int)$item['batch_id'] : null;
+                $quantity = (float)($item['quantity'] ?? 0);
+                $actualProductId = $productId;
+                $fpData = null;
+
+                if ($batchId) {
+                    try {
+                        $fpData = $db->queryOne("
+                            SELECT fp.quantity_produced,
+                                COALESCE(fp.product_id, bn.product_id) AS actual_product_id
+                            FROM finished_products fp
+                            LEFT JOIN batch_numbers bn ON fp.batch_number = bn.batch_number
+                            WHERE fp.id = ?
+                        ", [$batchId]);
+                        if ($fpData) {
+                            $actualProductId = (int)($fpData['actual_product_id'] ?? $productId);
+                        }
+                    } catch (Throwable $fpErr) {
+                        error_log('register_shipping_return: fpData error: ' . $fpErr->getMessage());
+                    }
+                }
+
+                recordInventoryMovement(
+                    $actualProductId,
+                    $mainWarehouse['id'] ?? null,
+                    'in',
+                    $quantity,
+                    'shipping_return',
+                    $orderId,
+                    $returnMovementNote,
+                    $currentUser['id'] ?? null,
+                    $batchId
+                );
+
+                if ($batchId && $fpData) {
+                    try {
+                        $newQty = (float)($fpData['quantity_produced'] ?? 0) + $quantity;
+                        $db->execute("UPDATE finished_products SET quantity_produced = ? WHERE id = ?", [$newQty, $batchId]);
+                    } catch (Throwable $fpUpdateErr) {
+                        error_log('register_shipping_return: fp quantity update error: ' . $fpUpdateErr->getMessage());
+                    }
+                }
+            }
+
+            logAudit(
+                $currentUser['id'] ?? null,
+                'register_shipping_return',
+                'shipping_order',
+                $orderId,
+                null,
+                ['order_number' => $orderNumber, 'company_id' => $companyId, 'order_total' => $orderTotal, 'return_fees' => $returnFees, 'total_deduction' => $totalDeduction]
+            );
+
+            $db->commit();
+            $transactionStarted = false;
+
+            $msg = sprintf(
+                "تم تسجيل المرتجع بنجاح.\nطلب #%s\nقيمة الطلب: %s ج.م\nرسوم الإرجاع: %s ج.م\nإجمالي الخصم من الديون: %s ج.م\nرصيد الشركة بعد المعاملة: %s ج.م",
+                $orderNumber,
+                number_format($orderTotal, 2),
+                number_format($returnFees, 2),
+                number_format($totalDeduction, 2),
+                number_format($newBalance, 2)
+            );
+
+            if ($isAjax) {
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(['success' => true, 'message' => $msg, 'new_balance' => $newBalance, 'company_id' => $companyId], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+            $_SESSION[$sessionSuccessKey] = $msg;
+        } catch (InvalidArgumentException $e) {
+            if ($transactionStarted) $db->rollback();
+            if ($isAjax) {
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(['success' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+            $_SESSION[$sessionErrorKey] = $e->getMessage();
+        } catch (Throwable $e) {
+            if ($transactionStarted) $db->rollback();
+            error_log('register_shipping_return: ' . $e->getMessage());
+            if ($isAjax) {
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(['success' => false, 'error' => 'حدث خطأ أثناء تسجيل المرتجع.'], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+            $_SESSION[$sessionErrorKey] = 'حدث خطأ أثناء تسجيل المرتجع.';
+        }
+        redirectAfterPost('shipping_orders', [], [], 'manager');
+        exit;
+    }
+
     if ($action === 'complete_shipping_order') {
         $orderId = isset($_POST['order_id']) ? (int)$_POST['order_id'] : 0;
 
@@ -3986,6 +4173,7 @@ try {
                                             <li><button type="button" class="dropdown-item w-100 text-start border-0 bg-transparent js-shipping-company-action <?php echo $companyBalance <= 0 ? 'disabled' : ''; ?>" data-action="collect" data-company-id="<?php echo $cid; ?>" data-company-name="<?php echo $cnameAttr; ?>" data-balance="<?php echo (float)$companyBalance; ?>" data-balance-formatted="<?php echo $balanceFormattedAttr; ?>"><i class="bi bi-cash-coin me-2"></i>تحصيل</button></li>
                                             <li><hr class="dropdown-divider"></li>
                                             <li><button type="button" class="dropdown-item w-100 text-start border-0 bg-transparent js-shipping-company-action <?php echo $companyBalance <= 0 ? 'disabled' : ''; ?>" data-action="deduct" data-company-id="<?php echo $cid; ?>" data-company-name="<?php echo $cnameAttr; ?>" data-balance="<?php echo (float)$companyBalance; ?>"><i class="bi bi-dash-circle me-2"></i>خصم</button></li>
+                                            <li><button type="button" class="dropdown-item w-100 text-start border-0 bg-transparent text-danger js-shipping-company-action" data-action="return" data-company-id="<?php echo $cid; ?>" data-company-name="<?php echo $cnameAttr; ?>" data-balance="<?php echo (float)$companyBalance; ?>"><i class="bi bi-arrow-return-right me-2"></i>تسجيل مرتجع</button></li>
                                         </ul>
                                     </div>
                                 </td>
@@ -5255,6 +5443,67 @@ function copyShippingCollectionResult(btn) {
     </div>
 </div>
 
+<!-- Modal تسجيل مرتجع شركة الشحن -->
+<div class="modal fade" id="registerReturnModal" tabindex="-1" aria-labelledby="registerReturnModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="registerReturnModalLabel">
+                    <i class="bi bi-arrow-return-right me-2"></i>تسجيل مرتجع
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="registerReturnFormModal" data-no-loading="true">
+                <div class="modal-body">
+                    <input type="hidden" name="action" value="register_shipping_return">
+                    <input type="hidden" name="company_id" id="returnModalCompanyId">
+                    <input type="hidden" name="order_id" id="returnModalOrderId">
+                    <div class="mb-3">
+                        <div class="fw-semibold text-muted small">شركة الشحن</div>
+                        <div class="fs-6 fw-bold" id="returnModalCompanyName">-</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="returnModalOrderNumber">رقم الطلب <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="returnModalOrderNumber" placeholder="أدخل رقم الطلب" required>
+                            <button type="button" class="btn btn-outline-secondary" onclick="lookupOrderForReturn('modal')">
+                                <i class="bi bi-search"></i> بحث
+                            </button>
+                        </div>
+                        <div class="text-danger small mt-1 d-none" id="returnModalOrderError"></div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">الإجمالي النهائي للطلب</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control bg-light" id="returnModalTotalAmount" step="0.01" readonly placeholder="سيتم جلبه تلقائياً بعد البحث">
+                            <span class="input-group-text">ج.م</span>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="returnModalReturnFees">رسوم الإرجاع</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="returnModalReturnFees" name="return_fees" step="0.01" min="0" value="0" placeholder="0.00">
+                            <span class="input-group-text">ج.م</span>
+                        </div>
+                        <div class="form-text">المبلغ الذي تخصمه شركة الشحن مقابل الإرجاع.</div>
+                    </div>
+                    <div id="returnModalSummary" class="alert alert-warning d-none">
+                        <i class="bi bi-info-circle me-1"></i>
+                        إجمالي الخصم من ديون الشركة: <strong id="returnModalTotalDeduction">0</strong> ج.م
+                    </div>
+                    <div id="returnModalAlert" class="alert d-none"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                    <button type="submit" class="btn btn-danger" id="returnModalSubmitBtn" disabled>
+                        <i class="bi bi-arrow-return-right me-1"></i>تسجيل المرتجع
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <!-- Card للموبايل - تعديل ديون شركة الشحن -->
 <div class="card shadow-sm mb-4 d-md-none" id="editShippingCompanyBalanceCard" style="display: none;">
     <div class="card-header bg-warning text-dark">
@@ -5354,6 +5603,59 @@ function copyShippingCollectionResult(btn) {
             <div class="d-flex gap-2">
                 <button type="submit" class="btn btn-warning">تنفيذ الخصم</button>
                 <button type="button" class="btn btn-secondary" onclick="closeDeductFromShippingCard()">إلغاء</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Card للموبايل - تسجيل مرتجع -->
+<div class="card shadow-sm mb-4 d-md-none" id="registerReturnCard" style="display: none !important;">
+    <div class="card-header bg-danger text-white">
+        <h5 class="mb-0"><i class="bi bi-arrow-return-right me-2"></i>تسجيل مرتجع</h5>
+    </div>
+    <div class="card-body">
+        <form id="registerReturnFormCard" data-no-loading="true">
+            <input type="hidden" name="action" value="register_shipping_return">
+            <input type="hidden" name="company_id" id="returnCardCompanyId">
+            <input type="hidden" name="order_id" id="returnCardOrderId">
+            <div class="mb-3">
+                <div class="fw-semibold text-muted small">شركة الشحن</div>
+                <div class="fs-6 fw-bold" id="returnCardCompanyName">-</div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="returnCardOrderNumber">رقم الطلب <span class="text-danger">*</span></label>
+                <div class="input-group">
+                    <input type="text" class="form-control" id="returnCardOrderNumber" placeholder="أدخل رقم الطلب" required>
+                    <button type="button" class="btn btn-outline-secondary" onclick="lookupOrderForReturn('card')">
+                        <i class="bi bi-search"></i>
+                    </button>
+                </div>
+                <div class="text-danger small mt-1 d-none" id="returnCardOrderError"></div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">الإجمالي النهائي للطلب</label>
+                <div class="input-group">
+                    <input type="number" class="form-control bg-light" id="returnCardTotalAmount" step="0.01" readonly placeholder="سيتم جلبه بعد البحث">
+                    <span class="input-group-text">ج.م</span>
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="returnCardReturnFees">رسوم الإرجاع</label>
+                <div class="input-group">
+                    <input type="number" class="form-control" id="returnCardReturnFees" name="return_fees" step="0.01" min="0" value="0" placeholder="0.00">
+                    <span class="input-group-text">ج.م</span>
+                </div>
+            </div>
+            <div id="returnCardSummary" class="alert alert-warning d-none">
+                <i class="bi bi-info-circle me-1"></i>
+                إجمالي الخصم: <strong id="returnCardTotalDeduction">0</strong> ج.م
+            </div>
+            <div id="returnCardAlert" class="alert d-none"></div>
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-danger" id="returnCardSubmitBtn" disabled>
+                    <i class="bi bi-arrow-return-right me-1"></i>تسجيل المرتجع
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="closeRegisterReturnCard()">إلغاء</button>
             </div>
         </form>
     </div>
@@ -5747,12 +6049,116 @@ function showDeductFromShippingCompany(companyId, companyName, balance) {
         else if (action === 'edit-balance') showEditBalanceByIdName(companyId, companyName, balance);
         else if (action === 'collect') showCollectByIdName(companyId, companyName, balance, balanceFormatted);
         else if (action === 'deduct') showDeductFromShippingCompany(companyId, companyName, balance);
+        else if (action === 'return') showRegisterReturnByIdName(companyId, companyName, balance);
     }, true);
 })();
 
 function closeDeductFromShippingCard() {
     var card = document.getElementById('deductFromShippingCompanyCard');
     if (card) card.style.display = 'none';
+}
+
+function showRegisterReturnByIdName(companyId, companyName, balance) {
+    if (isMobile()) {
+        var card = document.getElementById('registerReturnCard');
+        if (!card) return;
+        document.getElementById('returnCardCompanyId').value = companyId;
+        document.getElementById('returnCardCompanyName').textContent = companyName || '-';
+        document.getElementById('returnCardOrderId').value = '';
+        document.getElementById('returnCardOrderNumber').value = '';
+        document.getElementById('returnCardTotalAmount').value = '';
+        document.getElementById('returnCardReturnFees').value = '0';
+        document.getElementById('returnCardSubmitBtn').disabled = true;
+        document.getElementById('returnCardSummary').classList.add('d-none');
+        var alertEl = document.getElementById('returnCardAlert');
+        if (alertEl) { alertEl.className = 'alert d-none'; alertEl.textContent = ''; }
+        var errEl = document.getElementById('returnCardOrderError');
+        if (errEl) { errEl.className = 'text-danger small mt-1 d-none'; errEl.textContent = ''; }
+        card.style.removeProperty('display');
+        setTimeout(function() { scrollToElement(card); }, 50);
+    } else {
+        var modal = document.getElementById('registerReturnModal');
+        if (!modal) return;
+        document.getElementById('returnModalCompanyId').value = companyId;
+        document.getElementById('returnModalCompanyName').textContent = companyName || '-';
+        document.getElementById('returnModalOrderId').value = '';
+        document.getElementById('returnModalOrderNumber').value = '';
+        document.getElementById('returnModalTotalAmount').value = '';
+        document.getElementById('returnModalReturnFees').value = '0';
+        document.getElementById('returnModalSubmitBtn').disabled = true;
+        document.getElementById('returnModalSummary').classList.add('d-none');
+        var alertEl = document.getElementById('returnModalAlert');
+        if (alertEl) { alertEl.className = 'alert d-none'; alertEl.textContent = ''; }
+        var errEl = document.getElementById('returnModalOrderError');
+        if (errEl) { errEl.className = 'text-danger small mt-1 d-none'; errEl.textContent = ''; }
+        var modalInstance = new bootstrap.Modal(modal);
+        modalInstance.show();
+    }
+}
+
+function closeRegisterReturnCard() {
+    var card = document.getElementById('registerReturnCard');
+    if (card) card.style.display = 'none';
+}
+
+function lookupOrderForReturn(context) {
+    var isModal = context === 'modal';
+    var prefix = isModal ? 'returnModal' : 'returnCard';
+    var companyId = document.getElementById(prefix + 'CompanyId').value;
+    var orderNumberEl = document.getElementById(prefix + 'OrderNumber');
+    var orderNumber = orderNumberEl ? orderNumberEl.value.trim() : '';
+    var errorEl = document.getElementById(prefix + 'OrderError');
+    var totalEl = document.getElementById(prefix + 'TotalAmount');
+    var orderIdEl = document.getElementById(prefix + 'OrderId');
+    var submitBtn = document.getElementById(prefix + 'SubmitBtn');
+
+    if (errorEl) { errorEl.className = 'text-danger small mt-1 d-none'; errorEl.textContent = ''; }
+    if (!orderNumber) {
+        if (errorEl) { errorEl.textContent = 'يرجى إدخال رقم الطلب.'; errorEl.classList.remove('d-none'); }
+        return;
+    }
+
+    var fd = new FormData();
+    fd.append('action', 'get_order_for_return');
+    fd.append('order_number', orderNumber);
+    fd.append('company_id', companyId);
+
+    fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: fd })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (!data.success) {
+                if (errorEl) { errorEl.textContent = data.error || 'لم يتم العثور على الطلب.'; errorEl.classList.remove('d-none'); }
+                if (totalEl) totalEl.value = '';
+                if (orderIdEl) orderIdEl.value = '';
+                if (submitBtn) submitBtn.disabled = true;
+                updateReturnSummary(context);
+                return;
+            }
+            if (totalEl) totalEl.value = parseFloat(data.total_amount || 0).toFixed(2);
+            if (orderIdEl) orderIdEl.value = data.order_id;
+            if (submitBtn) submitBtn.disabled = false;
+            updateReturnSummary(context);
+        })
+        .catch(function() {
+            if (errorEl) { errorEl.textContent = 'حدث خطأ في الاتصال.'; errorEl.classList.remove('d-none'); }
+        });
+}
+
+function updateReturnSummary(context) {
+    var prefix = context === 'modal' ? 'returnModal' : 'returnCard';
+    var totalEl = document.getElementById(prefix + 'TotalAmount');
+    var feesEl = document.getElementById(prefix + 'ReturnFees');
+    var summaryEl = document.getElementById(prefix + 'Summary');
+    var totalDeductionEl = document.getElementById(prefix + 'TotalDeduction');
+    var total = parseFloat(totalEl ? totalEl.value : 0) || 0;
+    var fees = parseFloat(feesEl ? feesEl.value : 0) || 0;
+    var deduction = total + fees;
+    if (summaryEl && total > 0) {
+        summaryEl.classList.remove('d-none');
+        if (totalDeductionEl) totalDeductionEl.textContent = deduction.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    } else if (summaryEl) {
+        summaryEl.classList.add('d-none');
+    }
 }
 
 function showDeliveryModal(button) {
@@ -7413,6 +7819,99 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
+    // معالجة تسجيل مرتجع - Modal
+    var registerReturnFormModal = document.getElementById('registerReturnFormModal');
+    if (registerReturnFormModal) {
+        // تحديث الملخص عند تغيير رسوم الإرجاع
+        var returnModalFees = document.getElementById('returnModalReturnFees');
+        if (returnModalFees) {
+            returnModalFees.addEventListener('input', function() { updateReturnSummary('modal'); });
+        }
+        registerReturnFormModal.addEventListener('submit', function(e) {
+            e.preventDefault();
+            var orderIdVal = document.getElementById('returnModalOrderId').value;
+            if (!orderIdVal) {
+                showShippingToast('يرجى البحث عن الطلب أولاً.', 'danger');
+                return false;
+            }
+            var formData = new FormData();
+            formData.append('action', 'register_shipping_return');
+            formData.append('company_id', document.getElementById('returnModalCompanyId').value);
+            formData.append('order_id', orderIdVal);
+            formData.append('return_fees', document.getElementById('returnModalReturnFees').value || '0');
+            var submitBtn = document.getElementById('returnModalSubmitBtn');
+            if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>جاري التسجيل...'; }
+            var alertEl = document.getElementById('returnModalAlert');
+            fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: formData })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = '<i class="bi bi-arrow-return-right me-1"></i>تسجيل المرتجع'; }
+                    if (data.success) {
+                        showShippingToast(data.message || 'تم تسجيل المرتجع بنجاح.', 'success');
+                        if (typeof showShippingCollectionResultMessage === 'function') showShippingCollectionResultMessage(data.message || '');
+                        if (data.company_id != null && data.new_balance != null && typeof updateShippingCompanyBalanceInTable === 'function') updateShippingCompanyBalanceInTable(data.company_id, data.new_balance);
+                        var modalEl = document.getElementById('registerReturnModal');
+                        if (typeof bootstrap !== 'undefined' && bootstrap.Modal && modalEl) {
+                            var m = bootstrap.Modal.getInstance(modalEl);
+                            if (m) m.hide();
+                        }
+                    } else {
+                        if (alertEl) { alertEl.className = 'alert alert-danger'; alertEl.textContent = data.error || 'حدث خطأ.'; }
+                        if (submitBtn) submitBtn.disabled = false;
+                    }
+                })
+                .catch(function() {
+                    if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = '<i class="bi bi-arrow-return-right me-1"></i>تسجيل المرتجع'; }
+                    showShippingToast('حدث خطأ في الاتصال.', 'danger');
+                });
+            return false;
+        });
+    }
+
+    // معالجة تسجيل مرتجع - Card (موبايل)
+    var registerReturnFormCard = document.getElementById('registerReturnFormCard');
+    if (registerReturnFormCard) {
+        var returnCardFees = document.getElementById('returnCardReturnFees');
+        if (returnCardFees) {
+            returnCardFees.addEventListener('input', function() { updateReturnSummary('card'); });
+        }
+        registerReturnFormCard.addEventListener('submit', function(e) {
+            e.preventDefault();
+            var orderIdVal = document.getElementById('returnCardOrderId').value;
+            if (!orderIdVal) {
+                showShippingToast('يرجى البحث عن الطلب أولاً.', 'danger');
+                return false;
+            }
+            var formData = new FormData();
+            formData.append('action', 'register_shipping_return');
+            formData.append('company_id', document.getElementById('returnCardCompanyId').value);
+            formData.append('order_id', orderIdVal);
+            formData.append('return_fees', document.getElementById('returnCardReturnFees').value || '0');
+            var submitBtn = document.getElementById('returnCardSubmitBtn');
+            if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>جاري التسجيل...'; }
+            var alertEl = document.getElementById('returnCardAlert');
+            fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: formData })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (submitBtn) { submitBtn.disabled = data.success; submitBtn.innerHTML = '<i class="bi bi-arrow-return-right me-1"></i>تسجيل المرتجع'; }
+                    if (data.success) {
+                        showShippingToast(data.message || 'تم تسجيل المرتجع بنجاح.', 'success');
+                        if (typeof showShippingCollectionResultMessage === 'function') showShippingCollectionResultMessage(data.message || '');
+                        if (data.company_id != null && data.new_balance != null && typeof updateShippingCompanyBalanceInTable === 'function') updateShippingCompanyBalanceInTable(data.company_id, data.new_balance);
+                        closeRegisterReturnCard();
+                    } else {
+                        if (alertEl) { alertEl.className = 'alert alert-danger'; alertEl.textContent = data.error || 'حدث خطأ.'; }
+                        if (submitBtn) submitBtn.disabled = false;
+                    }
+                })
+                .catch(function() {
+                    if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = '<i class="bi bi-arrow-return-right me-1"></i>تسجيل المرتجع'; }
+                    showShippingToast('حدث خطأ في الاتصال.', 'danger');
+                });
+            return false;
+        });
+    }
+
     // معالجة إضافة عميل جديد
     const addLocalCustomerModal = document.getElementById('addLocalCustomerModal');
     const addLocalCustomerForm = document.getElementById('addLocalCustomerForm');
