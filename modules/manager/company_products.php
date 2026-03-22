@@ -4135,9 +4135,6 @@ function initEditExternalButtons() {
             
             return `
                 <div class="product-card">
-                    <div class="product-status" style="background: #10b981;">
-                        <i class="bi bi-cart4 me-1"></i>خارجي
-                    </div>
                     <div class="product-name">${escapeHtml(productName)}</div>
                     <div style="color: #94a3b8; font-size: 13px; margin-bottom: 10px;">منتج خارجي</div>
                     <div class="product-detail-row"><span>الصنف:</span> <span>${escapeHtml(category)}</span></div>

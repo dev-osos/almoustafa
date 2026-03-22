@@ -430,39 +430,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         while (ob_get_level()) { ob_end_clean(); }
         header('Content-Type: application/json; charset=utf-8');
         try {
-            $invoiceNumber = trim($_POST['order_number'] ?? '');
-            $companyId = isset($_POST['company_id']) ? (int)$_POST['company_id'] : 0;
-            if ($invoiceNumber === '' || $companyId <= 0) {
+            $taskIdInput = (int)trim($_POST['order_number'] ?? '');
+            $companyId   = isset($_POST['company_id']) ? (int)$_POST['company_id'] : 0;
+            if ($taskIdInput <= 0 || $companyId <= 0) {
                 echo json_encode(['success' => false, 'error' => 'بيانات غير صالحة.'], JSON_UNESCAPED_UNICODE);
                 exit;
             }
             $hasTaskIdCol = $db->queryOne("SHOW COLUMNS FROM shipping_company_paper_invoices LIKE 'task_id'");
-            $selectCols = "id, shipping_company_id, invoice_number, total_amount";
-            if (!empty($hasTaskIdCol)) $selectCols .= ", task_id";
+            if (empty($hasTaskIdCol)) {
+                echo json_encode(['success' => false, 'error' => 'عمود task_id غير موجود في جدول الفواتير الورقية.'], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
             $paperInv = $db->queryOne(
-                "SELECT $selectCols FROM shipping_company_paper_invoices WHERE invoice_number = ? AND shipping_company_id = ?",
-                [$invoiceNumber, $companyId]
+                "SELECT id, shipping_company_id, invoice_number, total_amount, task_id
+                 FROM shipping_company_paper_invoices
+                 WHERE task_id = ? AND shipping_company_id = ?",
+                [$taskIdInput, $companyId]
             );
             if (!$paperInv) {
-                echo json_encode(['success' => false, 'error' => 'لم يتم العثور على فاتورة ورقية برقم: ' . $invoiceNumber . ' لهذه الشركة.'], JSON_UNESCAPED_UNICODE);
+                echo json_encode(['success' => false, 'error' => 'لم يتم العثور على فاتورة ورقية مرتبطة بالطلب #' . $taskIdInput . ' لهذه الشركة.'], JSON_UNESCAPED_UNICODE);
             } else {
+                // جلب المنتجات من tasks.notes
                 $products = [];
-                $taskId = !empty($hasTaskIdCol) ? (int)($paperInv['task_id'] ?? 0) : 0;
-                if ($taskId > 0) {
-                    $task = $db->queryOne("SELECT notes FROM tasks WHERE id = ?", [$taskId]);
-                    if ($task && !empty($task['notes'])) {
-                        if (preg_match('/\[PRODUCTS_JSON\]:(.+?)(?=\n|$)/', $task['notes'], $pMatches)) {
-                            $decoded = json_decode(trim($pMatches[1]), true);
-                            if (is_array($decoded)) {
-                                foreach ($decoded as $p) {
-                                    if (!empty($p['id'])) {
-                                        $products[] = [
-                                            'id'       => (int)$p['id'],
-                                            'name'     => $p['name'] ?? '',
-                                            'quantity' => (float)($p['quantity'] ?? 0),
-                                            'unit'     => $p['unit'] ?? 'قطعة',
-                                        ];
-                                    }
+                $task = $db->queryOne("SELECT notes FROM tasks WHERE id = ?", [$taskIdInput]);
+                if ($task && !empty($task['notes'])) {
+                    if (preg_match('/\[PRODUCTS_JSON\]:(.+?)(?=\n|$)/', $task['notes'], $pMatches)) {
+                        $decoded = json_decode(trim($pMatches[1]), true);
+                        if (is_array($decoded)) {
+                            foreach ($decoded as $p) {
+                                if (!empty($p['id'])) {
+                                    $products[] = [
+                                        'id'       => (int)$p['id'],
+                                        'name'     => $p['name'] ?? '',
+                                        'quantity' => (float)($p['quantity'] ?? 0),
+                                        'unit'     => $p['unit'] ?? 'قطعة',
+                                    ];
                                 }
                             }
                         }
@@ -472,6 +474,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'success'          => true,
                     'paper_invoice_id' => (int)$paperInv['id'],
                     'total_amount'     => (float)$paperInv['total_amount'],
+                    'invoice_number'   => $paperInv['invoice_number'] ?? '',
                     'products'         => $products,
                 ], JSON_UNESCAPED_UNICODE);
             }
@@ -5635,9 +5638,9 @@ function copyShippingCollectionResult(btn) {
                 <div class="fs-6 fw-bold" id="returnCardCompanyName">-</div>
             </div>
             <div class="mb-3">
-                <label class="form-label" for="returnCardOrderNumber">رقم الفاتورة الورقية <span class="text-danger">*</span></label>
+                <label class="form-label" for="returnCardOrderNumber">رقم الطلب <span class="text-danger">*</span></label>
                 <div class="input-group">
-                    <input type="text" class="form-control" id="returnCardOrderNumber" placeholder="أدخل رقم الفاتورة الورقية" required>
+                    <input type="number" class="form-control" id="returnCardOrderNumber" placeholder="أدخل رقم الطلب (مثال: 480)" min="1" required>
                     <button type="button" class="btn btn-outline-secondary" onclick="lookupOrderForReturn('card')">
                         <i class="bi bi-search"></i>
                     </button>
