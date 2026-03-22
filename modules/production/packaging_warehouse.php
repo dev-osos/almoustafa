@@ -1579,6 +1579,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $statusValue = $_POST['status'] ?? 'active';
             $weightRaw = $_POST['weight'] ?? '';
             $weightUnitValue = trim((string)($_POST['weight_unit'] ?? ''));
+            $quantityRaw = $_POST['quantity'] ?? null;
+            $newQuantity = ($quantityRaw !== null && is_numeric($quantityRaw)) ? max(0.0, round((float)$quantityRaw, 4)) : null;
             $weightValue = null;
             if ($weightRaw !== '' && is_numeric($weightRaw) && floatval($weightRaw) > 0) {
                 $weightValue = round(floatval($weightRaw), 3);
@@ -1610,21 +1612,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             throw new Exception('لم يتم العثور على أداة التعبئة المطلوبة.');
                         }
 
+                        $pmUpdateParams = [
+                            $name,
+                            $typeValue !== '' ? $typeValue : null,
+                            $unitValue !== '' ? $unitValue : null,
+                            $materialCode !== '' ? $materialCode : null,
+                            $specificationsValue !== '' ? $specificationsValue : null,
+                            $weightValue,
+                            $weightUnitValue !== '' ? $weightUnitValue : null,
+                            $statusValue,
+                        ];
+                        $pmQuantitySql = '';
+                        if ($newQuantity !== null) {
+                            $pmQuantitySql = ', quantity = ?';
+                            $pmUpdateParams[] = $newQuantity;
+                        }
+                        $pmUpdateParams[] = $materialId;
                         $db->execute(
                             "UPDATE packaging_materials
-                             SET name = ?, type = ?, unit = ?, material_id = ?, specifications = ?, weight = ?, weight_unit = ?, status = ?, updated_at = NOW()
+                             SET name = ?, type = ?, unit = ?, material_id = ?, specifications = ?, weight = ?, weight_unit = ?, status = ?{$pmQuantitySql}, updated_at = NOW()
                              WHERE id = ?",
-                            [
-                                $name,
-                                $typeValue !== '' ? $typeValue : null,
-                                $unitValue !== '' ? $unitValue : null,
-                                $materialCode !== '' ? $materialCode : null,
-                                $specificationsValue !== '' ? $specificationsValue : null,
-                                $weightValue,
-                                $weightUnitValue !== '' ? $weightUnitValue : null,
-                                $statusValue,
-                                $materialId
-                            ]
+                            $pmUpdateParams
                         );
                     } else {
                         $original = $db->queryOne(
@@ -1660,6 +1668,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         if (array_key_exists('status', $original)) {
                             $updateParts[] = "status = ?";
                             $updateParams[] = $statusValue;
+                        }
+
+                        if ($newQuantity !== null && array_key_exists('quantity', $original)) {
+                            $updateParts[] = "quantity = ?";
+                            $updateParams[] = $newQuantity;
                         }
 
                         if (array_key_exists('updated_at', $original)) {
@@ -3578,30 +3591,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     <input type="text" class="form-control" name="type" id="edit_material_type" maxlength="100">
                 </div>
                 <div class="col-md-6">
-                    <label class="form-label">الوحدة</label>
-                    <input type="text" class="form-control" name="unit" id="edit_material_unit" maxlength="50">
+                    <label class="form-label">الكمية</label>
+                    <input type="number" class="form-control" name="quantity" id="edit_material_quantity_display" step="0.001" min="0" placeholder="0">
                 </div>
             </div>
-
-            <div class="row g-3 mt-0">
-                <div class="col-md-6">
-                    <label class="form-label">الكود الداخلي</label>
-                    <input type="text" class="form-control" name="material_code" id="edit_material_code" maxlength="100">
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label">الحالة</label>
-                    <select class="form-select" name="status" id="edit_material_status">
-                        <option value="active">نشطة</option>
-                        <option value="inactive">غير نشطة</option>
-                    </select>
-                </div>
-            </div>
-
-            <div class="mb-3 mt-3">
-                <label class="form-label">المواصفات / الوصف</label>
-                <textarea class="form-control" name="specifications" id="edit_material_specifications" rows="3" maxlength="500"></textarea>
-            </div>
-
             <div class="row g-3 mt-0">
                 <div class="col-md-6">
                     <label class="form-label">الوزن</label>
@@ -3617,12 +3610,6 @@ document.addEventListener('DOMContentLoaded', function() {
                         <option value="لتر">لتر</option>
                     </select>
                 </div>
-            </div>
-
-            <div class="mb-3 mt-3">
-                <label class="form-label">الكمية الحالية (للقراءة فقط)</label>
-                <div class="form-control-plaintext fw-semibold" id="edit_material_quantity_display">-</div>
-                <small class="text-muted">لتعديل الكمية يرجى استخدام أزرار "إضافة كمية" أو "تسجيل تالف".</small>
             </div>
 
             <div class="d-flex gap-2 flex-wrap">
@@ -4641,14 +4628,7 @@ function openEditModalFromData(material) {
 
     if (quantityDisplay) {
         const numericQuantity = parseFloat(material.quantity ?? 0);
-        if (Number.isFinite(numericQuantity)) {
-            quantityDisplay.textContent = numericQuantity.toLocaleString('ar-EG', {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2
-            });
-        } else {
-            quantityDisplay.textContent = '-';
-        }
+        quantityDisplay.value = Number.isFinite(numericQuantity) ? numericQuantity : 0;
     }
 
     card.style.display = 'block';
