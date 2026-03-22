@@ -2746,7 +2746,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             <th style="width: 70px; padding: 0.5rem 0.25rem;">#</th>
                             <th style="padding: 0.5rem 0.25rem;">اسم الأداة</th>
                             <th style="width: 100px; padding: 0.5rem 0.25rem;">الفئة</th>
-                            <th style="width: 120px; padding: 0.5rem 0.25rem;">الكمية المتاحة</th>
+                            <th style="width: 120px; padding: 0.5rem 0.25rem;">عدد القطع / الوزن</th>
                             <th style="width: 80px; padding: 0.5rem 0.25rem;">الإجراءات</th>
                         </tr>
                     </thead>
@@ -2758,11 +2758,8 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <td style="padding: 0.4rem 0.25rem; font-size: 0.75rem; color: #0dcaf0; font-weight: 600;"><?php echo htmlspecialchars($material['material_id'] ?? ''); ?></td>
                                 <td style="padding: 0.4rem 0.25rem; line-height: 1.3;">
                                     <div style="font-weight: 600; font-size: 0.875rem;"><?php echo htmlspecialchars($material['name']); ?></div>
-                                    <?php if (!empty($material['specifications'])): ?>
-                                        <div style="font-size: 0.75rem; color: #6c757d; margin-top: 2px;"><?php echo htmlspecialchars($material['specifications']); ?></div>
-                                    <?php endif; ?>
                                     <?php if (!empty($material['weight']) && floatval($material['weight']) > 0): ?>
-                                        <div style="font-size: 0.75rem; color: #6f42c1; margin-top: 2px;">
+                                        <div style="font-size: 0.75rem; color: #4288c1; margin-top: 2px;">
                                             <i class="bi bi-box-seam"></i>
                                             <?php echo rtrim(rtrim(number_format(floatval($material['weight']), 3), '0'), '.'); ?>
                                             <?php echo htmlspecialchars($material['weight_unit'] ?? ''); ?>
@@ -2788,11 +2785,16 @@ document.addEventListener('DOMContentLoaded', function() {
                                         data-value="<?php echo number_format($materialQuantity, 4, '.', ''); ?>"
                                         data-unit-label="<?php echo htmlspecialchars($material['unit'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
                                         data-append-unit="0">
-                                        <?php echo number_format($materialQuantity, 2); ?>
+                                        <?php
+                                            $unit = $material['unit'] ?? '';
+                                            if ($unit === 'وزن') {
+                                                $wu = htmlspecialchars($material['weight_unit'] ?? '');
+                                                echo number_format($materialQuantity, 3) . ($wu ? ' ' . $wu : '');
+                                            } else {
+                                                echo number_format($materialQuantity, 0) . ' قطعة';
+                                            }
+                                        ?>
                                     </div>
-                                    <?php if (!empty($material['unit'])): ?>
-                                        <div style="font-size: 0.7rem; color: #6c757d;"><?php echo htmlspecialchars($material['unit']); ?></div>
-                                    <?php endif; ?>
                                 </td>
                                 <td style="padding: 0.4rem 0.25rem;">
                                     <div class="btn-group btn-group-sm">
