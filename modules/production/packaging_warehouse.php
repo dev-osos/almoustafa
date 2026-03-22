@@ -3095,7 +3095,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                        min="0"
                                        value="0"
                                        placeholder="0.00">
-                                <span class="input-group-text">قطعة</span>
+                                <span class="input-group-text" id="addToolUnitLabel">قطعة</span>
                             </div>
                             <small class="text-muted">يمكن تعديل الكمية لاحقاً من خلال زر "إضافة كمية".</small>
                         </div>
@@ -3578,6 +3578,7 @@ document.addEventListener('DOMContentLoaded', function() {
 <script>
 function toggleWeightFields(value) {
     const fields = document.getElementById('addToolWeightFields');
+    const unitLabel = document.getElementById('addToolUnitLabel');
     if (!fields) return;
     if (value === 'وزن') {
         fields.style.display = '';
@@ -3585,6 +3586,7 @@ function toggleWeightFields(value) {
         fields.style.display = 'none';
         fields.querySelectorAll('input, select').forEach(el => el.value = '');
     }
+    if (unitLabel) unitLabel.textContent = value;
 }
 
 const aliasApiUrl = '<?php echo getRelativeUrl('api/update_packaging_alias.php'); ?>';
