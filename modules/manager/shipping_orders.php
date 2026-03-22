@@ -4730,6 +4730,7 @@ function copyShippingCollectionResult(btn) {
                 <thead class="table-dark" style="position: sticky; top: 0; z-index: 2;">
                     <tr>
                         <th class="text-nowrap">رقم الشحنة</th>
+                        <th class="text-nowrap">الرقم المرجعي</th>
                         <th class="text-nowrap">التاريخ</th>
                         <th class="text-nowrap">المستلم</th>
                         <th class="text-nowrap">المنطقة</th>
@@ -4739,7 +4740,7 @@ function copyShippingCollectionResult(btn) {
                     </tr>
                 </thead>
                 <tbody id="tgShipmentsBody">
-                    <tr><td colspan="7" class="text-center text-muted py-4">
+                    <tr><td colspan="8" class="text-center text-muted py-4">
                         <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
                         جاري تحميل الشحنات...
                     </td></tr>
@@ -4844,13 +4845,14 @@ function copyShippingCollectionResult(btn) {
 
     function tgBuildRows(shipments) {
         if (!shipments || !shipments.length) {
-            return '<tr><td colspan="7" class="text-center text-muted py-4"><i class="bi bi-inbox fs-4 d-block mb-2"></i>لا توجد شحنات</td></tr>';
+            return '<tr><td colspan="8" class="text-center text-muted py-4"><i class="bi bi-inbox fs-4 d-block mb-2"></i>لا توجد شحنات</td></tr>';
         }
         return shipments.map(function (s) {
             var sc = (s.status && s.status.code) ? s.status.code : '';
             var sn = (s.status && s.status.name) ? s.status.name : sc;
             return '<tr>' +
                 '<td class="fw-semibold text-nowrap"><span class="tg-copy-code" title="انقر للنسخ" style="cursor:pointer">' + tgEsc(s.code) + '</span></td>' +
+                '<td class="text-muted text-nowrap">' + tgEsc(s.refNumber) + '</td>' +
                 '<td class="text-muted text-nowrap">' + tgFmtDate(s.date) + '</td>' +
                 '<td>' + tgEsc(s.recipientName) + '</td>' +
                 '<td class="text-nowrap">' + tgEsc(s.recipientZone && s.recipientZone.name) + '</td>' +
@@ -4918,7 +4920,7 @@ function copyShippingCollectionResult(btn) {
             if (wrapper) wrapper.style.opacity = '1';
 
             if (!data.success) {
-                if (body) body.innerHTML = '<tr><td colspan="7" class="text-center text-danger py-3"><i class="bi bi-exclamation-triangle-fill me-1"></i>' + (data.error || 'خطأ') + '</td></tr>';
+                if (body) body.innerHTML = '<tr><td colspan="8" class="text-center text-danger py-3"><i class="bi bi-exclamation-triangle-fill me-1"></i>' + (data.error || 'خطأ') + '</td></tr>';
                 return;
             }
 
@@ -4947,7 +4949,7 @@ function copyShippingCollectionResult(btn) {
         .catch(function () {
             if (loading) loading.classList.add('d-none');
             if (wrapper) wrapper.style.opacity = '1';
-            if (body) body.innerHTML = '<tr><td colspan="7" class="text-center text-danger py-3">حدث خطأ في الاتصال</td></tr>';
+            if (body) body.innerHTML = '<tr><td colspan="8" class="text-center text-danger py-3">حدث خطأ في الاتصال</td></tr>';
         });
     }
 
@@ -5011,7 +5013,7 @@ function copyShippingCollectionResult(btn) {
 
             if (!data.success) {
                 if (status) { status.classList.remove('d-none'); status.textContent = 'خطأ: ' + (data.error || 'فشل البحث'); }
-                if (body) body.innerHTML = '<tr><td colspan="7" class="text-center text-danger py-3"><i class="bi bi-exclamation-triangle-fill me-1"></i>' + (data.error || 'فشل البحث') + '</td></tr>';
+                if (body) body.innerHTML = '<tr><td colspan="8" class="text-center text-danger py-3"><i class="bi bi-exclamation-triangle-fill me-1"></i>' + (data.error || 'فشل البحث') + '</td></tr>';
                 return;
             }
 
