@@ -6005,8 +6005,10 @@ function showRegisterReturnByIdName(companyId, companyName, balance) {
     document.getElementById('returnCardOrderNumber').value = '';
     document.getElementById('returnCardTotalAmount').value = '';
     document.getElementById('returnCardReturnFees').value = '0';
-    document.getElementById('returnCardSubmitBtn').disabled = true;
-    document.getElementById('returnCardSummary').classList.add('d-none');
+    var submitBtnEl = document.getElementById('returnCardSubmitBtn');
+    if (submitBtnEl) submitBtnEl.disabled = true;
+    var summaryEl = document.getElementById('returnCardSummary');
+    if (summaryEl) summaryEl.classList.add('d-none');
     var alertEl = document.getElementById('returnCardAlert');
     if (alertEl) { alertEl.className = 'alert d-none'; alertEl.textContent = ''; }
     var errEl = document.getElementById('returnCardOrderError');
