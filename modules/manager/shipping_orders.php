@@ -432,6 +432,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $orderNumber = trim($_POST['order_number'] ?? '');
             $companyId = isset($_POST['company_id']) ? (int)$_POST['company_id'] : 0;
+            // الأرقام تُخزَّن بشكل 5 خانات مع أصفار (مثل 00480)
+            if (ctype_digit($orderNumber) && strlen($orderNumber) < 5) {
+                $orderNumber = str_pad($orderNumber, 5, '0', STR_PAD_LEFT);
+            }
             if ($orderNumber === '' || $companyId <= 0) {
                 echo json_encode(['success' => false, 'error' => 'بيانات غير صالحة.'], JSON_UNESCAPED_UNICODE);
                 exit;
