@@ -1126,6 +1126,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $materialId = intval($_POST['material_id'] ?? 0);
         $useQuantity = isset($_POST['use_quantity']) ? max(0.0, (float)$_POST['use_quantity']) : 1.0;
         if ($useQuantity <= 0) $useQuantity = 1.0;
+        $deductFromWeight = intval($_POST['deduct_from_weight'] ?? 0) === 1;
 
         if ($materialId <= 0) {
             echo json_encode([
@@ -1166,7 +1167,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             $isWeightBased = ($material['unit'] ?? '') === 'وزن';
-            $quantityBefore = $isWeightBased
+            $useWeightField = $isWeightBased || $deductFromWeight;
+            $quantityBefore = $useWeightField
                 ? (float)($material['weight'] ?? 0)
                 : (float)($material['quantity'] ?? 0);
 
@@ -1178,7 +1180,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($usePackagingTable) {
                 $db->execute(
-                    $isWeightBased
+                    $useWeightField
                         ? "UPDATE packaging_materials SET weight = ?, updated_at = NOW() WHERE id = ?"
                         : "UPDATE packaging_materials SET quantity = ?, updated_at = NOW() WHERE id = ?",
                     [$quantityAfter, $materialId]
@@ -1204,7 +1206,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $quantityBefore,
                             $useQuantity,
                             $quantityAfter,
-                            $material['unit'] ?? 'وحدة',
+                            $useWeightField ? ($material['weight_unit'] ?? 'وزن') : ($material['unit'] ?? 'وحدة'),
                             $currentUser['id'] ?? null
                         ]
                     );
@@ -2800,19 +2802,23 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <?php
                                     $isWeightUnit = ($material['unit'] ?? '') === 'وزن';
                                     $wu = trim($material['weight_unit'] ?? '');
+                                    $hasWeight = !$isWeightUnit && floatval($material['weight'] ?? 0) > 0;
                                     $stockValue = $isWeightUnit
                                         ? (float)($material['weight'] ?? 0)
                                         : (float)($material['quantity'] ?? 0);
-                                    $useButtonDisabled = $stockValue <= 0;
+                                    $displayValue = $hasWeight
+                                        ? (float)($material['weight'] ?? 0)
+                                        : $stockValue;
+                                    $useButtonDisabled = $displayValue <= 0;
                                     $quantityElementId = 'material-quantity-' . $material['id'];
                                 ?>
                                 <td style="padding: 0.4rem 0.25rem;">
                                     <div
                                         id="<?php echo htmlspecialchars($quantityElementId, ENT_QUOTES, 'UTF-8'); ?>"
                                         style="font-weight: 600; font-size: 0.875rem;"
-                                        class="text-<?php echo $stockValue > 0 ? 'success' : 'danger'; ?>"
-                                        data-value="<?php echo number_format($stockValue, 4, '.', ''); ?>"
-                                        data-unit-label="<?php echo htmlspecialchars($material['unit'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                        class="text-<?php echo $displayValue > 0 ? 'success' : 'danger'; ?>"
+                                        data-value="<?php echo number_format($displayValue, 4, '.', ''); ?>"
+                                        data-unit-label="<?php echo htmlspecialchars($hasWeight ? ($wu ?: '') : ($material['unit'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
                                         data-append-unit="0">
                                         <?php if ($isWeightUnit): ?>
                                             <?php echo number_format($stockValue, 3) . ($wu ? ' ' . htmlspecialchars($wu) : ''); ?>
@@ -2832,11 +2838,12 @@ document.addEventListener('DOMContentLoaded', function() {
                                             data-name="<?php echo htmlspecialchars($material['name'], ENT_QUOTES, 'UTF-8'); ?>"
                                             data-unit="<?php echo htmlspecialchars(!empty($material['unit']) ? $material['unit'] : 'وحدة', ENT_QUOTES, 'UTF-8'); ?>"
                                             data-weight-unit="<?php echo htmlspecialchars($material['weight_unit'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                            data-material-weight="<?php echo number_format(floatval($material['weight'] ?? 0), 4, '.', ''); ?>"
                                             data-quantity="<?php echo number_format($stockValue, 4, '.', ''); ?>"
                                             data-quantity-target="<?php echo htmlspecialchars($quantityElementId, ENT_QUOTES, 'UTF-8'); ?>"
                                             data-use-quantity="1"
                                             onclick="usePackagingMaterial(this)"
-                                            title="<?php echo ($material['unit'] ?? '') === 'وزن' ? 'استخدام وزن محدد' : 'استخدام وحدة واحدة'; ?>"
+                                            title="<?php echo ($material['unit'] ?? '') === 'وزن' ? 'استخدام وزن محدد' : (floatval($material['weight'] ?? 0) > 0 ? 'استخدام وزن محدد' : 'استخدام وحدة واحدة'); ?>"
                                             style="padding: 0.2rem 0.4rem; font-size: 0.75rem;"
                                             <?php echo $useButtonDisabled ? ' disabled' : ''; ?>
                                             aria-label="استخدام الأداة">
@@ -2923,10 +2930,14 @@ document.addEventListener('DOMContentLoaded', function() {
                             <?php
                                 $isWeightUnitM = ($material['unit'] ?? '') === 'وزن';
                                 $wuM = trim($material['weight_unit'] ?? '');
+                                $hasWeightM = !$isWeightUnitM && floatval($material['weight'] ?? 0) > 0;
                                 $mobileStockValue = $isWeightUnitM
                                     ? (float)($material['weight'] ?? 0)
                                     : (float)($material['quantity'] ?? 0);
-                                $useButtonDisabled = $mobileStockValue <= 0;
+                                $mobileDisplayValue = $hasWeightM
+                                    ? (float)($material['weight'] ?? 0)
+                                    : $mobileStockValue;
+                                $useButtonDisabled = $mobileDisplayValue <= 0;
                                 $mobileQuantityElementId = 'material-quantity-' . $material['id'] . '-mobile';
                             ?>
                             <div class="row g-2 mb-2">
@@ -2938,9 +2949,9 @@ document.addEventListener('DOMContentLoaded', function() {
                                     <small class="text-muted d-block">الكمية:</small>
                                     <strong
                                         id="<?php echo htmlspecialchars($mobileQuantityElementId, ENT_QUOTES, 'UTF-8'); ?>"
-                                        class="text-<?php echo $mobileStockValue > 0 ? 'success' : 'danger'; ?>"
-                                        data-value="<?php echo number_format($mobileStockValue, 4, '.', ''); ?>"
-                                        data-unit-label="<?php echo htmlspecialchars($material['unit'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                        class="text-<?php echo $mobileDisplayValue > 0 ? 'success' : 'danger'; ?>"
+                                        data-value="<?php echo number_format($mobileDisplayValue, 4, '.', ''); ?>"
+                                        data-unit-label="<?php echo htmlspecialchars($hasWeightM ? ($wuM ?: '') : ($material['unit'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
                                         data-append-unit="1">
                                         <?php if ($isWeightUnitM): ?>
                                             <?php echo number_format($mobileStockValue, 3) . ($wuM ? ' ' . htmlspecialchars($wuM) : ''); ?>
@@ -2961,6 +2972,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                     data-name="<?php echo htmlspecialchars($material['name'], ENT_QUOTES, 'UTF-8'); ?>"
                                     data-unit="<?php echo htmlspecialchars(!empty($material['unit']) ? $material['unit'] : 'وحدة', ENT_QUOTES, 'UTF-8'); ?>"
                                     data-weight-unit="<?php echo htmlspecialchars($material['weight_unit'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                    data-material-weight="<?php echo number_format(floatval($material['weight'] ?? 0), 4, '.', ''); ?>"
                                     data-quantity="<?php echo number_format($mobileStockValue, 4, '.', ''); ?>"
                                     data-quantity-target="<?php echo htmlspecialchars($mobileQuantityElementId, ENT_QUOTES, 'UTF-8'); ?>"
                                     data-use-quantity="1"
@@ -3275,6 +3287,51 @@ document.addEventListener('DOMContentLoaded', function() {
                     </button>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal استخدام وزن -->
+<div class="modal fade" id="useWeightModal" tabindex="-1" aria-labelledby="useWeightModalLabel" aria-modal="true" role="dialog">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="useWeightModalLabel"><i class="bi bi-check2-circle me-2"></i>استخدام وزن</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label fw-bold">أداة التعبئة</label>
+                    <div class="form-control-plaintext fw-semibold" id="useWeightMaterialName">-</div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">الوزن المتاح</label>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge bg-success fs-6" id="useWeightAvailable">0</span>
+                        <span class="text-muted small" id="useWeightUnitLabel"></span>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">الوزن المراد استخدامه <span class="text-danger">*</span></label>
+                    <div class="input-group">
+                        <input type="number"
+                               id="useWeightInput"
+                               class="form-control form-control-lg"
+                               step="0.001"
+                               min="0.001"
+                               placeholder="0.000"
+                               autocomplete="off">
+                        <span class="input-group-text" id="useWeightInputUnit"></span>
+                    </div>
+                    <small class="text-muted">سيتم خصم هذا الوزن من المتاح حالياً.</small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                <button type="button" class="btn btn-primary" id="useWeightConfirmBtn">
+                    <i class="bi bi-check2-circle me-2"></i>تأكيد الاستخدام
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -3822,6 +3879,65 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 });
 
+function _promptUseWeightModal(trigger, materialName, availableWeight, weightUnit) {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('useWeightModal');
+        if (!modal) { resolve(null); return; }
+
+        const wLabel = weightUnit || '';
+        document.getElementById('useWeightMaterialName').textContent = materialName;
+        document.getElementById('useWeightAvailable').textContent =
+            availableWeight.toLocaleString('ar-EG', {minimumFractionDigits: 0, maximumFractionDigits: 3}) + (wLabel ? ' ' + wLabel : '');
+        document.getElementById('useWeightUnitLabel').textContent = '';
+        document.getElementById('useWeightInputUnit').textContent = wLabel;
+
+        const input = document.getElementById('useWeightInput');
+        input.value = '';
+        input.max = availableWeight;
+
+        const bsModal = bootstrap.Modal.getOrCreateInstance(modal);
+
+        const confirmBtn = document.getElementById('useWeightConfirmBtn');
+        const newConfirmBtn = confirmBtn.cloneNode(true);
+        confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+
+        let resolved = false;
+
+        const doResolve = (val) => {
+            if (resolved) return;
+            resolved = true;
+            bsModal.hide();
+            resolve(val);
+        };
+
+        newConfirmBtn.addEventListener('click', () => {
+            const val = parseFloat(input.value);
+            if (isNaN(val) || val <= 0) {
+                input.classList.add('is-invalid');
+                input.focus();
+                return;
+            }
+            if (val > availableWeight) {
+                input.classList.add('is-invalid');
+                alert(`الوزن المدخل (${val}) أكبر من المتاح (${availableWeight}).`);
+                input.focus();
+                return;
+            }
+            input.classList.remove('is-invalid');
+            doResolve(val);
+        });
+
+        modal.addEventListener('hidden.bs.modal', () => { if (!resolved) resolve(null); }, { once: true });
+
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') newConfirmBtn.click();
+        });
+
+        bsModal.show();
+        setTimeout(() => input.focus(), 300);
+    });
+}
+
 async function usePackagingMaterial(trigger) {
     if (!trigger) {
         return;
@@ -3837,9 +3953,13 @@ async function usePackagingMaterial(trigger) {
     const unitLabel = (trigger.dataset.unit || 'وحدة').trim() || 'وحدة';
     const weightUnit = (trigger.dataset.weightUnit || '').trim();
     const availableQty = parseFloat(trigger.dataset.quantity || '0');
+    const materialWeight = parseFloat(trigger.dataset.materialWeight || '0');
     const isWeight = unitLabel === 'وزن';
+    const hasWeight = !isWeight && materialWeight > 0;
 
     let useQuantity;
+    let deductFromWeight = false;
+
     if (isWeight) {
         const weightLabel = weightUnit || 'وحدة الوزن';
         const input = window.prompt(
@@ -3855,6 +3975,11 @@ async function usePackagingMaterial(trigger) {
             alert(`الكمية المدخلة (${useQuantity}) أكبر من المتاح (${availableQty}).`);
             return;
         }
+    } else if (hasWeight) {
+        // أداة لها وزن مدخل — اطلب الوزن المراد خصمه عبر modal
+        useQuantity = await _promptUseWeightModal(trigger, materialName, materialWeight, weightUnit);
+        if (useQuantity === null) return;
+        deductFromWeight = true;
     } else {
         useQuantity = parseFloat(trigger.dataset.useQuantity || '1') || 1;
         if (!window.confirm(`سيتم خصم قطعة واحدة من "${materialName}". هل تريد المتابعة؟`)) {
@@ -3881,7 +4006,8 @@ async function usePackagingMaterial(trigger) {
             body: new URLSearchParams({
                 action: 'use_packaging_material',
                 material_id: materialId,
-                use_quantity: useQuantity
+                use_quantity: useQuantity,
+                deduct_from_weight: deductFromWeight ? '1' : '0'
             })
         });
 
