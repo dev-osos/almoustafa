@@ -52,7 +52,7 @@ try {
     }
     
     // إضافة الأصناف الافتراضية إذا لم تكن موجودة
-    $defaultCategories = ['عسل', 'زيت زيتون', 'كريمات', 'زيوت', 'اخري'];
+    $defaultCategories = ['عسل', 'زيت زيتون', 'كريمات', 'زيوت', 'تمور', 'اخري'];
     foreach ($defaultCategories as $catName) {
         try {
             $existing = $db->queryOne("SELECT id FROM product_categories WHERE name = ?", [$catName]);
@@ -80,7 +80,7 @@ try {
         
         // إذا كانت القائمة فارغة، إضافة الأصناف الافتراضية
         if (empty($productCategories)) {
-            $defaultCategories = ['عسل', 'زيت زيتون', 'كريمات', 'زيوت', 'اخري'];
+            $defaultCategories = ['عسل', 'زيت زيتون', 'كريمات', 'زيوت', 'تمور', 'اخري'];
             foreach ($defaultCategories as $catName) {
                 try {
                     $db->execute(
@@ -109,6 +109,7 @@ if (empty($productCategories)) {
         ['id' => 2, 'name' => 'زيت زيتون'],
         ['id' => 3, 'name' => 'كريمات'],
         ['id' => 4, 'name' => 'زيوت'],
+        ['id' => 6, 'name' => 'تمور'],
         ['id' => 5, 'name' => 'اخري']
     ];
 }
@@ -1518,6 +1519,7 @@ foreach ($factoryProducts as $product) {
                                         <option value="2">زيت زيتون</option>
                                         <option value="3">كريمات</option>
                                         <option value="4">زيوت</option>
+                                        <option value="6">تمور</option>
                                         <option value="5">اخري</option>
                                     <?php endif; ?>
                                 </select>
@@ -1587,6 +1589,7 @@ foreach ($factoryProducts as $product) {
                                 <option value="زيت زيتون">زيت زيتون</option>
                                 <option value="كريمات">كريمات</option>
                                 <option value="زيوت">زيوت</option>
+                                <option value="تمور">تمور</option>
                                 <option value="اخري">اخري</option>
                             <?php endif; ?>
                         </select>
@@ -1987,6 +1990,7 @@ foreach ($factoryProducts as $product) {
                                 <option value="زيت زيتون">زيت زيتون</option>
                                 <option value="كريمات">كريمات</option>
                                 <option value="زيوت">زيوت</option>
+                                <option value="تمور">تمور</option>
                                 <option value="اخري">اخري</option>
                             <?php endif; ?>
                         </select>
@@ -2244,6 +2248,7 @@ foreach ($factoryProducts as $product) {
                                 <option value="1">عسل</option>
                                 <option value="2">زيت زيتون</option>
                                 <option value="4">زيوت</option>
+                                <option value="6">تمور</option>
                                 <option value="5">اخري</option>
                             <?php endif; ?>
                         </select>
