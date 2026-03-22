@@ -437,11 +437,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit;
             }
             $returnOrder = $db->queryOne(
-                "SELECT id, order_number, total_amount, status FROM shipping_company_orders WHERE order_number = ? AND shipping_company_id = ?",
-                [$orderNumber, $companyId]
+                "SELECT sco.id, sco.order_number, sco.total_amount, sco.status, sco.shipping_company_id, sc.name AS company_name
+                 FROM shipping_company_orders sco
+                 LEFT JOIN shipping_companies sc ON sco.shipping_company_id = sc.id
+                 WHERE sco.order_number = ?",
+                [$orderNumber]
             );
             if (!$returnOrder) {
-                echo json_encode(['success' => false, 'error' => 'لم يتم العثور على الطلب. تأكد من رقم الطلب وأن الطلب يخص هذه الشركة.'], JSON_UNESCAPED_UNICODE);
+                echo json_encode(['success' => false, 'error' => 'لم يتم العثور على طلب برقم: ' . $orderNumber], JSON_UNESCAPED_UNICODE);
+            } elseif ((int)$returnOrder['shipping_company_id'] !== $companyId) {
+                echo json_encode(['success' => false, 'error' => 'هذا الطلب يخص شركة: ' . ($returnOrder['company_name'] ?? 'غير معروفة') . ' (ID=' . $returnOrder['shipping_company_id'] . ') وليس الشركة المحددة (ID=' . $companyId . ')'], JSON_UNESCAPED_UNICODE);
             } else {
                 echo json_encode([
                     'success' => true,

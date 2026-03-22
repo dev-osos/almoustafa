@@ -5948,83 +5948,50 @@ function closeApproveInvoiceCard() {
 }
 
 /**
- * بناء جدول ملخص المخزون من بيانات الـ API
+ * بناء جدول ملخص المخزون من بيانات الـ API (flat array per product)
  */
 function buildInventoryPreviewTable(data) {
-    var html = '';
-    var hasAny = false;
+    if (!Array.isArray(data) || data.length === 0) {
+        return '<div class="text-muted small text-center py-1">لا توجد بيانات مخزون مرتبطة بهذا الأوردر</div>';
+    }
 
     function fmtQty(n) { return (Math.round(parseFloat(n) * 100) / 100).toLocaleString('ar-EG'); }
     function suffBadge(sufficient) {
-        if (sufficient === null || sufficient === undefined) return '<span class="badge bg-secondary">غير محدد</span>';
-        return sufficient
-            ? '<span class="badge bg-success">كافية</span>'
-            : '<span class="badge bg-danger">غير كافية</span>';
+        if (sufficient === null || sufficient === undefined) return '<span class="badge bg-secondary">غير موجود</span>';
+        return sufficient ? '<span class="badge bg-success">كافية</span>' : '<span class="badge bg-danger">غير كافية</span>';
     }
-
-    // ===== منتجات الشركة =====
-    if (data.company_products && data.company_products.length > 0) {
-        hasAny = true;
-        html += '<div class="mb-2"><div class="d-flex align-items-center gap-1 mb-1"><i class="bi bi-shop text-primary"></i><strong class="small">منتجات الشركة</strong></div>' +
+    function renderSection(rows, icon, iconColor, title) {
+        if (!rows.length) return '';
+        var s = '<div class="mb-2"><div class="d-flex align-items-center gap-1 mb-1"><i class="bi ' + icon + ' text-' + iconColor + '"></i><strong class="small">' + title + '</strong></div>' +
             '<table class="table table-sm table-bordered mb-0" style="font-size:0.8rem;">' +
             '<thead class="table-light"><tr><th>المنتج</th><th class="text-center">المطلوب</th><th class="text-center">المتاح</th><th class="text-center">الحالة</th></tr></thead><tbody>';
-        data.company_products.forEach(function(p) {
-            var rowCls = (p.sufficient === false) ? 'table-danger' : '';
-            var availTxtP = (p.available === null || p.available === undefined) ? '—' : fmtQty(p.available) + ' ' + (p.unit || '');
-            html += '<tr class="' + rowCls + '">' +
-                '<td>' + (p.name || '—') + '</td>' +
-                '<td class="text-center">' + fmtQty(p.needed) + ' ' + (p.unit || '') + '</td>' +
-                '<td class="text-center">' + availTxtP + '</td>' +
-                '<td class="text-center">' + suffBadge(p.sufficient) + '</td>' +
-                '</tr>';
-        });
-        html += '</tbody></table></div>';
-    }
-
-    // ===== مخزن الخامات =====
-    if (data.raw_materials && data.raw_materials.length > 0) {
-        hasAny = true;
-        html += '<div class="mb-2"><div class="d-flex align-items-center gap-1 mb-1"><i class="bi bi-boxes text-warning"></i><strong class="small">مخزن الخامات</strong></div>' +
-            '<table class="table table-sm table-bordered mb-0" style="font-size:0.8rem;">' +
-            '<thead class="table-light"><tr><th>الخامة</th><th class="text-center">المطلوب</th><th class="text-center">المتاح</th><th class="text-center">الحالة</th></tr></thead><tbody>';
-        data.raw_materials.forEach(function(r) {
+        rows.forEach(function(r) {
             var rowCls = (r.sufficient === false) ? 'table-danger' : '';
             var availTxt = (r.available === null || r.available === undefined) ? '—' : fmtQty(r.available) + ' ' + (r.unit || '');
-            var suffTxt  = (r.available === null || r.available === undefined) ? '<span class="badge bg-secondary">لا يُتتبع</span>' : suffBadge(r.sufficient);
-            html += '<tr class="' + rowCls + '">' +
+            s += '<tr class="' + rowCls + '">' +
                 '<td>' + (r.name || '—') + '</td>' +
                 '<td class="text-center">' + fmtQty(r.needed) + ' ' + (r.unit || '') + '</td>' +
                 '<td class="text-center">' + availTxt + '</td>' +
-                '<td class="text-center">' + suffTxt + '</td>' +
-                '</tr>';
+                '<td class="text-center">' + suffBadge(r.sufficient) + '</td></tr>';
         });
-        html += '</tbody></table></div>';
+        return s + '</tbody></table></div>';
     }
 
-    // ===== مخزن أدوات التعبئة =====
-    if (data.packaging && data.packaging.length > 0) {
-        hasAny = true;
-        html += '<div class="mb-2"><div class="d-flex align-items-center gap-1 mb-1"><i class="bi bi-archive text-info"></i><strong class="small">مخزن أدوات التعبئة</strong></div>' +
-            '<table class="table table-sm table-bordered mb-0" style="font-size:0.8rem;">' +
-            '<thead class="table-light"><tr><th>الأداة</th><th class="text-center">المطلوب</th><th class="text-center">المتاح</th><th class="text-center">الحالة</th></tr></thead><tbody>';
-        data.packaging.forEach(function(pk) {
-            var rowCls = (pk.sufficient === false) ? 'table-danger' : '';
-            var availTxt = (pk.available === null || pk.available === undefined) ? '—' : fmtQty(pk.available) + ' قطعة';
-            var suffTxt  = (pk.available === null || pk.available === undefined) ? '<span class="badge bg-secondary">لا يُتتبع</span>' : suffBadge(pk.sufficient);
-            html += '<tr class="' + rowCls + '">' +
-                '<td>' + (pk.name || '—') + '</td>' +
-                '<td class="text-center">' + fmtQty(pk.needed) + ' قطعة</td>' +
-                '<td class="text-center">' + availTxt + '</td>' +
-                '<td class="text-center">' + suffTxt + '</td>' +
-                '</tr>';
-        });
-        html += '</tbody></table></div>';
-    }
+    var groups = { products: [], packaging: [], raw: [], none: [] };
+    data.forEach(function(r) {
+        var src = r.source;
+        if (src === 'products') groups.products.push(r);
+        else if (src === 'packaging') groups.packaging.push(r);
+        else if (src === 'raw') groups.raw.push(r);
+        else groups.none.push(r);
+    });
 
-    if (!hasAny) {
-        return '<div class="text-muted small text-center py-1">لا توجد بيانات مخزون مرتبطة بهذا الأوردر</div>';
-    }
-    return html;
+    var html = renderSection(groups.products, 'bi-shop', 'primary', 'منتجات الشركة') +
+               renderSection(groups.packaging, 'bi-archive', 'info', 'مخزن أدوات التعبئة') +
+               renderSection(groups.raw, 'bi-boxes', 'warning', 'مخزن الخامات') +
+               renderSection(groups.none, 'bi-question-circle', 'secondary', 'غير موجود في المخزون');
+
+    return html || '<div class="text-muted small text-center py-1">لا توجد بيانات مخزون مرتبطة بهذا الأوردر</div>';
 }
 
 /**
