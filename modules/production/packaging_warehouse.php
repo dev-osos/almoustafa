@@ -4613,9 +4613,9 @@ function openEditModalFromData(material) {
     const resolvedType = (material.type ?? '') || (material.category ?? '');
     typeInput.value = resolvedType;
 
-    unitInput.value = material.unit ?? '';
-    codeInput.value = material.material_id ?? '';
-    specsInput.value = material.specifications ?? '';
+    if (unitInput) unitInput.value = material.unit ?? '';
+    if (codeInput) codeInput.value = material.material_id ?? '';
+    if (specsInput) specsInput.value = material.specifications ?? '';
 
     if (weightInput) {
         weightInput.value = material.weight ? parseFloat(material.weight) : '';
