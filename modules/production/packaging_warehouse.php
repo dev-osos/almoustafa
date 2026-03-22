@@ -4558,9 +4558,15 @@ function editMaterial(materialId) {
         credentials: 'same-origin'
     })
         .then(async response => {
+            const contentType = response.headers.get('content-type') || '';
+            if (!contentType.includes('application/json')) {
+                const text = await response.text();
+                console.error('Non-JSON response for editMaterial:', text.substring(0, 500));
+                throw new Error('استجابة غير صحيحة من الخادم (كود ' + response.status + '): ' + text.substring(0, 150));
+            }
             if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error('HTTP error! status: ' + response.status + ' - ' + errorText.substring(0, 200));
+                const errData = await response.json().catch(() => null);
+                throw new Error((errData?.message) || 'HTTP error: ' + response.status);
             }
             return response.json();
         })
@@ -4572,7 +4578,7 @@ function editMaterial(materialId) {
         })
         .catch(error => {
             console.error('Error loading material data for edit:', error);
-            alert('حدث خطأ أثناء تحميل بيانات الأداة للتعديل. يرجى المحاولة لاحقاً.\n' + (error.message || ''));
+            alert('تعذّر تحميل بيانات الأداة:\n' + (error.message || 'خطأ غير معروف'));
         });
 }
 
