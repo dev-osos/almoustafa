@@ -765,7 +765,8 @@ $offset = ($pageNum - 1) * $perPage;
 // الفلترة والبحث
 $filters = [
     'material_id' => isset($_GET['material_id']) ? intval($_GET['material_id']) : 0,
-    'filter_type' => isset($_GET['filter_type']) ? trim((string)$_GET['filter_type']) : ''
+    'filter_type' => isset($_GET['filter_type']) ? trim((string)$_GET['filter_type']) : '',
+    'sort_by' => in_array($_GET['sort_by'] ?? '', ['qty_asc', 'qty_desc', 'name_asc', 'name_desc']) ? $_GET['sort_by'] : ''
 ];
 
 // التحقق من وجود جدول packaging_materials
@@ -2298,6 +2299,19 @@ foreach ($packagingMaterials as $material) {
     $filteredMaterials[] = $material;
 }
 
+// ترتيب حسب sort_by
+if (!empty($filters['sort_by'])) {
+    usort($filteredMaterials, function($a, $b) use ($filters) {
+        switch ($filters['sort_by']) {
+            case 'qty_asc':  return (float)($a['quantity'] ?? 0) <=> (float)($b['quantity'] ?? 0);
+            case 'qty_desc': return (float)($b['quantity'] ?? 0) <=> (float)($a['quantity'] ?? 0);
+            case 'name_asc': return strcmp($a['name'] ?? '', $b['name'] ?? '');
+            case 'name_desc': return strcmp($b['name'] ?? '', $a['name'] ?? '');
+        }
+        return 0;
+    });
+}
+
 // Pagination
 $totalMaterials = count($filteredMaterials);
 $totalPages = ceil($totalMaterials / $perPage);
@@ -2529,6 +2543,16 @@ $packagingReportGeneratedAt = $packagingReport['generated_at'] ?? date('Y-m-d H:
                          id="material-search-results"
                          style="max-height: 220px; z-index: 1050;"></div>
                 </div>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">ترتيب حسب</label>
+                <select class="form-select" name="sort_by">
+                    <option value="">الافتراضي (الاسم)</option>
+                    <option value="qty_asc"  <?php echo $filters['sort_by'] === 'qty_asc'  ? 'selected' : ''; ?>>الأقل مخزونًا أولاً</option>
+                    <option value="qty_desc" <?php echo $filters['sort_by'] === 'qty_desc' ? 'selected' : ''; ?>>الأكثر مخزونًا أولاً</option>
+                    <option value="name_asc" <?php echo $filters['sort_by'] === 'name_asc' ? 'selected' : ''; ?>>الاسم (أ → ي)</option>
+                    <option value="name_desc"<?php echo $filters['sort_by'] === 'name_desc'? 'selected' : ''; ?>>الاسم (ي → أ)</option>
+                </select>
             </div>
             <div class="col-md-4 d-flex align-items-end">
                 <button type="submit" class="btn btn-primary me-2">
