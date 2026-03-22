@@ -427,26 +427,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($action === 'get_order_for_return' && $isAjax) {
-        $orderNumber = trim($_POST['order_number'] ?? '');
-        $companyId = isset($_POST['company_id']) ? (int)$_POST['company_id'] : 0;
+        while (ob_get_level()) { ob_end_clean(); }
         header('Content-Type: application/json; charset=utf-8');
-        if ($orderNumber === '' || $companyId <= 0) {
-            echo json_encode(['success' => false, 'error' => 'بيانات غير صالحة.'], JSON_UNESCAPED_UNICODE);
-            exit;
-        }
-        $returnOrder = $db->queryOne(
-            "SELECT id, order_number, total_amount, status FROM shipping_company_orders WHERE order_number = ? AND shipping_company_id = ?",
-            [$orderNumber, $companyId]
-        );
-        if (!$returnOrder) {
-            echo json_encode(['success' => false, 'error' => 'لم يتم العثور على الطلب. تأكد من رقم الطلب وأن الطلب يخص هذه الشركة.'], JSON_UNESCAPED_UNICODE);
-        } else {
-            echo json_encode([
-                'success' => true,
-                'order_id' => (int)$returnOrder['id'],
-                'total_amount' => (float)$returnOrder['total_amount'],
-                'status' => $returnOrder['status'],
-            ], JSON_UNESCAPED_UNICODE);
+        try {
+            $orderNumber = trim($_POST['order_number'] ?? '');
+            $companyId = isset($_POST['company_id']) ? (int)$_POST['company_id'] : 0;
+            if ($orderNumber === '' || $companyId <= 0) {
+                echo json_encode(['success' => false, 'error' => 'بيانات غير صالحة.'], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+            $returnOrder = $db->queryOne(
+                "SELECT id, order_number, total_amount, status FROM shipping_company_orders WHERE order_number = ? AND shipping_company_id = ?",
+                [$orderNumber, $companyId]
+            );
+            if (!$returnOrder) {
+                echo json_encode(['success' => false, 'error' => 'لم يتم العثور على الطلب. تأكد من رقم الطلب وأن الطلب يخص هذه الشركة.'], JSON_UNESCAPED_UNICODE);
+            } else {
+                echo json_encode([
+                    'success' => true,
+                    'order_id' => (int)$returnOrder['id'],
+                    'total_amount' => (float)$returnOrder['total_amount'],
+                    'status' => $returnOrder['status'],
+                ], JSON_UNESCAPED_UNICODE);
+            }
+        } catch (Throwable $e) {
+            error_log('get_order_for_return: ' . $e->getMessage());
+            echo json_encode(['success' => false, 'error' => 'حدث خطأ في الخادم: ' . $e->getMessage()], JSON_UNESCAPED_UNICODE);
         }
         exit;
     }
@@ -6105,7 +6111,14 @@ function lookupOrderForReturn(context) {
     fd.append('company_id', companyId);
 
     fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: fd })
-        .then(function(r) { return r.json(); })
+        .then(function(r) {
+            var clone = r.clone();
+            return r.json().catch(function() {
+                return clone.text().then(function(text) {
+                    throw new Error(text.substring(0, 300));
+                });
+            });
+        })
         .then(function(data) {
             if (!data.success) {
                 if (errorEl) { errorEl.textContent = data.error || 'لم يتم العثور على الطلب.'; errorEl.classList.remove('d-none'); }
@@ -6120,8 +6133,8 @@ function lookupOrderForReturn(context) {
             if (submitBtn) submitBtn.disabled = false;
             updateReturnSummary(context);
         })
-        .catch(function() {
-            if (errorEl) { errorEl.textContent = 'حدث خطأ في الاتصال.'; errorEl.classList.remove('d-none'); }
+        .catch(function(e) {
+            if (errorEl) { errorEl.textContent = 'خطأ: ' + (e && e.message ? e.message : 'فشل الاتصال'); errorEl.classList.remove('d-none'); }
         });
 }
 
