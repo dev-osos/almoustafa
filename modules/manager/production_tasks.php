@@ -486,7 +486,10 @@ function getTaskReceiptTotalFromNotes($notes)
 
 /**
  * خصم كميات منتجات الأوردر من المخزون (يُستدعى عند اعتماد الفاتورة فقط).
- * يقرأ [PRODUCTS_JSON] من notes ويخصم effective_quantity من products.quantity لكل منتج مطابق بالاسم.
+ * يقرأ [PRODUCTS_JSON] من notes ويخصم effective_quantity من:
+ *   1. products.quantity  (منتجات الشركة)
+ *   2. مخزن الخامات (عبر القالب: template_raw_materials أو product_template_raw_materials)
+ *   3. مخزن أدوات التعبئة (عبر القالب: template_packaging أو product_template_packaging)
  * @param object $db
  * @param string $notes محتوى notes للمهمة
  * @throws InvalidArgumentException عند عدم كفاية الكمية المتاحة
@@ -543,6 +546,8 @@ function deductTaskProductsFromStock($db, $notes)
         if ($templateName === '') {
             continue;
         }
+
+        // ====== 1. خصم من منتجات الشركة ======
         try {
             $productRow = $db->queryOne(
                 "SELECT id, quantity FROM products WHERE name = ? AND status = 'active' LIMIT 1 FOR UPDATE",
@@ -566,6 +571,228 @@ function deductTaskProductsFromStock($db, $notes)
             "UPDATE products SET quantity = quantity - ? WHERE id = ?",
             [$effectiveQty, $resolvedProductId]
         );
+
+        // ====== 2. البحث عن القالب لخصم الخامات وأدوات التعبئة ======
+        $templateId = null;
+        $isUnified  = false;
+        try {
+            $uCheck = $db->queryOne("SHOW TABLES LIKE 'unified_product_templates'");
+            if (!empty($uCheck)) {
+                $tpl = $db->queryOne(
+                    "SELECT id FROM unified_product_templates WHERE product_name = ? LIMIT 1",
+                    [$templateName]
+                );
+                if ($tpl) { $templateId = (int)$tpl['id']; $isUnified = true; }
+            }
+        } catch (Exception $e) { /* skip */ }
+
+        if (!$templateId) {
+            try {
+                $ptCheck = $db->queryOne("SHOW TABLES LIKE 'product_templates'");
+                if (!empty($ptCheck)) {
+                    $tpl = $db->queryOne(
+                        "SELECT id FROM product_templates WHERE product_name = ? LIMIT 1",
+                        [$templateName]
+                    );
+                    if ($tpl) { $templateId = (int)$tpl['id']; $isUnified = false; }
+                }
+            } catch (Exception $e) { /* skip */ }
+        }
+
+        if (!$templateId) {
+            continue; // لا قالب، تجاوز خصم الخامات والتعبئة
+        }
+
+        // ====== 3. خصم الخامات من مخزن الخامات ======
+        _deductRawMaterialsForTemplate($db, $templateId, $isUnified, $effectiveQty, $templateName);
+
+        // ====== 4. خصم أدوات التعبئة من مخزن التعبئة ======
+        _deductPackagingForTemplate($db, $templateId, $isUnified, $effectiveQty, $templateName);
+    }
+}
+
+/**
+ * خصم الخامات المرتبطة بقالب منتج من مخازن الخامات المناسبة
+ */
+function _deductRawMaterialsForTemplate($db, $templateId, $isUnified, $effectiveQty, $productName)
+{
+    try {
+        if ($isUnified) {
+            $rmCheck = $db->queryOne("SHOW TABLES LIKE 'template_raw_materials'");
+            if (empty($rmCheck)) return;
+            $raws = $db->query(
+                "SELECT material_type, material_name, honey_variety, quantity, unit
+                 FROM template_raw_materials WHERE template_id = ?",
+                [$templateId]
+            ) ?? [];
+        } else {
+            $rmCheck = $db->queryOne("SHOW TABLES LIKE 'product_template_raw_materials'");
+            if (empty($rmCheck)) return;
+            $raws = $db->query(
+                "SELECT NULL as material_type, material_name, NULL as honey_variety, quantity_per_unit as quantity, unit
+                 FROM product_template_raw_materials WHERE template_id = ?",
+                [$templateId]
+            ) ?? [];
+        }
+
+        foreach ($raws as $rm) {
+            $neededQty    = (float)$rm['quantity'] * $effectiveQty;
+            $materialType = $rm['material_type'] ?? null;
+            $materialName = trim($rm['material_name'] ?? '');
+            $honeyVariety = $rm['honey_variety'] ?? null;
+
+            if ($neededQty <= 0 || $materialName === '') continue;
+
+            _deductFromRawMaterialTable($db, $materialType, $materialName, $honeyVariety, $neededQty, $productName);
+        }
+    } catch (Exception $e) {
+        error_log('_deductRawMaterialsForTemplate error (' . $productName . '): ' . $e->getMessage());
+    }
+}
+
+/**
+ * خصم كمية من جدول الخامة المناسب بناءً على نوعها
+ */
+function _deductFromRawMaterialTable($db, $materialType, $materialName, $honeyVariety, $neededQty, $productName)
+{
+    try {
+        switch ($materialType) {
+            case 'honey_raw':
+                _deductFromRowsWaterfall(
+                    $db,
+                    "SELECT id, raw_honey_quantity as qty FROM honey_stock WHERE raw_honey_quantity > 0 ORDER BY raw_honey_quantity DESC",
+                    [],
+                    "UPDATE honey_stock SET raw_honey_quantity = raw_honey_quantity - ? WHERE id = ?",
+                    $neededQty
+                );
+                break;
+
+            case 'honey_filtered':
+                if ($honeyVariety) {
+                    _deductFromRowsWaterfall(
+                        $db,
+                        "SELECT id, filtered_honey_quantity as qty FROM honey_stock WHERE honey_variety = ? AND filtered_honey_quantity > 0 ORDER BY filtered_honey_quantity DESC",
+                        [$honeyVariety],
+                        "UPDATE honey_stock SET filtered_honey_quantity = filtered_honey_quantity - ? WHERE id = ?",
+                        $neededQty
+                    );
+                } else {
+                    _deductFromRowsWaterfall(
+                        $db,
+                        "SELECT id, filtered_honey_quantity as qty FROM honey_stock WHERE filtered_honey_quantity > 0 ORDER BY filtered_honey_quantity DESC",
+                        [],
+                        "UPDATE honey_stock SET filtered_honey_quantity = filtered_honey_quantity - ? WHERE id = ?",
+                        $neededQty
+                    );
+                }
+                break;
+
+            case 'olive_oil':
+                _deductFromRowsWaterfall(
+                    $db,
+                    "SELECT id, quantity as qty FROM olive_oil_stock WHERE quantity > 0 ORDER BY quantity DESC",
+                    [],
+                    "UPDATE olive_oil_stock SET quantity = quantity - ? WHERE id = ?",
+                    $neededQty
+                );
+                break;
+
+            case 'beeswax':
+                _deductFromRowsWaterfall(
+                    $db,
+                    "SELECT id, weight as qty FROM beeswax_stock WHERE weight > 0 ORDER BY weight DESC",
+                    [],
+                    "UPDATE beeswax_stock SET weight = weight - ? WHERE id = ?",
+                    $neededQty
+                );
+                break;
+
+            case 'derivatives':
+                _deductFromRowsWaterfall(
+                    $db,
+                    "SELECT id, weight as qty FROM derivatives_stock WHERE derivative_type = ? AND weight > 0 ORDER BY weight DESC",
+                    [$materialName],
+                    "UPDATE derivatives_stock SET weight = weight - ? WHERE id = ?",
+                    $neededQty
+                );
+                break;
+
+            case 'nuts':
+                _deductFromRowsWaterfall(
+                    $db,
+                    "SELECT id, quantity as qty FROM nuts_stock WHERE nut_type = ? AND quantity > 0 ORDER BY quantity DESC",
+                    [$materialName],
+                    "UPDATE nuts_stock SET quantity = quantity - ? WHERE id = ?",
+                    $neededQty
+                );
+                break;
+
+            default:
+                // نوع غير معروف أو null (قوالب تقليدية) — تسجيل فقط
+                if ($materialType) {
+                    error_log("_deductFromRawMaterialTable: نوع غير مدعوم '$materialType' للمنتج '$productName'");
+                }
+                break;
+        }
+    } catch (Exception $e) {
+        error_log('_deductFromRawMaterialTable error (' . $materialType . '/' . $materialName . '): ' . $e->getMessage());
+    }
+}
+
+/**
+ * خصم كمية من مجموعة صفوف بترتيب الأكبر أولاً (Waterfall)
+ * يخصم من كل صف حتى يكتمل المطلوب
+ */
+function _deductFromRowsWaterfall($db, $selectSql, $selectParams, $updateSql, $neededQty)
+{
+    $rows = $db->query($selectSql, $selectParams) ?? [];
+    $remaining = $neededQty;
+    foreach ($rows as $row) {
+        if ($remaining <= 0) break;
+        $available = (float)$row['qty'];
+        if ($available <= 0) continue;
+        $deduct = min($remaining, $available);
+        $db->execute($updateSql, [$deduct, (int)$row['id']]);
+        $remaining -= $deduct;
+    }
+}
+
+/**
+ * خصم أدوات التعبئة المرتبطة بقالب منتج من جدول packaging_materials
+ */
+function _deductPackagingForTemplate($db, $templateId, $isUnified, $effectiveQty, $productName)
+{
+    try {
+        $pmCheck = $db->queryOne("SHOW TABLES LIKE 'packaging_materials'");
+        if (empty($pmCheck)) return;
+
+        if ($isUnified) {
+            $tpCheck = $db->queryOne("SHOW TABLES LIKE 'template_packaging'");
+            if (empty($tpCheck)) return;
+            $pkgs = $db->query(
+                "SELECT packaging_material_id, quantity_per_unit FROM template_packaging WHERE template_id = ?",
+                [$templateId]
+            ) ?? [];
+        } else {
+            $ptpCheck = $db->queryOne("SHOW TABLES LIKE 'product_template_packaging'");
+            if (empty($ptpCheck)) return;
+            $pkgs = $db->query(
+                "SELECT packaging_material_id, quantity_per_unit FROM product_template_packaging WHERE template_id = ?",
+                [$templateId]
+            ) ?? [];
+        }
+
+        foreach ($pkgs as $pkg) {
+            $pkgId     = (int)$pkg['packaging_material_id'];
+            $neededQty = (float)$pkg['quantity_per_unit'] * $effectiveQty;
+            if ($pkgId <= 0 || $neededQty <= 0) continue;
+            $db->execute(
+                "UPDATE packaging_materials SET quantity = GREATEST(quantity - ?, 0), updated_at = NOW() WHERE id = ?",
+                [$neededQty, $pkgId]
+            );
+        }
+    } catch (Exception $e) {
+        error_log('_deductPackagingForTemplate error (' . $productName . '): ' . $e->getMessage());
     }
 }
 
@@ -5833,6 +6060,11 @@ function ensureApproveInvoiceCardExists() {
         '<div class="mb-3"><label class="form-label fw-bold">صافي سعر الطرد (ج.م)</label><input type="number" step="0.01" class="form-control" name="net_parcel_price" id="approveInvoiceCardNetParcelPrice" placeholder="موجب أو سالب">' +
         '<small class="form-text text-muted">هذا المبلغ يُضاف لديون شركة الشحن (سالب = يقلل الديون)</small></div>' +
         '</div>' +
+        '<!-- ملخص خصم المخزون -->' +
+        '<div id="approveInvoiceInventoryPreview" class="mb-3" style="display:none;">' +
+        '<label class="form-label fw-bold"><i class="bi bi-box-seam me-1"></i>المخزون الذي سيُخصم عند الاعتماد</label>' +
+        '<div id="approveInvoiceInventoryContent"><div class="text-muted small text-center py-2"><span class="spinner-border spinner-border-sm me-1"></span>جاري تحميل بيانات المخزون...</div></div>' +
+        '</div>' +
         '<div class="mb-3"><label class="form-label fw-bold">الإجمالي النهائي (من إيصال الأوردر)</label><div id="approveInvoiceCardTotalDisplay" class="form-control bg-light fw-bold"></div></div>' +
         '<div class="d-flex gap-2">' +
         '<button type="button" class="btn btn-secondary w-50" onclick="closeApproveInvoiceCard()"><i class="bi bi-x-circle me-1"></i>إلغاء</button>' +
@@ -5852,6 +6084,124 @@ function closeApproveInvoiceCard() {
         if (c) c.hide();
     }
 }
+
+/**
+ * بناء جدول ملخص المخزون من بيانات الـ API
+ */
+function buildInventoryPreviewTable(data) {
+    var html = '';
+    var hasAny = false;
+
+    function fmtQty(n) { return (Math.round(parseFloat(n) * 100) / 100).toLocaleString('ar-EG'); }
+    function suffBadge(sufficient) {
+        if (sufficient === null || sufficient === undefined) return '<span class="badge bg-secondary">غير محدد</span>';
+        return sufficient
+            ? '<span class="badge bg-success">كافية</span>'
+            : '<span class="badge bg-danger">غير كافية</span>';
+    }
+
+    // ===== منتجات الشركة =====
+    if (data.company_products && data.company_products.length > 0) {
+        hasAny = true;
+        html += '<div class="mb-2"><div class="d-flex align-items-center gap-1 mb-1"><i class="bi bi-shop text-primary"></i><strong class="small">منتجات الشركة</strong></div>' +
+            '<table class="table table-sm table-bordered mb-0" style="font-size:0.8rem;">' +
+            '<thead class="table-light"><tr><th>المنتج</th><th class="text-center">المطلوب</th><th class="text-center">المتاح</th><th class="text-center">الحالة</th></tr></thead><tbody>';
+        data.company_products.forEach(function(p) {
+            var rowCls = (p.sufficient === false) ? 'table-danger' : '';
+            html += '<tr class="' + rowCls + '">' +
+                '<td>' + (p.name || '—') + '</td>' +
+                '<td class="text-center">' + fmtQty(p.needed) + ' ' + (p.unit || '') + '</td>' +
+                '<td class="text-center">' + fmtQty(p.available) + ' ' + (p.unit || '') + '</td>' +
+                '<td class="text-center">' + suffBadge(p.sufficient) + '</td>' +
+                '</tr>';
+        });
+        html += '</tbody></table></div>';
+    }
+
+    // ===== مخزن الخامات =====
+    if (data.raw_materials && data.raw_materials.length > 0) {
+        hasAny = true;
+        html += '<div class="mb-2"><div class="d-flex align-items-center gap-1 mb-1"><i class="bi bi-boxes text-warning"></i><strong class="small">مخزن الخامات</strong></div>' +
+            '<table class="table table-sm table-bordered mb-0" style="font-size:0.8rem;">' +
+            '<thead class="table-light"><tr><th>الخامة</th><th class="text-center">المطلوب</th><th class="text-center">المتاح</th><th class="text-center">الحالة</th></tr></thead><tbody>';
+        data.raw_materials.forEach(function(r) {
+            var rowCls = (r.sufficient === false) ? 'table-danger' : '';
+            var availTxt = (r.available === null || r.available === undefined) ? '—' : fmtQty(r.available) + ' ' + (r.unit || '');
+            var suffTxt  = (r.available === null || r.available === undefined) ? '<span class="badge bg-secondary">لا يُتتبع</span>' : suffBadge(r.sufficient);
+            html += '<tr class="' + rowCls + '">' +
+                '<td>' + (r.name || '—') + '</td>' +
+                '<td class="text-center">' + fmtQty(r.needed) + ' ' + (r.unit || '') + '</td>' +
+                '<td class="text-center">' + availTxt + '</td>' +
+                '<td class="text-center">' + suffTxt + '</td>' +
+                '</tr>';
+        });
+        html += '</tbody></table></div>';
+    }
+
+    // ===== مخزن أدوات التعبئة =====
+    if (data.packaging && data.packaging.length > 0) {
+        hasAny = true;
+        html += '<div class="mb-2"><div class="d-flex align-items-center gap-1 mb-1"><i class="bi bi-archive text-info"></i><strong class="small">مخزن أدوات التعبئة</strong></div>' +
+            '<table class="table table-sm table-bordered mb-0" style="font-size:0.8rem;">' +
+            '<thead class="table-light"><tr><th>الأداة</th><th class="text-center">المطلوب</th><th class="text-center">المتاح</th><th class="text-center">الحالة</th></tr></thead><tbody>';
+        data.packaging.forEach(function(pk) {
+            var rowCls = (pk.sufficient === false) ? 'table-danger' : '';
+            var availTxt = (pk.available === null || pk.available === undefined) ? '—' : fmtQty(pk.available) + ' قطعة';
+            var suffTxt  = (pk.available === null || pk.available === undefined) ? '<span class="badge bg-secondary">لا يُتتبع</span>' : suffBadge(pk.sufficient);
+            html += '<tr class="' + rowCls + '">' +
+                '<td>' + (pk.name || '—') + '</td>' +
+                '<td class="text-center">' + fmtQty(pk.needed) + ' قطعة</td>' +
+                '<td class="text-center">' + availTxt + '</td>' +
+                '<td class="text-center">' + suffTxt + '</td>' +
+                '</tr>';
+        });
+        html += '</tbody></table></div>';
+    }
+
+    if (!hasAny) {
+        return '<div class="text-muted small text-center py-1">لا توجد بيانات مخزون مرتبطة بهذا الأوردر</div>';
+    }
+    return html;
+}
+
+/**
+ * جلب وعرض ملخص خصم المخزون لأوردر محدد
+ */
+function loadInventoryPreview(taskId) {
+    var previewSection = document.getElementById('approveInvoiceInventoryPreview');
+    var contentEl = document.getElementById('approveInvoiceInventoryContent');
+    if (!previewSection || !contentEl || !taskId) return;
+
+    previewSection.style.display = 'block';
+    contentEl.innerHTML = '<div class="text-muted small text-center py-2"><span class="spinner-border spinner-border-sm me-1"></span>جاري تحميل بيانات المخزون...</div>';
+
+    // بناء مسار الـ API بنفس طريقة باقي الاستدعاءات في هذه الصفحة
+    var _curPath = window.location.pathname || '/';
+    var _pathParts = _curPath.split('/').filter(Boolean);
+    var _stopSegs = ['dashboard', 'modules', 'api', 'assets', 'includes'];
+    var _baseParts = [];
+    for (var _i = 0; _i < _pathParts.length; _i++) {
+        var _p = _pathParts[_i];
+        if (_stopSegs.indexOf(_p) !== -1 || _p.indexOf('.php') !== -1) break;
+        _baseParts.push(_p);
+    }
+    var _base = _baseParts.length ? '/' + _baseParts.join('/') : '';
+    var url = (_base + '/api/task_inventory_preview.php').replace(/\/+/g, '/') + '?task_id=' + encodeURIComponent(taskId);
+
+    fetch(url)
+        .then(function(res) { return res.json(); })
+        .then(function(json) {
+            if (!json.success) {
+                contentEl.innerHTML = '<div class="text-muted small text-center py-1">' + (json.error || 'تعذر تحميل بيانات المخزون') + '</div>';
+                return;
+            }
+            contentEl.innerHTML = buildInventoryPreviewTable(json.data);
+        })
+        .catch(function() {
+            contentEl.innerHTML = '<div class="text-muted small text-center py-1">تعذر تحميل بيانات المخزون</div>';
+        });
+}
+
 window.openApproveInvoiceCardFromBtn = function(btn) {
     if (!btn || !btn.getAttribute) return;
     if (btn.stopPropagation) btn.stopPropagation();
@@ -5883,6 +6233,8 @@ window.openApproveInvoiceCard = function(taskId, customerName, receiptTotal, ord
     if (nameEl) nameEl.textContent = (customerName != null && String(customerName).trim() !== '') ? customerName : '—';
     if (shippingSelect) { shippingSelect.value = ''; shippingSelect.removeAttribute('required'); if (isShippingMode) shippingSelect.setAttribute('required', 'required'); }
     if (netPriceInput) { netPriceInput.value = ''; netPriceInput.removeAttribute('required'); if (isShippingMode) netPriceInput.setAttribute('required', 'required'); }
+    // جلب ملخص خصم المخزون
+    if (taskId) { loadInventoryPreview(taskId); }
     if (collapse && typeof bootstrap !== 'undefined') {
         var c = bootstrap.Collapse.getOrCreateInstance(collapse, { toggle: true });
         c.show();
