@@ -149,6 +149,58 @@ $isManager = ($currentUser['role'] ?? '') === 'manager';
 $isDeveloper = ($currentUser['role'] ?? '') === 'developer';
 $canPrintTasks = $isAccountant || $isManager || $isDeveloper;
 
+// جلب سجل الأسعار السابقة لمنتج معين لعميل معين (API endpoint)
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['action'] === 'get_customer_price_history' && ($isAccountant || $isManager || $isDeveloper)) {
+    while (ob_get_level() > 0) { ob_end_clean(); }
+    ob_start();
+    try {
+        $customerId  = isset($_GET['customer_id'])  ? intval($_GET['customer_id'])               : 0;
+        $productName = isset($_GET['product_name']) ? trim((string)$_GET['product_name'])        : '';
+        header('Content-Type: application/json; charset=utf-8');
+        if ($customerId <= 0 || $productName === '') {
+            echo json_encode(['success' => false, 'suggestions' => []], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $tasks = $db->query(
+            "SELECT id, created_at, notes FROM tasks WHERE local_customer_id = ? ORDER BY created_at DESC LIMIT 40",
+            [$customerId]
+        );
+        $suggestions = [];
+        $seen = [];
+        foreach ($tasks as $task) {
+            $notes = (string)($task['notes'] ?? '');
+            if (!preg_match('/(?:\[PRODUCTS_JSON\]|المنتجات)\s*:\s*(\[.+?\])(?=\s*\n|\[ASSIGNED_WORKERS_IDS\]|$)/su', $notes, $m)) continue;
+            $decoded = json_decode(trim($m[1]), true);
+            if (!is_array($decoded)) continue;
+            foreach ($decoded as $p) {
+                $pName = trim((string)($p['name'] ?? ''));
+                if ($pName === '') continue;
+                // مطابقة جزئية (المنتج المطلوب يحتوي على اسم المنتج المخزن أو العكس)
+                if (mb_stripos($pName, $productName) === false && mb_stripos($productName, $pName) === false) continue;
+                $price = (isset($p['price']) && is_numeric($p['price'])) ? (float)$p['price'] : null;
+                $unit  = trim((string)($p['unit'] ?? 'قطعة')) ?: 'قطعة';
+                if ($price === null || $price <= 0) continue;
+                $key = round($price, 2) . '_' . $unit;
+                if (isset($seen[$key])) continue;
+                $seen[$key]  = true;
+                $suggestions[] = [
+                    'price'   => $price,
+                    'unit'    => $unit,
+                    'date'    => date('Y-m-d', strtotime($task['created_at'])),
+                    'task_id' => (int)$task['id'],
+                ];
+                if (count($suggestions) >= 5) break 2;
+            }
+        }
+        echo json_encode(['success' => true, 'suggestions' => $suggestions], JSON_UNESCAPED_UNICODE);
+        exit;
+    } catch (Exception $e) {
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['success' => false, 'error' => $e->getMessage(), 'suggestions' => []], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+}
+
 // إرسال أول بايت للمتصفح فوراً (خاصة كروم) لتفادي "This site can't be reached" بسبب تأخر الاستجابة
 if (ob_get_level() && function_exists('flush')) {
     @flush();
@@ -2269,50 +2321,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode(['success' => false, 'error' => $e->getMessage(), 'orders' => []], JSON_UNESCAPED_UNICODE);
     }
-    exit;
-}
-
-// جلب سجل الأسعار السابقة لمنتج معين لعميل معين
-if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['action'] === 'get_customer_price_history' && ($isAccountant || $isManager || $isDeveloper)) {
-    $customerId  = isset($_GET['customer_id'])  ? intval($_GET['customer_id'])               : 0;
-    $productName = isset($_GET['product_name']) ? trim((string)$_GET['product_name'])        : '';
-    header('Content-Type: application/json; charset=utf-8');
-    if ($customerId <= 0 || $productName === '') {
-        echo json_encode(['success' => false, 'suggestions' => []], JSON_UNESCAPED_UNICODE);
-        exit;
-    }
-    $tasks = $db->query(
-        "SELECT id, created_at, notes FROM tasks WHERE local_customer_id = ? ORDER BY created_at DESC LIMIT 40",
-        [$customerId]
-    );
-    $suggestions = [];
-    $seen = [];
-    foreach ($tasks as $task) {
-        $notes = (string)($task['notes'] ?? '');
-        if (!preg_match('/(?:\[PRODUCTS_JSON\]|المنتجات)\s*:\s*(\[.+?\])(?=\s*\n|\[ASSIGNED_WORKERS_IDS\]|$)/su', $notes, $m)) continue;
-        $decoded = json_decode(trim($m[1]), true);
-        if (!is_array($decoded)) continue;
-        foreach ($decoded as $p) {
-            $pName = trim((string)($p['name'] ?? ''));
-            if ($pName === '') continue;
-            // مطابقة جزئية (المنتج المطلوب يحتوي على اسم المنتج المخزن أو العكس)
-            if (mb_stripos($pName, $productName) === false && mb_stripos($productName, $pName) === false) continue;
-            $price = (isset($p['price']) && is_numeric($p['price'])) ? (float)$p['price'] : null;
-            $unit  = trim((string)($p['unit'] ?? 'قطعة')) ?: 'قطعة';
-            if ($price === null || $price <= 0) continue;
-            $key = round($price, 2) . '_' . $unit;
-            if (isset($seen[$key])) continue;
-            $seen[$key]  = true;
-            $suggestions[] = [
-                'price'   => $price,
-                'unit'    => $unit,
-                'date'    => date('Y-m-d', strtotime($task['created_at'])),
-                'task_id' => (int)$task['id'],
-            ];
-            if (count($suggestions) >= 5) break 2;
-        }
-    }
-    echo json_encode(['success' => true, 'suggestions' => $suggestions], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
