@@ -691,12 +691,13 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
                 width: 80mm !important;
                 max-width: 80mm !important;
                 overflow: hidden !important;
-                font-family: 'Tajawal', 'Arial', sans-serif !important;
-                font-size: 9px !important;
-                line-height: 1.2 !important;
+                font-family: 'Tajawal', 'Cairo', 'Arial', sans-serif !important;
+                font-size: 10px !important;
+                line-height: 1.3 !important;
                 color: #000 !important;
                 direction: rtl !important;
                 text-align: right !important;
+                font-weight: 500 !important;
             }
             
             body * {
@@ -727,17 +728,19 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             }
             
             .receipt-title {
-                font-size: 13px !important;
+                font-size: 15px !important;
                 font-weight: 700 !important;
-                margin-bottom: 2px !important;
+                margin-bottom: 3px !important;
                 text-transform: uppercase !important;
-                line-height: 1.2 !important;
+                line-height: 1.3 !important;
+                font-family: 'Tajawal', 'Cairo', 'Arial', sans-serif !important;
             }
             
             .receipt-number {
-                font-size: 10px !important;
+                font-size: 12px !important;
                 font-weight: 600 !important;
-                margin-bottom: 2px !important;
+                margin-bottom: 3px !important;
+                font-family: 'Tajawal', 'Cairo', 'Arial', sans-serif !important;
             }
             
             .receipt-divider {
@@ -755,14 +758,15 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             .info-row {
                 display: flex !important;
                 justify-content: space-between !important;
-                margin-bottom: 0.5px !important;
-                font-size: 6.5px !important;
-                line-height: 1.2 !important;
+                margin-bottom: 1px !important;
+                font-size: 8px !important;
+                line-height: 1.3 !important;
                 width: 100% !important;
                 box-sizing: border-box !important;
                 align-items: center !important;
                 direction: rtl !important;
                 text-align: right !important;
+                font-family: 'Tajawal', 'Cairo', 'Arial', sans-serif !important;
             }
             
             .info-row .label {
@@ -771,8 +775,9 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
                 margin-right: 0 !important;
                 white-space: nowrap !important;
                 flex-shrink: 0 !important;
-                font-size: 6.5px !important;
+                font-size: 8px !important;
                 text-align: right !important;
+                font-family: 'Tajawal', 'Cairo', 'Arial', sans-serif !important;
             }
             
             .info-row .value {
@@ -780,7 +785,8 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
                 flex: 1 !important;
                 font-weight: 500 !important;
                 min-width: 0 !important;
-                font-size: 6.5px !important;
+                font-size: 8px !important;
+                font-family: 'Tajawal', 'Cairo', 'Arial', sans-serif !important;
             }
             
             .receipt-items {
@@ -807,13 +813,14 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             }
             
             .items-table th {
-                padding: 1.2mm 1mm !important;
+                padding: 1.5mm 1mm !important;
                 text-align: center !important;
-                font-weight: 600 !important;
-                font-size: 5.5px !important;
+                font-weight: 700 !important;
+                font-size: 7px !important;
                 border-right: 1px solid #000 !important;
                 border-left: none !important;
-                line-height: 1.2 !important;
+                line-height: 1.3 !important;
+                font-family: 'Tajawal', 'Cairo', 'Arial', sans-serif !important;
             }
             
             .items-table th:first-child {
@@ -822,15 +829,16 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             }
             
             .items-table td {
-                padding: 1.2mm 1mm !important;
+                padding: 1.5mm 1mm !important;
                 text-align: center !important;
                 border-bottom: 1px solid #000 !important;
                 border-right: 1px solid #000 !important;
                 border-left: none !important;
-                font-size: 5.5px !important;
-                line-height: 1.2 !important;
+                font-size: 7px !important;
+                line-height: 1.3 !important;
                 vertical-align: middle !important;
                 font-weight: 500 !important;
+                font-family: 'Tajawal', 'Cairo', 'Arial', sans-serif !important;
             }
             
             .items-table td:first-child {
@@ -968,13 +976,13 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         footerText.className = 'footer-text';
         footerText.innerHTML = `
             <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; direction: rtl; text-align: right;">
-                <div style="flex: 1; text-align: center; border-top: 1px solid #000; padding-top: 2px; margin-left: 5px;">
-                    <div style="font-size: 6px; margin-bottom: 1px;">توقيع أمين المخزن</div>
-                    <div style="height: 8px;"></div>
+                <div style="flex: 1; text-align: center; border-top: 1px solid #000; padding-top: 3px; margin-left: 5px;">
+                    <div style="font-size: 8px; margin-bottom: 2px; font-weight: 600; font-family: 'Tajawal', 'Cairo', 'Arial', sans-serif;">توقيع أمين المخزن</div>
+                    <div style="height: 10px;"></div>
                 </div>
-                <div style="flex: 1; text-align: center; border-top: 1px solid #000; padding-top: 2px; margin-right: 5px;">
-                    <div style="font-size: 6px; margin-bottom: 1px;">يعتمد</div>
-                    <div style="height: 8px;"></div>
+                <div style="flex: 1; text-align: center; border-top: 1px solid #000; padding-top: 3px; margin-right: 5px;">
+                    <div style="font-size: 8px; margin-bottom: 2px; font-weight: 600; font-family: 'Tajawal', 'Cairo', 'Arial', sans-serif;">يعتمد</div>
+                    <div style="height: 10px;"></div>
                 </div>
             </div>
         `;
