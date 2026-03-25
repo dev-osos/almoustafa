@@ -4466,6 +4466,11 @@ function showEditLocalCustomerModal(button) {
             if (typeof _fillLCTgFields === 'function') {
                 _fillLCTgFields('Card', customerTgGov, customerTgGovId, customerTgCity, customerTgCityId);
             }
+            // عرض القيم المخزنة في قاعدة البيانات أسفل الحقول (الموبايل)
+            var govStoredCard = document.getElementById('editLCCardGovStored');
+            var cityStoredCard = document.getElementById('editLCCardCityStored');
+            if (govStoredCard) govStoredCard.textContent = customerTgGov ? 'المخزن: ' + customerTgGov : '';
+            if (cityStoredCard) cityStoredCard.textContent = customerTgCity ? 'المخزن: ' + customerTgCity : '';
 
             // تحميل أرقام الهواتف المتعددة
             if (editPhoneContainer) {
@@ -4554,6 +4559,11 @@ function showEditLocalCustomerModal(button) {
             if (typeof _fillLCTgFields === 'function') {
                 _fillLCTgFields('', customerTgGov, customerTgGovId, customerTgCity, customerTgCityId);
             }
+            // عرض القيم المخزنة في قاعدة البيانات أسفل الحقول
+            var govStoredEl = document.getElementById('editLCGovStored');
+            var cityStoredEl = document.getElementById('editLCCityStored');
+            if (govStoredEl) govStoredEl.textContent = customerTgGov ? 'المخزن: ' + customerTgGov : '';
+            if (cityStoredEl) cityStoredEl.textContent = customerTgCity ? 'المخزن: ' + customerTgCity : '';
 
             // تحميل أرقام الهواتف المتعددة
             if (editPhoneContainer) {
@@ -7662,6 +7672,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <input type="hidden" name="tg_gov_id" id="editLCGovId">
                                 <div class="gov-dropdown d-none"></div>
                             </div>
+                            <small class="text-muted d-block mt-1" id="editLCGovStored"></small>
                         </div>
                         <div class="col-6">
                             <label class="form-label">المدينة (تليجراف)</label>
@@ -7671,6 +7682,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <input type="hidden" name="tg_city_id" id="editLCCityId">
                                 <div class="city-dropdown d-none"></div>
                             </div>
+                            <small class="text-muted d-block mt-1" id="editLCCityStored"></small>
                         </div>
                     </div>
                     <div class="mb-3">
@@ -7753,6 +7765,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <input type="hidden" name="tg_gov_id" id="editLCCardGovId">
                     <div class="gov-dropdown d-none"></div>
                 </div>
+                <small class="text-muted d-block mt-1" id="editLCCardGovStored"></small>
             </div>
             <div class="mb-3">
                 <label class="form-label">المدينة (تليجراف)</label>
@@ -7762,6 +7775,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <input type="hidden" name="tg_city_id" id="editLCCardCityId">
                     <div class="city-dropdown d-none"></div>
                 </div>
+                <small class="text-muted d-block mt-1" id="editLCCardCityStored"></small>
             </div>
             <div class="mb-3">
                 <label class="form-label">المنطقة</label>
