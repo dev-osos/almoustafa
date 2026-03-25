@@ -721,7 +721,7 @@ $singleReceipt = count($receipts) === 1;
             </div>
         </div>
         <div style="text-align: center; margin-top: 12px; padding-top: 10px; border-top: 1px dashed #ccc;">
-            <div style="font-size: 12px; color: #555; margin-bottom: 6px; font-weight: 600;">تابعنا على فيسبوك</div>
+            <div style="font-size: 18px; color: #555; margin-bottom: 6px; font-weight: 1200;">تابعنا على فيسبوك</div>
             <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=https%3A%2F%2Fwww.facebook.com%2Fshare%2F14Xj74teaZW%2F%3Fmibextid%3DwwXIfr" alt="QR فيسبوك" width="100" height="100" style="display:block; margin: 0 auto;" />
         </div>
         </div>
