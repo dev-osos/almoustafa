@@ -897,7 +897,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             ensureCustomerUniqueCodeColumn('local_customers');
                             $newCustomerUniqueCode = generateUniqueCustomerCode('local_customers');
                             if ($taskType === 'telegraph') {
-                                $db->execute(
+                                $insertRes = $db->execute(
                                     "INSERT INTO local_customers (unique_code, name, phone, address, tg_governorate, tg_gov_id, tg_city, tg_city_id, balance, status, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 'active', ?)",
                                     [
                                         $newCustomerUniqueCode,
@@ -911,8 +911,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                         $currentUser['id'] ?? null,
                                     ]
                                 );
+                                $localCustomerIdForTask = (int)($insertRes['insert_id'] ?? 0);
                             } else {
-                                $db->execute(
+                                $insertRes = $db->execute(
                                     "INSERT INTO local_customers (unique_code, name, phone, address, balance, status, created_by) VALUES (?, ?, ?, NULL, 0, 'active', ?)",
                                     [
                                         $newCustomerUniqueCode,
@@ -921,9 +922,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                         $currentUser['id'] ?? null,
                                     ]
                                 );
+                                $localCustomerIdForTask = (int)($insertRes['insert_id'] ?? 0);
                             }
                         } elseif ($taskType === 'telegraph') {
                             // تحديث بيانات التليجراف للعميل الموجود
+                            $localCustomerIdForTask = (int)($existingLocal['id'] ?? 0);
                             $db->execute(
                                 "UPDATE local_customers SET tg_governorate = ?, tg_gov_id = ?, tg_city = ?, tg_city_id = ?, address = COALESCE(NULLIF(?, ''), address) WHERE id = ?",
                                 [
@@ -935,6 +938,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     (int)$existingLocal['id'],
                                 ]
                             );
+                        } elseif (!empty($existingLocal)) {
+                            // عميل موجود لكن ليس telegraph: فقط اربط task بالعميل
+                            $localCustomerIdForTask = (int)($existingLocal['id'] ?? 0);
                         }
                     }
                 }
