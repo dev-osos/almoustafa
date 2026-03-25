@@ -745,6 +745,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $collectionNumber = null;
                 $collectionId = null;
+                $collectionDate = date('Y-m-d');
 
                 // حفظ التحصيل في جدول local_collections
                 $localCollectionsTableExists = $db->queryOne("SHOW TABLES LIKE 'local_collections'");
@@ -766,7 +767,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
                     }
 
-                    $collectionDate = date('Y-m-d');
                     $collectionColumns = ['customer_id', 'amount', 'date', 'payment_method', 'collected_by'];
                     $collectionValues = [$customerId, $amount, $collectionDate, 'cash', $currentUser['id']];
                     $collectionPlaceholders = array_fill(0, count($collectionColumns), '?');
@@ -923,6 +923,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $copyableLines = [
                     'تم التحصيل بنجاح',
                     'المبلغ المحصل: ' . formatCurrency($amount),
+                    'تاريخ التحصيل: ' . $collectionDate,
                     'المتبقي بعد التحصيل: ' . formatCurrency($newBalance),
                 ];
                 if ($customerName !== '') {
