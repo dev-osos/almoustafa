@@ -8368,8 +8368,13 @@ function lcInitAutocomplete(opts) {
     return {
         setList: function(list, preSelectValue) {
             opts._list = list;
-            if (preSelectValue) {
+            if (preSelectValue !== null && preSelectValue !== undefined && String(preSelectValue) !== '') {
+                var pre = String(preSelectValue);
+                // preSelectValue ممكن يكون اسم (name) أو كود/Id (code)
                 var match = list.find(function(c) { return c.name === preSelectValue; });
+                if (!match) {
+                    match = list.find(function(c) { return String(c.code ?? '') === pre; });
+                }
                 if (match) selectItem(match.name, match.code);
             }
         },
@@ -8400,7 +8405,7 @@ function lcFetchCities(govCode, cityInstance, preSelectValue) {
         });
 }
 
-function lcInitGovAutocomplete(searchInputId, hiddenInputId, cityInstance) {
+function lcInitGovAutocomplete(searchInputId, hiddenInputId, govIdInputId, cityInstance) {
     return lcInitAutocomplete({
         searchId: searchInputId,
         hiddenId: hiddenInputId,
@@ -8409,12 +8414,24 @@ function lcInitGovAutocomplete(searchInputId, hiddenInputId, cityInstance) {
         itemClass: 'gov-item',
         noResultClass: 'gov-no-result',
         getList: function() { return LC_GOV_LIST; },
-        onSelect: function(name, code) { if (cityInstance && code) lcFetchCities(code, cityInstance); },
-        onClear: function() { if (cityInstance) cityInstance.reset(); }
+        onSelect: function(name, code) {
+            if (govIdInputId) {
+                var govIdEl = document.getElementById(govIdInputId);
+                if (govIdEl) govIdEl.value = code;
+            }
+            if (cityInstance && code) lcFetchCities(code, cityInstance);
+        },
+        onClear: function() {
+            if (govIdInputId) {
+                var govIdEl = document.getElementById(govIdInputId);
+                if (govIdEl) govIdEl.value = '';
+            }
+            if (cityInstance) cityInstance.reset();
+        }
     });
 }
 
-function lcInitCityAutocomplete(searchInputId, hiddenInputId) {
+function lcInitCityAutocomplete(searchInputId, hiddenInputId, cityIdInputId) {
     var cityList = [];
     var instance = lcInitAutocomplete({
         searchId: searchInputId,
@@ -8424,7 +8441,17 @@ function lcInitCityAutocomplete(searchInputId, hiddenInputId) {
         itemClass: 'city-item',
         noResultClass: 'city-no-result',
         getList: function() { return cityList; },
-        _list: cityList
+        _list: cityList,
+        onSelect: function(name, code) {
+            if (!cityIdInputId) return;
+            var cityIdEl = document.getElementById(cityIdInputId);
+            if (cityIdEl) cityIdEl.value = code;
+        },
+        onClear: function() {
+            if (!cityIdInputId) return;
+            var cityIdEl = document.getElementById(cityIdInputId);
+            if (cityIdEl) cityIdEl.value = '';
+        }
     });
     if (instance) {
         instance._searchId = searchInputId;
@@ -8439,11 +8466,11 @@ function lcInitCityAutocomplete(searchInputId, hiddenInputId) {
 
 // تهيئة instances للمودال والكارد
 var _lcCityInstances = {
-    modal: lcInitCityAutocomplete('editLCCitySearch', 'editLCCity'),
-    card:  lcInitCityAutocomplete('editLCCardCitySearch', 'editLCCardCity')
+    modal: lcInitCityAutocomplete('editLCCitySearch', 'editLCCity', 'editLCCityId'),
+    card:  lcInitCityAutocomplete('editLCCardCitySearch', 'editLCCardCity', 'editLCCardCityId')
 };
-lcInitGovAutocomplete('editLCGovSearch',     'editLCGov',     _lcCityInstances.modal);
-lcInitGovAutocomplete('editLCCardGovSearch', 'editLCCardGov', _lcCityInstances.card);
+lcInitGovAutocomplete('editLCGovSearch',     'editLCGov',     'editLCGovId',     _lcCityInstances.modal);
+lcInitGovAutocomplete('editLCCardGovSearch', 'editLCCardGov', 'editLCCardGovId', _lcCityInstances.card);
 
 // دالة مساعدة لملء حقول التليجراف في النموذج
 // suffix: '' للمودال، 'Card' للكارد
@@ -8454,25 +8481,41 @@ function _fillLCTgFields(suffix, govName, govId, cityName, cityId) {
     var citySearch = document.getElementById('editLC' + suffix + 'CitySearch');
     var cityHidden = document.getElementById('editLC' + suffix + 'City');
     var cityIdEl   = document.getElementById('editLC' + suffix + 'CityId');
+    var govIdStr = (govId !== null && govId !== undefined && String(govId) !== '') ? String(govId) : '';
+    var cityIdStr = (cityId !== null && cityId !== undefined && String(cityId) !== '') ? String(cityId) : '';
+
+    // تعيين قيم مبدئية (حتى لو لم نستطع تحميل المدن)
     if (govSearch) govSearch.value = govName || '';
     if (govHidden) govHidden.value = govName || '';
     if (govIdEl)   govIdEl.value   = govId   || '';
     if (citySearch) citySearch.value = '';
     if (cityHidden) cityHidden.value = '';
     if (cityIdEl)   cityIdEl.value   = '';
-    // جلب المدن وتحديد المدينة المحفوظة
-    if (govName) {
-        var gov = LC_GOV_LIST.find(function(g) { return g.name === govName; });
-        var inst = suffix === 'Card' ? _lcCityInstances.card : _lcCityInstances.modal;
-        if (gov && inst) {
-            lcFetchCities(gov.code, inst, cityName || '');
-        } else if (inst && cityName) {
-            // إذا لم نجد المحافظة بالاسم، نضع اسم المدينة مباشرة
-            if (citySearch) citySearch.value = cityName;
-            if (cityHidden) cityHidden.value = cityName;
-        }
+
+    var inst = suffix === 'Card' ? _lcCityInstances.card : _lcCityInstances.modal;
+
+    // محاولة مطابقة المحافظة حسب govId (أكثر موثوقية من الاسم)
+    var gov = null;
+    if (govIdStr) gov = LC_GOV_LIST.find(function(g) { return String(g.code ?? '') === govIdStr; });
+    // fallback: مطابقة حسب الاسم كما كان سابقاً
+    if (!gov && govName) gov = LC_GOV_LIST.find(function(g) { return g.name === govName; });
+
+    if (gov && inst) {
+        // استخدم اسم القائمة (قد يختلف عن الاسم المخزن بشكل بسيط)
+        if (govSearch) govSearch.value = gov.name || '';
+        if (govHidden) govHidden.value = gov.name || '';
+        if (govIdEl)   govIdEl.value   = gov.code || '';
+
+        // حدد المدينة حسب cityId إن وجد، وإلا cityName
+        var preCity = cityIdStr || (cityName || '');
+        lcFetchCities(gov.code, inst, preCity);
+    } else if (inst && cityName) {
+        // إذا لم نستطع تحميل المدن (لم نجد المحافظة)، نعرض اسم المدينة مباشرة
+        if (citySearch) citySearch.value = cityName;
+        if (cityHidden) cityHidden.value = cityName;
     }
-    if (cityIdEl && cityId) cityIdEl.value = cityId;
+
+    if (cityIdEl && cityIdStr) cityIdEl.value = cityIdStr;
 }
 </script>
 <script src="<?php echo ASSETS_URL; ?>js/customer_export.js?v=<?php echo time(); ?>" defer></script>
