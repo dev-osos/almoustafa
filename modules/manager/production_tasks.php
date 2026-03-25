@@ -2922,7 +2922,7 @@ if (isset($_GET['export_recent_tasks_print']) && (string)$_GET['export_recent_ta
     $headers = ['تاريخ الطلب', 'رقم الطلب', 'اسم العميل', 'تفاصيل الاوردر', 'الاجمالي النهائي'];
 
     // HTML بسيط جداً (بيانات فقط): جدول أعمدة + صفوف
-    $style = 'table{width:100%;border-collapse:collapse;font-family:Arial, sans-serif;font-size:10pt;}th,td{border:1px solid #000;padding:4px;vertical-align:top;}th{font-weight:bold;text-align:center;}td{text-align:right;white-space:pre-wrap;}';
+    $style = 'table{width:100%;border-collapse:collapse;font-family:Arial, sans-serif;font-size:10pt;}th,td{border:1px solid #000;padding:4px;vertical-align:top;}th{font-weight:bold;text-align:center;}td{text-align:right;white-space:pre-wrap;}body{visibility:visible !important;}@media print{body{visibility:visible !important;}table{page-break-inside:auto;}tr{page-break-inside:avoid;page-break-after:auto;} }';
     $htmlRows = '';
     foreach ($exportRows as $row) {
         $cells = [];
@@ -2949,7 +2949,13 @@ if (isset($_GET['export_recent_tasks_print']) && (string)$_GET['export_recent_ta
     header('Content-Type: text/html; charset=utf-8');
     $html = str_replace(
         '</body></html>',
-        '<script>window.addEventListener("load", function(){ try { window.print(); } catch(e){} });</script></body></html>',
+        '<script>' .
+        '(function(){' .
+        '  function go(){ try{ window.focus && window.focus(); window.print(); } catch(e){} }' .
+        '  if(document.readyState === "complete"){ setTimeout(go, 200); return; }' .
+        '  window.addEventListener("load", function(){ setTimeout(go, 200); }, { once: true });' .
+        '})()' .
+        '</script></body></html>',
         $html
     );
     echo $html;
