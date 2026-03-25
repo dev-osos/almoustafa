@@ -210,17 +210,26 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         c2.appendChild(itemContainer);
 
         const c3 = document.createElement('div');
-        c3.className = 'col-md-3';
+        c3.className = 'col-md-2';
         const l3 = document.createElement('label');
         l3.className = 'form-label';
         l3.textContent = 'الكمية *';
+        const qtyContainer = document.createElement('div');
+        qtyContainer.className = 'input-group';
         const qty = document.createElement('input');
         qty.type = 'number';
         qty.className = 'form-control';
         qty.min = '0.001';
         qty.step = '0.001';
+        const calcBtn = document.createElement('button');
+        calcBtn.type = 'button';
+        calcBtn.className = 'btn btn-outline-secondary';
+        calcBtn.innerHTML = '<i class="bi bi-calculator"></i>';
+        calcBtn.title = 'آلة حاسبة';
+        qtyContainer.appendChild(qty);
+        qtyContainer.appendChild(calcBtn);
         c3.appendChild(l3);
-        c3.appendChild(qty);
+        c3.appendChild(qtyContainer);
 
         const c4 = document.createElement('div');
         c4.className = 'col-md-1 d-grid';
@@ -284,6 +293,10 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             updateRemoveState();
         });
 
+        calcBtn.addEventListener('click', function () {
+            createCalculator(qty);
+        });
+
         updateRemoveState();
     }
 
@@ -293,6 +306,119 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             const b = r.querySelector('.btn-outline-danger');
             b.disabled = rows.length <= 1;
         });
+    }
+
+    function createCalculator(targetInput) {
+        // Create calculator modal
+        const calcModal = document.createElement('div');
+        calcModal.className = 'modal fade';
+        calcModal.id = 'calculatorModal_' + Date.now();
+        calcModal.setAttribute('tabindex', '-1');
+        
+        calcModal.innerHTML = `
+            <div class="modal-dialog modal-sm">
+                <div class="modal-content">
+                    <div class="modal-header py-2">
+                        <h6 class="modal-title">آلة حاسبة</h6>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body p-3">
+                        <div class="mb-3">
+                            <input type="text" id="calcDisplay" class="form-control text-end" readonly 
+                                   style="font-size: 1.2rem; font-family: monospace;">
+                        </div>
+                        <div class="row g-2">
+                            <div class="col-3"><button class="btn btn-light w-100 calc-btn" data-value="7">7</button></div>
+                            <div class="col-3"><button class="btn btn-light w-100 calc-btn" data-value="8">8</button></div>
+                            <div class="col-3"><button class="btn btn-light w-100 calc-btn" data-value="9">9</button></div>
+                            <div class="col-3"><button class="btn btn-warning w-100 calc-btn" data-op="/">÷</button></div>
+                            <div class="col-3"><button class="btn btn-light w-100 calc-btn" data-value="4">4</button></div>
+                            <div class="col-3"><button class="btn btn-light w-100 calc-btn" data-value="5">5</button></div>
+                            <div class="col-3"><button class="btn btn-light w-100 calc-btn" data-value="6">6</button></div>
+                            <div class="col-3"><button class="btn btn-warning w-100 calc-btn" data-op="*">×</button></div>
+                            <div class="col-3"><button class="btn btn-light w-100 calc-btn" data-value="1">1</button></div>
+                            <div class="col-3"><button class="btn btn-light w-100 calc-btn" data-value="2">2</button></div>
+                            <div class="col-3"><button class="btn btn-light w-100 calc-btn" data-value="3">3</button></div>
+                            <div class="col-3"><button class="btn btn-warning w-100 calc-btn" data-op="-">-</button></div>
+                            <div class="col-3"><button class="btn btn-light w-100 calc-btn" data-value="0">0</button></div>
+                            <div class="col-3"><button class="btn btn-light w-100 calc-btn" data-value=".">.</button></div>
+                            <div class="col-3"><button class="btn btn-danger w-100 calc-btn" data-op="clear">C</button></div>
+                            <div class="col-3"><button class="btn btn-warning w-100 calc-btn" data-op="+">+</button></div>
+                        </div>
+                        <div class="row g-2 mt-2">
+                            <div class="col-6"><button class="btn btn-success w-100" id="calcEquals">=</button></div>
+                            <div class="col-6"><button class="btn btn-primary w-100" id="calcInsert">إضافة للكمية</button></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(calcModal);
+        
+        // Calculator logic
+        const display = calcModal.querySelector('#calcDisplay');
+        let currentExpression = '';
+        let lastResult = 0;
+        
+        function updateDisplay() {
+            display.value = currentExpression || '0';
+        }
+        
+        function calculate() {
+            if (!currentExpression) return 0;
+            try {
+                // Replace × with * and ÷ with /
+                const expr = currentExpression.replace(/×/g, '*').replace(/÷/g, '/');
+                // Safely evaluate the expression
+                const result = Function('"use strict"; return (' + expr + ')')();
+                return parseFloat(result.toFixed(6));
+            } catch (e) {
+                return 0;
+            }
+        }
+        
+        // Button events
+        calcModal.querySelectorAll('.calc-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const value = this.dataset.value;
+                const op = this.dataset.op;
+                
+                if (value !== undefined) {
+                    currentExpression += value;
+                } else if (op === 'clear') {
+                    currentExpression = '';
+                    lastResult = 0;
+                } else if (op) {
+                    currentExpression += ' ' + op + ' ';
+                }
+                updateDisplay();
+            });
+        });
+        
+        calcModal.querySelector('#calcEquals').addEventListener('click', function() {
+            lastResult = calculate();
+            currentExpression = lastResult.toString();
+            updateDisplay();
+        });
+        
+        calcModal.querySelector('#calcInsert').addEventListener('click', function() {
+            const result = currentExpression ? calculate() : lastResult;
+            targetInput.value = result;
+            const modal = bootstrap.Modal.getInstance(calcModal);
+            if (modal) modal.hide();
+        });
+        
+        // Show modal
+        const modal = new bootstrap.Modal(calcModal);
+        modal.show();
+        
+        // Clean up when modal is hidden
+        calcModal.addEventListener('hidden.bs.modal', function() {
+            document.body.removeChild(calcModal);
+        });
+        
+        updateDisplay();
     }
 
     function setupAutocomplete(input, dropdown, select, items) {
