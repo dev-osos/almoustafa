@@ -538,12 +538,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     abs($changeAmount),
                                     $supplierId,
                                     $description . ($notes ? ' - ملاحظات: ' . $notes : ''),
-                                    'SUP-' . $supplierId . '-' . date('YmdHis'),
+                                    null, // Will be updated with transaction ID
                                     $currentUser['id'],
                                     $currentUser['id']
                                 ]
                             );
                             $transactionId = $db->getLastInsertId();
+                            
+                            // Update reference number with the transaction ID
+                            $db->execute(
+                                "UPDATE financial_transactions SET reference_number = ? WHERE id = ?",
+                                [(string)$transactionId, $transactionId]
+                            );
                             
                             $db->execute(
                                 "UPDATE supplier_balance_history SET reference_id = ? WHERE id = ?",
