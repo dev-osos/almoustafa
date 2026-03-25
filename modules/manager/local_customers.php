@@ -1008,46 +1008,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         if (empty($error) && in_array('phone', $allowedFields)) {
                             // تحديث أرقام الهواتف في جدول local_customer_phones
                             $phones = $_POST['phones'] ?? [];
-                            
-                            // إذا كان حقل `phone` المخفي فارغ لكن `phones[]` فيه قيم، نستخدم أول رقم كـ primary
-                            $primaryPhone = $phone;
-                            if (($primaryPhone === '' || $primaryPhone === null) && is_array($phones) && !empty($phones)) {
-                                foreach ($phones as $phoneNumberCandidate) {
-                                    $phoneNumberCandidate = trim((string)$phoneNumberCandidate);
-                                    if ($phoneNumberCandidate !== '') {
-                                        $primaryPhone = $phoneNumberCandidate;
-                                        break;
-                                    }
+
+                            // تصفية الأرقام الفارغة
+                            $validPhones = [];
+                            if (is_array($phones)) {
+                                foreach ($phones as $p) {
+                                    $p = trim((string)$p);
+                                    if ($p !== '') $validPhones[] = $p;
                                 }
                             }
 
-                            $updateFields[] = 'phone = ?';
-                            $updateValues[] = $primaryPhone ?: null;
-                            
-                            if (is_array($phones) && !empty($phones)) {
-                                // حذف الأرقام القديمة
-                                $db->execute("DELETE FROM local_customer_phones WHERE customer_id = ?", [$customerId]);
-                                
-                                // إضافة الأرقام الجديدة
-                                $firstPhone = true;
-                                foreach ($phones as $phoneNumber) {
-                                    $phoneNumber = trim($phoneNumber);
-                                    if (!empty($phoneNumber)) {
-                                        $db->execute(
-                                            "INSERT INTO local_customer_phones (customer_id, phone, is_primary) VALUES (?, ?, ?)",
-                                            [$customerId, $phoneNumber, $firstPhone ? 1 : 0]
-                                        );
-                                        $firstPhone = false;
-                                    }
-                                }
-                            } elseif (!empty($primaryPhone)) {
-                                // إذا لم تكن هناك أرقام متعددة، احفظ الرقم الواحد
-                                $db->execute("DELETE FROM local_customer_phones WHERE customer_id = ?", [$customerId]);
-                                $db->execute(
-                                    "INSERT INTO local_customer_phones (customer_id, phone, is_primary) VALUES (?, ?, ?)",
-                                    [$customerId, $primaryPhone, 1]
-                                );
+                            // إذا كان حقل `phone` المخفي فارغ لكن `phones[]` فيه قيم، نستخدم أول رقم كـ primary
+                            $primaryPhone = $phone;
+                            if (($primaryPhone === '' || $primaryPhone === null) && !empty($validPhones)) {
+                                $primaryPhone = $validPhones[0];
                             }
+
+                            // حماية: إذا لم يتم إرسال أي رقم هاتف (خلل في AJAX)، لا نحذف الأرقام القديمة
+                            $phonesSubmitted = isset($_POST['phones']);
+
+                            if (!empty($primaryPhone)) {
+                                $updateFields[] = 'phone = ?';
+                                $updateValues[] = $primaryPhone;
+                            } elseif ($phonesSubmitted) {
+                                // المستخدم أزال جميع الأرقام يدوياً
+                                $updateFields[] = 'phone = ?';
+                                $updateValues[] = null;
+                            }
+                            // إذا لم يتم إرسال phones أصلاً، نحافظ على القيمة القديمة (لا نضيف phone لقائمة التحديث)
+
+                            if (!empty($validPhones)) {
+                                // حذف الأرقام القديمة وإضافة الجديدة
+                                $db->execute("DELETE FROM local_customer_phones WHERE customer_id = ?", [$customerId]);
+                                $firstPhone = true;
+                                foreach ($validPhones as $phoneNumber) {
+                                    $db->execute(
+                                        "INSERT INTO local_customer_phones (customer_id, phone, is_primary) VALUES (?, ?, ?)",
+                                        [$customerId, $phoneNumber, $firstPhone ? 1 : 0]
+                                    );
+                                    $firstPhone = false;
+                                }
+                            } elseif ($phonesSubmitted) {
+                                // المستخدم أزال جميع الأرقام يدوياً
+                                $db->execute("DELETE FROM local_customer_phones WHERE customer_id = ?", [$customerId]);
+                            }
+                            // إذا لم يتم إرسال phones أصلاً، نحافظ على الأرقام القديمة
                         }
                         
                         if (empty($error) && in_array('address', $allowedFields)) {
@@ -4482,7 +4487,7 @@ function showEditLocalCustomerModal(button) {
             // تحميل أرقام الهواتف المتعددة
             if (editPhoneContainer) {
                 editPhoneContainer.innerHTML = '';
-                fetch('?action=get_local_customer_phones&customer_id=' + customerId)
+                fetch('?page=local_customers&action=get_local_customer_phones&customer_id=' + customerId)
                     .then(response => response.json())
                     .then(data => {
                         if (data.success && data.phones && data.phones.length > 0) {
@@ -4581,7 +4586,7 @@ function showEditLocalCustomerModal(button) {
             // تحميل أرقام الهواتف المتعددة
             if (editPhoneContainer) {
                 editPhoneContainer.innerHTML = '';
-                fetch('?action=get_local_customer_phones&customer_id=' + customerId)
+                fetch('?page=local_customers&action=get_local_customer_phones&customer_id=' + customerId)
                     .then(response => response.json())
                     .then(data => {
                         if (data.success && data.phones && data.phones.length > 0) {
