@@ -733,6 +733,9 @@ $singleReceipt = count($receipts) === 1;
                     if ($deliveryCost !== null) {
                         $finalTotal = max(0, (float)$grandTotal - (float)$deliveryCost);
                     }
+                    // لو حصل أي فشل في جلب التكلفة (deliveryCost = null) ممكن legacy formula يخلي الإجمالي سالب.
+                    // إحنا في الإيصال نعرض قيمة غير سالبة دائماً.
+                    $finalTotal = max(0, (float)$finalTotal);
                 }
                 if ($receiptShippingFees > 0): ?>
                 <tr style="font-weight: 700; background-color: #f8f8f8;">
