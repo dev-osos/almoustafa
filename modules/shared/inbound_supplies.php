@@ -713,6 +713,8 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
                 break-inside: avoid !important;
                 overflow: hidden !important;
                 box-sizing: border-box !important;
+                direction: rtl !important;
+                text-align: right !important;
             }
             
             .receipt-header-80mm {
@@ -759,14 +761,18 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
                 width: 100% !important;
                 box-sizing: border-box !important;
                 align-items: center !important;
+                direction: rtl !important;
+                text-align: right !important;
             }
             
             .info-row .label {
                 font-weight: 600 !important;
                 margin-left: 1px !important;
+                margin-right: 0 !important;
                 white-space: nowrap !important;
                 flex-shrink: 0 !important;
                 font-size: 6.5px !important;
+                text-align: right !important;
             }
             
             .info-row .value {
@@ -805,12 +811,13 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
                 text-align: center !important;
                 font-weight: 600 !important;
                 font-size: 5.5px !important;
-                border-left: 1px solid #000 !important;
+                border-right: 1px solid #000 !important;
+                border-left: none !important;
                 line-height: 1.2 !important;
             }
             
             .items-table th:first-child {
-                border-left: none !important;
+                border-right: none !important;
                 text-align: right !important;
             }
             
@@ -818,7 +825,8 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
                 padding: 1.2mm 1mm !important;
                 text-align: center !important;
                 border-bottom: 1px solid #000 !important;
-                border-left: 1px solid #000 !important;
+                border-right: 1px solid #000 !important;
+                border-left: none !important;
                 font-size: 5.5px !important;
                 line-height: 1.2 !important;
                 vertical-align: middle !important;
@@ -826,13 +834,14 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             }
             
             .items-table td:first-child {
-                border-left: none !important;
+                border-right: none !important;
                 text-align: right !important;
             }
             
             .items-table .col-item {
                 width: 40% !important;
                 text-align: right !important;
+                padding-left: 1mm !important;
                 padding-right: 1mm !important;
             }
             
