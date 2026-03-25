@@ -2786,9 +2786,9 @@ try {
 }
 
 // =========================
-// تصدير Excel/CSV للأوردرات المحددة
+// تصدير PDF للأوردرات المحددة
 // =========================
-if (isset($_GET['export_recent_tasks_excel']) && (string)$_GET['export_recent_tasks_excel'] === '1') {
+if (isset($_GET['export_recent_tasks_pdf']) && (string)$_GET['export_recent_tasks_pdf'] === '1') {
     if (!$canPrintTasks) {
         http_response_code(403);
         header('Content-Type: text/plain; charset=utf-8');
@@ -2919,36 +2919,35 @@ if (isset($_GET['export_recent_tasks_excel']) && (string)$_GET['export_recent_ta
         ];
     }
 
-    // بث CSV مباشرة لتقليل مشاكل صلاحيات/ملفات وتقليل ظهور HTML بدل البيانات
-    $fileName = ' فواتير الأوردرات' . date('Y-m-d_His') . '.csv';
-    header('Content-Type: text/csv; charset=utf-8');
-    header('Content-Disposition: attachment; filename="' . $fileName . '"');
-    header('Cache-Control: must-revalidate, post-check=0, pre-check=0, private');
-
-    $out = fopen('php://output', 'w');
-    if ($out === false) {
-        http_response_code(500);
-        header('Content-Type: text/plain; charset=utf-8');
-        echo 'فشل في فتح output stream للتصدير';
-        exit;
-    }
-
-    // BOM لدعم العربية في Excel
-    fwrite($out, chr(0xEF) . chr(0xBB) . chr(0xBF));
-
     $headers = ['تاريخ الطلب', 'رقم الطلب', 'اسم العميل', 'تفاصيل الاوردر', 'الاجمالي النهائي'];
-    fputcsv($out, $headers);
 
+    // HTML بسيط جداً (بيانات فقط): جدول أعمدة + صفوف
+    $style = 'table{width:100%;border-collapse:collapse;font-family:Arial, sans-serif;font-size:10pt;}th,td{border:1px solid #000;padding:4px;vertical-align:top;}th{font-weight:bold;text-align:center;}td{text-align:right;white-space:pre-wrap;}';
+    $htmlRows = '';
     foreach ($exportRows as $row) {
-        $line = [];
+        $cells = [];
         foreach ($headers as $h) {
-            $line[] = isset($row[$h]) ? (string)$row[$h] : '';
+            $cell = isset($row[$h]) ? (string)$row[$h] : '';
+            $cellEsc = htmlspecialchars($cell, ENT_QUOTES, 'UTF-8');
+            $cellEsc = str_replace("\n", '<br>', $cellEsc);
+            $cells[] = '<td>' . $cellEsc . '</td>';
         }
-        fputcsv($out, $line);
+        $htmlRows .= '<tr>' . implode('', $cells) . '</tr>';
     }
 
-    fclose($out);
-    exit;
+    $html = '<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>tasks</title><style>' . $style . '</style></head><body>' .
+        '<table><thead><tr>' .
+        '<th>' . $headers[0] . '</th>' .
+        '<th>' . $headers[1] . '</th>' .
+        '<th>' . $headers[2] . '</th>' .
+        '<th>' . $headers[3] . '</th>' .
+        '<th>' . $headers[4] . '</th>' .
+        '</tr></thead><tbody>' . $htmlRows . '</tbody></table>' .
+        '</body></html>';
+
+    require_once __DIR__ . '/../../includes/pdf_helper.php';
+    $fileName = 'production_tasks_selected_' . date('Y-m-d_His') . '.pdf';
+    apdfStreamPdfToBrowser($html, $fileName, [], true);
 }
 
 // بناء معاملات الرابط للفلترة والبحث (للاستخدام في التصفح والروابط)
@@ -3581,7 +3580,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                 </button>
                 <?php endif; ?>
 
-                <button type="button" class="btn btn-outline-info btn-sm" id="exportSelectedExcelBtn" title="تصدير Excel للأوردرات المحددة" disabled>
+                <button type="button" class="btn btn-outline-info btn-sm" id="exportSelectedExcelBtn" title="تصدير PDF للأوردرات المحددة" disabled>
                     <i class="bi bi-file-earmark-spreadsheet me-1"></i>تصدير المحدد (<span id="exportSelectedCount">0</span>)
                 </button>
                 <?php endif; ?>
@@ -6978,7 +6977,7 @@ window.closeChangeStatusCard = function() {
             if (ids.length === 0) return;
 
             var url = new URL(window.location.href);
-            url.searchParams.set('export_recent_tasks_excel', '1');
+            url.searchParams.set('export_recent_tasks_pdf', '1');
             url.searchParams.set('ids', ids.join(','));
 
             window.open(url.toString(), '_blank', 'noopener,noreferrer');
