@@ -213,14 +213,27 @@ $localCustomersForDropdown = [];
 try {
     $t = $db->queryOne("SHOW TABLES LIKE 'local_customers'");
     if (!empty($t)) {
+        // migration: إضافة أعمدة بيانات التليجراف إن لم تكن موجودة
+        $hasTgGov = $db->queryOne("SHOW COLUMNS FROM local_customers LIKE 'tg_governorate'");
+        if (empty($hasTgGov)) {
+            $db->execute("ALTER TABLE local_customers ADD COLUMN tg_governorate VARCHAR(100) DEFAULT NULL AFTER address");
+            $db->execute("ALTER TABLE local_customers ADD COLUMN tg_gov_id INT DEFAULT NULL AFTER tg_governorate");
+            $db->execute("ALTER TABLE local_customers ADD COLUMN tg_city VARCHAR(100) DEFAULT NULL AFTER tg_gov_id");
+            $db->execute("ALTER TABLE local_customers ADD COLUMN tg_city_id INT DEFAULT NULL AFTER tg_city");
+        }
         $hasPhone = $db->queryOne("SHOW COLUMNS FROM local_customers LIKE 'phone'");
-        $rows = $db->query("SELECT id, name" . (!empty($hasPhone) ? ", phone" : "") . " FROM local_customers WHERE status = 'active' ORDER BY name ASC");
+        $rows = $db->query("SELECT id, name, address, tg_governorate, tg_gov_id, tg_city, tg_city_id" . (!empty($hasPhone) ? ", phone" : "") . " FROM local_customers WHERE status = 'active' ORDER BY name ASC");
         foreach ($rows as $r) {
             $localCustomersForDropdown[] = [
-                'id' => (int)$r['id'],
-                'name' => trim((string)($r['name'] ?? '')),
-                'phone' => !empty($hasPhone) ? trim((string)($r['phone'] ?? '')) : '',
-                'phones' => [],
+                'id'             => (int)$r['id'],
+                'name'           => trim((string)($r['name'] ?? '')),
+                'phone'          => !empty($hasPhone) ? trim((string)($r['phone'] ?? '')) : '',
+                'phones'         => [],
+                'address'        => trim((string)($r['address'] ?? '')),
+                'tg_governorate' => trim((string)($r['tg_governorate'] ?? '')),
+                'tg_gov_id'      => $r['tg_gov_id'] ? (int)$r['tg_gov_id'] : null,
+                'tg_city'        => trim((string)($r['tg_city'] ?? '')),
+                'tg_city_id'     => $r['tg_city_id'] ? (int)$r['tg_city_id'] : null,
             ];
         }
     }
@@ -688,7 +701,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $details = trim($_POST['details'] ?? '');
         $orderTitle    = trim($_POST['order_title'] ?? '');
         $tgGovernorate = trim($_POST['tg_governorate'] ?? '');
+        $tgGovId       = isset($_POST['tg_gov_id']) && $_POST['tg_gov_id'] !== '' ? (int)$_POST['tg_gov_id'] : null;
         $tgCity        = trim($_POST['tg_city'] ?? '');
+        $tgCityId      = isset($_POST['tg_city_id']) && $_POST['tg_city_id'] !== '' ? (int)$_POST['tg_city_id'] : null;
         $tgWeight      = trim($_POST['tg_weight'] ?? '');
         $tgParcelDesc  = trim($_POST['tg_parcel_desc'] ?? '');
         $priority = $_POST['priority'] ?? 'normal';
@@ -878,12 +893,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (!empty($localCustomersTable)) {
                         $existingLocal = $db->queryOne("SELECT id FROM local_customers WHERE name = ?", [$customerName]);
                         if (empty($existingLocal)) {
+                            if ($taskType === 'telegraph') {
+                                $db->execute(
+                                    "INSERT INTO local_customers (name, phone, address, tg_governorate, tg_gov_id, tg_city, tg_city_id, balance, status, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'active', ?)",
+                                    [
+                                        $customerName,
+                                        $customerPhone !== '' ? $customerPhone : null,
+                                        $orderTitle !== '' ? $orderTitle : null,
+                                        $tgGovernorate !== '' ? $tgGovernorate : null,
+                                        $tgGovId,
+                                        $tgCity !== '' ? $tgCity : null,
+                                        $tgCityId,
+                                        $currentUser['id'] ?? null,
+                                    ]
+                                );
+                            } else {
+                                $db->execute(
+                                    "INSERT INTO local_customers (name, phone, address, balance, status, created_by) VALUES (?, ?, NULL, 0, 'active', ?)",
+                                    [
+                                        $customerName,
+                                        $customerPhone !== '' ? $customerPhone : null,
+                                        $currentUser['id'] ?? null,
+                                    ]
+                                );
+                            }
+                        } elseif ($taskType === 'telegraph') {
+                            // تحديث بيانات التليجراف للعميل الموجود
                             $db->execute(
-                                "INSERT INTO local_customers (name, phone, address, balance, status, created_by) VALUES (?, ?, NULL, 0, 'active', ?)",
+                                "UPDATE local_customers SET tg_governorate = ?, tg_gov_id = ?, tg_city = ?, tg_city_id = ?, address = COALESCE(NULLIF(?, ''), address) WHERE id = ?",
                                 [
-                                    $customerName,
-                                    $customerPhone !== '' ? $customerPhone : null,
-                                    $currentUser['id'] ?? null,
+                                    $tgGovernorate !== '' ? $tgGovernorate : null,
+                                    $tgGovId,
+                                    $tgCity !== '' ? $tgCity : null,
+                                    $tgCityId,
+                                    $orderTitle,
+                                    (int)$existingLocal['id'],
                                 ]
                             );
                         }
@@ -1742,7 +1786,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $details = trim($_POST['details'] ?? '') ?: null;
                     $orderTitle    = trim($_POST['order_title'] ?? '');
                     $tgGovernorate = trim($_POST['tg_governorate'] ?? '');
+                    $tgGovId       = isset($_POST['tg_gov_id']) && $_POST['tg_gov_id'] !== '' ? (int)$_POST['tg_gov_id'] : null;
                     $tgCity        = trim($_POST['tg_city'] ?? '');
+                    $tgCityId      = isset($_POST['tg_city_id']) && $_POST['tg_city_id'] !== '' ? (int)$_POST['tg_city_id'] : null;
                     $tgWeight      = trim($_POST['tg_weight'] ?? '');
                     $tgParcelDesc  = trim($_POST['tg_parcel_desc'] ?? '');
                     $assignees = isset($_POST['assigned_to']) && is_array($_POST['assigned_to'])
@@ -1858,6 +1904,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $taskId
                         ]
                     );
+                    // تحديث بيانات التليجراف في سجل العميل عند تعديل الأوردر
+                    if ($taskType === 'telegraph' && $customerName) {
+                        $localCustomersTable2 = $db->queryOne("SHOW TABLES LIKE 'local_customers'");
+                        if (!empty($localCustomersTable2)) {
+                            $custIdToUpdate = $newLocalCustomerId;
+                            if (!$custIdToUpdate && $customerName) {
+                                $found = $db->queryOne("SELECT id FROM local_customers WHERE name = ?", [$customerName]);
+                                if ($found) $custIdToUpdate = (int)$found['id'];
+                            }
+                            if ($custIdToUpdate) {
+                                $db->execute(
+                                    "UPDATE local_customers SET tg_governorate = ?, tg_gov_id = ?, tg_city = ?, tg_city_id = ?, address = COALESCE(NULLIF(?, ''), address) WHERE id = ?",
+                                    [
+                                        $tgGovernorate !== '' ? $tgGovernorate : null,
+                                        $tgGovId,
+                                        $tgCity !== '' ? $tgCity : null,
+                                        $tgCityId,
+                                        $orderTitle,
+                                        $custIdToUpdate,
+                                    ]
+                                );
+                            }
+                        }
+                    }
                     $successMessage = 'تم تعديل الأوردر بنجاح.';
                     $userRole = ($currentUser['role'] ?? '') === 'accountant' ? 'accountant' : 'manager';
                     preventDuplicateSubmission($successMessage, ['page' => 'production_tasks', '_refresh' => time()], null, $userRole);
@@ -4253,6 +4323,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 div.dataset.id = c.id;
                 div.dataset.name = c.name;
                 div.dataset.phone = (c.phone || '').toString();
+                div.dataset.address = (c.address || '').toString();
+                div.dataset.tgGovernorate = (c.tg_governorate || '').toString();
+                div.dataset.tgGovId = (c.tg_gov_id || '').toString();
+                div.dataset.tgCity = (c.tg_city || '').toString();
+                div.dataset.tgCityId = (c.tg_city_id || '').toString();
                 div.addEventListener('click', function() {
                     if (hiddenIdEl) {
                         hiddenIdEl.value = this.dataset.id;
@@ -4262,6 +4337,25 @@ document.addEventListener('DOMContentLoaded', function() {
                     submitName.value = this.dataset.name || '';
                     submitPhone.value = this.dataset.phone || '';
                     dropEl.classList.add('d-none');
+                    // ملء بيانات التليجراف تلقائياً إذا كان نوع الأوردر تليجراف
+                    var editTypeEl = document.getElementById('editTaskType');
+                    var isTgEdit = editTypeEl ? editTypeEl.value === 'telegraph' : false;
+                    if (isTgEdit) {
+                        var eAddrEl = document.getElementById('editOrderTitle');
+                        var eGovSearchEl = document.getElementById('editGovSearch');
+                        var eGovEl = document.getElementById('editGov');
+                        var eGovIdEl = document.getElementById('editGovId');
+                        var eCitySearchEl = document.getElementById('editCitySearch');
+                        var eCityEl = document.getElementById('editCity');
+                        var eCityIdEl = document.getElementById('editCityId');
+                        if (eAddrEl && this.dataset.address) eAddrEl.value = this.dataset.address;
+                        if (eGovSearchEl && this.dataset.tgGovernorate) eGovSearchEl.value = this.dataset.tgGovernorate;
+                        if (eGovEl && this.dataset.tgGovernorate) eGovEl.value = this.dataset.tgGovernorate;
+                        if (eGovIdEl && this.dataset.tgGovId) eGovIdEl.value = this.dataset.tgGovId;
+                        if (eCitySearchEl && this.dataset.tgCity) eCitySearchEl.value = this.dataset.tgCity;
+                        if (eCityEl && this.dataset.tgCity) eCityEl.value = this.dataset.tgCity;
+                        if (eCityIdEl && this.dataset.tgCityId) eCityIdEl.value = this.dataset.tgCityId;
+                    }
                 });
                 dropEl.appendChild(div);
             });
@@ -4516,6 +4610,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 div.dataset.id = c.id;
                 div.dataset.name = c.name;
                 div.dataset.phone = (c.phone || '').toString();
+                div.dataset.address = (c.address || '').toString();
+                div.dataset.tgGovernorate = (c.tg_governorate || '').toString();
+                div.dataset.tgGovId = (c.tg_gov_id || '').toString();
+                div.dataset.tgCity = (c.tg_city || '').toString();
+                div.dataset.tgCityId = (c.tg_city_id || '').toString();
                 div.addEventListener('click', function() {
                     if (hiddenIdEl) {
                         hiddenIdEl.value = this.dataset.id;
@@ -4525,6 +4624,24 @@ document.addEventListener('DOMContentLoaded', function () {
                     submitName.value = this.dataset.name || '';
                     submitPhone.value = this.dataset.phone || '';
                     dropEl.classList.add('d-none');
+                    // ملء بيانات التليجراف تلقائياً إذا كان نوع الأوردر تليجراف
+                    var typeEl = document.getElementById('taskTypeSelect');
+                    if (typeEl && typeEl.value === 'telegraph') {
+                        var addrEl = document.getElementById('createOrderTitle');
+                        var govSearchEl = document.getElementById('createGovSearch');
+                        var govEl = document.getElementById('createGov');
+                        var govIdEl = document.getElementById('createGovId');
+                        var citySearchEl = document.getElementById('createCitySearch');
+                        var cityEl = document.getElementById('createCity');
+                        var cityIdEl = document.getElementById('createCityId');
+                        if (addrEl && this.dataset.address) addrEl.value = this.dataset.address;
+                        if (govSearchEl && this.dataset.tgGovernorate) govSearchEl.value = this.dataset.tgGovernorate;
+                        if (govEl && this.dataset.tgGovernorate) govEl.value = this.dataset.tgGovernorate;
+                        if (govIdEl && this.dataset.tgGovId) govIdEl.value = this.dataset.tgGovId;
+                        if (citySearchEl && this.dataset.tgCity) citySearchEl.value = this.dataset.tgCity;
+                        if (cityEl && this.dataset.tgCity) cityEl.value = this.dataset.tgCity;
+                        if (cityIdEl && this.dataset.tgCityId) cityIdEl.value = this.dataset.tgCityId;
+                    }
                     if (onSelect) onSelect(c);
                 });
                 dropEl.appendChild(div);
