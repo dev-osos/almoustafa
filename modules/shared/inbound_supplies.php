@@ -7,11 +7,13 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
 
 <style>
 .autocomplete-dropdown {
-    position-absolute: absolute !important;
-    w-100: 100% !important;
-    bg-white: white !important;
+    position: absolute !important;
+    top: 100% !important;
+    left: 0 !important;
+    right: 0 !important;
+    background: white !important;
     border: 1px solid #dee2e6 !important;
-    border-top: none !important;
+    border-top: 1px solid #dee2e6 !important;
     border-radius: 0 0 0.375rem 0.375rem !important;
     z-index: 1000 !important;
     max-height: 200px !important;
