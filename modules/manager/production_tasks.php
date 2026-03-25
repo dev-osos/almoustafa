@@ -2982,8 +2982,8 @@ if ($isSelectedExport || $isPeriodExport) {
 
     // إصدار CSV كملف داخل reports ثم تنزيله عبر api/download_csv.php
     // (مطابق لطريقة إصدار تقارير ملفات CSV في النظام)
-    $mode = $isPeriodExport ? 'period' : 'selected';
-    $fileName = 'production_tasks_' . $mode . '_' . date('Y-m-d_His') . '.csv';
+    $mode = $isPeriodExport ? '-الفتره-' : 'selected';
+    $fileName = 'فواتير السيستم - ' . $mode . '-' . date('Y-m-d_His') . '.csv';
 
     $exportsDir = rtrim(REPORTS_PATH, '/\\') . DIRECTORY_SEPARATOR . 'exports';
     if (!is_dir($exportsDir)) {
@@ -3719,8 +3719,8 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             </th>
                             <?php endif; ?>
                             <th>رقم الطلب</th>
-                            <th>اسم العميل</th>
-                            <th>من</th>
+                            <th style="min-width: 220px;">اسم العميل</th>
+                            <th style="min-width: 180px;">من</th>
                             <th>نوع الاوردر</th>
                             <th>الحاله</th>
                             <th>التسليم</th>
@@ -3795,14 +3795,14 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                         }
                                         ?>
                                     </td>
-                                    <td><?php 
+                                    <td class="text-wrap" data-wrap="true" style="min-width: 220px;"><?php 
                                         $custName = isset($task['customer_name']) ? trim((string)$task['customer_name']) : '';
                                         echo $custName !== '' ? htmlspecialchars($custName, ENT_QUOTES, 'UTF-8') : '<span class="text-muted">-</span>';
                                         if (in_array((int)$task['id'], $approvedTaskIds, true)) {
                                             echo ' <i class="bi bi-patch-check-fill text-success" style="font-size: 0.75rem; vertical-align: middle;" title="تم اعتماد الفاتورة" aria-label="تم اعتماد الفاتورة"></i>';
                                         }
                                     ?></td>
-                                    <td>                                        <?php 
+                                    <td class="text-wrap" data-wrap="true" style="min-width: 180px;">                                        <?php 
                                         // عرض منشئ المهمة إذا كان المحاسب أو المدير
                                         if (isset($task['creator_name']) && ($isAccountant || $isManager)) {
                                             $creatorRoleLabel = '';
