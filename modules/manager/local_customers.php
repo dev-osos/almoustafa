@@ -8313,6 +8313,16 @@ function lcInitAutocomplete(opts) {
     if (!dropdown) return null;
     var activeIdx = -1;
 
+    function normalizeArabicText(str) {
+        return String(str || '')
+            .trim()
+            .replace(/\s+/g, ' ')
+            // توحيد بعض أشكال الألف/الهاء لتقليل مشاكل اختلاف الحروف
+            .replace(/[إأآ]/g, 'ا')
+            .replace(/[ة]/g, 'ه')
+            .replace(/ـ/g, '');
+    }
+
     function renderDropdown(filtered) {
         while (dropdown.firstChild) dropdown.removeChild(dropdown.firstChild);
         activeIdx = -1;
@@ -8384,8 +8394,9 @@ function lcInitAutocomplete(opts) {
             opts._list = list;
             if (preSelectValue !== null && preSelectValue !== undefined && String(preSelectValue) !== '') {
                 var pre = String(preSelectValue);
+                var preNorm = normalizeArabicText(pre);
                 // preSelectValue ممكن يكون اسم (name) أو كود/Id (code)
-                var match = list.find(function(c) { return c.name === preSelectValue; });
+                var match = list.find(function(c) { return normalizeArabicText(c.name) === preNorm; });
                 if (!match) {
                     match = list.find(function(c) { return String(c.code ?? '') === pre; });
                 }
@@ -8492,6 +8503,14 @@ lcInitGovAutocomplete('editLCCardGovSearch', 'editLCCardGov', 'editLCCardGovId',
 // دالة مساعدة لملء حقول التليجراف في النموذج
 // suffix: '' للمودال، 'Card' للكارد
 function _fillLCTgFields(suffix, govName, govId, cityName, cityId) {
+    function normalizeArabicText(str) {
+        return String(str || '')
+            .trim()
+            .replace(/\s+/g, ' ')
+            .replace(/[إأآ]/g, 'ا')
+            .replace(/[ة]/g, 'ه')
+            .replace(/ـ/g, '');
+    }
     var govSearch = document.getElementById('editLC' + suffix + 'GovSearch');
     var govHidden = document.getElementById('editLC' + suffix + 'Gov');
     var govIdEl   = document.getElementById('editLC' + suffix + 'GovId');
@@ -8517,8 +8536,11 @@ function _fillLCTgFields(suffix, govName, govId, cityName, cityId) {
         gov = LC_GOV_LIST.find(function(g) { return String(g.code ?? '') === govIdStr; });
         if (!gov) gov = LC_GOV_LIST.find(function(g) { return String(g.id ?? '') === govIdStr; });
     }
-    // fallback: مطابقة حسب الاسم كما كان سابقاً
-    if (!gov && govName) gov = LC_GOV_LIST.find(function(g) { return g.name === govName; });
+    // fallback: مطابقة حسب الاسم مع تطبيع بسيط
+    if (!gov && govName) {
+        var govNameNorm = normalizeArabicText(govName);
+        gov = LC_GOV_LIST.find(function(g) { return normalizeArabicText(g.name) === govNameNorm; });
+    }
 
     if (gov && inst) {
         // استخدم اسم القائمة (قد يختلف عن الاسم المخزن بشكل بسيط)
