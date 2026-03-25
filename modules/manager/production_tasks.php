@@ -4496,7 +4496,16 @@ window.openEditTaskModal = function(taskId) {
                 var editGovSearch = document.getElementById('editGovSearch');
                 if (editGovEl) editGovEl.value = t.tg_governorate || '';
                 if (editGovSearch) editGovSearch.value = t.tg_governorate || '';
-                if (t.tg_governorate && typeof window.triggerCityFetchByGovName === 'function') {
+                // مهم: TelelgraphEx حساب تكلفة التوصيل في نموذج التعديل يعتمد على editGovId/editCityId.
+                // triggerCityFetchByGovName قد لا يعبّي govId، لذلك بنستخدم setTgAutoFillIds أولاً إن وُجد.
+                if (t.tg_governorate && typeof window.setTgAutoFillIds === 'function') {
+                    window.setTgAutoFillIds(t.tg_governorate, 'editGovId', 'editCitySearch', t.tg_city || '');
+                    // ضمان تعبئة قيمة الاسم الظاهرة فوراً (حتى لو هتتحول لاحقاً عبر autocomplete)
+                    var editCityHidden = document.getElementById('editCity');
+                    var editCitySearch = document.getElementById('editCitySearch');
+                    if (editCityHidden) editCityHidden.value = t.tg_city || '';
+                    if (editCitySearch) editCitySearch.value = t.tg_city || '';
+                } else if (t.tg_governorate && typeof window.triggerCityFetchByGovName === 'function') {
                     window.triggerCityFetchByGovName(t.tg_governorate, 'editCitySearch', 'editCity', t.tg_city || '');
                 } else {
                     var editCityHidden = document.getElementById('editCity');
