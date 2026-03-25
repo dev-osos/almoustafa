@@ -10450,12 +10450,5 @@ function closeImportLocalCustomersCard() {
     }
     
     })(); // End runLocalCustomersDOMInit
-  }
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', doRun);
-  } else {
-    doRun();
-  }
-})(); // End runLocalCustomersWhenReady
 </script>
 <?php endif; ?>
