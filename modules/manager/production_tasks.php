@@ -2786,9 +2786,11 @@ try {
 }
 
 // =========================
-// صفحة طباعة للأوردرات المحددة فقط
+// صفحة طباعة للبيانات (محدد/حسب فترة)
 // =========================
-if (isset($_GET['export_recent_tasks_print']) && (string)$_GET['export_recent_tasks_print'] === '1') {
+$isSelectedExport = isset($_GET['export_recent_tasks_print']) && (string)$_GET['export_recent_tasks_print'] === '1';
+$isPeriodExport = isset($_GET['export_recent_tasks_print_period']) && (string)$_GET['export_recent_tasks_print_period'] === '1';
+if ($isSelectedExport || $isPeriodExport) {
     if (!$canPrintTasks) {
         http_response_code(403);
         header('Content-Type: text/plain; charset=utf-8');
@@ -2797,7 +2799,7 @@ if (isset($_GET['export_recent_tasks_print']) && (string)$_GET['export_recent_ta
     }
 
     $selectedIds = [];
-    if (!empty($_GET['ids'])) {
+    if ($isSelectedExport && !empty($_GET['ids'])) {
         $rawIds = preg_split('/\s*,\s*/', (string)$_GET['ids'], -1, PREG_SPLIT_NO_EMPTY);
         if (is_array($rawIds)) {
             $selectedIds = array_values(array_filter(array_map('intval', $rawIds), function($v) {
@@ -2823,7 +2825,64 @@ if (isset($_GET['export_recent_tasks_print']) && (string)$_GET['export_recent_ta
 
     $exportRows = [];
 
-    foreach ($recentTasks as $task) {
+    $tasksToPrint = $recentTasks;
+
+    // عند التصدير حسب الفترة: جلب كل الطلبات في نطاق التواريخ (بدون Pagination)
+    if ($isPeriodExport) {
+        $exportLimit = 5000; // حد آمن للتصدير
+        // في وضع "حسب الفترة" نريد كل الطلبات داخل نطاق تاريخ الطلب فقط
+        $periodWhere = '';
+        $periodParams = [];
+        if ($filterOrderDateFrom !== '') {
+            $periodWhere .= " AND DATE(t.created_at) >= ?";
+            $periodParams[] = $filterOrderDateFrom;
+        }
+        if ($filterOrderDateTo !== '') {
+            $periodWhere .= " AND DATE(t.created_at) <= ?";
+            $periodParams[] = $filterOrderDateTo;
+        }
+        if ($isAccountant || $isManager) {
+            $adminUsers = $db->query("
+                SELECT id FROM users
+                WHERE role IN ('manager', 'accountant') AND status = 'active'
+            ");
+            $adminIds = !empty($adminUsers) ? array_map(function($user) { return (int)$user['id']; }, $adminUsers) : [];
+            if (!empty($adminIds)) {
+                $placeholders = implode(',', array_fill(0, count($adminIds), '?'));
+                $queryParamsExport = array_merge($adminIds, $periodParams, [$exportLimit]);
+                $tasksToPrint = $db->query("
+                    SELECT t.id, t.title, t.status, t.due_date, t.created_at,
+                           t.quantity, t.unit, t.customer_name, t.customer_phone, t.notes,
+                           t.product_id, t.related_type, t.related_id, t.task_type,
+                           t.total_amount
+                    FROM tasks t
+                    WHERE t.created_by IN ($placeholders)
+                    AND t.status != 'cancelled'
+                    $periodWhere
+                    ORDER BY t.created_at DESC, t.id DESC
+                    LIMIT ?
+                ", $queryParamsExport);
+            } else {
+                $tasksToPrint = [];
+            }
+        } else {
+            $queryParamsExport = array_merge([$currentUser['id']], $periodParams, [$exportLimit]);
+            $tasksToPrint = $db->query("
+                SELECT t.id, t.title, t.status, t.due_date, t.created_at,
+                       t.quantity, t.unit, t.customer_name, t.customer_phone, t.notes,
+                       t.product_id, t.related_type, t.related_id, t.task_type,
+                       t.total_amount
+                FROM tasks t
+                WHERE t.created_by = ?
+                AND t.status != 'cancelled'
+                $periodWhere
+                ORDER BY t.created_at DESC, t.id DESC
+                LIMIT ?
+            ", $queryParamsExport);
+        }
+    }
+
+    foreach ($tasksToPrint as $task) {
         $taskId = (int)($task['id'] ?? 0);
         if ($taskId <= 0) continue;
         if (!empty($selectedIds) && !in_array($taskId, $selectedIds, true)) continue;
@@ -2897,8 +2956,8 @@ if (isset($_GET['export_recent_tasks_print']) && (string)$_GET['export_recent_ta
             $details = trim($notes);
         }
 
-        $finalTotal = isset($task['receipt_total']) ? (float)$task['receipt_total'] : 0;
-        $finalTotalStr = number_format($finalTotal, 2, '.', '');
+        $finalTotal = getTaskReceiptTotalFromNotes($task['notes'] ?? '');
+        $finalTotalStr = number_format((float)$finalTotal, 2, '.', '');
 
         $exportRows[] = [
             'تاريخ الطلب' => $orderDate,
@@ -2921,44 +2980,36 @@ if (isset($_GET['export_recent_tasks_print']) && (string)$_GET['export_recent_ta
 
     $headers = ['تاريخ الطلب', 'رقم الطلب', 'اسم العميل', 'تفاصيل الاوردر', 'الاجمالي النهائي'];
 
-    // HTML بسيط جداً (بيانات فقط): جدول أعمدة + صفوف
-    $style = 'table{width:100%;border-collapse:collapse;font-family:Arial, sans-serif;font-size:10pt;}th,td{border:1px solid #000;padding:4px;vertical-align:top;}th{font-weight:bold;text-align:center;}td{text-align:right;white-space:pre-wrap;}body{visibility:visible !important;}@media print{body{visibility:visible !important;}table{page-break-inside:auto;}tr{page-break-inside:avoid;page-break-after:auto;} }';
-    $htmlRows = '';
-    foreach ($exportRows as $row) {
-        $cells = [];
-        foreach ($headers as $h) {
-            $cell = isset($row[$h]) ? (string)$row[$h] : '';
-            $cellEsc = htmlspecialchars($cell, ENT_QUOTES, 'UTF-8');
-            $cellEsc = str_replace("\n", '<br>', $cellEsc);
-            $cells[] = '<td>' . $cellEsc . '</td>';
-        }
-        $htmlRows .= '<tr>' . implode('', $cells) . '</tr>';
+    // بث CSV مباشرة بدون أي تصميم/HTML
+    $mode = $isPeriodExport ? 'period' : 'selected';
+    $fileName = 'production_tasks_' . $mode . '_' . date('Y-m-d_His') . '.csv';
+
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="' . $fileName . '"');
+    header('Cache-Control: must-revalidate, post-check=0, pre-check=0, private');
+
+    $out = fopen('php://output', 'w');
+    if ($out === false) {
+        http_response_code(500);
+        header('Content-Type: text/plain; charset=utf-8');
+        echo 'فشل في فتح output stream للتصدير';
+        exit;
     }
 
-    $html = '<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>tasks</title><style>' . $style . '</style></head><body>' .
-        '<table><thead><tr>' .
-        '<th>' . $headers[0] . '</th>' .
-        '<th>' . $headers[1] . '</th>' .
-        '<th>' . $headers[2] . '</th>' .
-        '<th>' . $headers[3] . '</th>' .
-        '<th>' . $headers[4] . '</th>' .
-        '</tr></thead><tbody>' . $htmlRows . '</tbody></table>' .
-        '</body></html>';
+    // BOM لدعم العربية في Excel
+    fwrite($out, chr(0xEF) . chr(0xBB) . chr(0xBF));
 
-    // إخراج صفحة HTML للطباعة فقط (بدون توليد PDF على السيرفر)
-    header('Content-Type: text/html; charset=utf-8');
-    $html = str_replace(
-        '</body></html>',
-        '<script>' .
-        '(function(){' .
-        '  function go(){ try{ window.focus && window.focus(); window.print(); } catch(e){} }' .
-        '  if(document.readyState === "complete"){ setTimeout(go, 200); return; }' .
-        '  window.addEventListener("load", function(){ setTimeout(go, 200); }, { once: true });' .
-        '})()' .
-        '</script></body></html>',
-        $html
-    );
-    echo $html;
+    fputcsv($out, $headers);
+
+    foreach ($exportRows as $row) {
+        $line = [];
+        foreach ($headers as $h) {
+            $line[] = isset($row[$h]) ? (string)$row[$h] : '';
+        }
+        fputcsv($out, $line);
+    }
+
+    fclose($out);
     exit;
 }
 
@@ -3582,7 +3633,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
         <div class="card-header bg-light d-flex justify-content-between align-items-center flex-wrap gap-2">
             <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>قائمة الأوردرات</h5>
             <div class="d-flex align-items-center gap-2">
-                <?php if ($canPrintTasks && !empty($recentTasks)): ?>
+                <?php if ($canPrintTasks): ?>
                 <button type="button" class="btn btn-outline-primary btn-sm" id="printSelectedReceiptsBtn" title="طباعة إيصالات الأوردرات المحددة" disabled>
                     <i class="bi bi-printer me-1"></i>طباعة المحدد (<span id="selectedCount">0</span>)
                 </button>
@@ -3592,8 +3643,8 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                 </button>
                 <?php endif; ?>
 
-                <button type="button" class="btn btn-outline-info btn-sm" id="exportSelectedExcelBtn" title="طباعة بيانات الأوردرات المحددة" disabled>
-                    <i class="bi bi-file-earmark-spreadsheet me-1"></i>تصدير المحدد (<span id="exportSelectedCount">0</span>)
+                <button type="button" class="btn btn-outline-info btn-sm" id="exportSelectedExcelBtn" title="تصدير CSV حسب الفترة">
+                    <i class="bi bi-file-earmark-spreadsheet me-1"></i>تصدير CSV حسب الفترة (<span id="exportSelectedCount">0</span>)
                 </button>
                 <?php endif; ?>
             </div>
@@ -6927,7 +6978,7 @@ window.closeChangeStatusCard = function() {
     var approveCountEl = document.getElementById('approveSelectedCount');
     var exportBtn = document.getElementById('exportSelectedExcelBtn');
     var exportCountEl = document.getElementById('exportSelectedCount');
-    if (!checkboxes.length) return;
+    // even if there are no checkboxes (no recent tasks), allow period export
 
     function updateSelection() {
         var checked = document.querySelectorAll('.task-print-checkbox:checked');
@@ -6935,7 +6986,6 @@ window.closeChangeStatusCard = function() {
         if (selectedCountEl) selectedCountEl.textContent = n;
         if (printBtn) printBtn.disabled = n === 0;
         if (exportCountEl) exportCountEl.textContent = n;
-        if (exportBtn) exportBtn.disabled = n === 0;
         // عد الأوردرات القابلة للاعتماد (غير معتمدة وليست شحن)
         var approvable = 0;
         checked.forEach(function(cb) {
@@ -6980,19 +7030,36 @@ window.closeChangeStatusCard = function() {
 
     if (exportBtn) {
         exportBtn.addEventListener('click', function() {
-            var checked = document.querySelectorAll('.task-print-checkbox:checked');
-            var ids = [];
-            checked.forEach(function(cb) {
-                var id = cb.value;
-                if (id) ids.push(id);
-            });
-            if (ids.length === 0) return;
-
             var url = new URL(window.location.href);
-            url.searchParams.set('export_recent_tasks_print', '1');
-            url.searchParams.set('ids', ids.join(','));
+            var fromEl = document.getElementById('recentTasksFilterOrderDateFrom');
+            var toEl = document.getElementById('recentTasksFilterOrderDateTo');
+            var fromVal = fromEl ? fromEl.value : '';
+            var toVal = toEl ? toEl.value : '';
 
-            // استخدام window.location لتفادي حظر تنزيل الملفات من نافذة جديدة
+            var dateFrom = window.prompt('ادخل تاريخ من (YYYY-MM-DD):', fromVal || '');
+            if (!dateFrom) return;
+            var dateTo = window.prompt('ادخل تاريخ الى (YYYY-MM-DD):', toVal || '');
+            if (!dateTo) return;
+
+            dateFrom = String(dateFrom).trim();
+            dateTo = String(dateTo).trim();
+
+            // تحقق بسيط من الصيغة
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(dateTo)) {
+                alert('تنسيق التواريخ غير صحيح. استخدم YYYY-MM-DD');
+                return;
+            }
+            if (dateFrom > dateTo) {
+                alert('تاريخ من لازم يكون قبل او يساوي تاريخ الى');
+                return;
+            }
+
+            url.searchParams.set('export_recent_tasks_print_period', '1');
+            url.searchParams.set('order_date_from', dateFrom);
+            url.searchParams.set('order_date_to', dateTo);
+            url.searchParams.delete('ids');
+            url.searchParams.delete('export_recent_tasks_print');
+
             window.location.href = url.toString();
         });
     }
