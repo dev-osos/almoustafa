@@ -454,7 +454,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $products = [];
                 $task = $db->queryOne("SELECT notes FROM tasks WHERE id = ?", [$taskIdInput]);
                 if ($task && !empty($task['notes'])) {
-                    if (preg_match('/\[PRODUCTS_JSON\]:(.+?)(?=\n|$)/', $task['notes'], $pMatches)) {
+                    if (preg_match('/(?:\[PRODUCTS_JSON\]|المنتجات)\s*:\s*(\[.+?\])(?=\s*\n|\[ASSIGNED_WORKERS_IDS\]|$)/su', $task['notes'], $pMatches)) {
                         $decoded = json_decode(trim($pMatches[1]), true);
                         if (is_array($decoded)) {
                             foreach ($decoded as $p) {
@@ -2350,7 +2350,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($taskId > 0) {
                     $task = $db->queryOne("SELECT notes FROM tasks WHERE id = ?", [$taskId]);
                     if ($task && !empty($task['notes'])) {
-                        if (preg_match('/\[PRODUCTS_JSON\]:(.+?)(?=\n|$)/', $task['notes'], $pMatches)) {
+                        if (preg_match('/(?:\[PRODUCTS_JSON\]|المنتجات)\s*:\s*(\[.+?\])(?=\s*\n|\[ASSIGNED_WORKERS_IDS\]|$)/su', $task['notes'], $pMatches)) {
                             $decoded = json_decode(trim($pMatches[1]), true);
                             if (is_array($decoded)) {
                                 foreach ($decoded as $p) {

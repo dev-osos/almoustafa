@@ -468,7 +468,7 @@ function getTaskReceiptTotalFromNotes($notes)
 {
     $notes = (string)$notes;
     $products = [];
-    if (preg_match('/\[PRODUCTS_JSON\]:(.+?)(?=\n|$)/s', $notes, $m)) {
+    if (preg_match('/(?:\[PRODUCTS_JSON\]|المنتجات)\s*:\s*(\[.+?\])(?=\s*\n|\[ASSIGNED_WORKERS_IDS\]|$)/su', $notes, $m)) {
         $decoded = json_decode(trim($m[1]), true);
         if (is_array($decoded)) {
             $products = $decoded;
@@ -513,7 +513,7 @@ function deductTaskProductsFromStock($db, $notes)
     if ($notes === '') {
         return;
     }
-    if (!preg_match('/\[PRODUCTS_JSON\]:(.+?)(?=\n|$)/s', $notes, $m)) {
+    if (!preg_match('/(?:\[PRODUCTS_JSON\]|المنتجات)\s*:\s*(\[.+?\])(?=\s*\n|\[ASSIGNED_WORKERS_IDS\]|$)/su', $notes, $m)) {
         return;
     }
     $products = json_decode(trim($m[1]), true);
@@ -1848,7 +1848,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                     if ($details) $notesParts[] = $details;
                     if (!empty($products)) {
-                        $notesParts[] = 'المنتجات :' . json_encode($products, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                        $productsJson = json_encode($products, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                        $notesParts[] = '[PRODUCTS_JSON]:' . $productsJson;
                         $lines = [];
                         foreach ($products as $p) {
                             $lines[] = 'المنتج: ' . $p['name'] . ($p['quantity'] !== null ? ' - الكمية: ' . $p['quantity'] : '');
@@ -1964,8 +1965,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
             $notes = (string)($task['notes'] ?? '');
             $products = [];
             $assignees = [];
-            // استخراج المنتجات من [PRODUCTS_JSON] — دعم \n و \r\n
-            if (preg_match('/\[PRODUCTS_JSON\]\s*:\s*(.+?)(?=\s*\n\s*\n|\[ASSIGNED_WORKERS_IDS\]|$)/s', $notes, $m)) {
+            // استخراج المنتجات — دعم الصيغتين: [PRODUCTS_JSON] و المنتجات :
+            if (preg_match('/(?:\[PRODUCTS_JSON\]|المنتجات)\s*:\s*(\[.+?\])(?=\s*\n|\[ASSIGNED_WORKERS_IDS\]|$)/su', $notes, $m)) {
                 $jsonStr = trim($m[1]);
                 $decoded = json_decode($jsonStr, true);
                 if (is_array($decoded)) {
@@ -2044,6 +2045,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
             if ($details === '') {
                 $details = $notes;
                 $details = preg_replace('/\[PRODUCTS_JSON\][\s\S]*?(?=\s*\n\s*\n|\[ASSIGNED_WORKERS_IDS\]|$)/', '', $details);
+                $details = preg_replace('/المنتجات\s*:\s*\[.*?\](?=\s*\n|$)/su', '', $details);
                 $details = preg_replace('/\[ASSIGNED_WORKERS_IDS\]\s*:[^\n]*/', '', $details);
                 $details = preg_replace('/العمال المخصصون:[^\n]*/', '', $details);
                 $details = preg_replace('/العامل المخصص:[^\n]*/', '', $details);
@@ -2126,7 +2128,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
             if (empty($items)) {
                 $notes = (string)($task['notes'] ?? '');
                 $products = [];
-                if (preg_match('/\[PRODUCTS_JSON\]\s*:\s*(.+?)(?=\s*\n\s*\n|\[ASSIGNED_WORKERS_IDS\]|$)/s', $notes, $m)) {
+                if (preg_match('/(?:\[PRODUCTS_JSON\]|المنتجات)\s*:\s*(\[.+?\])(?=\s*\n|\[ASSIGNED_WORKERS_IDS\]|$)/su', $notes, $m)) {
                     $decoded = json_decode(trim($m[1]), true);
                     if (is_array($decoded)) {
                         foreach ($decoded as $p) {
@@ -2223,7 +2225,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
                 $notes = (string)($task['notes'] ?? '');
                 $products = [];
 
-                if (preg_match('/\[PRODUCTS_JSON\]\s*:\s*(.+?)(?=\s*\n\s*\n|\[ASSIGNED_WORKERS_IDS\]|$)/s', $notes, $m)) {
+                if (preg_match('/(?:\[PRODUCTS_JSON\]|المنتجات)\s*:\s*(\[.+?\])(?=\s*\n|\[ASSIGNED_WORKERS_IDS\]|$)/su', $notes, $m)) {
                     $decoded = json_decode(trim($m[1]), true);
                     if (is_array($decoded)) {
                         foreach ($decoded as $p) {
@@ -2287,7 +2289,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
     $seen = [];
     foreach ($tasks as $task) {
         $notes = (string)($task['notes'] ?? '');
-        if (!preg_match('/\[PRODUCTS_JSON\]\s*:\s*(.+?)(?=\s*\n\s*\n|\[ASSIGNED_WORKERS_IDS\]|$)/s', $notes, $m)) continue;
+        if (!preg_match('/(?:\[PRODUCTS_JSON\]|المنتجات)\s*:\s*(\[.+?\])(?=\s*\n|\[ASSIGNED_WORKERS_IDS\]|$)/su', $notes, $m)) continue;
         $decoded = json_decode(trim($m[1]), true);
         if (!is_array($decoded)) continue;
         foreach ($decoded as $p) {
@@ -2907,7 +2909,7 @@ if ($isSelectedExport || $isPeriodExport) {
         $detailsLines = [];
 
         $products = [];
-        if (preg_match('/\[PRODUCTS_JSON\]\s*:\s*(.+?)(?=\s*\n\s*\n|\[ASSIGNED_WORKERS_IDS\]|$)/s', $notes, $m)) {
+        if (preg_match('/(?:\[PRODUCTS_JSON\]|المنتجات)\s*:\s*(\[.+?\])(?=\s*\n|\[ASSIGNED_WORKERS_IDS\]|$)/su', $notes, $m)) {
             $decoded = json_decode(trim($m[1]), true);
             if (is_array($decoded)) {
                 foreach ($decoded as $p) {
@@ -2948,10 +2950,10 @@ if ($isSelectedExport || $isPeriodExport) {
 
         // شحن/خصم (اختياري)
         $shippingFees = 0.0;
-        if (preg_match('/\[SHIPPING_FEES\]\s*:\s*([0-9.]+)/', $notes, $m)) $shippingFees = (float)$m[1];
+        if (preg_match('/(?:\[SHIPPING_FEES\]|رسوم الشحن)\s*:\s*([0-9.]+)/u', $notes, $m)) $shippingFees = (float)$m[1];
 
         $discount = 0.0;
-        if (preg_match('/\[DISCOUNT\]\s*:\s*([0-9.]+)/', $notes, $m)) $discount = (float)$m[1];
+        if (preg_match('/(?:\[DISCOUNT\]|الخصم)\s*:\s*([0-9.]+)/u', $notes, $m)) $discount = (float)$m[1];
 
         if ($shippingFees > 0) $detailsLines[] = 'الشحن: ' . number_format($shippingFees, 2, '.', '');
         if ($discount > 0) $detailsLines[] = 'الخصم: ' . number_format($discount, 2, '.', '');
@@ -3761,7 +3763,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                         <?php
                                         $cbNotes = $task['notes'] ?? '';
                                         $cbProductsJson = '[]';
-                                        if (preg_match('/\[PRODUCTS_JSON\]:(.+?)(?=\n\[|\n\n|\z)/s', $cbNotes, $cbPm)) {
+                                        if (preg_match('/(?:\[PRODUCTS_JSON\]|المنتجات)\s*:\s*(\[.+?\])(?=\s*\n|\[ASSIGNED_WORKERS_IDS\]|\z)/su', $cbNotes, $cbPm)) {
                                             $cbDecoded = json_decode(trim($cbPm[1]), true);
                                             if (is_array($cbDecoded)) $cbProductsJson = json_encode($cbDecoded, JSON_UNESCAPED_UNICODE);
                                         }

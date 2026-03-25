@@ -53,7 +53,7 @@ function buildInventoryPreview($db, $notes)
 {
     // استخراج المنتجات — نوقف عند أول سطر جديد (JSON دائماً على سطر واحد)
     $products = [];
-    if (preg_match('/\[PRODUCTS_JSON\]:(.+?)(?=\n|$)/s', $notes, $m)) {
+    if (preg_match('/(?:\[PRODUCTS_JSON\]|المنتجات)\s*:\s*(\[.+?\])(?=\s*\n|\[ASSIGNED_WORKERS_IDS\]|$)/su', $notes, $m)) {
         $decoded = json_decode(trim($m[1]), true);
         if (is_array($decoded)) {
             $products = $decoded;
