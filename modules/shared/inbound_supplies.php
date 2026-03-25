@@ -81,7 +81,10 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
     const submitInboundBtn = document.getElementById('submitInboundBtn');
     const tableBody = document.getElementById('suppliesTableBody');
     const receiptBody = document.getElementById('receiptBody');
-    const receiptModal = new bootstrap.Modal(document.getElementById('supplyReceiptModal'));
+    const receiptModalEl = document.getElementById('supplyReceiptModal');
+    const receiptModalInstance = (window.bootstrap && receiptModalEl)
+        ? new window.bootstrap.Modal(receiptModalEl)
+        : null;
     const paginationInfo = document.getElementById('suppliesPaginationInfo');
     const prevPageBtn = document.getElementById('prevPageBtn');
     const nextPageBtn = document.getElementById('nextPageBtn');
@@ -293,7 +296,15 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         table.appendChild(tbody);
         root.appendChild(table);
         receiptBody.appendChild(root);
-        receiptModal.show();
+        if (receiptModalInstance) {
+            receiptModalInstance.show();
+        } else if (receiptModalEl) {
+            receiptModalEl.classList.add('show');
+            receiptModalEl.style.display = 'block';
+            receiptModalEl.setAttribute('aria-modal', 'true');
+            receiptModalEl.removeAttribute('aria-hidden');
+            document.body.classList.add('modal-open');
+        }
     }
 
     async function loadSupplyDetails(id, printAfter) {
@@ -328,6 +339,15 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         doc.documentElement.replaceChildren(head, body);
         w.focus();
         w.print();
+    }
+
+    function closeReceiptModalFallback() {
+        if (!receiptModalEl || receiptModalInstance) return;
+        receiptModalEl.classList.remove('show');
+        receiptModalEl.style.display = 'none';
+        receiptModalEl.setAttribute('aria-hidden', 'true');
+        receiptModalEl.removeAttribute('aria-modal');
+        document.body.classList.remove('modal-open');
     }
 
     async function loadSupplies() {
@@ -439,6 +459,14 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
     nextPageBtn.addEventListener('click', function () { if (listPage < totalPages) { listPage += 1; loadSupplies(); } });
     applyFilterBtn.addEventListener('click', function () { listPage = 1; loadSupplies(); });
     printReceiptBtn.addEventListener('click', printReceipt);
+    if (!receiptModalInstance && receiptModalEl) {
+        receiptModalEl.querySelectorAll('[data-bs-dismiss="modal"], .btn-close').forEach(btn => {
+            btn.addEventListener('click', closeReceiptModalFallback);
+        });
+        receiptModalEl.addEventListener('click', function (e) {
+            if (e.target === receiptModalEl) closeReceiptModalFallback();
+        });
+    }
 
     createRow();
     loadSupplies();
