@@ -220,6 +220,20 @@ try {
         }
     }
 
+    // إضافة أعمدة بيانات التليجراف إن لم تكن موجودة
+    $hasTgGov = $db->queryOne("SHOW COLUMNS FROM local_customers LIKE 'tg_governorate'");
+    if (empty($hasTgGov)) {
+        try {
+            $db->rawQuery("ALTER TABLE `local_customers` ADD COLUMN `tg_governorate` VARCHAR(100) DEFAULT NULL AFTER `address`");
+            $db->rawQuery("ALTER TABLE `local_customers` ADD COLUMN `tg_gov_id` INT DEFAULT NULL AFTER `tg_governorate`");
+            $db->rawQuery("ALTER TABLE `local_customers` ADD COLUMN `tg_city` VARCHAR(100) DEFAULT NULL AFTER `tg_gov_id`");
+            $db->rawQuery("ALTER TABLE `local_customers` ADD COLUMN `tg_city_id` INT DEFAULT NULL AFTER `tg_city`");
+            error_log('Telegraph columns added to local_customers');
+        } catch (Throwable $e) {
+            error_log('Error adding telegraph columns to local_customers: ' . $e->getMessage());
+        }
+    }
+
     // إنشاء جدول local_collections إذا لم يكن موجوداً
     $localCollectionsTable = $db->queryOne("SHOW TABLES LIKE 'local_collections'");
     if (empty($localCollectionsTable)) {
@@ -948,6 +962,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $phone = trim($_POST['phone'] ?? '');
         $address = trim($_POST['address'] ?? '');
         $regionId = isset($_POST['region_id']) && $_POST['region_id'] !== '' ? (int)$_POST['region_id'] : null;
+        $tgGovernorate = trim($_POST['tg_governorate'] ?? '');
+        $tgGovId = isset($_POST['tg_gov_id']) && $_POST['tg_gov_id'] !== '' ? (int)$_POST['tg_gov_id'] : null;
+        $tgCity = trim($_POST['tg_city'] ?? '');
+        $tgCityId = isset($_POST['tg_city_id']) && $_POST['tg_city_id'] !== '' ? (int)$_POST['tg_city_id'] : null;
         
         if ($customerId <= 0) {
             $error = 'معرف العميل غير صحيح';
@@ -965,11 +983,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (in_array($currentRole, ['manager', 'developer'], true)) {
                         // المدير والمطور يعدلون جميع البيانات بما فيها اسم العميل
                         $canEdit = true;
-                        $allowedFields = ['name', 'phone', 'address', 'region_id', 'balance'];
+                        $allowedFields = ['name', 'phone', 'address', 'region_id', 'balance', 'tg_fields'];
                     } elseif (in_array($currentRole, ['accountant', 'sales'], true)) {
                         // المحاسب والمندوب يعدلون (الاسم – العنوان – الهاتف – المنطقة)
                         $canEdit = true;
-                        $allowedFields = ['name', 'phone', 'address', 'region_id'];
+                        $allowedFields = ['name', 'phone', 'address', 'region_id', 'tg_fields'];
                     }
                     
                     if (!$canEdit) {
@@ -1028,7 +1046,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $updateFields[] = 'region_id = ?';
                             $updateValues[] = $regionId;
                         }
-                        
+
+                        if (in_array('tg_fields', $allowedFields)) {
+                            $updateFields[] = 'tg_governorate = ?';
+                            $updateValues[] = $tgGovernorate !== '' ? $tgGovernorate : null;
+                            $updateFields[] = 'tg_gov_id = ?';
+                            $updateValues[] = $tgGovId;
+                            $updateFields[] = 'tg_city = ?';
+                            $updateValues[] = $tgCity !== '' ? $tgCity : null;
+                            $updateFields[] = 'tg_city_id = ?';
+                            $updateValues[] = $tgCityId;
+                        }
+
                         if (in_array('balance', $allowedFields)) {
                             $balance = isset($_POST['balance']) ? cleanFinancialValue($_POST['balance'], true) : null;
                             if ($balance !== null) {
@@ -1840,6 +1869,10 @@ var dashboardWrapper = null;
         font-size: 0.7rem !important;
     }
 }
+.gov-dropdown,.city-dropdown{position:absolute;top:100%;right:0;left:0;z-index:1055;background:#fff;border:1px solid #ced4da;border-radius:0 0 .375rem .375rem;max-height:220px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.12);}
+.gov-dropdown .gov-item,.city-dropdown .city-item{padding:.45rem .75rem;cursor:pointer;font-size:.9rem;}
+.gov-dropdown .gov-item:hover,.gov-dropdown .gov-item.active,.city-dropdown .city-item:hover,.city-dropdown .city-item.active{background:#e9f0ff;color:#0d6efd;}
+.gov-dropdown .gov-no-result,.city-dropdown .city-no-result{padding:.45rem .75rem;font-size:.85rem;color:#888;}
 </style>
 
 <div class="row g-3 mb-4">
@@ -2191,7 +2224,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                             </li>
                                             <?php if (in_array($currentRole, ['manager', 'developer', 'accountant', 'sales'], true)): ?>
                                             <li>
-                                                <button type="button" class="dropdown-item" onclick="showEditLocalCustomerModal(this)" data-customer-id="<?php echo $custId; ?>" data-customer-name="<?php echo $custName; ?>" data-customer-phone="<?php echo $custPhone; ?>" data-customer-address="<?php echo $custAddress; ?>" data-customer-region-id="<?php echo (int)($customer['region_id'] ?? 0); ?>" data-customer-balance="<?php echo $rawBalance; ?>">
+                                                <button type="button" class="dropdown-item" onclick="showEditLocalCustomerModal(this)" data-customer-id="<?php echo $custId; ?>" data-customer-name="<?php echo $custName; ?>" data-customer-phone="<?php echo $custPhone; ?>" data-customer-address="<?php echo $custAddress; ?>" data-customer-region-id="<?php echo (int)($customer['region_id'] ?? 0); ?>" data-customer-balance="<?php echo $rawBalance; ?>" data-customer-tg-governorate="<?php echo htmlspecialchars($customer['tg_governorate'] ?? ''); ?>" data-customer-tg-gov-id="<?php echo htmlspecialchars((string)($customer['tg_gov_id'] ?? '')); ?>" data-customer-tg-city="<?php echo htmlspecialchars($customer['tg_city'] ?? ''); ?>" data-customer-tg-city-id="<?php echo htmlspecialchars((string)($customer['tg_city_id'] ?? '')); ?>">
                                                     <i class="bi bi-pencil me-2"></i>تعديل
                                                 </button>
                                             </li>
@@ -4390,6 +4423,10 @@ function showEditLocalCustomerModal(button) {
     const customerAddress = button.getAttribute('data-customer-address') || '';
     const customerRegionId = button.getAttribute('data-customer-region-id') || '';
     const customerBalance = button.getAttribute('data-customer-balance') || '0';
+    const customerTgGov = button.getAttribute('data-customer-tg-governorate') || '';
+    const customerTgGovId = button.getAttribute('data-customer-tg-gov-id') || '';
+    const customerTgCity = button.getAttribute('data-customer-tg-city') || '';
+    const customerTgCityId = button.getAttribute('data-customer-tg-city-id') || '';
     
     if (!customerId) {
         console.error('Customer ID not found');
@@ -4490,13 +4527,15 @@ function showEditLocalCustomerModal(button) {
             const regionInput = document.getElementById('editLocalCustomerRegionId');
             const balanceInput = document.getElementById('editLocalCustomerBalance');
             const editPhoneContainer = document.getElementById('editPhoneNumbersContainer');
-            
+
             if (idInput) idInput.value = customerId;
             if (nameInput) nameInput.value = customerName || '';
             if (addressInput) addressInput.value = customerAddress;
             if (regionInput) regionInput.value = customerRegionId;
             if (balanceInput) balanceInput.value = customerBalance;
-            
+            // ملء بيانات التليجراف
+            _fillLCTgFields('', customerTgGov, customerTgGovId, customerTgCity, customerTgCityId);
+
             // تحميل أرقام الهواتف المتعددة
             if (editPhoneContainer) {
                 editPhoneContainer.innerHTML = '';
@@ -7595,6 +7634,26 @@ document.addEventListener('DOMContentLoaded', function() {
                         <label class="form-label">العنوان</label>
                         <textarea class="form-control" name="address" id="editLocalCustomerAddress" rows="2"></textarea>
                     </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label">المحافظة (تليجراف)</label>
+                            <div class="gov-autocomplete-wrap position-relative">
+                                <input type="text" class="form-control gov-search-input" id="editLCGovSearch" placeholder="ابحث عن محافظة..." autocomplete="off">
+                                <input type="hidden" name="tg_governorate" id="editLCGov">
+                                <input type="hidden" name="tg_gov_id" id="editLCGovId">
+                                <div class="gov-dropdown d-none"></div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">المدينة (تليجراف)</label>
+                            <div class="city-autocomplete-wrap position-relative">
+                                <input type="text" class="form-control city-search-input" id="editLCCitySearch" placeholder="ابحث عن مدينة..." autocomplete="off">
+                                <input type="hidden" name="tg_city" id="editLCCity">
+                                <input type="hidden" name="tg_city_id" id="editLCCityId">
+                                <div class="city-dropdown d-none"></div>
+                            </div>
+                        </div>
+                    </div>
                     <div class="mb-3">
                         <label class="form-label">المنطقة</label>
                         <div class="input-group">
@@ -7666,6 +7725,24 @@ document.addEventListener('DOMContentLoaded', function() {
             <div class="mb-3">
                 <label class="form-label">العنوان</label>
                 <textarea class="form-control" name="address" id="editLocalCustomerCardAddress" rows="2"></textarea>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">المحافظة (تليجراف)</label>
+                <div class="gov-autocomplete-wrap position-relative">
+                    <input type="text" class="form-control gov-search-input" id="editLCCardGovSearch" placeholder="ابحث عن محافظة..." autocomplete="off">
+                    <input type="hidden" name="tg_governorate" id="editLCCardGov">
+                    <input type="hidden" name="tg_gov_id" id="editLCCardGovId">
+                    <div class="gov-dropdown d-none"></div>
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">المدينة (تليجراف)</label>
+                <div class="city-autocomplete-wrap position-relative">
+                    <input type="text" class="form-control city-search-input" id="editLCCardCitySearch" placeholder="ابحث عن مدينة..." autocomplete="off">
+                    <input type="hidden" name="tg_city" id="editLCCardCity">
+                    <input type="hidden" name="tg_city_id" id="editLCCardCityId">
+                    <div class="city-dropdown d-none"></div>
+                </div>
             </div>
             <div class="mb-3">
                 <label class="form-label">المنطقة</label>
@@ -8195,6 +8272,207 @@ function printDebtorCustomers() {
     const basePath = window.CUSTOMER_EXPORT_CONFIG?.basePath || '';
     const printUrl = (basePath ? basePath + '/' : '/') + 'print_debtor_customers.php';
     window.open(printUrl, '_blank');
+}
+
+// ========== نظام autocomplete المحافظات والمدن لنموذج تعديل العميل ==========
+
+var LC_GOV_LIST = <?php $govJsonLC = json_decode(file_get_contents(__DIR__ . '/../../gov.json'), true); echo json_encode($govJsonLC['data']['listZonesDropdown'] ?? []); ?>;
+
+function lcGetTgZonesApiPath() {
+    var pathParts = window.location.pathname.split('/');
+    var stopSegments = ['modules', 'dashboard', 'api', 'assets'];
+    var baseParts = [];
+    for (var i = 0; i < pathParts.length; i++) {
+        var part = pathParts[i];
+        if (stopSegments.indexOf(part) !== -1 || part.indexOf('.php') !== -1) break;
+        baseParts.push(part);
+    }
+    var basePath = baseParts.length ? '/' + baseParts.join('/') : '';
+    return (basePath + '/api/tg_zones.php').replace(/\/+/g, '/');
+}
+
+function lcInitAutocomplete(opts) {
+    var searchEl = document.getElementById(opts.searchId);
+    var hiddenEl = document.getElementById(opts.hiddenId);
+    if (!searchEl || !hiddenEl) return null;
+    var wrap = searchEl.closest('.' + (opts.wrapClass || 'gov-autocomplete-wrap'));
+    var dropdown = wrap ? wrap.querySelector('.' + opts.dropdownClass) : null;
+    if (!dropdown) return null;
+    var activeIdx = -1;
+
+    function renderDropdown(filtered) {
+        while (dropdown.firstChild) dropdown.removeChild(dropdown.firstChild);
+        activeIdx = -1;
+        if (!filtered.length) {
+            var noRes = document.createElement('div');
+            noRes.className = opts.noResultClass;
+            noRes.textContent = 'لا توجد نتائج';
+            dropdown.appendChild(noRes);
+            dropdown.classList.remove('d-none');
+            return;
+        }
+        filtered.forEach(function(item) {
+            var el = document.createElement('div');
+            el.className = opts.itemClass;
+            el.textContent = item.name;
+            el.dataset.code = item.code || '';
+            el.addEventListener('mousedown', function(e) {
+                e.preventDefault();
+                selectItem(item.name, item.code);
+            });
+            dropdown.appendChild(el);
+        });
+        dropdown.classList.remove('d-none');
+    }
+
+    function selectItem(name, code) {
+        searchEl.value = name;
+        hiddenEl.value = name;
+        dropdown.classList.add('d-none');
+        try { hiddenEl.dispatchEvent(new CustomEvent('ac-select', { detail: { name: name, code: code } })); } catch(e) {}
+        if (opts.onSelect) opts.onSelect(name, code);
+    }
+
+    function closeDropdown() {
+        dropdown.classList.add('d-none');
+        if (!searchEl.value.trim()) {
+            hiddenEl.value = '';
+            if (opts.onClear) opts.onClear();
+        }
+        var typed = searchEl.value.trim();
+        var list = opts.getList();
+        var match = list.find(function(g) { return g.name === typed; });
+        if (!match) searchEl.value = hiddenEl.value;
+    }
+
+    searchEl.addEventListener('input', function() {
+        var q = this.value.trim();
+        hiddenEl.value = '';
+        if (opts.onClear) opts.onClear();
+        if (!q) { dropdown.classList.add('d-none'); return; }
+        var filtered = opts.getList().filter(function(g) { return g.name.includes(q); });
+        renderDropdown(filtered);
+    });
+    searchEl.addEventListener('focus', function() {
+        var q = this.value.trim();
+        var list = opts.getList();
+        if (q) {
+            var filtered = list.filter(function(g) { return g.name.includes(q); });
+            if (filtered.length) renderDropdown(filtered);
+        } else {
+            renderDropdown(list);
+        }
+    });
+    searchEl.addEventListener('blur', function() { setTimeout(closeDropdown, 150); });
+
+    return {
+        setList: function(list, preSelectValue) {
+            opts._list = list;
+            if (preSelectValue) {
+                var match = list.find(function(c) { return c.name === preSelectValue; });
+                if (match) selectItem(match.name, match.code);
+            }
+        },
+        reset: function() {
+            searchEl.value = '';
+            hiddenEl.value = '';
+            opts._list = [];
+            dropdown.classList.add('d-none');
+        },
+        _searchId: opts.searchId
+    };
+}
+
+function lcFetchCities(govCode, cityInstance, preSelectValue) {
+    if (!govCode || !cityInstance) return;
+    cityInstance.reset();
+    var searchEl = cityInstance._searchId ? document.getElementById(cityInstance._searchId) : null;
+    if (searchEl) { searchEl.placeholder = 'جاري التحميل...'; searchEl.disabled = true; }
+    fetch(lcGetTgZonesApiPath() + '?parentId=' + encodeURIComponent(govCode))
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var zones = (data && data.data && data.data.listZonesDropdown) || [];
+            if (searchEl) { searchEl.placeholder = 'ابحث عن مدينة...'; searchEl.disabled = false; }
+            cityInstance.setList(zones, preSelectValue);
+        })
+        .catch(function() {
+            if (searchEl) { searchEl.placeholder = 'خطأ في التحميل'; searchEl.disabled = false; }
+        });
+}
+
+function lcInitGovAutocomplete(searchInputId, hiddenInputId, cityInstance) {
+    return lcInitAutocomplete({
+        searchId: searchInputId,
+        hiddenId: hiddenInputId,
+        wrapClass: 'gov-autocomplete-wrap',
+        dropdownClass: 'gov-dropdown',
+        itemClass: 'gov-item',
+        noResultClass: 'gov-no-result',
+        getList: function() { return LC_GOV_LIST; },
+        onSelect: function(name, code) { if (cityInstance && code) lcFetchCities(code, cityInstance); },
+        onClear: function() { if (cityInstance) cityInstance.reset(); }
+    });
+}
+
+function lcInitCityAutocomplete(searchInputId, hiddenInputId) {
+    var cityList = [];
+    var instance = lcInitAutocomplete({
+        searchId: searchInputId,
+        hiddenId: hiddenInputId,
+        wrapClass: 'city-autocomplete-wrap',
+        dropdownClass: 'city-dropdown',
+        itemClass: 'city-item',
+        noResultClass: 'city-no-result',
+        getList: function() { return cityList; },
+        _list: cityList
+    });
+    if (instance) {
+        instance._searchId = searchInputId;
+        var origSetList = instance.setList;
+        instance.setList = function(list, preSelectValue) {
+            cityList = list;
+            origSetList.call(this, list, preSelectValue);
+        };
+    }
+    return instance;
+}
+
+// تهيئة instances للمودال والكارد
+var _lcCityInstances = {
+    modal: lcInitCityAutocomplete('editLCCitySearch', 'editLCCity'),
+    card:  lcInitCityAutocomplete('editLCCardCitySearch', 'editLCCardCity')
+};
+lcInitGovAutocomplete('editLCGovSearch',     'editLCGov',     _lcCityInstances.modal);
+lcInitGovAutocomplete('editLCCardGovSearch', 'editLCCardGov', _lcCityInstances.card);
+
+// دالة مساعدة لملء حقول التليجراف في النموذج
+// suffix: '' للمودال، 'Card' للكارد
+function _fillLCTgFields(suffix, govName, govId, cityName, cityId) {
+    var govSearch = document.getElementById('editLC' + suffix + 'GovSearch');
+    var govHidden = document.getElementById('editLC' + suffix + 'Gov');
+    var govIdEl   = document.getElementById('editLC' + suffix + 'GovId');
+    var citySearch = document.getElementById('editLC' + suffix + 'CitySearch');
+    var cityHidden = document.getElementById('editLC' + suffix + 'City');
+    var cityIdEl   = document.getElementById('editLC' + suffix + 'CityId');
+    if (govSearch) govSearch.value = govName || '';
+    if (govHidden) govHidden.value = govName || '';
+    if (govIdEl)   govIdEl.value   = govId   || '';
+    if (citySearch) citySearch.value = '';
+    if (cityHidden) cityHidden.value = '';
+    if (cityIdEl)   cityIdEl.value   = '';
+    // جلب المدن وتحديد المدينة المحفوظة
+    if (govName) {
+        var gov = LC_GOV_LIST.find(function(g) { return g.name === govName; });
+        var inst = suffix === 'Card' ? _lcCityInstances.card : _lcCityInstances.modal;
+        if (gov && inst) {
+            lcFetchCities(gov.code, inst, cityName || '');
+        } else if (inst && cityName) {
+            // إذا لم نجد المحافظة بالاسم، نضع اسم المدينة مباشرة
+            if (citySearch) citySearch.value = cityName;
+            if (cityHidden) cityHidden.value = cityName;
+        }
+    }
+    if (cityIdEl && cityId) cityIdEl.value = cityId;
 }
 </script>
 <script src="<?php echo ASSETS_URL; ?>js/customer_export.js?v=<?php echo time(); ?>" defer></script>
