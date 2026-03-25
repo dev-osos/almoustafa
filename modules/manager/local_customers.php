@@ -4463,7 +4463,9 @@ function showEditLocalCustomerModal(button) {
             if (regionInput) regionInput.value = customerRegionId;
             if (balanceInput) balanceInput.value = customerBalance;
             // ملء بيانات التليجراف (الموبايل)
-            _fillLCTgFields('Card', customerTgGov, customerTgGovId, customerTgCity, customerTgCityId);
+            if (typeof _fillLCTgFields === 'function') {
+                _fillLCTgFields('Card', customerTgGov, customerTgGovId, customerTgCity, customerTgCityId);
+            }
 
             // تحميل أرقام الهواتف المتعددة
             if (editPhoneContainer) {
@@ -4549,7 +4551,9 @@ function showEditLocalCustomerModal(button) {
             if (regionInput) regionInput.value = customerRegionId;
             if (balanceInput) balanceInput.value = customerBalance;
             // ملء بيانات التليجراف
-            _fillLCTgFields('', customerTgGov, customerTgGovId, customerTgCity, customerTgCityId);
+            if (typeof _fillLCTgFields === 'function') {
+                _fillLCTgFields('', customerTgGov, customerTgGovId, customerTgCity, customerTgCityId);
+            }
 
             // تحميل أرقام الهواتف المتعددة
             if (editPhoneContainer) {
@@ -8289,6 +8293,13 @@ function printDebtorCustomers() {
     window.open(printUrl, '_blank');
 }
 
+// ========== نهاية كود التصدير ==========
+</script>
+<script src="<?php echo ASSETS_URL; ?>js/customer_export.js?v=<?php echo time(); ?>" defer></script>
+<?php endif; ?>
+
+<?php if (in_array($currentRole, ['manager', 'developer', 'accountant', 'sales'], true)): ?>
+<script>
 // ========== نظام autocomplete المحافظات والمدن لنموذج تعديل العميل ==========
 
 var LC_GOV_LIST = <?php $govJsonLC = json_decode(file_get_contents(__DIR__ . '/../../gov.json'), true); echo json_encode($govJsonLC['data']['listZonesDropdown'] ?? []); ?>;
@@ -8563,7 +8574,6 @@ function _fillLCTgFields(suffix, govName, govId, cityName, cityId) {
     if (cityIdEl && cityIdStr) cityIdEl.value = cityIdStr;
 }
 </script>
-<script src="<?php echo ASSETS_URL; ?>js/customer_export.js?v=<?php echo time(); ?>" defer></script>
 <?php endif; ?>
 
 <!-- Modal استيراد العملاء المحليين من CSV -->
