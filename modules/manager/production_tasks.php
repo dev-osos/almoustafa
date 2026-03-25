@@ -3612,7 +3612,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                 </button>
                 <?php endif; ?>
 
-                <button type="button" class="btn btn-outline-info btn-sm" id="exportSelectedExcelBtn" title="تصدير PDF للأوردرات المحددة" disabled>
+                <button type="button" class="btn btn-outline-info btn-sm" id="exportSelectedExcelBtn" title="طباعة بيانات الأوردرات المحددة" disabled>
                     <i class="bi bi-file-earmark-spreadsheet me-1"></i>تصدير المحدد (<span id="exportSelectedCount">0</span>)
                 </button>
                 <?php endif; ?>
