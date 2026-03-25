@@ -986,7 +986,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // حفظ المنتجات في notes بصيغة JSON
                 $notesParts = [];
                 if ($orderTitle !== '') {
-                    $notesParts[] = '[ORDER_TITLE]:' . $orderTitle;
+                    $notesParts[] = 'عنوان  :' . $orderTitle;
                 }
                 if ($tgGovernorate !== '') {
                     $notesParts[] = 'المحافظة :' . $tgGovernorate;
@@ -1117,10 +1117,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 // حفظ رسوم الشحن والخصم في notes لعرضها في الإيصال
                 if ($shippingFees > 0) {
-                    $notesParts[] = '[SHIPPING_FEES]:' . $shippingFees;
+                    $notesParts[] = 'رسوم الشحن :' . $shippingFees;
                 }
                 if ($discount > 0) {
-                    $notesParts[] = '[DISCOUNT]:' . $discount;
+                    $notesParts[] = 'الخصم :' . $discount;
                 }
 
                 $notesValue = !empty($notesParts) ? implode("\n\n", $notesParts) : null;
@@ -1826,23 +1826,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                     $notesParts = [];
                     if ($orderTitle !== '') {
-                        $notesParts[] = '[ORDER_TITLE]:' . $orderTitle;
+                        $notesParts[] = 'عنوان  :' . $orderTitle;
                     }
                     if ($tgGovernorate !== '') {
-                        $notesParts[] = ':' . $tgGovernorate;
+                        $notesParts[] = 'المحافظة :' . $tgGovernorate;
                     }
-                    if ($tgCity !== '') {
-                        $notesParts[] = '[TG_CITY]:' . $tgCity;
+                    if ($tgCity !== '') {   
+                        $notesParts[] = 'المدينة :' . $tgCity;
                     }
                     if ($tgWeight !== '') {
-                        $notesParts[] = '[TG_WEIGHT]:' . $tgWeight;
+                        $notesParts[] = 'الوزن :' . $tgWeight;
                     }
                     if ($tgParcelDesc !== '') {
-                        $notesParts[] = '[TG_PARCEL_DESC]:' . $tgParcelDesc;
+                        $notesParts[] = 'وصف البضاعة :' . $tgParcelDesc;
                     }
                     if ($details) $notesParts[] = $details;
                     if (!empty($products)) {
-                        $notesParts[] = '[PRODUCTS_JSON]:' . json_encode($products, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                        $notesParts[] = 'المنتجات :' . json_encode($products, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
                         $lines = [];
                         foreach ($products as $p) {
                             $lines[] = 'المنتج: ' . $p['name'] . ($p['quantity'] !== null ? ' - الكمية: ' . $p['quantity'] : '');
@@ -1860,10 +1860,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $notesParts[] = 'العامل المخصص: ' . ($assigneeNames[0] ?? '') . "\n[ASSIGNED_WORKERS_IDS]:" . $assignees[0];
                     }
                     if ($shippingFees > 0) {
-                        $notesParts[] = '[SHIPPING_FEES]:' . $shippingFees;
+                        $notesParts[] = 'رسوم الشحن :' . $shippingFees;
                     }
                     if ($discount > 0) {
-                        $notesParts[] = '[DISCOUNT]:' . $discount;
+                        $notesParts[] = 'الخصم :' . $discount;
                     }
                     $notesValue = !empty($notesParts) ? implode("\n\n", $notesParts) : null;
                     $firstProduct = !empty($products) ? $products[0] : null;
