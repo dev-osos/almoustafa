@@ -1507,8 +1507,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $error = ($e instanceof InvalidArgumentException) ? $e->getMessage() : 'تعذر اعتماد الفاتورة: ' . $e->getMessage();
                 }
             }
-        } elseif ($totalAmount < 0) {
-            $error = 'الإجمالي النهائي غير صالح.';
         } else {
             try {
                 $task = $db->queryOne(
@@ -4063,7 +4061,7 @@ function updateEditTaskSummary() {
     });
     var shipping = (shipInput && !isNaN(parseFloat(shipInput.value))) ? Math.max(0, parseFloat(shipInput.value)) : 0;
     var discount = (discountInput && !isNaN(parseFloat(discountInput.value))) ? Math.max(0, parseFloat(discountInput.value)) : 0;
-    var finalTotal = Math.max(0, subtotal + shipping - discount);
+    var finalTotal = subtotal + shipping - discount;
     subEl.textContent = subtotal.toFixed(2) + ' ج.م';
     shipEl.textContent = shipping.toFixed(2) + ' ج.م';
     if (discountEl) discountEl.textContent = discount.toFixed(2) + ' ج.م';
@@ -5468,9 +5466,9 @@ document.addEventListener('DOMContentLoaded', function () {
         if (isTg) {
             // تليجراف: الإجمالي = إجمالي المنتجات - تكلفة التوصيل
             var deliveryCost = window._tgDeliveryCost || 0;
-            finalTotal = Math.max(0, subtotal - deliveryCost);
+            finalTotal = subtotal - deliveryCost;
         } else {
-            finalTotal = Math.max(0, subtotal + shipping - discount);
+            finalTotal = subtotal + shipping - discount;
         }
         subtotalEl.textContent = subtotal.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
         shippingEl.textContent = shipping.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
