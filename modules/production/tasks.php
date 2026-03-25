@@ -1627,7 +1627,7 @@ function tasksHtml(string $value): string
                 <div class="card <?php echo $statusFilter === '' && !$overdueFilter ? 'bg-primary text-white' : 'border-primary'; ?> text-center h-100">
                     <div class="card-body p-2">
                         <h5 class="<?php echo $statusFilter === '' && !$overdueFilter ? 'text-white' : 'text-primary'; ?> mb-0"><?php echo $stats['total']; ?></h5>
-                        <small class="<?php echo $statusFilter === '' && !$overdueFilter ? 'text-white-50' : 'text-muted'; ?>">إجمالي المهام</small>
+                        <small class="<?php echo $statusFilter === '' && !$overdueFilter ? 'text-white-50' : 'text-muted'; ?>">إجمالي الاوردرات</small>
                     </div>
                 </div>
             </a>

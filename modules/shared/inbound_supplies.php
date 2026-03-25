@@ -5,6 +5,37 @@ if (!defined('ACCESS_ALLOWED')) {
 $apiUrl = getRelativeUrl('api/inbound_supplies.php');
 ?>
 
+<style>
+.autocomplete-dropdown {
+    position-absolute: absolute !important;
+    w-100: 100% !important;
+    bg-white: white !important;
+    border: 1px solid #dee2e6 !important;
+    border-top: none !important;
+    border-radius: 0 0 0.375rem 0.375rem !important;
+    z-index: 1000 !important;
+    max-height: 200px !important;
+    overflow-y: auto !important;
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075) !important;
+}
+
+.autocomplete-item {
+    padding: 0.5rem 0.75rem !important;
+    border-bottom: 1px solid #e9ecef !important;
+    cursor: pointer !important;
+    transition: background-color 0.15s ease-in-out !important;
+}
+
+.autocomplete-item:hover,
+.autocomplete-item.highlighted {
+    background-color: #f8f9fa !important;
+}
+
+.autocomplete-item:last-child {
+    border-bottom: none !important;
+}
+</style>
+
 <div class="page-header mb-4">
     <h2><i class="bi bi-box-arrow-in-down me-2"></i>تسجيل الواردات</h2>
 </div>
@@ -147,12 +178,34 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         const l2 = document.createElement('label');
         l2.className = 'form-label';
         l2.textContent = 'العنصر *';
+        
+        // Create a container for the input and dropdown
+        const itemContainer = document.createElement('div');
+        itemContainer.className = 'position-relative';
+        
+        // Create autocomplete input
+        const itemInput = document.createElement('input');
+        itemInput.type = 'text';
+        itemInput.className = 'form-control';
+        itemInput.placeholder = 'اكتب اسم العنصر أو اختر من القائمة';
+        itemInput.disabled = true;
+        
+        // Create hidden select to store options
         const item = document.createElement('select');
-        item.className = 'form-select';
+        item.className = 'd-none';
         item.disabled = true;
         item.appendChild(createOption('', 'اختر القسم أولاً'));
+        
+        // Create dropdown for autocomplete suggestions
+        const dropdown = document.createElement('div');
+        dropdown.className = 'autocomplete-dropdown';
+        dropdown.style.display = 'none';
+        
+        itemContainer.appendChild(itemInput);
+        itemContainer.appendChild(dropdown);
+        itemContainer.appendChild(item);
         c2.appendChild(l2);
-        c2.appendChild(item);
+        c2.appendChild(itemContainer);
 
         const c3 = document.createElement('div');
         c3.className = 'col-md-3';
@@ -187,26 +240,40 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             const depMeta = departmentOptions.find(d => d.value === dep);
             l3.textContent = (depMeta ? depMeta.qtyLabel : 'الكمية') + ' *';
             clearNode(item);
+            clearNode(dropdown);
+            
             if (!dep) {
                 item.appendChild(createOption('', 'اختر القسم أولاً'));
-                item.disabled = true;
+                itemInput.disabled = true;
+                itemInput.value = '';
+                dropdown.style.display = 'none';
                 return;
             }
-            item.disabled = false;
+            
+            itemInput.disabled = false;
+            itemInput.placeholder = 'اكتب اسم العنصر أو اختر من القائمة';
             item.appendChild(createOption('', 'اختر العنصر'));
+            
             try {
                 const data = await getItems(dep);
                 const items = data && data.success && Array.isArray(data.items) ? data.items : [];
+                
                 items.forEach(x => {
                     const o = createOption(String(x.id), x.name + ' (' + (x.current_quantity || 0) + ' ' + (x.unit || '') + ')');
                     o.dataset.table = x.table || '';
                     o.dataset.field = x.quantity_field || '';
                     o.dataset.name = x.name || '';
                     o.dataset.unit = x.unit || '';
+                    o.dataset.searchText = x.name.toLowerCase();
                     item.appendChild(o);
                 });
+                
+                // Setup autocomplete functionality
+                setupAutocomplete(itemInput, dropdown, item, items);
+                
             } catch (e) {
-                item.disabled = true;
+                itemInput.disabled = true;
+                dropdown.style.display = 'none';
             }
         });
 
@@ -226,21 +293,131 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         });
     }
 
+    function setupAutocomplete(input, dropdown, select, items) {
+        let selectedIndex = -1;
+        let filteredItems = [];
+        
+        input.addEventListener('input', function() {
+            const value = this.value.toLowerCase().trim();
+            clearNode(dropdown);
+            selectedIndex = -1;
+            
+            if (value.length === 0) {
+                dropdown.style.display = 'none';
+                select.value = '';
+                return;
+            }
+            
+            filteredItems = items.filter(item => 
+                item.name.toLowerCase().includes(value)
+            );
+            
+            if (filteredItems.length === 0) {
+                dropdown.style.display = 'none';
+                return;
+            }
+            
+            filteredItems.forEach((item, index) => {
+                const div = document.createElement('div');
+                div.className = 'autocomplete-item';
+                div.textContent = item.name + ' (' + (item.current_quantity || 0) + ' ' + (item.unit || '') + ')';
+                
+                div.addEventListener('click', function() {
+                    input.value = item.name;
+                    select.value = item.id;
+                    dropdown.style.display = 'none';
+                    selectedIndex = -1;
+                });
+                
+                div.addEventListener('mouseenter', function() {
+                    if (selectedIndex >= 0) {
+                        dropdown.children[selectedIndex].classList.remove('highlighted');
+                    }
+                    selectedIndex = index;
+                    div.classList.add('highlighted');
+                });
+                
+                dropdown.appendChild(div);
+            });
+            
+            dropdown.style.display = 'block';
+        });
+        
+        input.addEventListener('keydown', function(e) {
+            if (dropdown.style.display === 'none') return;
+            
+            const items = dropdown.children;
+            if (items.length === 0) return;
+            
+            switch(e.key) {
+                case 'ArrowDown':
+                    e.preventDefault();
+                    if (selectedIndex < items.length - 1) {
+                        if (selectedIndex >= 0) items[selectedIndex].classList.remove('highlighted');
+                        selectedIndex++;
+                        items[selectedIndex].classList.add('highlighted');
+                        items[selectedIndex].scrollIntoView({ block: 'nearest' });
+                    }
+                    break;
+                    
+                case 'ArrowUp':
+                    e.preventDefault();
+                    if (selectedIndex > 0) {
+                        items[selectedIndex].classList.remove('highlighted');
+                        selectedIndex--;
+                        items[selectedIndex].classList.add('highlighted');
+                        items[selectedIndex].scrollIntoView({ block: 'nearest' });
+                    }
+                    break;
+                    
+                case 'Enter':
+                    e.preventDefault();
+                    if (selectedIndex >= 0 && selectedIndex < filteredItems.length) {
+                        const selectedItem = filteredItems[selectedIndex];
+                        input.value = selectedItem.name;
+                        select.value = selectedItem.id;
+                        dropdown.style.display = 'none';
+                        selectedIndex = -1;
+                    }
+                    break;
+                    
+                case 'Escape':
+                    dropdown.style.display = 'none';
+                    selectedIndex = -1;
+                    break;
+            }
+        });
+        
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function(e) {
+            if (!input.contains(e.target) && !dropdown.contains(e.target)) {
+                dropdown.style.display = 'none';
+                selectedIndex = -1;
+            }
+        });
+    }
+
     function collectRows() {
         return Array.from(inboundRows.querySelectorAll('.border.rounded')).map((r) => {
             const s = r.querySelectorAll('select');
             const q = r.querySelector('input[type="number"]');
+            const itemInput = r.querySelector('input[type="text"]:not([type="number"])');
             const dep = s[0].value;
             const itemSel = s[1];
             const itemOpt = itemSel.options[itemSel.selectedIndex];
+            
+            // Check if user typed a custom item name or selected from dropdown
+            const isCustomItem = itemInput.value && !itemSel.value;
+            
             return {
                 department: dep,
-                item_id: parseInt(itemSel.value || '0', 10),
-                table: itemOpt ? (itemOpt.dataset.table || '') : '',
-                quantity_field: itemOpt ? (itemOpt.dataset.field || '') : '',
-                item_name: itemOpt ? (itemOpt.dataset.name || '') : '',
-                unit: itemOpt ? (itemOpt.dataset.unit || '') : '',
-                quantity: parseFloat(q.value || '0')
+                item_id: isCustomItem ? null : parseInt(itemSel.value || '0', 10),
+                table: isCustomItem ? '' : (itemOpt ? (itemOpt.dataset.table || '') : ''),
+                quantity_field: isCustomItem ? '' : (itemOpt ? (itemOpt.dataset.field || '') : ''),
+                item_name: isCustomItem ? itemInput.value : (itemOpt ? (itemOpt.dataset.name || '') : ''),
+                unit: isCustomItem ? '' : (itemOpt ? (itemOpt.dataset.unit || '') : ''),
+                quantity: parseFloat(q.value || '0'),
+                is_custom_item: isCustomItem
             };
         });
     }
@@ -248,7 +425,9 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
     function validateRows(rows) {
         if (!rows.length) return 'يرجى إضافة صف واحد على الأقل';
         for (const r of rows) {
-            if (!r.department || !r.item_id || !r.table || !r.quantity_field) return 'يرجى استكمال البيانات المطلوبة';
+            if (!r.department) return 'يرجى اختيار القسم';
+            if (!r.item_name || r.item_name.trim() === '') return 'يرجى إدخال اسم العنصر';
+            if (!r.is_custom_item && (!r.item_id || !r.table || !r.quantity_field)) return 'يرجى اختيار عنصر من القائمة';
             if (!(r.quantity > 0)) return 'الكمية يجب أن تكون أكبر من صفر';
         }
         return '';

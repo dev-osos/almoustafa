@@ -3115,7 +3115,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
             <a href="?page=production_tasks" class="text-decoration-none">
                 <div class="card <?php echo $statusFilter === '' || $statusFilter === 'all' ? 'bg-primary text-white' : 'border-primary'; ?> h-100">
                     <div class="card-body text-center py-2 px-2">
-                        <div class="<?php echo $statusFilter === '' || $statusFilter === 'all' ? 'text-white-50' : 'text-muted'; ?> small mb-1">إجمالي المهام</div>
+                        <div class="<?php echo $statusFilter === '' || $statusFilter === 'all' ? 'text-white-50' : 'text-muted'; ?> small mb-1">إجمالي الاوردرات</div>
                         <div class="fs-5 <?php echo $statusFilter === '' || $statusFilter === 'all' ? 'text-white' : 'text-primary'; ?> fw-semibold" style="min-width: 3em; display: inline-block; overflow: visible;" title="إجمالي: <?php echo (int)$stats['total']; ?>"><?php echo (int)$stats['total']; ?></div>
                     </div>
                 </div>
