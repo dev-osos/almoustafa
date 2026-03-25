@@ -731,11 +731,8 @@ $singleReceipt = count($receipts) === 1;
                     $priceForFees = max(0, (float)$grandTotal - (float)$receiptDiscount);
                     $deliveryCost = fetchTgDeliveryCost($priceForFees, $tgGovId, $tgCityId, $tgWeight, $tgCalcCache);
                     if ($deliveryCost !== null) {
-                        $finalTotal = max(0, (float)$grandTotal - (float)$deliveryCost);
+                        $finalTotal = (float)$grandTotal - (float)$deliveryCost;
                     }
-                    // لو حصل أي فشل في جلب التكلفة (deliveryCost = null) ممكن legacy formula يخلي الإجمالي سالب.
-                    // إحنا في الإيصال نعرض قيمة غير سالبة دائماً.
-                    $finalTotal = max(0, (float)$finalTotal);
                 }
                 if ($receiptShippingFees > 0): ?>
                 <tr style="font-weight: 700; background-color: #f8f8f8;">
@@ -803,7 +800,7 @@ $singleReceipt = count($receipts) === 1;
                 $priceForFees = 0;
                 $deliveryCost = fetchTgDeliveryCost($priceForFees, $tgGovId, $tgCityId, $tgWeight, $tgCalcCache);
                 if ($deliveryCost !== null) {
-                    $finalEmpty = max(0, 0 - (float)$deliveryCost);
+                    $finalEmpty = 0 - (float)$deliveryCost;
                 }
             }
             if ($receiptShippingFeesEmpty > 0 || $receiptDiscountEmpty > 0): ?>
@@ -827,7 +824,7 @@ $singleReceipt = count($receipts) === 1;
             <?php endif; ?>
             <tr style="font-weight: 700; background-color: #e8f5e9;">
                 <td>الإجمالي النهائي</td>
-                <td><?php echo number_format(max(0, $finalEmpty), 2); ?> ج.م</td>
+                <td><?php echo number_format((float)$finalEmpty, 2); ?> ج.م</td>
             </tr>
             <?php endif; ?>
         </table>
