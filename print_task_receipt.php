@@ -135,9 +135,16 @@ foreach ($taskIds as $taskId) {
     if (!empty($notes)) {
         $displayNotes = preg_replace('/\[ASSIGNED_WORKERS_IDS\]:\s*[0-9,]+/', '', $notes);
         $displayNotes = preg_replace('/\[PRODUCTS_JSON\]:[^\n]*/', '', $displayNotes);
+        // صيغة قديمة بعد تعديل الأوردر: "المنتجات : { ... }"
+        // (بدون ده، هتظهر بيانات JSON خامة داخل قسم الملاحظات في الإيصال)
+        $displayNotes = preg_replace('/المنتجات\s*:\s*.*?(?=\n\s*\n|\[ASSIGNED_WORKERS_IDS\]|\n\s*المنتج:|\z)/su', '', $displayNotes);
         $displayNotes = preg_replace('/\[SHIPPING_FEES\]:\s*[0-9.]+/', '', $displayNotes);
         $displayNotes = preg_replace('/\[DISCOUNT\]:\s*[0-9.]+/', '', $displayNotes);
         $displayNotes = preg_replace('/\[ORDER_TITLE\]:\s*[^\n]+/', '', $displayNotes);
+        // صيغة قديمة بعد تعديل الأوردر
+        $displayNotes = preg_replace('/رسوم\s*الشحن\s*:\s*[0-9.]+/u', '', $displayNotes);
+        $displayNotes = preg_replace('/الخصم\s*:\s*[0-9.]+/u', '', $displayNotes);
+        $displayNotes = preg_replace('/عنوان\s*:\s*[^\n\r]+/u', '', $displayNotes);
         $displayNotes = preg_replace('/المنتج:\s*[^\n]+/', '', $displayNotes);
         $displayNotes = preg_replace('/الكمية:\s*[0-9.]+/', '', $displayNotes);
         $displayNotes = preg_replace('/^[^\n]*العامل المخصص[^\n]*\n?/m', '', $displayNotes);
@@ -146,16 +153,28 @@ foreach ($taskIds as $taskId) {
     }
 
     $shippingFees = 0;
-    if (!empty($notes) && preg_match('/\[SHIPPING_FEES\]:\s*([0-9.]+)/', $notes, $m)) {
-        $shippingFees = (float) $m[1];
+    if (!empty($notes)) {
+        if (preg_match('/\[SHIPPING_FEES\]:\s*([0-9.]+)/', $notes, $m)) {
+            $shippingFees = (float) $m[1];
+        } elseif (preg_match('/رسوم\s*الشحن\s*:\s*([0-9.]+)/u', $notes, $m)) {
+            $shippingFees = (float) $m[1];
+        }
     }
     $discount = 0;
-    if (!empty($notes) && preg_match('/\[DISCOUNT\]:\s*([0-9.]+)/', $notes, $m)) {
-        $discount = (float) $m[1];
+    if (!empty($notes)) {
+        if (preg_match('/\[DISCOUNT\]:\s*([0-9.]+)/', $notes, $m)) {
+            $discount = (float) $m[1];
+        } elseif (preg_match('/الخصم\s*:\s*([0-9.]+)/u', $notes, $m)) {
+            $discount = (float) $m[1];
+        }
     }
     $orderTitle = '';
-    if (!empty($notes) && preg_match('/\[ORDER_TITLE\]:\s*([^\n]+)/', $notes, $m)) {
-        $orderTitle = trim($m[1]);
+    if (!empty($notes)) {
+        if (preg_match('/\[ORDER_TITLE\]:\s*([^\n]+)/', $notes, $m)) {
+            $orderTitle = trim($m[1]);
+        } elseif (preg_match('/عنوان\s*:\s*([^\n\r]+)/u', $notes, $m)) {
+            $orderTitle = trim($m[1]);
+        }
     }
 
     $receipts[] = [
