@@ -4469,8 +4469,14 @@ function showEditLocalCustomerModal(button) {
             // عرض القيم المخزنة في قاعدة البيانات أسفل الحقول (الموبايل)
             var govStoredCard = document.getElementById('editLCCardGovStored');
             var cityStoredCard = document.getElementById('editLCCardCityStored');
-            if (govStoredCard) govStoredCard.textContent = customerTgGov ? 'المخزن: ' + customerTgGov : '';
-            if (cityStoredCard) cityStoredCard.textContent = customerTgCity ? 'المخزن: ' + customerTgCity : '';
+            if (govStoredCard) {
+                govStoredCard.textContent = customerTgGov ? 'المخزن: ' + customerTgGov : 'لا يوجد محافظة مخزنة';
+                govStoredCard.className = customerTgGov ? 'text-success d-block mt-1 small' : 'text-muted d-block mt-1 small';
+            }
+            if (cityStoredCard) {
+                cityStoredCard.textContent = customerTgCity ? 'المخزن: ' + customerTgCity : 'لا يوجد مدينة مخزنة';
+                cityStoredCard.className = customerTgCity ? 'text-success d-block mt-1 small' : 'text-muted d-block mt-1 small';
+            }
 
             // تحميل أرقام الهواتف المتعددة
             if (editPhoneContainer) {
@@ -4562,8 +4568,14 @@ function showEditLocalCustomerModal(button) {
             // عرض القيم المخزنة في قاعدة البيانات أسفل الحقول
             var govStoredEl = document.getElementById('editLCGovStored');
             var cityStoredEl = document.getElementById('editLCCityStored');
-            if (govStoredEl) govStoredEl.textContent = customerTgGov ? 'المخزن: ' + customerTgGov : '';
-            if (cityStoredEl) cityStoredEl.textContent = customerTgCity ? 'المخزن: ' + customerTgCity : '';
+            if (govStoredEl) {
+                govStoredEl.textContent = customerTgGov ? 'المخزن: ' + customerTgGov : 'لا يوجد محافظة مخزنة';
+                govStoredEl.className = customerTgGov ? 'text-success d-block mt-1 small' : 'text-muted d-block mt-1 small';
+            }
+            if (cityStoredEl) {
+                cityStoredEl.textContent = customerTgCity ? 'المخزن: ' + customerTgCity : 'لا يوجد مدينة مخزنة';
+                cityStoredEl.className = customerTgCity ? 'text-success d-block mt-1 small' : 'text-muted d-block mt-1 small';
+            }
 
             // تحميل أرقام الهواتف المتعددة
             if (editPhoneContainer) {
