@@ -7012,7 +7012,8 @@ window.closeChangeStatusCard = function() {
             url.searchParams.set('export_recent_tasks_pdf', '1');
             url.searchParams.set('ids', ids.join(','));
 
-            window.open(url.toString(), '_blank', 'noopener,noreferrer');
+            // استخدام window.location لتفادي حظر تنزيل الملفات من نافذة جديدة
+            window.location.href = url.toString();
         });
     }
     updateSelection();
