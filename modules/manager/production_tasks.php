@@ -2002,31 +2002,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
                 }
             }
             $shippingFees = 0;
-            if (preg_match('/\[SHIPPING_FEES\]\s*:\s*([0-9.]+)/', $notes, $m)) {
+            if (preg_match('/\رسوم الشحن :\s*([0-9.]+)/', $notes, $m)) {
                 $shippingFees = (float)$m[1];
             }
             $discount = 0;
-            if (preg_match('/\[DISCOUNT\]\s*:\s*([0-9.]+)/', $notes, $m)) {
+            if (preg_match('/\الخصم :\s*([0-9.]+)/', $notes, $m)) {
                 $discount = (float)$m[1];
             }
             $orderTitle = '';
-            if (preg_match('/\[ORDER_TITLE\]\s*:\s*([^\n]+)/', $notes, $m)) {
+            if (preg_match('/\عنوان :\s*([^\n]+)/', $notes, $m)) {
                 $orderTitle = trim($m[1]);
             }
             $tgGovernorate = '';
-            if (preg_match('/\[TG_GOV\]\s*:\s*([^\n]+)/', $notes, $m)) {
+            if (preg_match('/\المحافظة :\s*([^\n]+)/', $notes, $m)) {
                 $tgGovernorate = trim($m[1]);
             }
             $tgCity = '';
-            if (preg_match('/\[TG_CITY\]\s*:\s*([^\n]+)/', $notes, $m)) {
+            if (preg_match('/\المدينة :\s*([^\n]+)/', $notes, $m)) {
                 $tgCity = trim($m[1]);
             }
             $tgWeight = '';
-            if (preg_match('/\[TG_WEIGHT\]\s*:\s*([^\n]+)/', $notes, $m)) {
+            if (preg_match('/\الوزن :\s*([^\n]+)/', $notes, $m)) {
                 $tgWeight = trim($m[1]);
             }
             $tgParcelDesc = '';
-            if (preg_match('/\[TG_PARCEL_DESC\]\s*:\s*([^\n]+)/', $notes, $m)) {
+            if (preg_match('/\وصف البضاعة :\s*([^\n]+)/', $notes, $m)) {
                 $tgParcelDesc = trim($m[1]);
             }
             // استخراج العمال المخصصين
@@ -2042,13 +2042,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
                 $details = preg_replace('/العمال المخصصون:[^\n]*/', '', $details);
                 $details = preg_replace('/العامل المخصص:[^\n]*/', '', $details);
                 $details = preg_replace('/المنتج:\s*[^\n]+/m', '', $details);
-                $details = preg_replace('/\[SHIPPING_FEES\]\s*:\s*[0-9.]+/', '', $details);
-                $details = preg_replace('/\[DISCOUNT\]\s*:\s*[0-9.]+/', '', $details);
-                $details = preg_replace('/\[ORDER_TITLE\]\s*:\s*[^\n]+/', '', $details);
-                $details = preg_replace('/\[TG_GOV\]\s*:\s*[^\n]+/', '', $details);
-                $details = preg_replace('/\[TG_CITY\]\s*:\s*[^\n]+/', '', $details);
-                $details = preg_replace('/\[TG_WEIGHT\]\s*:\s*[^\n]+/', '', $details);
-                $details = preg_replace('/\[TG_PARCEL_DESC\]\s*:\s*[^\n]+/', '', $details);
+                $details = preg_replace('/\رسوم الشحن :\s*[0-9.]+/', '', $details);
+                $details = preg_replace('/\الخصم :\s*[0-9.]+/', '', $details);
+                $details = preg_replace('/\عنوان :\s*[^\n]+/', '', $details);
+                $details = preg_replace('/\المحافظة :\s*[^\n]+/', '', $details);
+                $details = preg_replace('/\المدينة :\s*[^\n]+/', '', $details);
+                $details = preg_replace('/\الوزن :\s*[^\n]+/', '', $details);
+                $details = preg_replace('/\وصف البضاعة :\s*[^\n]+/', '', $details);
                 $details = preg_replace('/\n\s*\n\s*\n+/', "\n\n", trim($details));
             }
             // تنسيق تاريخ الاستحقاق لـ input type="date" (YYYY-MM-DD)
