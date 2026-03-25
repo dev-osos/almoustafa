@@ -622,9 +622,25 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             const tr = document.createElement('tr');
             appendCell(tr, it.department_label || it.department || '-');
             appendCell(tr, it.item_name || '-');
-            appendCell(tr, String(it.before_quantity || 0) + ' ' + (it.unit || ''));
-            appendCell(tr, String(it.added_quantity || 0) + ' ' + (it.unit || ''));
-            appendCell(tr, String(it.after_quantity || 0) + ' ' + (it.unit || ''));
+            
+            // Format quantity based on unit
+            function formatQuantity(quantity, unit) {
+                const qty = parseFloat(quantity || 0);
+                if (unit === 'قطعة' || unit === 'ق') {
+                    return Math.round(qty).toString() + ' ق';
+                } else if (unit === 'كجم' || unit === 'كج') {
+                    // Show with 3 decimal places for weight, remove trailing zeros
+                    const formatted = qty.toFixed(3).replace(/\.?0+$/, '');
+                    return formatted + ' كج';
+                } else {
+                    // Default formatting
+                    return qty.toString() + ' ' + (unit || '');
+                }
+            }
+            
+            appendCell(tr, formatQuantity(it.before_quantity, it.unit));
+            appendCell(tr, formatQuantity(it.added_quantity, it.unit));
+            appendCell(tr, formatQuantity(it.after_quantity, it.unit));
             tbody.appendChild(tr);
         });
         table.appendChild(tbody);
@@ -916,24 +932,19 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         const info = doc.createElement('div');
         info.className = 'receipt-info';
         
-        if (originalMeta.length >= 3) {
-            // Date
-            const dateRow = doc.createElement('div');
-            dateRow.className = 'info-row';
-            dateRow.innerHTML = '<span class="label">التاريخ:</span><span class="value">' + originalMeta[0].textContent.replace('التاريخ: ', '') + '</span>';
-            info.appendChild(dateRow);
-            
-            // Time
-            const timeRow = doc.createElement('div');
-            timeRow.className = 'info-row';
-            timeRow.innerHTML = '<span class="label">الوقت:</span><span class="value">' + originalMeta[1].textContent.replace('الوقت: ', '') + '</span>';
-            info.appendChild(timeRow);
-            
-            // User
-            const userRow = doc.createElement('div');
-            userRow.className = 'info-row';
-            userRow.innerHTML = '<span class="label">المستخدم:</span><span class="value">' + originalMeta[2].textContent.replace('المستخدم: ', '') + '</span>';
-            info.appendChild(userRow);
+        if (originalMeta.length >= 2) {
+            // Date and Time in same row
+            const dateTimeRow = doc.createElement('div');
+            dateTimeRow.className = 'info-row';
+            dateTimeRow.style.marginBottom = '3px';
+            dateTimeRow.style.fontSize = '9px';
+            dateTimeRow.innerHTML = `
+                <span class="label" style="font-size: 9px; font-weight: 600;">التاريخ:</span>
+                <span class="value" style="font-size: 9px; font-weight: 500; margin-left: 10px;">${originalMeta[0].textContent.replace('التاريخ: ', '')}</span>
+                <span class="label" style="font-size: 9px; font-weight: 600; margin-right: 15px;">الوقت:</span>
+                <span class="value" style="font-size: 9px; font-weight: 500;">${originalMeta[1].textContent.replace('الوقت: ', '')}</span>
+            `;
+            info.appendChild(dateTimeRow);
         }
         
         receiptDiv.appendChild(info);
