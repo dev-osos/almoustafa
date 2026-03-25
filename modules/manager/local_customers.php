@@ -4440,6 +4440,7 @@ function showEditLocalCustomerModal(button) {
     const customerTgGovId = button.getAttribute('data-customer-tg-gov-id') || '';
     const customerTgCity = button.getAttribute('data-customer-tg-city') || '';
     const customerTgCityId = button.getAttribute('data-customer-tg-city-id') || '';
+    console.log('TG Debug:', {customerTgGov, customerTgGovId, customerTgCity, customerTgCityId, isMob: isMobile()});
     
     if (!customerId) {
         console.error('Customer ID not found');
