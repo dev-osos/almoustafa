@@ -575,9 +575,36 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         title.textContent = 'إيصال واردات - ' + (supply.supply_number || '-');
         root.appendChild(title);
 
-        const meta = document.createElement('p');
-        meta.textContent = 'التاريخ: ' + (supply.created_at || '-') + ' | المستخدم: ' + (supply.created_by || supply.created_by_name || supply.created_by_username || '-');
-        root.appendChild(meta);
+        // Format date and time separately
+        const createdAt = supply.created_at || '-';
+        let dateStr = '-';
+        let timeStr = '-';
+        
+        if (createdAt !== '-') {
+            const date = new Date(createdAt);
+            dateStr = date.toLocaleDateString('ar-SA', { 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+            });
+            timeStr = date.toLocaleTimeString('ar-SA', { 
+                hour: 'numeric', 
+                minute: '2-digit',
+                hour12: true 
+            });
+        }
+
+        const dateMeta = document.createElement('p');
+        dateMeta.textContent = 'التاريخ: ' + dateStr;
+        root.appendChild(dateMeta);
+
+        const timeMeta = document.createElement('p');
+        timeMeta.textContent = 'الوقت: ' + timeStr;
+        root.appendChild(timeMeta);
+
+        const userMeta = document.createElement('p');
+        userMeta.textContent = 'المستخدم: ' + (supply.created_by_name || supply.created_by_username || supply.created_by || '-');
+        root.appendChild(userMeta);
 
         const table = document.createElement('table');
         table.className = 'table table-bordered';
@@ -631,18 +658,309 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
     function printReceipt() {
         const src = document.getElementById('receiptPrintable');
         if (!src) return;
+        
+        // Create 80mm print version
         const w = window.open('', '_blank');
         if (!w) return;
+        
         const doc = w.document;
         const head = doc.createElement('head');
         const title = doc.createElement('title');
         title.textContent = 'إيصال الوارد';
         head.appendChild(title);
+        
+        // 80mm specific styles
         const style = doc.createElement('style');
-        style.textContent = 'body{font-family:Arial;padding:20px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:8px;text-align:right}';
+        style.textContent = `
+            @page {
+                size: 80mm auto;
+                margin: 0mm;
+                padding: 0mm;
+            }
+            
+            * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                color-adjust: exact !important;
+            }
+            
+            html, body {
+                margin: 0 !important;
+                padding: 0 !important;
+                background: #ffffff !important;
+                width: 80mm !important;
+                max-width: 80mm !important;
+                overflow: hidden !important;
+                font-family: 'Tajawal', 'Arial', sans-serif !important;
+                font-size: 9px !important;
+                line-height: 1.2 !important;
+                color: #000 !important;
+            }
+            
+            body * {
+                max-width: 80mm !important;
+                box-sizing: border-box !important;
+            }
+            
+            .receipt-80mm {
+                width: 80mm !important;
+                max-width: 80mm !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+                overflow: hidden !important;
+                box-sizing: border-box !important;
+            }
+            
+            .receipt-header-80mm {
+                text-align: center !important;
+                padding: 1.5mm 1.5mm 1mm 1.5mm !important;
+                border-bottom: 2px solid #000 !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                box-sizing: border-box !important;
+            }
+            
+            .receipt-title {
+                font-size: 13px !important;
+                font-weight: 700 !important;
+                margin-bottom: 2px !important;
+                text-transform: uppercase !important;
+                line-height: 1.2 !important;
+            }
+            
+            .receipt-number {
+                font-size: 10px !important;
+                font-weight: 600 !important;
+                margin-bottom: 2px !important;
+            }
+            
+            .receipt-divider {
+                border-top: 1px solid #000 !important;
+                margin: 2px 0 !important;
+            }
+            
+            .receipt-info {
+                padding: 0.8mm 1.5mm !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                box-sizing: border-box !important;
+            }
+            
+            .info-row {
+                display: flex !important;
+                justify-content: space-between !important;
+                margin-bottom: 0.5px !important;
+                font-size: 6.5px !important;
+                line-height: 1.2 !important;
+                width: 100% !important;
+                box-sizing: border-box !important;
+                align-items: center !important;
+            }
+            
+            .info-row .label {
+                font-weight: 600 !important;
+                margin-left: 1px !important;
+                white-space: nowrap !important;
+                flex-shrink: 0 !important;
+                font-size: 6.5px !important;
+            }
+            
+            .info-row .value {
+                text-align: left !important;
+                flex: 1 !important;
+                font-weight: 500 !important;
+                min-width: 0 !important;
+                font-size: 6.5px !important;
+            }
+            
+            .receipt-items {
+                padding: 0.8mm 1.5mm !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                box-sizing: border-box !important;
+            }
+            
+            .items-table {
+                width: 100% !important;
+                max-width: 100% !important;
+                border-collapse: collapse !important;
+                font-size: 6px !important;
+                margin-top: 1px !important;
+                table-layout: fixed !important;
+                border-spacing: 0 !important;
+                box-sizing: border-box !important;
+            }
+            
+            .items-table thead {
+                background: #f0f0f0 !important;
+                border-bottom: 2px solid #000 !important;
+            }
+            
+            .items-table th {
+                padding: 1.2mm 1mm !important;
+                text-align: center !important;
+                font-weight: 600 !important;
+                font-size: 5.5px !important;
+                border-left: 1px solid #000 !important;
+                line-height: 1.2 !important;
+            }
+            
+            .items-table th:first-child {
+                border-left: none !important;
+                text-align: right !important;
+            }
+            
+            .items-table td {
+                padding: 1.2mm 1mm !important;
+                text-align: center !important;
+                border-bottom: 1px solid #000 !important;
+                border-left: 1px solid #000 !important;
+                font-size: 5.5px !important;
+                line-height: 1.2 !important;
+                vertical-align: middle !important;
+                font-weight: 500 !important;
+            }
+            
+            .items-table td:first-child {
+                border-left: none !important;
+                text-align: right !important;
+            }
+            
+            .items-table .col-item {
+                width: 40% !important;
+                text-align: right !important;
+                padding-right: 1mm !important;
+            }
+            
+            .items-table .col-qty {
+                width: 15% !important;
+            }
+            
+            .items-table .col-before,
+            .items-table .col-added,
+            .items-table .col-after {
+                width: 15% !important;
+            }
+            
+            .receipt-footer {
+                text-align: center !important;
+                padding: 1mm 0.5mm !important;
+                border-top: 1px solid #000 !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                box-sizing: border-box !important;
+                margin-top: 3px !important;
+            }
+            
+            .footer-text {
+                font-size: 8px !important;
+                font-weight: 600 !important;
+                line-height: 1.4 !important;
+            }
+            
+            .no-print {
+                display: none !important;
+            }
+        `;
         head.appendChild(style);
+        
         const body = doc.createElement('body');
-        body.appendChild(src.cloneNode(true));
+        
+        // Create 80mm receipt content
+        const receiptDiv = doc.createElement('div');
+        receiptDiv.className = 'receipt-80mm';
+        
+        // Get data from the original receipt
+        const originalTitle = src.querySelector('h4')?.textContent || 'إيصال واردات';
+        const originalMeta = src.querySelectorAll('p');
+        const originalTable = src.querySelector('table');
+        
+        // Header
+        const header = doc.createElement('div');
+        header.className = 'receipt-header-80mm';
+        
+        const title = doc.createElement('div');
+        title.className = 'receipt-title';
+        title.textContent = 'إيصال واردات';
+        header.appendChild(title);
+        
+        const number = doc.createElement('div');
+        number.className = 'receipt-number';
+        number.textContent = originalTitle.replace('إيصال واردات - ', '').trim() || '-';
+        header.appendChild(number);
+        
+        receiptDiv.appendChild(header);
+        
+        // Info section
+        const info = doc.createElement('div');
+        info.className = 'receipt-info';
+        
+        if (originalMeta.length >= 3) {
+            // Date
+            const dateRow = doc.createElement('div');
+            dateRow.className = 'info-row';
+            dateRow.innerHTML = '<span class="label">التاريخ:</span><span class="value">' + originalMeta[0].textContent.replace('التاريخ: ', '') + '</span>';
+            info.appendChild(dateRow);
+            
+            // Time
+            const timeRow = doc.createElement('div');
+            timeRow.className = 'info-row';
+            timeRow.innerHTML = '<span class="label">الوقت:</span><span class="value">' + originalMeta[1].textContent.replace('الوقت: ', '') + '</span>';
+            info.appendChild(timeRow);
+            
+            // User
+            const userRow = doc.createElement('div');
+            userRow.className = 'info-row';
+            userRow.innerHTML = '<span class="label">المستخدم:</span><span class="value">' + originalMeta[2].textContent.replace('المستخدم: ', '') + '</span>';
+            info.appendChild(userRow);
+        }
+        
+        receiptDiv.appendChild(info);
+        
+        // Divider
+        const divider1 = doc.createElement('div');
+        divider1.className = 'receipt-divider';
+        receiptDiv.appendChild(divider1);
+        
+        // Items table
+        const items = doc.createElement('div');
+        items.className = 'receipt-items';
+        
+        if (originalTable) {
+            const table = doc.createElement('table');
+            table.className = 'items-table';
+            
+            // Copy header
+            const thead = originalTable.querySelector('thead');
+            if (thead) {
+                table.appendChild(thead.cloneNode(true));
+            }
+            
+            // Copy body
+            const tbody = originalTable.querySelector('tbody');
+            if (tbody) {
+                table.appendChild(tbody.cloneNode(true));
+            }
+            
+            items.appendChild(table);
+        }
+        
+        receiptDiv.appendChild(items);
+        
+        // Footer
+        const footer = doc.createElement('div');
+        footer.className = 'receipt-footer';
+        
+        const footerText = doc.createElement('div');
+        footerText.className = 'footer-text';
+        footerText.textContent = 'شكراً لكم - تم الاستلام بنجاح';
+        footer.appendChild(footerText);
+        
+        receiptDiv.appendChild(footer);
+        
+        body.appendChild(receiptDiv);
         doc.documentElement.replaceChildren(head, body);
         w.focus();
         w.print();
