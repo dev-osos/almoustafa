@@ -2945,9 +2945,41 @@ if (isset($_GET['export_recent_tasks_pdf']) && (string)$_GET['export_recent_task
         '</tr></thead><tbody>' . $htmlRows . '</tbody></table>' .
         '</body></html>';
 
-    require_once __DIR__ . '/../../includes/pdf_helper.php';
     $fileName = 'production_tasks_selected_' . date('Y-m-d_His') . '.pdf';
-    apdfStreamPdfToBrowser($html, $fileName, [], true);
+    try {
+        require_once __DIR__ . '/../../includes/pdf_helper.php';
+        apdfStreamPdfToBrowser($html, $fileName, [], true);
+    } catch (Throwable $e) {
+        // fallback CSV لو aPDF.io غير متاح/غير مُكوّن
+        error_log('production_tasks PDF export fallback to CSV: ' . $e->getMessage());
+
+        $csvFileName = 'production_tasks_selected_' . date('Y-m-d_His') . '.csv';
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="' . $csvFileName . '"');
+        header('Cache-Control: must-revalidate, post-check=0, pre-check=0, private');
+
+        $out = fopen('php://output', 'w');
+        if ($out === false) {
+            http_response_code(500);
+            header('Content-Type: text/plain; charset=utf-8');
+            echo 'فشل في فتح output stream للتصدير';
+            exit;
+        }
+
+        fwrite($out, chr(0xEF) . chr(0xBB) . chr(0xBF));
+        fputcsv($out, $headers);
+
+        foreach ($exportRows as $row) {
+            $line = [];
+            foreach ($headers as $h) {
+                $line[] = isset($row[$h]) ? (string)$row[$h] : '';
+            }
+            fputcsv($out, $line);
+        }
+
+        fclose($out);
+        exit;
+    }
 }
 
 // بناء معاملات الرابط للفلترة والبحث (للاستخدام في التصفح والروابط)
