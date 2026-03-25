@@ -7627,7 +7627,7 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 
 <!-- Modal تعديل عميل محلي - للكمبيوتر فقط -->
-<?php if (in_array($currentRole, ['manager', 'accountant', 'sales'], true)): ?>
+<?php if (in_array($currentRole, ['manager', 'developer', 'accountant', 'sales'], true)): ?>
 <div class="modal fade d-none d-md-block" id="editLocalCustomerModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content">
