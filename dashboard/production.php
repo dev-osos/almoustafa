@@ -1167,6 +1167,17 @@ if ($isAjaxNavigation) {
                     echo '<div class="alert alert-warning">صفحة مخزن الخامات غير متاحة حالياً</div>';
                 }
                 ?>
+
+            <?php elseif ($page === 'inbound_supplies'): ?>
+                <!-- صفحة تسجيل الواردات -->
+                <?php
+                $modulePath = __DIR__ . '/../modules/shared/inbound_supplies.php';
+                if (file_exists($modulePath)) {
+                    include $modulePath;
+                } else {
+                    echo '<div class="alert alert-warning">صفحة تسجيل الواردات غير متاحة حالياً</div>';
+                }
+                ?>
                 
             <?php elseif ($page === 'factory_waste_warehouse'): ?>
                 <!-- صفحة مخزن توالف المصنع -->

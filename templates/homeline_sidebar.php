@@ -211,6 +211,13 @@ switch ($role) {
                 'badge' => null
             ],
             [
+                'title' => 'تسجيل الواردات',
+                'icon' => 'bi-box-arrow-in-down',
+                'url' => $baseUrl . 'manager.php?page=inbound_supplies',
+                'active' => ($currentPage === 'manager.php' && $currentPageParam === 'inbound_supplies'),
+                'badge' => null
+            ],
+            [
                 'title' => isset($lang['menu_salaries']) ? $lang['menu_salaries'] : 'الرواتب',
                 'icon' => 'bi-currency-dollar',
                 'url' => $baseUrl . 'manager.php?page=salaries',
@@ -477,6 +484,13 @@ switch ($role) {
                 'icon' => 'bi-box-seam',
                 'url' => $baseUrl . 'accountant.php?page=packaging_warehouse',
                 'active' => ($currentPage === 'accountant.php' && $currentPageParam === 'packaging_warehouse'),
+                'badge' => null
+            ],
+            [
+                'title' => 'تسجيل الواردات',
+                'icon' => 'bi-box-arrow-in-down',
+                'url' => $baseUrl . 'accountant.php?page=inbound_supplies',
+                'active' => ($currentPage === 'accountant.php' && $currentPageParam === 'inbound_supplies'),
                 'badge' => null
             ],
             [
@@ -800,6 +814,13 @@ switch ($role) {
                 'icon' => 'bi-box-seam',
                 'url' => $baseUrl . 'production.php?page=raw_materials_warehouse',
                 'active' => ($currentPage === 'production.php' && $currentPageParam === 'raw_materials_warehouse'),
+                'badge' => null
+            ],
+            [
+                'title' => 'تسجيل الواردات',
+                'icon' => 'bi-box-arrow-in-down',
+                'url' => $baseUrl . 'production.php?page=inbound_supplies',
+                'active' => ($currentPage === 'production.php' && $currentPageParam === 'inbound_supplies'),
                 'badge' => null
             ],
             [

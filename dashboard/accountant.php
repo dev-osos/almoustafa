@@ -2599,6 +2599,16 @@ if ($isAjaxNavigation) {
                 }
                 ?>
                 
+            <?php elseif ($page === 'inbound_supplies'): ?>
+                <?php
+                $modulePath = __DIR__ . '/../modules/shared/inbound_supplies.php';
+                if (file_exists($modulePath)) {
+                    include $modulePath;
+                } else {
+                    echo '<div class="alert alert-warning">صفحة تسجيل الواردات غير متاحة حالياً</div>';
+                }
+                ?>
+
             <?php elseif ($page === 'batch_reader'): ?>
                 <!-- صفحة قارئ أرقام التشغيلات -->
                 <div class="container-fluid p-0" style="height: 100vh; overflow: hidden;">
