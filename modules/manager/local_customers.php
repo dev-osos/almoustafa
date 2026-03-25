@@ -4462,7 +4462,9 @@ function showEditLocalCustomerModal(button) {
             if (addressInput) addressInput.value = customerAddress;
             if (regionInput) regionInput.value = customerRegionId;
             if (balanceInput) balanceInput.value = customerBalance;
-            
+            // ملء بيانات التليجراف (الموبايل)
+            _fillLCTgFields('Card', customerTgGov, customerTgGovId, customerTgCity, customerTgCityId);
+
             // تحميل أرقام الهواتف المتعددة
             if (editPhoneContainer) {
                 editPhoneContainer.innerHTML = '';
