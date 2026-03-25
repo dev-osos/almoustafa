@@ -219,8 +219,8 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         const qty = document.createElement('input');
         qty.type = 'number';
         qty.className = 'form-control';
-        qty.min = '0.001';
-        qty.step = '0.001';
+        qty.min = '1';
+        qty.step = '1';
         const calcBtn = document.createElement('button');
         calcBtn.type = 'button';
         calcBtn.className = 'btn btn-outline-secondary';
@@ -236,7 +236,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         const removeBtn = document.createElement('button');
         removeBtn.type = 'button';
         removeBtn.className = 'btn btn-outline-danger';
-        removeBtn.textContent = 'حذف';
+        removeBtn.innerHTML = '<i class="bi bi-trash"></i>';
         c4.appendChild(removeBtn);
 
         row.appendChild(c1);
@@ -572,7 +572,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         const root = document.createElement('div');
         root.id = 'receiptPrintable';
         const title = document.createElement('h4');
-        title.textContent = 'إيصال واردات - ' + (supply.supply_number || '-');
+        title.textContent = 'إيصال واردات رقم - ' + (supply.supply_number || '-');
         root.appendChild(title);
 
         // Format date and time separately
@@ -873,7 +873,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         receiptDiv.className = 'receipt-80mm';
         
         // Get data from the original receipt
-        const originalTitle = src.querySelector('h4')?.textContent || 'إيصال واردات';
+        const originalTitle = src.querySelector('h4')?.textContent || 'إيصال واردات رقم -';
         const originalMeta = src.querySelectorAll('p');
         const originalTable = src.querySelector('table');
         
@@ -888,7 +888,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         
         const number = doc.createElement('div');
         number.className = 'receipt-number';
-        number.textContent = originalTitle.replace('إيصال واردات - ', '').trim() || '-';
+        number.textContent = originalTitle.replace('إيصال واردات رقم - ', '').trim() || '-';    
         header.appendChild(number);
         
         receiptDiv.appendChild(header);
@@ -1027,12 +1027,12 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
                 const viewBtn = document.createElement('button');
                 viewBtn.type = 'button';
                 viewBtn.className = 'btn btn-sm btn-outline-primary me-1';
-                viewBtn.textContent = 'عرض الإيصال';
+                viewBtn.innerHTML = '<i class="bi bi-eye me-1"></i>';
                 viewBtn.addEventListener('click', () => loadSupplyDetails(s.id, false));
                 const printBtn = document.createElement('button');
                 printBtn.type = 'button';
                 printBtn.className = 'btn btn-sm btn-outline-secondary';
-                printBtn.textContent = 'إعادة الطباعة';
+                printBtn.innerHTML = '<i class="bi bi-printer me-1"></i>';
                 printBtn.addEventListener('click', () => loadSupplyDetails(s.id, true));
                 td.appendChild(viewBtn);
                 td.appendChild(printBtn);
