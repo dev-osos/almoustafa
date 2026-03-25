@@ -695,6 +695,8 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
                 font-size: 9px !important;
                 line-height: 1.2 !important;
                 color: #000 !important;
+                direction: rtl !important;
+                text-align: right !important;
             }
             
             body * {
