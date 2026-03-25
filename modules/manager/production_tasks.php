@@ -1829,7 +1829,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $notesParts[] = '[ORDER_TITLE]:' . $orderTitle;
                     }
                     if ($tgGovernorate !== '') {
-                        $notesParts[] = '[TG_GOV]:' . $tgGovernorate;
+                        $notesParts[] = ':' . $tgGovernorate;
                     }
                     if ($tgCity !== '') {
                         $notesParts[] = '[TG_CITY]:' . $tgCity;
