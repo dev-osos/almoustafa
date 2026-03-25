@@ -768,7 +768,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             }
             
             .info-row .value {
-                text-align: left !important;
+                text-align: right !important;
                 flex: 1 !important;
                 font-weight: 500 !important;
                 min-width: 0 !important;
