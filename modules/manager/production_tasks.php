@@ -7043,31 +7043,81 @@ window.closeChangeStatusCard = function() {
             var fromVal = fromEl ? fromEl.value : '';
             var toVal = toEl ? toEl.value : '';
 
-            var dateFrom = window.prompt('ادخل تاريخ من (YYYY-MM-DD):', fromVal || '');
-            if (!dateFrom) return;
-            var dateTo = window.prompt('ادخل تاريخ الى (YYYY-MM-DD):', toVal || '');
-            if (!dateTo) return;
-
-            dateFrom = String(dateFrom).trim();
-            dateTo = String(dateTo).trim();
-
-            // تحقق بسيط من الصيغة
-            if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(dateTo)) {
-                alert('تنسيق التواريخ غير صحيح. استخدم YYYY-MM-DD');
-                return;
+            // Modal لتحديد الفترة من التقويم بدل كتابة يدوي
+            var modalId = 'exportTasksPeriodModal';
+            var modalEl = document.getElementById(modalId);
+            if (!modalEl) {
+                modalEl = document.createElement('div');
+                modalEl.id = modalId;
+                modalEl.className = 'modal fade';
+                modalEl.tabIndex = -1;
+                modalEl.setAttribute('aria-hidden', 'true');
+                modalEl.innerHTML =
+                    '<div class="modal-dialog modal-dialog-centered">' +
+                        '<div class="modal-content">' +
+                            '<div class="modal-header">' +
+                                '<h5 class="modal-title"><i class="bi bi-calendar-event me-2"></i>تحديد فترة التصدير</h5>' +
+                                '<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="إغلاق"></button>' +
+                            '</div>' +
+                            '<div class="modal-body">' +
+                                '<div class="row g-2 align-items-end">' +
+                                    '<div class="col-12 col-md-6">' +
+                                        '<label class="form-label mb-1">تاريخ من</label>' +
+                                        '<input type="date" class="form-control form-control-sm" id="exportTasksPeriodFrom">' +
+                                    '</div>' +
+                                    '<div class="col-12 col-md-6">' +
+                                        '<label class="form-label mb-1">تاريخ إلى</label>' +
+                                        '<input type="date" class="form-control form-control-sm" id="exportTasksPeriodTo">' +
+                                    '</div>' +
+                                '</div>' +
+                                '<div class="form-text mt-2">سيتم تصدير كل الطلبات داخل نطاق تاريخ الطلب.</div>' +
+                            '</div>' +
+                            '<div class="modal-footer">' +
+                                '<button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">إلغاء</button>' +
+                                '<button type="button" class="btn btn-primary btn-sm" id="exportTasksPeriodConfirmBtn">تصدير</button>' +
+                            '</div>' +
+                        '</div>' +
+                    '</div>';
+                document.body.appendChild(modalEl);
             }
-            if (dateFrom > dateTo) {
-                alert('تاريخ من لازم يكون قبل او يساوي تاريخ الى');
-                return;
+
+            var exportFromInput = document.getElementById('exportTasksPeriodFrom');
+            var exportToInput = document.getElementById('exportTasksPeriodTo');
+            if (exportFromInput) exportFromInput.value = fromVal || '';
+            if (exportToInput) exportToInput.value = toVal || '';
+
+            var confirmBtn = document.getElementById('exportTasksPeriodConfirmBtn');
+            if (confirmBtn && !confirmBtn.dataset.bound) {
+                confirmBtn.dataset.bound = '1';
+                confirmBtn.addEventListener('click', function() {
+                    var dateFrom = exportFromInput ? String(exportFromInput.value || '').trim() : '';
+                    var dateTo = exportToInput ? String(exportToInput.value || '').trim() : '';
+
+                    if (!dateFrom || !dateTo) {
+                        alert('فضلاً اختر تاريخ من وتاريخ الى.');
+                        return;
+                    }
+                    if (dateFrom > dateTo) {
+                        alert('تاريخ من لازم يكون قبل او يساوي تاريخ الى.');
+                        return;
+                    }
+
+                    url.searchParams.set('export_recent_tasks_print_period', '1');
+                    url.searchParams.set('order_date_from', dateFrom);
+                    url.searchParams.set('order_date_to', dateTo);
+                    url.searchParams.delete('ids');
+                    url.searchParams.delete('export_recent_tasks_print');
+
+                    window.location.href = url.toString();
+                });
             }
 
-            url.searchParams.set('export_recent_tasks_print_period', '1');
-            url.searchParams.set('order_date_from', dateFrom);
-            url.searchParams.set('order_date_to', dateTo);
-            url.searchParams.delete('ids');
-            url.searchParams.delete('export_recent_tasks_print');
-
-            window.location.href = url.toString();
+            if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+                var m = bootstrap.Modal.getOrCreateInstance(modalEl);
+                m.show();
+            } else {
+                alert('حدث خطأ: Bootstrap Modal غير متاح.');
+            }
         });
     }
     updateSelection();
