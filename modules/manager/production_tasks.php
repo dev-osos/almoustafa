@@ -1291,6 +1291,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // ===== إرسال شحنة TelegraphEx تلقائياً عند إنشاء اوردر تليجراف =====
                 $tgShipmentMsg = '';
                 if ($taskType === 'telegraph') {
+                    if (empty($customerPhone)) {
+                        $tgShipmentMsg = ' ⚠ لم يتم تسجيل الشحنة في TelegraphEx: رقم هاتف العميل مطلوب';
+                    } else
                     try {
                         $tgGovId  = isset($_POST['tg_gov_id']) ? (int)$_POST['tg_gov_id'] : 0;
                         $tgCityId = isset($_POST['tg_city_id']) ? (int)$_POST['tg_city_id'] : 0;
@@ -4355,6 +4358,14 @@ document.addEventListener('DOMContentLoaded', function() {
                         if (eCitySearchEl && this.dataset.tgCity) eCitySearchEl.value = this.dataset.tgCity;
                         if (eCityEl && this.dataset.tgCity) eCityEl.value = this.dataset.tgCity;
                         if (eCityIdEl && this.dataset.tgCityId) eCityIdEl.value = this.dataset.tgCityId;
+                        // احتساب تكلفة الشحن
+                        if (this.dataset.tgGovId && this.dataset.tgCityId) {
+                            // الـ IDs محفوظة → استدعاء مباشر
+                            if (typeof fetchEditDeliveryCost === 'function') fetchEditDeliveryCost();
+                        } else if (this.dataset.tgGovernorate && typeof window.setTgAutoFillIds === 'function') {
+                            // الـ IDs غير محفوظة → بحث بالاسم وتشغيل السلسلة (يستدعي fetchEditDeliveryCost تلقائياً)
+                            window.setTgAutoFillIds(this.dataset.tgGovernorate, 'editGovId', 'editCitySearch', this.dataset.tgCity || '');
+                        }
                     }
                 });
                 dropEl.appendChild(div);
@@ -4641,6 +4652,14 @@ document.addEventListener('DOMContentLoaded', function () {
                         if (citySearchEl && this.dataset.tgCity) citySearchEl.value = this.dataset.tgCity;
                         if (cityEl && this.dataset.tgCity) cityEl.value = this.dataset.tgCity;
                         if (cityIdEl && this.dataset.tgCityId) cityIdEl.value = this.dataset.tgCityId;
+                        // احتساب تكلفة الشحن
+                        if (this.dataset.tgGovId && this.dataset.tgCityId) {
+                            // الـ IDs محفوظة → استدعاء مباشر
+                            if (typeof fetchCreateDeliveryCost === 'function') fetchCreateDeliveryCost();
+                        } else if (this.dataset.tgGovernorate && typeof window.setTgAutoFillIds === 'function') {
+                            // الـ IDs غير محفوظة → بحث بالاسم وتشغيل السلسلة (يستدعي fetchCreateDeliveryCost تلقائياً)
+                            window.setTgAutoFillIds(this.dataset.tgGovernorate, 'createGovId', 'createCitySearch', this.dataset.tgCity || '');
+                        }
                     }
                     if (onSelect) onSelect(c);
                 });
@@ -4987,6 +5006,20 @@ document.addEventListener('DOMContentLoaded', function () {
             if (gov && inst) fetchCities(gov.code, inst, preSelectValue);
         };
 
+        // دالة: تعبئة govId من القائمة وتشغيل سلسلة تحميل المدن → ac-select → fetchDeliveryCost
+        // تُستخدم عند الملء التلقائي لعميل ليس لديه IDs مخزنة
+        window.setTgAutoFillIds = function(govName, govIdFieldId, citySearchId, cityName) {
+            if (!govName) return;
+            var gov = GOV_LIST.find(function(g) { return g.name === govName; });
+            if (!gov) return;
+            var govIdEl = document.getElementById(govIdFieldId);
+            if (govIdEl) govIdEl.value = gov.code || '';
+            var inst = cityInstances[citySearchId];
+            if (inst) fetchCities(gov.code, inst, cityName || '');
+            // fetchCities → setList → selectItem → ac-select على createCity/editCity
+            // → linkIdField يضبط cityId ويستدعي fetchCreateDeliveryCost/fetchEditDeliveryCost
+        };
+
         function validateGovOnSubmit(formEl, hiddenInputId, searchInputId) {
             var hiddenEl = document.getElementById(hiddenInputId);
             var searchEl = document.getElementById(searchInputId);
@@ -5029,19 +5062,24 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // ===== ملء حقول gov_id و city_id عند اختيار قيمة من autocomplete =====
     (function() {
-        function linkIdField(hiddenNameId, idFieldId) {
+        function linkIdField(hiddenNameId, idFieldId, onSelectCallback) {
             var h = document.getElementById(hiddenNameId);
             var idEl = document.getElementById(idFieldId);
             if (!h || !idEl) return;
             h.addEventListener('ac-select', function(e) {
                 var d = e.detail || {};
                 idEl.value = d.code || '';
+                if (typeof onSelectCallback === 'function') onSelectCallback();
             });
         }
         linkIdField('createGov', 'createGovId');
         linkIdField('editGov', 'editGovId');
-        linkIdField('createCity', 'createCityId');
-        linkIdField('editCity', 'editCityId');
+        linkIdField('createCity', 'createCityId', function() {
+            if (typeof fetchCreateDeliveryCost === 'function') fetchCreateDeliveryCost();
+        });
+        linkIdField('editCity', 'editCityId', function() {
+            if (typeof fetchEditDeliveryCost === 'function') fetchEditDeliveryCost();
+        });
     })();
 
     // تحميل أسماء القوالب وتعبئة datalist
@@ -5684,6 +5722,60 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // جعل الدالة متاحة عالمياً ليتم استدعاؤها من autocomplete callbacks
     window.fetchCreateDeliveryCost = fetchCreateDeliveryCost;
+
+    // ===== حساب تكلفة التوصيل لنموذج التعديل =====
+    var _tgEditCalcTimer = null;
+    function fetchEditDeliveryCost() {
+        var editTypeEl = document.getElementById('editTaskType');
+        if (!editTypeEl || editTypeEl.value !== 'telegraph') return;
+
+        var govIdEl  = document.getElementById('editGovId');
+        var cityIdEl = document.getElementById('editCityId');
+        var weightEl = document.getElementById('editTgWeight');
+        var shipInput = document.getElementById('editTaskShippingFees');
+        if (!shipInput) return;
+
+        var govId  = govIdEl  ? parseInt(govIdEl.value)  : 0;
+        var cityId = cityIdEl ? parseInt(cityIdEl.value) : 0;
+        if (!govId || !cityId) return;
+
+        var container = document.getElementById('editProductsContainer');
+        var subtotal = 0;
+        if (container) {
+            container.querySelectorAll('.edit-product-line-total').forEach(function(inp) {
+                var v = parseFloat(inp.value);
+                if (!isNaN(v) && v >= 0) subtotal += v;
+            });
+        }
+        var discountInput = document.getElementById('editTaskDiscount');
+        var discount = discountInput ? parseFloat(discountInput.value || '0') : 0;
+        if (isNaN(discount) || discount < 0) discount = 0;
+        var price = Math.max(0, subtotal - discount);
+        var weight = weightEl ? parseFloat(weightEl.value || '1') : 1;
+        if (isNaN(weight) || weight <= 0) weight = 1;
+
+        clearTimeout(_tgEditCalcTimer);
+        _tgEditCalcTimer = setTimeout(function() {
+            var url = getTgCalcApiPath() + '?price=' + price + '&recipientZoneId=' + govId + '&recipientSubzoneId=' + cityId + '&weight=' + weight;
+            fetch(url)
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var fees = data && data.data && data.data.calculateShipmentFees;
+                    if (fees) {
+                        var deliveryCost = (parseFloat(fees.delivery) || 0) + (parseFloat(fees.weight) || 0) + (parseFloat(fees.collection) || 0);
+                        shipInput.value = deliveryCost.toFixed(2);
+                        updateEditTaskSummary();
+                    }
+                })
+                .catch(function() {});
+        }, 500);
+    }
+    window.fetchEditDeliveryCost = fetchEditDeliveryCost;
+
+    // ربط حساب تكلفة توصيل التعديل بتغيير الوزن
+    if (document.getElementById('editTgWeight')) {
+        document.getElementById('editTgWeight').addEventListener('input', fetchEditDeliveryCost);
+    }
 
     // ربط حساب تكلفة التوصيل بتغيير الوزن/الخصم/المنتجات
     if (document.getElementById('createTgWeight')) {
