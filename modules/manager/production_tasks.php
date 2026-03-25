@@ -2785,6 +2785,162 @@ try {
     error_log('Manager recent tasks error: ' . $e->getMessage());
 }
 
+// =========================
+// تصدير Excel/CSV للأوردرات المحددة
+// =========================
+if (isset($_GET['export_recent_tasks_excel']) && (string)$_GET['export_recent_tasks_excel'] === '1') {
+    if (!$canPrintTasks) {
+        http_response_code(403);
+        header('Content-Type: text/plain; charset=utf-8');
+        echo 'غير مصرح بتصدير البيانات';
+        exit;
+    }
+
+    $selectedIds = [];
+    if (!empty($_GET['ids'])) {
+        $rawIds = preg_split('/\s*,\s*/', (string)$_GET['ids'], -1, PREG_SPLIT_NO_EMPTY);
+        if (is_array($rawIds)) {
+            $selectedIds = array_values(array_filter(array_map('intval', $rawIds), function($v) {
+                return $v > 0;
+            }));
+        }
+    }
+
+    $filtersForExport = [
+        'status' => $statusFilter,
+        'task_id' => $filterTaskId,
+        'search_customer' => $filterCustomer,
+        'task_type' => $filterTaskType,
+        'due_date_from' => $filterDueFrom,
+        'due_date_to' => $filterDueTo,
+        'order_date_from' => $filterOrderDateFrom,
+        'order_date_to' => $filterOrderDateTo,
+        'search_text' => $filterSearchText,
+    ];
+    $filtersForExport = array_filter($filtersForExport, function($v) {
+        return $v !== '' && $v !== null;
+    });
+
+    $exportRows = [];
+
+    foreach ($recentTasks as $task) {
+        $taskId = (int)($task['id'] ?? 0);
+        if ($taskId <= 0) continue;
+        if (!empty($selectedIds) && !in_array($taskId, $selectedIds, true)) continue;
+
+        $orderDate = '';
+        if (!empty($task['created_at'])) {
+            $orderDate = date('Y-m-d', strtotime((string)$task['created_at']));
+        }
+
+        $customerName = trim((string)($task['customer_name'] ?? ''));
+        $customerPhone = trim((string)($task['customer_phone'] ?? ''));
+        $customer = $customerName !== '' ? $customerName : ($customerPhone !== '' ? $customerPhone : '-');
+
+        // تفاصيل الأوردر: منتجات فقط (من [PRODUCTS_JSON] أو سطور "المنتج:"), مع شحن/خصم إن وُجد
+        $notes = (string)($task['notes'] ?? '');
+        $detailsLines = [];
+
+        $products = [];
+        if (preg_match('/\[PRODUCTS_JSON\]\s*:\s*(.+?)(?=\s*\n\s*\n|\[ASSIGNED_WORKERS_IDS\]|$)/s', $notes, $m)) {
+            $decoded = json_decode(trim($m[1]), true);
+            if (is_array($decoded)) {
+                foreach ($decoded as $p) {
+                    $pName = trim((string)($p['name'] ?? ''));
+                    if ($pName === '') continue;
+                    $products[] = [
+                        'name' => $pName,
+                        'quantity' => isset($p['quantity']) && is_numeric($p['quantity']) ? (float)$p['quantity'] : null,
+                        'unit' => trim((string)($p['unit'] ?? 'قطعة')) ?: 'قطعة',
+                    ];
+                }
+            }
+        }
+
+        if (empty($products) && preg_match_all('/المنتج:\s*([^\n]+?)(?:\s*-\s*الكمية:\s*([0-9.]+))?/u', $notes, $matches, PREG_SET_ORDER)) {
+            foreach ($matches as $m) {
+                $products[] = [
+                    'name' => trim((string)($m[1] ?? '')),
+                    'quantity' => isset($m[2]) && $m[2] !== '' ? (float)$m[2] : null,
+                    'unit' => trim((string)($task['unit'] ?? 'قطعة')) ?: 'قطعة',
+                ];
+            }
+        }
+
+        foreach ($products as $p) {
+            $pName = trim((string)($p['name'] ?? '-'));
+            $q = $p['quantity'] ?? null;
+            $unit = trim((string)($p['unit'] ?? 'قطعة'));
+
+            if ($q === null) {
+                $detailsLines[] = $pName;
+            } else {
+                $qNum = is_numeric($q) ? (float)$q : 0;
+                $qStr = rtrim(rtrim(number_format($qNum, 2, '.', ''), '0'), '.');
+                $detailsLines[] = $pName . ' - ' . $qStr . ' ' . $unit;
+            }
+        }
+
+        // شحن/خصم (اختياري)
+        $shippingFees = 0.0;
+        if (preg_match('/\[SHIPPING_FEES\]\s*:\s*([0-9.]+)/', $notes, $m)) $shippingFees = (float)$m[1];
+
+        $discount = 0.0;
+        if (preg_match('/\[DISCOUNT\]\s*:\s*([0-9.]+)/', $notes, $m)) $discount = (float)$m[1];
+
+        if ($shippingFees > 0) $detailsLines[] = 'الشحن: ' . number_format($shippingFees, 2, '.', '');
+        if ($discount > 0) $detailsLines[] = 'الخصم: ' . number_format($discount, 2, '.', '');
+
+        $details = trim(implode("\n", $detailsLines));
+        if ($details === '') {
+            // fallback بسيط لو مفيش منتجات
+            $details = trim($notes);
+        }
+
+        $finalTotal = isset($task['receipt_total']) ? (float)$task['receipt_total'] : 0;
+        $finalTotalStr = number_format($finalTotal, 2, '.', '');
+
+        $exportRows[] = [
+            'تاريخ الطلب' => $orderDate,
+            'رقم الطلب' => (string)$taskId,
+            'اسم العميل' => $customer,
+            'تفاصيل الاوردر' => $details,
+            'الاجمالي النهائي' => $finalTotalStr,
+        ];
+    }
+
+    if (empty($exportRows)) {
+        $exportRows[] = [
+            'تاريخ الطلب' => '',
+            'رقم الطلب' => '',
+            'اسم العميل' => '',
+            'تفاصيل الاوردر' => 'لا توجد بيانات للتصدير',
+            'الاجمالي النهائي' => '',
+        ];
+    }
+
+    require_once __DIR__ . '/../../includes/simple_export.php';
+
+    $title = 'قائمة الأوردرات';
+    $filePath = exportCSV($exportRows, $title, $filtersForExport);
+
+    if (!is_string($filePath) || !file_exists($filePath)) {
+        http_response_code(500);
+        header('Content-Type: text/plain; charset=utf-8');
+        echo 'فشل في إنشاء ملف التصدير';
+        exit;
+    }
+
+    $fileName = basename($filePath);
+    $mimeType = 'application/vnd.ms-excel'; // فتح Excel لملفات CSV
+    header('Content-Type: ' . $mimeType . '; charset=utf-8');
+    header('Content-Disposition: attachment; filename="' . $fileName . '"');
+    header('Content-Length: ' . filesize($filePath));
+    header('Cache-Control: must-revalidate, post-check=0, pre-check=0, private');
+    readfile($filePath);
+    exit;
+}
+
 // بناء معاملات الرابط للفلترة والبحث (للاستخدام في التصفح والروابط)
 $recentTasksQueryParams = ['page' => 'production_tasks'];
 if ($statusFilter !== '') $recentTasksQueryParams['status'] = $statusFilter;
@@ -3414,6 +3570,10 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                     <i class="bi bi-check2-circle me-1"></i>اعتماد المحدد (<span id="approveSelectedCount">0</span>)
                 </button>
                 <?php endif; ?>
+
+                <button type="button" class="btn btn-outline-info btn-sm" id="exportSelectedExcelBtn" title="تصدير Excel للأوردرات المحددة" disabled>
+                    <i class="bi bi-file-earmark-spreadsheet me-1"></i>تصدير المحدد (<span id="exportSelectedCount">0</span>)
+                </button>
                 <?php endif; ?>
             </div>
         </div>
@@ -6744,6 +6904,8 @@ window.closeChangeStatusCard = function() {
     var selectedCountEl = document.getElementById('selectedCount');
     var approveBtn = document.getElementById('approveSelectedBtn');
     var approveCountEl = document.getElementById('approveSelectedCount');
+    var exportBtn = document.getElementById('exportSelectedExcelBtn');
+    var exportCountEl = document.getElementById('exportSelectedCount');
     if (!checkboxes.length) return;
 
     function updateSelection() {
@@ -6751,6 +6913,8 @@ window.closeChangeStatusCard = function() {
         var n = checked.length;
         if (selectedCountEl) selectedCountEl.textContent = n;
         if (printBtn) printBtn.disabled = n === 0;
+        if (exportCountEl) exportCountEl.textContent = n;
+        if (exportBtn) exportBtn.disabled = n === 0;
         // عد الأوردرات القابلة للاعتماد (غير معتمدة وليست شحن)
         var approvable = 0;
         checked.forEach(function(cb) {
@@ -6790,6 +6954,24 @@ window.closeChangeStatusCard = function() {
             var path = firstUrl ? firstUrl.split('?')[0] : 'print_task_receipt.php';
             var url = path + '?ids=' + ids.join(',');
             window.open(url, '_blank', 'noopener,noreferrer');
+        });
+    }
+
+    if (exportBtn) {
+        exportBtn.addEventListener('click', function() {
+            var checked = document.querySelectorAll('.task-print-checkbox:checked');
+            var ids = [];
+            checked.forEach(function(cb) {
+                var id = cb.value;
+                if (id) ids.push(id);
+            });
+            if (ids.length === 0) return;
+
+            var url = new URL(window.location.href);
+            url.searchParams.set('export_recent_tasks_excel', '1');
+            url.searchParams.set('ids', ids.join(','));
+
+            window.open(url.toString(), '_blank', 'noopener,noreferrer');
         });
     }
     updateSelection();
