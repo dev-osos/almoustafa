@@ -4525,7 +4525,7 @@ window.openEditTaskModal = function(taskId) {
                 if (editTgWeightEl) editTgWeightEl.value = t.tg_weight || '';
                 var editTgParcelDescEl = document.getElementById('editTgParcelDesc');
                 if (editTgParcelDescEl) editTgParcelDescEl.value = t.tg_parcel_desc || '';
-                if (typeof toggleEditTgFields === 'function') toggleEditTgFields();
+                if (typeof window.toggleEditTgFields === 'function') window.toggleEditTgFields();
                 var shippingEl = document.getElementById('editTaskShippingFees');
                 if (shippingEl && typeof t.shipping_fees === 'number') shippingEl.value = t.shipping_fees;
                 if (shippingEl && (typeof t.shipping_fees === 'string' && t.shipping_fees !== '')) shippingEl.value = t.shipping_fees;
@@ -4644,7 +4644,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         // احتساب تكلفة الشحن
                         if (this.dataset.tgGovId && this.dataset.tgCityId) {
                             // الـ IDs محفوظة → استدعاء مباشر
-                            if (typeof fetchEditDeliveryCost === 'function') fetchEditDeliveryCost();
+                            if (typeof window.fetchEditDeliveryCost === 'function') window.fetchEditDeliveryCost();
                         } else if (this.dataset.tgGovernorate && typeof window.setTgAutoFillIds === 'function') {
                             // الـ IDs غير محفوظة → بحث بالاسم وتشغيل السلسلة (يستدعي fetchEditDeliveryCost تلقائياً)
                             window.setTgAutoFillIds(this.dataset.tgGovernorate, 'editGovId', 'editCitySearch', this.dataset.tgCity || '');
@@ -5046,6 +5046,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // إظهار/إخفاء حقلي المحافظة والمدينة (نموذج التعديل)
     var editTaskTypeEl = document.getElementById('editTaskType');
+    window.toggleEditTgFields = toggleEditTgFields;
     function toggleEditTgFields() {
         var isTg = editTaskTypeEl && editTaskTypeEl.value === 'telegraph';
         ['editGovWrap', 'editCityWrap', 'editTgParcelWrap'].forEach(function (id) {
@@ -7054,6 +7055,9 @@ window.closeChangeStatusCard = function() {
 
     if (exportBtn) {
         exportBtn.addEventListener('click', function() {
+            // لا نريد شاشة التحميل لهذا النموذج (تقرير/تصدير)
+            if (typeof window.resetPageLoading === 'function') window.resetPageLoading();
+
             var url = new URL(window.location.href);
             var fromEl = document.getElementById('recentTasksFilterOrderDateFrom');
             var toEl = document.getElementById('recentTasksFilterOrderDateTo');
@@ -7069,6 +7073,7 @@ window.closeChangeStatusCard = function() {
                 modalEl.className = 'modal fade';
                 modalEl.tabIndex = -1;
                 modalEl.setAttribute('aria-hidden', 'true');
+                modalEl.setAttribute('data-no-loading', 'true');
                 modalEl.innerHTML =
                     '<div class="modal-dialog modal-dialog-centered">' +
                         '<div class="modal-content">' +
@@ -7091,7 +7096,7 @@ window.closeChangeStatusCard = function() {
                             '</div>' +
                             '<div class="modal-footer">' +
                                 '<button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">إلغاء</button>' +
-                                '<button type="button" class="btn btn-primary btn-sm" id="exportTasksPeriodConfirmBtn">تصدير</button>' +
+                                '<button type="button" class="btn btn-primary btn-sm" id="exportTasksPeriodConfirmBtn" data-no-loading="true">تصدير</button>' +
                             '</div>' +
                         '</div>' +
                     '</div>';
@@ -7107,6 +7112,9 @@ window.closeChangeStatusCard = function() {
             if (confirmBtn && !confirmBtn.dataset.bound) {
                 confirmBtn.dataset.bound = '1';
                 confirmBtn.addEventListener('click', function() {
+                    // لا نريد شاشة التحميل لهذا النموذج (تقرير/تصدير)
+                    if (typeof window.resetPageLoading === 'function') window.resetPageLoading();
+
                     var dateFrom = exportFromInput ? String(exportFromInput.value || '').trim() : '';
                     var dateTo = exportToInput ? String(exportToInput.value || '').trim() : '';
 
