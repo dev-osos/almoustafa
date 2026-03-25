@@ -966,7 +966,18 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         
         const footerText = doc.createElement('div');
         footerText.className = 'footer-text';
-        footerText.textContent = 'شكراً لكم - تم الاستلام بنجاح';
+        footerText.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; direction: rtl; text-align: right;">
+                <div style="flex: 1; text-align: center; border-top: 1px solid #000; padding-top: 2px; margin-left: 5px;">
+                    <div style="font-size: 6px; margin-bottom: 1px;">توقيع أمين المخزن</div>
+                    <div style="height: 8px;"></div>
+                </div>
+                <div style="flex: 1; text-align: center; border-top: 1px solid #000; padding-top: 2px; margin-right: 5px;">
+                    <div style="font-size: 6px; margin-bottom: 1px;">يعتمد</div>
+                    <div style="height: 8px;"></div>
+                </div>
+            </div>
+        `;
         footer.appendChild(footerText);
         
         receiptDiv.appendChild(footer);
