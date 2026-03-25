@@ -6141,10 +6141,17 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function showPriceSuggestions(productRow, suggestions) {
+        console.log('showPriceSuggestions called with', suggestions);
         var wrap = getOrCreatePriceSuggestionsEl(productRow);
-        if (!wrap) return;
+        if (!wrap) {
+            console.log('showPriceSuggestions: no wrap element found');
+            return;
+        }
         wrap.innerHTML = '';
-        if (!suggestions || suggestions.length === 0) return;
+        if (!suggestions || suggestions.length === 0) {
+            console.log('showPriceSuggestions: no suggestions to show');
+            return;
+        }
         var label = document.createElement('div');
         label.className = 'text-muted small mb-1';
         label.textContent = 'أسعار سابقة:';
@@ -6184,9 +6191,20 @@ document.addEventListener('DOMContentLoaded', function () {
         var nameInput = productRow.querySelector('.product-name-input');
         var productName = nameInput ? (nameInput.value || '').trim() : '';
 
+        // Debug code - تسجيل البيانات للتشخيص
+        console.log('fetchProductPriceHistory called', {
+            customerId: customerIdVal,
+            productName: productName,
+            hasCustomer: !!customerIdVal,
+            hasProduct: !!productName,
+            customerElement: !!customerIdEl,
+            nameElement: !!nameInput
+        });
+
         if (!customerIdVal || !productName) {
             var wrap = productRow.querySelector('.price-suggestions-wrap');
             if (wrap) wrap.innerHTML = '';
+            console.log('fetchProductPriceHistory: missing customer or product name');
             return;
         }
 
@@ -6209,16 +6227,27 @@ document.addEventListener('DOMContentLoaded', function () {
         _params.set('customer_id', customerIdVal);
         _params.set('product_name', productName);
         var url = '?' + _params.toString();
+        
+        console.log('fetchProductPriceHistory: making API request to', url);
 
         fetch(url)
-            .then(function(r) { return r.json(); })
+            .then(function(r) { 
+                console.log('fetchProductPriceHistory: API response status', r.status);
+                return r.json(); 
+            })
             .then(function(data) {
+                console.log('fetchProductPriceHistory: API response data', data);
                 if (data && data.success && Array.isArray(data.suggestions)) {
                     _priceHistoryCache[cacheKey] = data.suggestions;
                     showPriceSuggestions(productRow, data.suggestions);
+                    console.log('fetchProductPriceHistory: showing suggestions', data.suggestions);
+                } else {
+                    console.log('fetchProductPriceHistory: no valid suggestions in response');
                 }
             })
-            .catch(function() {});
+            .catch(function(error) { 
+                console.error('fetchProductPriceHistory: API request failed', error);
+            });
     }
 
     // استخراج مقترحات الأسعار من أوردرات محملة مسبقاً
