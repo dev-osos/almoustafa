@@ -989,16 +989,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $notesParts[] = '[ORDER_TITLE]:' . $orderTitle;
                 }
                 if ($tgGovernorate !== '') {
-                    $notesParts[] = '[TG_GOV]:' . $tgGovernorate;
+                    $notesParts[] = 'المحافظة :' . $tgGovernorate;
                 }
                 if ($tgCity !== '') {
-                    $notesParts[] = '[TG_CITY]:' . $tgCity;
+                    $notesParts[] = 'المدينة :' . $tgCity;
                 }
                 if ($tgWeight !== '') {
-                    $notesParts[] = '[TG_WEIGHT]:' . $tgWeight;
+                    $notesParts[] = 'الوزن :' . $tgWeight;
                 }
                 if ($tgParcelDesc !== '') {
-                    $notesParts[] = '[TG_PARCEL_DESC]:' . $tgParcelDesc;
+                    $notesParts[] = 'وصف البضاعة :' . $tgParcelDesc;
                 }
                 if ($details) {
                     $notesParts[] = $details;
