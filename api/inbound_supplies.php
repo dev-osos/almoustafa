@@ -254,27 +254,19 @@ function handleSubmitSupply($db, $currentUser) {
     $conn->begin_transaction();
 
     try {
-        // Generate supply number
-        $today = date('Y-m-d');
-        $prefix = 'SUP-' . date('Ymd') . '-';
-        $lastSupply = $db->queryOne(
-            "SELECT supply_number FROM supplies WHERE supply_number LIKE ? ORDER BY id DESC LIMIT 1",
-            [$prefix . '%']
-        );
-        if ($lastSupply) {
-            $parts = explode('-', $lastSupply['supply_number']);
-            $seq = intval(end($parts)) + 1;
-        } else {
-            $seq = 1;
-        }
-        $supplyNumber = $prefix . str_pad($seq, 3, '0', STR_PAD_LEFT);
-
-        // Insert supply header
-        $db->execute(
-            "INSERT INTO supplies (supply_number, created_by, created_at) VALUES (?, ?, NOW())",
-            [$supplyNumber, $currentUser['id']]
-        );
-        $supplyId = $db->getLastInsertId();
+        // Insert the supply record to get the ID
+        $stmt = $conn->prepare("INSERT INTO supplies (supply_number, created_at, created_by) VALUES (?, NOW(), ?)");
+        $stmt->bind_param('si', $supplyNumber, $userId);
+        $stmt->execute();
+        $supplyId = $conn->insert_id;
+        
+        // Use the ID as the supply number
+        $supplyNumber = (string)$supplyId;
+        
+        // Update the supply record with the final number
+        $updateStmt = $conn->prepare("UPDATE supplies SET supply_number = ? WHERE id = ?");
+        $updateStmt->bind_param('si', $supplyNumber, $supplyId);
+        $updateStmt->execute();
 
         $resultItems = [];
 

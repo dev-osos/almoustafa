@@ -657,15 +657,18 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         document.body.classList.remove('modal-open');
     }
 
-    async function loadSupplies() {
+    async function loadSupplies(showLoading = true) {
         clearNode(tableBody);
-        const waitTr = document.createElement('tr');
-        const waitTd = document.createElement('td');
-        waitTd.colSpan = 5;
-        waitTd.className = 'text-center text-muted';
-        waitTd.textContent = 'جاري التحميل...';
-        waitTr.appendChild(waitTd);
-        tableBody.appendChild(waitTr);
+        
+        if (showLoading) {
+            const waitTr = document.createElement('tr');
+            const waitTd = document.createElement('td');
+            waitTd.colSpan = 5;
+            waitTd.className = 'text-center text-muted';
+            waitTd.textContent = 'جاري التحميل...';
+            waitTr.appendChild(waitTd);
+            tableBody.appendChild(waitTr);
+        }
 
         const url = new URL(apiUrl, window.location.origin);
         url.searchParams.set('action', 'get_supplies');
@@ -753,7 +756,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             clearNode(inboundRows);
             createRow();
             renderReceipt(data.supply);
-            loadSupplies();
+            loadSupplies(false);
         } catch (x) {
             showAlert('danger', x.message || 'حدث خطأ أثناء الحفظ');
         } finally {
