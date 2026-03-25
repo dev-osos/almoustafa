@@ -746,10 +746,18 @@ $singleReceipt = count($receipts) === 1;
                     <td style="text-align: center; padding: 6px 5px;">- <?php echo number_format($receiptDiscount, 2); ?> ج.م</td>
                 </tr>
                 <?php endif; ?>
-                <?php if ($taskType === 'telegraph' && $deliveryCost !== null && $deliveryCost > 0): ?>
+                <?php if ($taskType === 'telegraph'): ?>
                 <tr style="font-weight: 700; background-color: #e3f2fd;">
                     <td colspan="3" style="text-align: left; padding: 6px 5px;">تكلفة التوصيل (TelegraphEx)</td>
-                    <td style="text-align: center; padding: 6px 5px;">- <?php echo number_format($deliveryCost, 2); ?> ج.م</td>
+                    <td style="text-align: center; padding: 6px 5px;">
+                        <?php
+                        if ($deliveryCost !== null) {
+                            echo '- ' . number_format((float)$deliveryCost, 2) . ' ج.م';
+                        } else {
+                            echo '—';
+                        }
+                        ?>
+                    </td>
                 </tr>
                 <?php endif; ?>
                 <tr style="font-weight: 700; background-color: #e8f5e9;">
@@ -803,7 +811,7 @@ $singleReceipt = count($receipts) === 1;
                     $finalEmpty = 0 - (float)$deliveryCost;
                 }
             }
-            if ($receiptShippingFeesEmpty > 0 || $receiptDiscountEmpty > 0): ?>
+            if ($taskType === 'telegraph' || $receiptShippingFeesEmpty > 0 || $receiptDiscountEmpty > 0): ?>
             <?php if ($receiptShippingFeesEmpty > 0): ?>
             <tr style="font-weight: 700;">
                 <td>رسوم الشحن</td>
@@ -816,10 +824,18 @@ $singleReceipt = count($receipts) === 1;
                 <td>- <?php echo number_format($receiptDiscountEmpty, 2); ?> ج.م</td>
             </tr>
             <?php endif; ?>
-            <?php if ($taskType === 'telegraph' && $deliveryCost !== null && $deliveryCost > 0): ?>
+            <?php if ($taskType === 'telegraph'): ?>
             <tr style="font-weight: 700; background-color: #e3f2fd;">
                 <td>تكلفة التوصيل (TelegraphEx)</td>
-                <td>- <?php echo number_format((float)$deliveryCost, 2); ?> ج.م</td>
+                <td>
+                    <?php
+                    if ($deliveryCost !== null) {
+                        echo '- ' . number_format((float)$deliveryCost, 2) . ' ج.م';
+                    } else {
+                        echo '—';
+                    }
+                    ?>
+                </td>
             </tr>
             <?php endif; ?>
             <tr style="font-weight: 700; background-color: #e8f5e9;">
