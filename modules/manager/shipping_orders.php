@@ -7027,7 +7027,7 @@ function goToCompanyPaperInvoicesPage(page) {
         var dateStr = (pi.created_at || '-').toString().substring(0, 10);
         var viewBtn = pi.image_path
             ? '<button type="button" class="btn btn-sm btn-outline-primary" onclick="showCompanyPaperInvoiceImage(' + parseInt(pi.id, 10) + ')" title="عرض صورة الفاتورة"><i class="bi bi-image me-1"></i>عرض الفاتورة</button>'
-            : '<span class="text-muted small">لا توجد صورة</span>';
+            : '<span class="text-muted small"></span>';
         if (pi.task_id && parseInt(pi.task_id, 10) > 0) {
             var receiptUrl = receiptBase.indexOf('?') >= 0 ? (receiptBase + '&id=' + pi.task_id) : (receiptBase + '?id=' + pi.task_id);
             viewBtn = '<a href="' + receiptUrl + '" target="_blank" class="btn btn-sm btn-outline-success me-1" title="عرض إيصال الأوردر"><i class="bi bi-receipt me-1"></i>عرض الإيصال</a>' + viewBtn;

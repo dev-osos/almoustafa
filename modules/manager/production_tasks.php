@@ -893,10 +893,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (!empty($localCustomersTable)) {
                         $existingLocal = $db->queryOne("SELECT id FROM local_customers WHERE name = ?", [$customerName]);
                         if (empty($existingLocal)) {
+                            require_once __DIR__ . '/../../includes/customer_code_generator.php';
+                            ensureCustomerUniqueCodeColumn('local_customers');
+                            $newCustomerUniqueCode = generateUniqueCustomerCode('local_customers');
                             if ($taskType === 'telegraph') {
                                 $db->execute(
-                                    "INSERT INTO local_customers (name, phone, address, tg_governorate, tg_gov_id, tg_city, tg_city_id, balance, status, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'active', ?)",
+                                    "INSERT INTO local_customers (unique_code, name, phone, address, tg_governorate, tg_gov_id, tg_city, tg_city_id, balance, status, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 'active', ?)",
                                     [
+                                        $newCustomerUniqueCode,
                                         $customerName,
                                         $customerPhone !== '' ? $customerPhone : null,
                                         $orderTitle !== '' ? $orderTitle : null,
@@ -909,8 +913,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 );
                             } else {
                                 $db->execute(
-                                    "INSERT INTO local_customers (name, phone, address, balance, status, created_by) VALUES (?, ?, NULL, 0, 'active', ?)",
+                                    "INSERT INTO local_customers (unique_code, name, phone, address, balance, status, created_by) VALUES (?, ?, ?, NULL, 0, 'active', ?)",
                                     [
+                                        $newCustomerUniqueCode,
                                         $customerName,
                                         $customerPhone !== '' ? $customerPhone : null,
                                         $currentUser['id'] ?? null,
@@ -3336,7 +3341,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             <label class="form-label"> ملاحظات </label>
                             <textarea class="form-control" name="details" id="editDetails" rows="3" placeholder=""></textarea>
                         </div>
-                        <div class="col-12 col-md-6 col-lg-4 mt-2">
+                        <div class="col-12 col-md-6 col-lg-4 mt-2" id="editShippingFeesWrap">
                             <label class="form-label" for="editTaskShippingFees">الشحن</label>
                             <div class="input-group">
                                 <input type="number" class="form-control" name="shipping_fees" id="editTaskShippingFees" step="0.01" min="0" placeholder="0.00" value="0">
@@ -3359,9 +3364,20 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                             <span class="text-muted">إجمالي المنتجات:</span>
                                             <strong class="d-block" id="editTaskSubtotalDisplay">0.00 ج.م</strong>
                                         </div>
-                                        <div class="col-6 col-md-3">
+                                        <div class="col-6 col-md-3" id="editTaskShippingCol">
                                             <span class="text-muted">رسوم الشحن:</span>
                                             <strong class="d-block" id="editTaskShippingDisplay">0.00 ج.م</strong>
+                                        </div>
+                                        <div class="col-6 col-md-3 d-none" id="editTaskDeliveryCostCol">
+                                            <span class="text-muted">تكلفة التوصيل (TelegraphEx):</span>
+                                            <strong class="d-block text-info" id="editTaskDeliveryCostDisplay">
+                                                <span class="spinner-border spinner-border-sm d-none" id="editTaskDeliveryCostSpinner"></span>
+                                                <span id="editTaskDeliveryCostValue">—</span>
+                                            </strong>
+                                        </div>
+                                        <div class="col-6 col-md-3 d-none" id="editTaskReturnCostCol">
+                                            <span class="text-muted">رسوم الإرجاع:</span>
+                                            <strong class="d-block text-warning" id="editTaskReturnCostValue">—</strong>
                                         </div>
                                         <div class="col-6 col-md-3">
                                             <span class="text-muted">الخصم:</span>
@@ -4132,13 +4148,24 @@ function updateEditTaskSummary() {
         var v = parseFloat(input.value);
         if (!isNaN(v) && v >= 0) subtotal += v;
     });
-    var shipping = (shipInput && !isNaN(parseFloat(shipInput.value))) ? Math.max(0, parseFloat(shipInput.value)) : 0;
+    var isTg = document.getElementById('editTaskType') && document.getElementById('editTaskType').value === 'telegraph';
+    var shipping = 0;
+    if (!isTg && shipInput) {
+        var v = parseFloat(shipInput.value || '0');
+        if (!isNaN(v) && v >= 0) shipping = v;
+    }
     var discount = (discountInput && !isNaN(parseFloat(discountInput.value))) ? Math.max(0, parseFloat(discountInput.value)) : 0;
-    var finalTotal = subtotal + shipping - discount;
-    subEl.textContent = subtotal.toFixed(2) + ' ج.م';
-    shipEl.textContent = shipping.toFixed(2) + ' ج.م';
-    if (discountEl) discountEl.textContent = discount.toFixed(2) + ' ج.م';
-    finalEl.textContent = finalTotal.toFixed(2) + ' ج.م';
+    var finalTotal;
+    if (isTg) {
+        var deliveryCost = window._tgEditDeliveryCost || 0;
+        finalTotal = subtotal - deliveryCost;
+    } else {
+        finalTotal = subtotal + shipping - discount;
+    }
+    subEl.textContent = subtotal.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+    shipEl.textContent = shipping.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+    if (discountEl) discountEl.textContent = discount.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+    finalEl.textContent = finalTotal.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
 }
 function delegateEditSummaryInputs() {
     var form = document.getElementById('editTaskForm');
@@ -4338,7 +4365,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                     inputEl.value = this.dataset.name;
                     submitName.value = this.dataset.name || '';
-                    submitPhone.value = this.dataset.phone || '';
+                    if (this.dataset.phone) submitPhone.value = this.dataset.phone;
                     dropEl.classList.add('d-none');
                     // ملء بيانات التليجراف تلقائياً إذا كان نوع الأوردر تليجراف
                     var editTypeEl = document.getElementById('editTaskType');
@@ -4633,7 +4660,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     }
                     inputEl.value = this.dataset.name;
                     submitName.value = this.dataset.name || '';
-                    submitPhone.value = this.dataset.phone || '';
+                    if (this.dataset.phone) submitPhone.value = this.dataset.phone;
                     dropEl.classList.add('d-none');
                     // ملء بيانات التليجراف تلقائياً إذا كان نوع الأوردر تليجراف
                     var typeEl = document.getElementById('taskTypeSelect');
@@ -4769,6 +4796,25 @@ document.addEventListener('DOMContentLoaded', function () {
             var el = document.getElementById(id);
             if (el) { el.classList.toggle('d-none', !isTg); }
         });
+        // إخفاء خانة الشحن اليدوية وإظهار تكلفة التوصيل عند اختيار تليجراف
+        var shippingWrap = document.getElementById('editShippingFeesWrap');
+        var shippingCol  = document.getElementById('editTaskShippingCol');
+        var deliveryCol  = document.getElementById('editTaskDeliveryCostCol');
+        if (shippingWrap) shippingWrap.classList.toggle('d-none', isTg);
+        if (shippingCol)  shippingCol.classList.toggle('d-none', isTg);
+        if (deliveryCol)  deliveryCol.classList.toggle('d-none', !isTg);
+        var returnCol = document.getElementById('editTaskReturnCostCol');
+        if (returnCol) returnCol.classList.toggle('d-none', !isTg);
+        if (isTg) {
+            // تصفير قيمة الشحن اليدوي عند التبديل لتليجراف
+            var shippingInput = document.getElementById('editTaskShippingFees');
+            if (shippingInput) { shippingInput.value = '0'; }
+            updateEditTaskSummary();
+            if (typeof window.fetchEditDeliveryCost === 'function') window.fetchEditDeliveryCost();
+        } else {
+            window._tgEditDeliveryCost = 0;
+            updateEditTaskSummary();
+        }
     }
     if (editTaskTypeEl) {
         editTaskTypeEl.addEventListener('change', toggleEditTgFields);
@@ -5732,11 +5778,10 @@ document.addEventListener('DOMContentLoaded', function () {
         var govIdEl  = document.getElementById('editGovId');
         var cityIdEl = document.getElementById('editCityId');
         var weightEl = document.getElementById('editTgWeight');
-        var shipInput = document.getElementById('editTaskShippingFees');
-        if (!shipInput) return;
+        if (!govIdEl || !cityIdEl) return;
 
-        var govId  = govIdEl  ? parseInt(govIdEl.value)  : 0;
-        var cityId = cityIdEl ? parseInt(cityIdEl.value) : 0;
+        var govId  = parseInt(govIdEl.value)  || 0;
+        var cityId = parseInt(cityIdEl.value) || 0;
         if (!govId || !cityId) return;
 
         var container = document.getElementById('editProductsContainer');
@@ -5754,27 +5799,58 @@ document.addEventListener('DOMContentLoaded', function () {
         var weight = weightEl ? parseFloat(weightEl.value || '1') : 1;
         if (isNaN(weight) || weight <= 0) weight = 1;
 
+        var spinner  = document.getElementById('editTaskDeliveryCostSpinner');
+        var valueEl  = document.getElementById('editTaskDeliveryCostValue');
+        if (spinner) spinner.classList.remove('d-none');
+        if (valueEl) valueEl.textContent = '';
+
         clearTimeout(_tgEditCalcTimer);
         _tgEditCalcTimer = setTimeout(function() {
             var url = getTgCalcApiPath() + '?price=' + price + '&recipientZoneId=' + govId + '&recipientSubzoneId=' + cityId + '&weight=' + weight;
             fetch(url)
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
+                    if (spinner) spinner.classList.add('d-none');
                     var fees = data && data.data && data.data.calculateShipmentFees;
                     if (fees) {
                         var deliveryCost = (parseFloat(fees.delivery) || 0) + (parseFloat(fees.weight) || 0) + (parseFloat(fees.collection) || 0);
-                        shipInput.value = deliveryCost.toFixed(2);
+                        if (valueEl) valueEl.textContent = deliveryCost.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+                        window._tgEditDeliveryCost = deliveryCost;
                         updateEditTaskSummary();
+                        var returnVal = parseFloat(fees['return']) || 0;
+                        var returnEl = document.getElementById('editTaskReturnCostValue');
+                        if (returnEl) returnEl.textContent = returnVal.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+                    } else {
+                        if (valueEl) valueEl.textContent = 'غير متاح';
+                        window._tgEditDeliveryCost = 0;
+                        updateEditTaskSummary();
+                        var returnEl = document.getElementById('editTaskReturnCostValue');
+                        if (returnEl) returnEl.textContent = '—';
                     }
                 })
-                .catch(function() {});
+                .catch(function() {
+                    if (spinner) spinner.classList.add('d-none');
+                    if (valueEl) valueEl.textContent = 'خطأ في الحساب';
+                });
         }, 500);
     }
     window.fetchEditDeliveryCost = fetchEditDeliveryCost;
 
-    // ربط حساب تكلفة توصيل التعديل بتغيير الوزن
+    // ربط حساب تكلفة توصيل التعديل بتغيير الوزن/الخصم/المنتجات
     if (document.getElementById('editTgWeight')) {
         document.getElementById('editTgWeight').addEventListener('input', fetchEditDeliveryCost);
+    }
+    if (document.getElementById('editTaskDiscount')) {
+        document.getElementById('editTaskDiscount').addEventListener('input', fetchEditDeliveryCost);
+        document.getElementById('editTaskDiscount').addEventListener('change', fetchEditDeliveryCost);
+    }
+    var editProductsContainerEl = document.getElementById('editProductsContainer');
+    if (editProductsContainerEl) {
+        editProductsContainerEl.addEventListener('input', function(e) {
+            if (e.target.classList.contains('edit-product-line-total') || e.target.classList.contains('edit-product-price') || e.target.classList.contains('edit-product-qty')) {
+                fetchEditDeliveryCost();
+            }
+        });
     }
 
     // ربط حساب تكلفة التوصيل بتغيير الوزن/الخصم/المنتجات
