@@ -7498,7 +7498,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // إدارة أرقام الهواتف المتعددة
-(function() {
+document.addEventListener('DOMContentLoaded', function() {
     // للنموذج الإضافة
     const addPhoneBtn = document.getElementById('addPhoneBtn');
     const phoneContainer = document.getElementById('phoneNumbersContainer');
@@ -7623,7 +7623,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (phoneContainer) {
         updateRemoveButtons(phoneContainer);
     }
-})();
+});
 </script>
 
 <!-- Modal تعديل عميل محلي - للكمبيوتر فقط -->
