@@ -912,19 +912,43 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         const originalMeta = src.querySelectorAll('p');
         const originalTable = src.querySelector('table');
         
-        // Header
+        // Header with title and number on same line
         const header = doc.createElement('div');
         header.className = 'receipt-header-80mm';
         
+        const titleContainer = doc.createElement('div');
+        titleContainer.style.cssText = `
+            border: 2px solid #000 !important;
+            padding: 3mm 2mm !important;
+            margin-bottom: 2mm !important;
+            text-align: center !important;
+            background: #ffffff !important;
+        `;
+        
         const receiptTitle = doc.createElement('div');
         receiptTitle.className = 'receipt-title';
-        receiptTitle.textContent = 'إيصال واردات';
-        header.appendChild(receiptTitle);
+        receiptTitle.style.cssText = `
+            font-size: 16px !important;
+            font-weight: 700 !important;
+            margin: 0 !important;
+            display: inline !important;
+        `;
+        receiptTitle.textContent = 'إيصال واردات رقم - ';
         
-        const number = doc.createElement('div');
+        const number = doc.createElement('span');
         number.className = 'receipt-number';
-        number.textContent = originalTitle.replace('إيصال واردات رقم - ', '').trim() || '-';    
-        header.appendChild(number);
+        number.style.cssText = `
+            font-size: 16px !important;
+            font-weight: 700 !important;
+            margin: 0 !important;
+            display: inline !important;
+            color: #000 !important;
+        `;
+        number.textContent = originalTitle.replace('إيصال واردات رقم - ', '').trim() || '-';
+        
+        titleContainer.appendChild(receiptTitle);
+        titleContainer.appendChild(number);
+        header.appendChild(titleContainer);
         
         receiptDiv.appendChild(header);
         
