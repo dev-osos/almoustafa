@@ -1006,11 +1006,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
                         
                         if (empty($error) && in_array('phone', $allowedFields)) {
-                            $updateFields[] = 'phone = ?';
-                            $updateValues[] = $phone ?: null;
-                            
                             // تحديث أرقام الهواتف في جدول local_customer_phones
                             $phones = $_POST['phones'] ?? [];
+                            
+                            // إذا كان حقل `phone` المخفي فارغ لكن `phones[]` فيه قيم، نستخدم أول رقم كـ primary
+                            $primaryPhone = $phone;
+                            if (($primaryPhone === '' || $primaryPhone === null) && is_array($phones) && !empty($phones)) {
+                                foreach ($phones as $phoneNumberCandidate) {
+                                    $phoneNumberCandidate = trim((string)$phoneNumberCandidate);
+                                    if ($phoneNumberCandidate !== '') {
+                                        $primaryPhone = $phoneNumberCandidate;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            $updateFields[] = 'phone = ?';
+                            $updateValues[] = $primaryPhone ?: null;
+                            
                             if (is_array($phones) && !empty($phones)) {
                                 // حذف الأرقام القديمة
                                 $db->execute("DELETE FROM local_customer_phones WHERE customer_id = ?", [$customerId]);
@@ -1027,12 +1040,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                         $firstPhone = false;
                                     }
                                 }
-                            } elseif (!empty($phone)) {
+                            } elseif (!empty($primaryPhone)) {
                                 // إذا لم تكن هناك أرقام متعددة، احفظ الرقم الواحد
                                 $db->execute("DELETE FROM local_customer_phones WHERE customer_id = ?", [$customerId]);
                                 $db->execute(
                                     "INSERT INTO local_customer_phones (customer_id, phone, is_primary) VALUES (?, ?, ?)",
-                                    [$customerId, $phone, 1]
+                                    [$customerId, $primaryPhone, 1]
                                 );
                             }
                         }
@@ -8316,21 +8329,22 @@ function lcInitAutocomplete(opts) {
             el.className = opts.itemClass;
             el.textContent = item.name;
             el.dataset.code = item.code || '';
+            el.dataset.id = item.id != null ? String(item.id) : '';
             el.addEventListener('mousedown', function(e) {
                 e.preventDefault();
-                selectItem(item.name, item.code);
+                selectItem(item.name, item.code, item.id);
             });
             dropdown.appendChild(el);
         });
         dropdown.classList.remove('d-none');
     }
 
-    function selectItem(name, code) {
+    function selectItem(name, code, id) {
         searchEl.value = name;
         hiddenEl.value = name;
         dropdown.classList.add('d-none');
-        try { hiddenEl.dispatchEvent(new CustomEvent('ac-select', { detail: { name: name, code: code } })); } catch(e) {}
-        if (opts.onSelect) opts.onSelect(name, code);
+        try { hiddenEl.dispatchEvent(new CustomEvent('ac-select', { detail: { name: name, code: code, id: id } })); } catch(e) {}
+        if (opts.onSelect) opts.onSelect(name, code, id);
     }
 
     function closeDropdown() {
@@ -8375,7 +8389,10 @@ function lcInitAutocomplete(opts) {
                 if (!match) {
                     match = list.find(function(c) { return String(c.code ?? '') === pre; });
                 }
-                if (match) selectItem(match.name, match.code);
+                if (!match) {
+                    match = list.find(function(c) { return String(c.id ?? '') === pre; });
+                }
+                if (match) selectItem(match.name, match.code, match.id);
             }
         },
         reset: function() {
@@ -8414,10 +8431,10 @@ function lcInitGovAutocomplete(searchInputId, hiddenInputId, govIdInputId, cityI
         itemClass: 'gov-item',
         noResultClass: 'gov-no-result',
         getList: function() { return LC_GOV_LIST; },
-        onSelect: function(name, code) {
+        onSelect: function(name, code, id) {
             if (govIdInputId) {
                 var govIdEl = document.getElementById(govIdInputId);
-                if (govIdEl) govIdEl.value = code;
+                if (govIdEl) govIdEl.value = (id !== null && id !== undefined && String(id) !== '' ? id : code);
             }
             if (cityInstance && code) lcFetchCities(code, cityInstance);
         },
@@ -8442,10 +8459,10 @@ function lcInitCityAutocomplete(searchInputId, hiddenInputId, cityIdInputId) {
         noResultClass: 'city-no-result',
         getList: function() { return cityList; },
         _list: cityList,
-        onSelect: function(name, code) {
+        onSelect: function(name, code, id) {
             if (!cityIdInputId) return;
             var cityIdEl = document.getElementById(cityIdInputId);
-            if (cityIdEl) cityIdEl.value = code;
+            if (cityIdEl) cityIdEl.value = (id !== null && id !== undefined && String(id) !== '' ? id : code);
         },
         onClear: function() {
             if (!cityIdInputId) return;
@@ -8494,17 +8511,21 @@ function _fillLCTgFields(suffix, govName, govId, cityName, cityId) {
 
     var inst = suffix === 'Card' ? _lcCityInstances.card : _lcCityInstances.modal;
 
-    // محاولة مطابقة المحافظة حسب govId (أكثر موثوقية من الاسم)
+    // محاولة مطابقة المحافظة حسب govId (code أو id)
     var gov = null;
-    if (govIdStr) gov = LC_GOV_LIST.find(function(g) { return String(g.code ?? '') === govIdStr; });
+    if (govIdStr) {
+        gov = LC_GOV_LIST.find(function(g) { return String(g.code ?? '') === govIdStr; });
+        if (!gov) gov = LC_GOV_LIST.find(function(g) { return String(g.id ?? '') === govIdStr; });
+    }
     // fallback: مطابقة حسب الاسم كما كان سابقاً
     if (!gov && govName) gov = LC_GOV_LIST.find(function(g) { return g.name === govName; });
 
     if (gov && inst) {
         // استخدم اسم القائمة (قد يختلف عن الاسم المخزن بشكل بسيط)
-        if (govSearch) govSearch.value = gov.name || '';
-        if (govHidden) govHidden.value = gov.name || '';
-        if (govIdEl)   govIdEl.value   = gov.code || '';
+        if (govSearch) govSearch.value = govName || gov.name || '';
+        if (govHidden) govHidden.value = govName || gov.name || '';
+        // لا نعيد حساب govId: نُفضّل الحفاظ على قيمة قاعدة البيانات (govIdStr)
+        if (govIdEl)   govIdEl.value   = govIdStr || gov.code || gov.id || '';
 
         // حدد المدينة حسب cityId إن وجد، وإلا cityName
         var preCity = cityIdStr || (cityName || '');
