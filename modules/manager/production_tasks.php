@@ -2919,25 +2919,35 @@ if (isset($_GET['export_recent_tasks_excel']) && (string)$_GET['export_recent_ta
         ];
     }
 
-    require_once __DIR__ . '/../../includes/simple_export.php';
+    // بث CSV مباشرة لتقليل مشاكل صلاحيات/ملفات وتقليل ظهور HTML بدل البيانات
+    $fileName = ' فواتير الأوردرات' . date('Y-m-d_His') . '.csv';
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="' . $fileName . '"');
+    header('Cache-Control: must-revalidate, post-check=0, pre-check=0, private');
 
-    $title = 'قائمة الأوردرات';
-    $filePath = exportCSV($exportRows, $title, $filtersForExport);
-
-    if (!is_string($filePath) || !file_exists($filePath)) {
+    $out = fopen('php://output', 'w');
+    if ($out === false) {
         http_response_code(500);
         header('Content-Type: text/plain; charset=utf-8');
-        echo 'فشل في إنشاء ملف التصدير';
+        echo 'فشل في فتح output stream للتصدير';
         exit;
     }
 
-    $fileName = basename($filePath);
-    $mimeType = 'application/vnd.ms-excel'; // فتح Excel لملفات CSV
-    header('Content-Type: ' . $mimeType . '; charset=utf-8');
-    header('Content-Disposition: attachment; filename="' . $fileName . '"');
-    header('Content-Length: ' . filesize($filePath));
-    header('Cache-Control: must-revalidate, post-check=0, pre-check=0, private');
-    readfile($filePath);
+    // BOM لدعم العربية في Excel
+    fwrite($out, chr(0xEF) . chr(0xBB) . chr(0xBF));
+
+    $headers = ['تاريخ الطلب', 'رقم الطلب', 'اسم العميل', 'تفاصيل الاوردر', 'الاجمالي النهائي'];
+    fputcsv($out, $headers);
+
+    foreach ($exportRows as $row) {
+        $line = [];
+        foreach ($headers as $h) {
+            $line[] = isset($row[$h]) ? (string)$row[$h] : '';
+        }
+        fputcsv($out, $line);
+    }
+
+    fclose($out);
     exit;
 }
 
