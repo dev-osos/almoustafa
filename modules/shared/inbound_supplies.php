@@ -881,10 +881,10 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         const header = doc.createElement('div');
         header.className = 'receipt-header-80mm';
         
-        const title = doc.createElement('div');
-        title.className = 'receipt-title';
-        title.textContent = 'إيصال واردات';
-        header.appendChild(title);
+        const receiptTitle = doc.createElement('div');
+        receiptTitle.className = 'receipt-title';
+        receiptTitle.textContent = 'إيصال واردات';
+        header.appendChild(receiptTitle);
         
         const number = doc.createElement('div');
         number.className = 'receipt-number';
