@@ -2980,19 +2980,22 @@ if ($isSelectedExport || $isPeriodExport) {
 
     $headers = ['تاريخ الطلب', 'رقم الطلب', 'اسم العميل', 'تفاصيل الاوردر', 'الاجمالي النهائي'];
 
-    // بث CSV مباشرة بدون أي تصميم/HTML
+    // إصدار CSV كملف داخل reports ثم تنزيله عبر api/download_csv.php
+    // (مطابق لطريقة إصدار تقارير ملفات CSV في النظام)
     $mode = $isPeriodExport ? 'period' : 'selected';
     $fileName = 'production_tasks_' . $mode . '_' . date('Y-m-d_His') . '.csv';
 
-    header('Content-Type: text/csv; charset=utf-8');
-    header('Content-Disposition: attachment; filename="' . $fileName . '"');
-    header('Cache-Control: must-revalidate, post-check=0, pre-check=0, private');
+    $exportsDir = rtrim(REPORTS_PATH, '/\\') . DIRECTORY_SEPARATOR . 'exports';
+    if (!is_dir($exportsDir)) {
+        @mkdir($exportsDir, 0755, true);
+    }
 
-    $out = fopen('php://output', 'w');
+    $filePath = $exportsDir . DIRECTORY_SEPARATOR . $fileName;
+    $out = @fopen($filePath, 'w');
     if ($out === false) {
         http_response_code(500);
         header('Content-Type: text/plain; charset=utf-8');
-        echo 'فشل في فتح output stream للتصدير';
+        echo 'فشل في إنشاء ملف CSV للتصدير';
         exit;
     }
 
@@ -3000,7 +3003,6 @@ if ($isSelectedExport || $isPeriodExport) {
     fwrite($out, chr(0xEF) . chr(0xBB) . chr(0xBF));
 
     fputcsv($out, $headers);
-
     foreach ($exportRows as $row) {
         $line = [];
         foreach ($headers as $h) {
@@ -3010,6 +3012,11 @@ if ($isSelectedExport || $isPeriodExport) {
     }
 
     fclose($out);
+
+    // المسار النسبي لـ reports المطلوب بواسطة api/download_csv.php
+    $relativePath = 'reports/exports/' . $fileName;
+    $downloadPath = getAbsoluteUrl('api/download_csv.php?file=' . urlencode($relativePath));
+    header('Location: ' . $downloadPath);
     exit;
 }
 
