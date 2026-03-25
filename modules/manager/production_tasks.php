@@ -7125,7 +7125,26 @@ window.closeChangeStatusCard = function() {
                     url.searchParams.delete('ids');
                     url.searchParams.delete('export_recent_tasks_print');
 
-                    window.location.href = url.toString();
+                    // فتح التصدير في تبويب جديد لتجنب تعليق شاشة التحميل في نفس الصفحة عند بدء تنزيل الملف
+                    // (بعض المتصفحات/الاستضافات تنفّذ download بدون إعادة تحميل كاملة، فيظل overlay ظاهراً)
+                    var exportUrl = url.toString();
+                    var w = null;
+                    try {
+                        w = window.open(exportUrl, '_blank', 'noopener,noreferrer');
+                    } catch (e) {
+                        w = null;
+                    }
+                    // إن تم حظر الـ popup، نعود للطريقة التقليدية
+                    if (!w) {
+                        window.location.href = exportUrl;
+                        return;
+                    }
+                    // أغلق المودال وأعد ضبط شاشة التحميل إن كانت مفعّلة
+                    try {
+                        var mm = (typeof bootstrap !== 'undefined' && bootstrap.Modal) ? bootstrap.Modal.getInstance(modalEl) : null;
+                        if (mm) mm.hide();
+                    } catch (e2) {}
+                    if (typeof window.resetPageLoading === 'function') window.resetPageLoading();
                 });
             }
 
