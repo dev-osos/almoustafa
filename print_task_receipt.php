@@ -161,6 +161,7 @@ foreach ($taskIds as $taskId) {
     $receipts[] = [
         'task' => $task,
         'taskNumber' => $taskId,
+        'taskType' => $taskType,
         'taskTypeLabel' => $taskTypeLabels[$taskType] ?? $taskType,
         'priorityLabel' => $priorityLabels[$task['priority'] ?? 'normal'] ?? $task['priority'] ?? 'normal',
         'statusLabel' => $statusLabels[$task['status'] ?? 'pending'] ?? $task['status'] ?? 'pending',
@@ -175,6 +176,53 @@ foreach ($taskIds as $taskId) {
 
 if (empty($receipts)) {
     die('لا توجد مهام صالحة للطباعة');
+}
+
+$tgCalcCache = [];
+/**
+ * جلب تكلفة توصيل TelegraphEx من endpoint داخلي.
+ * (نفس المقادير اللي بتجمع في الـJS: delivery + weight + collection)
+ */
+function fetchTgDeliveryCost($price, $recipientZoneId, $recipientSubzoneId, $weight, &$tgCalcCache) {
+    $price = (float)$price;
+    $recipientZoneId = (int)$recipientZoneId;
+    $recipientSubzoneId = (int)$recipientSubzoneId;
+    $weight = (float)$weight;
+
+    if ($recipientZoneId <= 0 || $recipientSubzoneId <= 0) return null;
+    if ($weight <= 0) $weight = 1;
+
+    $cacheKey = $recipientZoneId . ':' . $recipientSubzoneId . ':' . round($price, 2) . ':' . round($weight, 3);
+    if (array_key_exists($cacheKey, $tgCalcCache)) return $tgCalcCache[$cacheKey];
+
+    $calcUrl = getAbsoluteUrl(
+        'api/tg_calc_fees.php?price=' . urlencode((string)$price) .
+        '&recipientZoneId=' . urlencode((string)$recipientZoneId) .
+        '&recipientSubzoneId=' . urlencode((string)$recipientSubzoneId) .
+        '&weight=' . urlencode((string)$weight)
+    );
+
+    $raw = @file_get_contents($calcUrl);
+    if ($raw === false || $raw === '') {
+        $tgCalcCache[$cacheKey] = null;
+        return null;
+    }
+
+    $data = json_decode($raw, true);
+    $fees = $data['data']['calculateShipmentFees'] ?? null;
+    if (!$fees) {
+        $tgCalcCache[$cacheKey] = null;
+        return null;
+    }
+
+    $deliveryCost =
+        (float)($fees['delivery'] ?? 0) +
+        (float)($fees['weight'] ?? 0) +
+        (float)($fees['collection'] ?? 0);
+
+    $deliveryCost = round($deliveryCost, 2);
+    $tgCalcCache[$cacheKey] = $deliveryCost;
+    return $deliveryCost;
 }
 
 $companyName = COMPANY_NAME;
@@ -542,6 +590,7 @@ $singleReceipt = count($receipts) === 1;
             }
             $task = $r['task'];
             $taskNumber = $r['taskNumber'];
+            $taskType = $r['taskType'] ?? 'general';
             $taskTypeLabel = $r['taskTypeLabel'];
             $priorityLabel = $r['priorityLabel'];
             $products = $r['products'];
@@ -650,6 +699,41 @@ $singleReceipt = count($receipts) === 1;
                 $receiptShippingFees = isset($r['shippingFees']) ? (float)$r['shippingFees'] : 0;
                 $receiptDiscount = isset($r['discount']) ? (float)$r['discount'] : 0;
                 $finalTotal = $grandTotal + $receiptShippingFees - $receiptDiscount;
+
+                // تليجراف: الإجمالي النهائي = إجمالي المنتجات - تكلفة التوصيل (TelegraphEx)
+                $deliveryCost = null;
+                if ($taskType === 'telegraph') {
+                    $tgGovId = 0;
+                    $tgCityId = 0;
+                    $localCustomerId = isset($task['local_customer_id']) ? (int)$task['local_customer_id'] : 0;
+                    if ($localCustomerId > 0) {
+                        try {
+                            $local = $db->queryOne(
+                                "SELECT tg_gov_id, tg_city_id FROM local_customers WHERE id = ? LIMIT 1",
+                                [$localCustomerId]
+                            );
+                            if ($local) {
+                                $tgGovId = (int)($local['tg_gov_id'] ?? 0);
+                                $tgCityId = (int)($local['tg_city_id'] ?? 0);
+                            }
+                        } catch (Exception $e) {
+                            error_log('print_task_receipt telegraph local_customers lookup error: ' . $e->getMessage());
+                        }
+                    }
+
+                    $tgWeight = 1;
+                    if (!empty($task['notes']) && preg_match('/\[TG_WEIGHT\]\s*:\s*([^\n]+)/', (string)$task['notes'], $m)) {
+                        $w = (float)trim((string)($m[1] ?? 0));
+                        if ($w > 0) $tgWeight = $w;
+                    }
+
+                    // نفس منطق الـJS لحساب الرسوم: price = max(0, subtotal - discount)
+                    $priceForFees = max(0, (float)$grandTotal - (float)$receiptDiscount);
+                    $deliveryCost = fetchTgDeliveryCost($priceForFees, $tgGovId, $tgCityId, $tgWeight, $tgCalcCache);
+                    if ($deliveryCost !== null) {
+                        $finalTotal = max(0, (float)$grandTotal - (float)$deliveryCost);
+                    }
+                }
                 if ($receiptShippingFees > 0): ?>
                 <tr style="font-weight: 700; background-color: #f8f8f8;">
                     <td colspan="3" style="text-align: left; padding: 6px 5px;">رسوم الشحن</td>
@@ -660,6 +744,12 @@ $singleReceipt = count($receipts) === 1;
                 <tr style="font-weight: 700; background-color: #fff3e0;">
                     <td colspan="3" style="text-align: left; padding: 6px 5px;">الخصم</td>
                     <td style="text-align: center; padding: 6px 5px;">- <?php echo number_format($receiptDiscount, 2); ?> ج.م</td>
+                </tr>
+                <?php endif; ?>
+                <?php if ($taskType === 'telegraph' && $deliveryCost !== null && $deliveryCost > 0): ?>
+                <tr style="font-weight: 700; background-color: #e3f2fd;">
+                    <td colspan="3" style="text-align: left; padding: 6px 5px;">تكلفة التوصيل (TelegraphEx)</td>
+                    <td style="text-align: center; padding: 6px 5px;">- <?php echo number_format($deliveryCost, 2); ?> ج.م</td>
                 </tr>
                 <?php endif; ?>
                 <tr style="font-weight: 700; background-color: #e8f5e9;">
@@ -678,6 +768,41 @@ $singleReceipt = count($receipts) === 1;
             $receiptShippingFeesEmpty = isset($r['shippingFees']) ? (float)$r['shippingFees'] : 0;
             $receiptDiscountEmpty = isset($r['discount']) ? (float)$r['discount'] : 0;
             $finalEmpty = $receiptShippingFeesEmpty - $receiptDiscountEmpty;
+
+            // تليجراف بدون منتجات: subtotal=0 => الإجمالي النهائي يعتمد على تكلفة التوصيل
+            $deliveryCost = null;
+            if ($taskType === 'telegraph') {
+                $tgGovId = 0;
+                $tgCityId = 0;
+                $localCustomerId = isset($task['local_customer_id']) ? (int)$task['local_customer_id'] : 0;
+                if ($localCustomerId > 0) {
+                    try {
+                        $local = $db->queryOne(
+                            "SELECT tg_gov_id, tg_city_id FROM local_customers WHERE id = ? LIMIT 1",
+                            [$localCustomerId]
+                        );
+                        if ($local) {
+                            $tgGovId = (int)($local['tg_gov_id'] ?? 0);
+                            $tgCityId = (int)($local['tg_city_id'] ?? 0);
+                        }
+                    } catch (Exception $e) {
+                        error_log('print_task_receipt telegraph local_customers lookup (empty) error: ' . $e->getMessage());
+                    }
+                }
+
+                $tgWeight = 1;
+                if (!empty($task['notes']) && preg_match('/\[TG_WEIGHT\]\s*:\s*([^\n]+)/', (string)$task['notes'], $m)) {
+                    $w = (float)trim((string)($m[1] ?? 0));
+                    if ($w > 0) $tgWeight = $w;
+                }
+
+                // نفس منطق الـJS للحساب: price = max(0, subtotal - discount) وبما أن subtotal=0 هنا يبقى 0
+                $priceForFees = 0;
+                $deliveryCost = fetchTgDeliveryCost($priceForFees, $tgGovId, $tgCityId, $tgWeight, $tgCalcCache);
+                if ($deliveryCost !== null) {
+                    $finalEmpty = max(0, 0 - (float)$deliveryCost);
+                }
+            }
             if ($receiptShippingFeesEmpty > 0 || $receiptDiscountEmpty > 0): ?>
             <?php if ($receiptShippingFeesEmpty > 0): ?>
             <tr style="font-weight: 700;">
@@ -689,6 +814,12 @@ $singleReceipt = count($receipts) === 1;
             <tr style="font-weight: 700;">
                 <td>الخصم</td>
                 <td>- <?php echo number_format($receiptDiscountEmpty, 2); ?> ج.م</td>
+            </tr>
+            <?php endif; ?>
+            <?php if ($taskType === 'telegraph' && $deliveryCost !== null && $deliveryCost > 0): ?>
+            <tr style="font-weight: 700; background-color: #e3f2fd;">
+                <td>تكلفة التوصيل (TelegraphEx)</td>
+                <td>- <?php echo number_format((float)$deliveryCost, 2); ?> ج.م</td>
             </tr>
             <?php endif; ?>
             <tr style="font-weight: 700; background-color: #e8f5e9;">
