@@ -99,13 +99,24 @@ foreach ($taskIds as $taskId) {
 
     $products = [];
     if (!empty($notes)) {
-        if (preg_match('/\[PRODUCTS_JSON\]:(.+?)(?=\n|$)/', $notes, $matches)) {
+        // format جديد: [PRODUCTS_JSON]:...
+        if (preg_match('/\[PRODUCTS_JSON\]\s*:\s*(.+?)(?=\n\s*\n|\[ASSIGNED_WORKERS_IDS\]|$)/su', $notes, $matches)) {
             $productsJson = trim($matches[1]);
             $decodedProducts = json_decode($productsJson, true);
             if (is_array($decodedProducts) && !empty($decodedProducts)) {
                 $products = $decodedProducts;
             }
         }
+
+        // format قديم بعد تعديل الأوردر: "المنتجات : { ... }" (JSON لمصفوفة المنتجات)
+        if (empty($products) && preg_match('/المنتجات\s*:\s*(.+?)(?=\n\s*\n|\[ASSIGNED_WORKERS_IDS\]|$)/su', $notes, $matches)) {
+            $productsJson = trim($matches[1]);
+            $decodedProducts = json_decode($productsJson, true);
+            if (is_array($decodedProducts) && !empty($decodedProducts)) {
+                $products = $decodedProducts;
+            }
+        }
+
         if (empty($products)) {
             $lines = explode("\n", $notes);
             foreach ($lines as $line) {
@@ -134,10 +145,10 @@ foreach ($taskIds as $taskId) {
     $displayNotes = '';
     if (!empty($notes)) {
         $displayNotes = preg_replace('/\[ASSIGNED_WORKERS_IDS\]:\s*[0-9,]+/', '', $notes);
-        $displayNotes = preg_replace('/\[PRODUCTS_JSON\]:[^\n]*/', '', $displayNotes);
+        // تنظيف كتلة JSON من الملاحظات (حتى لو اتخزنت/عرضت كسطر أو بعدة أسطر)
+        $displayNotes = preg_replace('/\[PRODUCTS_JSON\]\s*:\s*(.+?)(?=\n\s*\n|\[ASSIGNED_WORKERS_IDS\]|$)/su', '', $displayNotes);
         // صيغة قديمة بعد تعديل الأوردر: "المنتجات : { ... }"
-        // (بدون ده، هتظهر بيانات JSON خامة داخل قسم الملاحظات في الإيصال)
-        $displayNotes = preg_replace('/المنتجات\s*:\s*.*?(?=\n\s*\n|\[ASSIGNED_WORKERS_IDS\]|\n\s*المنتج:|\z)/su', '', $displayNotes);
+        $displayNotes = preg_replace('/المنتجات\s*:\s*(.+?)(?=\n\s*\n|\[ASSIGNED_WORKERS_IDS\]|$)/su', '', $displayNotes);
         $displayNotes = preg_replace('/\[SHIPPING_FEES\]:\s*[0-9.]+/', '', $displayNotes);
         $displayNotes = preg_replace('/\[DISCOUNT\]:\s*[0-9.]+/', '', $displayNotes);
         $displayNotes = preg_replace('/\[ORDER_TITLE\]:\s*[^\n]+/', '', $displayNotes);
