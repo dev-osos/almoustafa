@@ -592,9 +592,10 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
 
         const table = document.createElement('table');
         table.className = 'table table-bordered';
+        table.style.cssText = 'border: 2px solid #000 !important; font-weight: 600 !important;';
         const thead = document.createElement('thead');
         const hr = document.createElement('tr');
-        ['القسم', 'الصنف', 'قبل', 'وارد', 'بعد'].forEach(h => {
+        ['الصنف', 'قبل', 'وارد', 'بعد'].forEach(h => {
             const th = document.createElement('th');
             th.textContent = h;
             hr.appendChild(th);
@@ -604,7 +605,6 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         const tbody = document.createElement('tbody');
         (supply.items || []).forEach(it => {
             const tr = document.createElement('tr');
-            appendCell(tr, it.department_label || it.department || '-');
             appendCell(tr, it.item_name || '-');
             
             // Format quantity based on unit
