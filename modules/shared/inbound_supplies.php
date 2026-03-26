@@ -863,20 +863,20 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             }
             
             .items-table .col-item {
-                width: 40% !important;
+                width: 45% !important;
                 text-align: right !important;
                 padding-left: 1mm !important;
                 padding-right: 1mm !important;
             }
             
             .items-table .col-qty {
-                width: 15% !important;
+                width: 18% !important;
             }
             
             .items-table .col-before,
             .items-table .col-added,
             .items-table .col-after {
-                width: 15% !important;
+                width: 12.33% !important;
             }
             
             .receipt-footer {
