@@ -662,6 +662,11 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
     }
 
     async function loadSupplyDetails(id, printAfter) {
+        // Open window immediately to avoid popup blocker
+        let printWindow = null;
+        if (printAfter) {
+            printWindow = window.open('', '_blank');
+        }
         const url = new URL(apiUrl, window.location.origin);
         url.searchParams.set('action', 'get_supply_details');
         url.searchParams.set('id', String(id));
@@ -669,18 +674,19 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         const data = await res.json();
         if (!data.success) {
             showAlert('danger', data.message || 'تعذر تحميل الإيصال');
+            if (printWindow) printWindow.close();
             return;
         }
         renderReceipt(data.supply);
-        if (printAfter) setTimeout(printReceipt, 150);
+        if (printAfter) setTimeout(() => printReceipt(printWindow), 150);
     }
 
-    function printReceipt() {
+    function printReceipt(existingWindow) {
         const src = document.getElementById('receiptPrintable');
         if (!src) return;
-        
+
         // Create 80mm print version
-        const w = window.open('', '_blank');
+        const w = existingWindow || window.open('', '_blank');
         if (!w) return;
         
         const doc = w.document;
