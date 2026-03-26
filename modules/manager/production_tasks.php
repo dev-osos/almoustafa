@@ -552,6 +552,85 @@ function getTaskReceiptTotalFromNotes($notes)
 }
 
 /**
+ * حساب الإجمالي النهائي لأوردر تليجراف (يطابق ما يُطبع في الإيصال).
+ * الإجمالي = إجمالي المنتجات - تكلفة التوصيل (TelegraphEx)
+ */
+function getTelegraphReceiptTotal($task, $db)
+{
+    $notes = (string)($task['notes'] ?? '');
+    // حساب إجمالي المنتجات
+    $products = [];
+    if (preg_match('/(?:\[PRODUCTS_JSON\]|المنتجات)\s*:\s*(\[.+?\])(?=\s*\n|\[ASSIGNED_WORKERS_IDS\]|$)/su', $notes, $m)) {
+        $decoded = json_decode(trim($m[1]), true);
+        if (is_array($decoded)) $products = $decoded;
+    }
+    $grandTotal = 0.0;
+    foreach ($products as $p) {
+        $lineTotal = null;
+        if (isset($p['line_total']) && $p['line_total'] !== '' && $p['line_total'] !== null && is_numeric($p['line_total'])) {
+            $lineTotal = (float)$p['line_total'];
+        } elseif (isset($p['quantity']) && (float)$p['quantity'] > 0 && isset($p['price']) && ($p['price'] !== '' && $p['price'] !== null) && is_numeric($p['price'])) {
+            $lineTotal = round((float)$p['quantity'] * (float)$p['price'], 2);
+        }
+        if ($lineTotal !== null) $grandTotal += $lineTotal;
+    }
+    // حساب الخصم
+    $discount = 0.0;
+    if (preg_match('/\[DISCOUNT\]:\s*([0-9.]+)/', $notes, $m2)
+        || preg_match('/الخصم\s*:\s*([0-9.]+)/u', $notes, $m2)) {
+        $discount = (float)$m2[1];
+    }
+    // جلب بيانات العميل (المحافظة والمدينة)
+    $tgGovId = 0;
+    $tgCityId = 0;
+    $localCustomerId = isset($task['local_customer_id']) ? (int)$task['local_customer_id'] : 0;
+    $localLookup = null;
+    if ($localCustomerId > 0) {
+        try {
+            $localLookup = $db->queryOne("SELECT tg_gov_id, tg_city_id FROM local_customers WHERE id = ? LIMIT 1", [$localCustomerId]);
+        } catch (Exception $e) {}
+    }
+    if (!$localLookup && !empty($task['customer_name'])) {
+        try {
+            $localLookup = $db->queryOne("SELECT tg_gov_id, tg_city_id FROM local_customers WHERE name = ? LIMIT 1", [trim($task['customer_name'])]);
+        } catch (Exception $e) {}
+    }
+    if ($localLookup) {
+        $tgGovId = (int)($localLookup['tg_gov_id'] ?? 0);
+        $tgCityId = (int)($localLookup['tg_city_id'] ?? 0);
+    }
+    // جلب الوزن من notes
+    $tgWeight = 1;
+    if (preg_match('/\[TG_WEIGHT\]\s*:\s*([^\n]+)/', $notes, $m3)
+        || preg_match('/الوزن\s*:\s*([^\n]+)/u', $notes, $m3)) {
+        $w = (float)trim((string)($m3[1] ?? 0));
+        if ($w > 0) $tgWeight = $w;
+    }
+    // حساب تكلفة التوصيل عبر TelegraphEx API
+    $priceForFees = max(0, $grandTotal - $discount);
+    if ($tgGovId <= 0 || $tgCityId <= 0) {
+        return round($grandTotal - $discount, 2);
+    }
+    $calcUrl = getAbsoluteUrl(
+        'api/tg_calc_fees.php?price=' . urlencode((string)$priceForFees) .
+        '&recipientZoneId=' . urlencode((string)$tgGovId) .
+        '&recipientSubzoneId=' . urlencode((string)$tgCityId) .
+        '&weight=' . urlencode((string)$tgWeight)
+    );
+    $raw = @file_get_contents($calcUrl);
+    if ($raw === false || $raw === '') {
+        return round($grandTotal - $discount, 2);
+    }
+    $data = json_decode($raw, true);
+    $fees = $data['data']['calculateShipmentFees'] ?? null;
+    if (!$fees) {
+        return round($grandTotal - $discount, 2);
+    }
+    $deliveryCost = (float)($fees['delivery'] ?? 0) + (float)($fees['weight'] ?? 0) + (float)($fees['collection'] ?? 0);
+    return round($grandTotal - $deliveryCost, 2);
+}
+
+/**
  * خصم كميات منتجات الأوردر من المخزون (يُستدعى عند اعتماد الفاتورة فقط).
  * يقرأ [PRODUCTS_JSON] من notes ويخصم effective_quantity من:
  *   1. products.quantity  (منتجات الشركة)
@@ -2785,8 +2864,14 @@ try {
         $task['all_workers'] = $allWorkers;
         $task['workers_count'] = count($allWorkers);
         $task['extracted_product_name'] = $extractedProductName;
-        $task['receipt_total'] = getTaskReceiptTotalFromNotes($task['notes'] ?? '');
-        
+        // حساب الإجمالي النهائي: للتليجراف يُحسب عبر TelegraphEx API ليطابق الإيصال المطبوع
+        $taskDisplayType = (strpos($task['related_type'] ?? '', 'manager_') === 0) ? substr($task['related_type'], 8) : ($task['task_type'] ?? 'general');
+        if ($taskDisplayType === 'telegraph') {
+            $task['receipt_total'] = getTelegraphReceiptTotal($task, $db);
+        } else {
+            $task['receipt_total'] = getTaskReceiptTotalFromNotes($task['notes'] ?? '');
+        }
+
         // إضافة creator_name و creator_role إذا لم يكونا موجودين
         if (!isset($task['creator_name']) && isset($task['created_by'])) {
             $creator = $db->queryOne("SELECT full_name, role FROM users WHERE id = ?", [$task['created_by']]);
