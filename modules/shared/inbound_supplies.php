@@ -906,6 +906,11 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         // Create 80mm receipt content
         const receiptDiv = doc.createElement('div');
         receiptDiv.className = 'receipt-80mm';
+        receiptDiv.style.cssText = `
+            border: 2px solid #000 !important;
+            padding: 2mm !important;
+            box-sizing: border-box !important;
+        `;
         
         // Get data from the original receipt
         const originalTitle = src.querySelector('h4')?.textContent || 'إيصال واردات رقم -';
@@ -918,8 +923,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         
         const titleContainer = doc.createElement('div');
         titleContainer.style.cssText = `
-            border: 2px solid #000 !important;
-            padding: 2mm 1mm !important;
+            padding: 1mm 1mm !important;
             margin-bottom: 1mm !important;
             text-align: center !important;
             background: #ffffff !important;
