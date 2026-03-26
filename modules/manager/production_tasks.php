@@ -539,11 +539,13 @@ function getTaskReceiptTotalFromNotes($notes)
         }
     }
     $shipping = 0.0;
-    if (preg_match('/\[SHIPPING_FEES\]:\s*([0-9.]+)/', $notes, $m)) {
+    if (preg_match('/\[SHIPPING_FEES\]:\s*([0-9.]+)/', $notes, $m)
+        || preg_match('/رسوم\s*الشحن\s*:\s*([0-9.]+)/u', $notes, $m)) {
         $shipping = (float)$m[1];
     }
     $discount = 0.0;
-    if (preg_match('/\[DISCOUNT\]:\s*([0-9.]+)/', $notes, $m)) {
+    if (preg_match('/\[DISCOUNT\]:\s*([0-9.]+)/', $notes, $m)
+        || preg_match('/الخصم\s*:\s*([0-9.]+)/u', $notes, $m)) {
         $discount = (float)$m[1];
     }
     return round($grandTotal + $shipping - $discount, 2);
@@ -1992,6 +1994,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                         $custIdToUpdate,
                                     ]
                                 );
+                                // ربط العميل بالأوردر إذا كان local_customer_id فارغاً (مثلاً بعد تغيير اسم العميل)
+                                if (!$newLocalCustomerId) {
+                                    $db->execute("UPDATE tasks SET local_customer_id = ? WHERE id = ?", [$custIdToUpdate, $taskId]);
+                                }
                             }
                         }
                     }
@@ -3776,9 +3782,11 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                             if (is_array($cbDecoded)) $cbProductsJson = json_encode($cbDecoded, JSON_UNESCAPED_UNICODE);
                                         }
                                         $cbShipping = 0.0;
-                                        if (preg_match('/\[SHIPPING_FEES\]:\s*([0-9.]+)/', $cbNotes, $cbSm)) $cbShipping = (float)$cbSm[1];
+                                        if (preg_match('/\[SHIPPING_FEES\]:\s*([0-9.]+)/', $cbNotes, $cbSm)
+                                            || preg_match('/رسوم\s*الشحن\s*:\s*([0-9.]+)/u', $cbNotes, $cbSm)) $cbShipping = (float)$cbSm[1];
                                         $cbDiscount = 0.0;
-                                        if (preg_match('/\[DISCOUNT\]:\s*([0-9.]+)/', $cbNotes, $cbDm)) $cbDiscount = (float)$cbDm[1];
+                                        if (preg_match('/\[DISCOUNT\]:\s*([0-9.]+)/', $cbNotes, $cbDm)
+                                            || preg_match('/الخصم\s*:\s*([0-9.]+)/u', $cbNotes, $cbDm)) $cbDiscount = (float)$cbDm[1];
                                         $cbApproved = in_array((int)$task['id'], $approvedTaskIds, true) ? '1' : '0';
                                         $cbReceiptTotal = isset($task['receipt_total']) ? (float)$task['receipt_total'] : 0;
                                         ?>

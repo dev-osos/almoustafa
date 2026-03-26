@@ -736,25 +736,41 @@ $singleReceipt = count($receipts) === 1;
                     $tgGovId = 0;
                     $tgCityId = 0;
                     $localCustomerId = isset($task['local_customer_id']) ? (int)$task['local_customer_id'] : 0;
+                    // البحث عن العميل بالـ ID أو بالاسم كـ fallback
+                    $localLookup = null;
                     if ($localCustomerId > 0) {
                         try {
-                            $local = $db->queryOne(
+                            $localLookup = $db->queryOne(
                                 "SELECT tg_gov_id, tg_city_id FROM local_customers WHERE id = ? LIMIT 1",
                                 [$localCustomerId]
                             );
-                            if ($local) {
-                                $tgGovId = (int)($local['tg_gov_id'] ?? 0);
-                                $tgCityId = (int)($local['tg_city_id'] ?? 0);
-                            }
                         } catch (Exception $e) {
                             error_log('print_task_receipt telegraph local_customers lookup error: ' . $e->getMessage());
                         }
                     }
+                    if (!$localLookup && !empty($task['customer_name'])) {
+                        try {
+                            $localLookup = $db->queryOne(
+                                "SELECT tg_gov_id, tg_city_id FROM local_customers WHERE name = ? LIMIT 1",
+                                [trim($task['customer_name'])]
+                            );
+                        } catch (Exception $e) {
+                            error_log('print_task_receipt telegraph local_customers name lookup error: ' . $e->getMessage());
+                        }
+                    }
+                    if ($localLookup) {
+                        $tgGovId = (int)($localLookup['tg_gov_id'] ?? 0);
+                        $tgCityId = (int)($localLookup['tg_city_id'] ?? 0);
+                    }
 
                     $tgWeight = 1;
-                    if (!empty($task['notes']) && preg_match('/\[TG_WEIGHT\]\s*:\s*([^\n]+)/', (string)$task['notes'], $m)) {
-                        $w = (float)trim((string)($m[1] ?? 0));
-                        if ($w > 0) $tgWeight = $w;
+                    if (!empty($task['notes'])) {
+                        $notesStr = (string)$task['notes'];
+                        if (preg_match('/\[TG_WEIGHT\]\s*:\s*([^\n]+)/', $notesStr, $m)
+                            || preg_match('/الوزن\s*:\s*([^\n]+)/u', $notesStr, $m)) {
+                            $w = (float)trim((string)($m[1] ?? 0));
+                            if ($w > 0) $tgWeight = $w;
+                        }
                     }
 
                     // نفس منطق الـJS لحساب الرسوم: price = max(0, subtotal - discount)
@@ -813,25 +829,40 @@ $singleReceipt = count($receipts) === 1;
                 $tgGovId = 0;
                 $tgCityId = 0;
                 $localCustomerId = isset($task['local_customer_id']) ? (int)$task['local_customer_id'] : 0;
+                $localLookup = null;
                 if ($localCustomerId > 0) {
                     try {
-                        $local = $db->queryOne(
+                        $localLookup = $db->queryOne(
                             "SELECT tg_gov_id, tg_city_id FROM local_customers WHERE id = ? LIMIT 1",
                             [$localCustomerId]
                         );
-                        if ($local) {
-                            $tgGovId = (int)($local['tg_gov_id'] ?? 0);
-                            $tgCityId = (int)($local['tg_city_id'] ?? 0);
-                        }
                     } catch (Exception $e) {
                         error_log('print_task_receipt telegraph local_customers lookup (empty) error: ' . $e->getMessage());
                     }
                 }
+                if (!$localLookup && !empty($task['customer_name'])) {
+                    try {
+                        $localLookup = $db->queryOne(
+                            "SELECT tg_gov_id, tg_city_id FROM local_customers WHERE name = ? LIMIT 1",
+                            [trim($task['customer_name'])]
+                        );
+                    } catch (Exception $e) {
+                        error_log('print_task_receipt telegraph local_customers name lookup (empty) error: ' . $e->getMessage());
+                    }
+                }
+                if ($localLookup) {
+                    $tgGovId = (int)($localLookup['tg_gov_id'] ?? 0);
+                    $tgCityId = (int)($localLookup['tg_city_id'] ?? 0);
+                }
 
                 $tgWeight = 1;
-                if (!empty($task['notes']) && preg_match('/\[TG_WEIGHT\]\s*:\s*([^\n]+)/', (string)$task['notes'], $m)) {
-                    $w = (float)trim((string)($m[1] ?? 0));
-                    if ($w > 0) $tgWeight = $w;
+                if (!empty($task['notes'])) {
+                    $notesStr = (string)$task['notes'];
+                    if (preg_match('/\[TG_WEIGHT\]\s*:\s*([^\n]+)/', $notesStr, $m)
+                        || preg_match('/الوزن\s*:\s*([^\n]+)/u', $notesStr, $m)) {
+                        $w = (float)trim((string)($m[1] ?? 0));
+                        if ($w > 0) $tgWeight = $w;
+                    }
                 }
 
                 // نفس منطق الـJS للحساب: price = max(0, subtotal - discount) وبما أن subtotal=0 هنا يبقى 0
