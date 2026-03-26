@@ -1001,40 +1001,27 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             table.className = 'items-table';
             table.style.fontSize = '14px';
             
-            // Copy header and remove القسم column
+            // Copy header
             const thead = originalTable.querySelector('thead');
             if (thead) {
                 const newThead = thead.cloneNode(true);
                 const headerRow = newThead.querySelector('tr');
                 if (headerRow) {
-                    const headers = headerRow.querySelectorAll('th');
-                    headers.forEach((th, index) => {
-                        if (th.textContent === 'القسم') {
-                            th.remove();
-                        } else {
-                            th.style.fontSize = '14px';
-                            th.style.fontWeight = '900';
-                        }
+                    headerRow.querySelectorAll('th').forEach(th => {
+                        th.style.fontSize = '14px';
+                        th.style.fontWeight = '900';
                     });
                 }
                 table.appendChild(newThead);
             }
-            
-            // Copy body and remove القسم column
+
+            // Copy body
             const tbody = originalTable.querySelector('tbody');
             if (tbody) {
                 const newTbody = tbody.cloneNode(true);
-                const rows = newTbody.querySelectorAll('tr');
-                rows.forEach(row => {
-                    const cells = row.querySelectorAll('td');
-                    cells.forEach((td, index) => {
-                        if (index === 0) { // First column is القسم
-                            td.remove();
-                        } else {
-                            td.style.fontSize = '14px';
-                            td.style.padding = '4px 8px';
-                        }
-                    });
+                newTbody.querySelectorAll('td').forEach(td => {
+                    td.style.fontSize = '14px';
+                    td.style.padding = '4px 8px';
                 });
                 table.appendChild(newTbody);
             }
