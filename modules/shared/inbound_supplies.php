@@ -708,7 +708,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
                 max-width: 80mm !important;
                 overflow: hidden !important;
                 font-family: 'Tajawal', 'Cairo', 'Arial', sans-serif !important;
-                font-size: 10px !important;
+                font-size: 14px !important;
                 line-height: 1.3 !important;
                 color: #000 !important;
                 direction: rtl !important;
@@ -744,7 +744,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             }
             
             .receipt-title {
-                font-size: 15px !important;
+                font-size: 14px !important;
                 font-weight: 700 !important;
                 margin-bottom: 3px !important;
                 text-transform: uppercase !important;
@@ -753,7 +753,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             }
             
             .receipt-number {
-                font-size: 12px !important;
+                font-size: 14px !important;
                 font-weight: 600 !important;
                 margin-bottom: 3px !important;
                 font-family: 'Tajawal', 'Cairo', 'Arial', sans-serif !important;
@@ -775,7 +775,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
                 display: flex !important;
                 justify-content: space-between !important;
                 margin-bottom: 1px !important;
-                font-size: 8px !important;
+                font-size: 14px !important;
                 line-height: 1.3 !important;
                 width: 100% !important;
                 box-sizing: border-box !important;
@@ -791,7 +791,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
                 margin-right: 0 !important;
                 white-space: nowrap !important;
                 flex-shrink: 0 !important;
-                font-size: 8px !important;
+                font-size: 14px !important;
                 text-align: right !important;
                 font-family: 'Tajawal', 'Cairo', 'Arial', sans-serif !important;
             }
@@ -801,7 +801,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
                 flex: 1 !important;
                 font-weight: 500 !important;
                 min-width: 0 !important;
-                font-size: 8px !important;
+                font-size: 14px !important;
                 font-family: 'Tajawal', 'Cairo', 'Arial', sans-serif !important;
             }
             
@@ -816,7 +816,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
                 width: 100% !important;
                 max-width: 100% !important;
                 border-collapse: collapse !important;
-                font-size: 6px !important;
+                font-size: 14px !important;
                 margin-top: 1px !important;
                 table-layout: fixed !important;
                 border-spacing: 0 !important;
@@ -832,7 +832,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
                 padding: 1.5mm 1mm !important;
                 text-align: center !important;
                 font-weight: 700 !important;
-                font-size: 7px !important;
+                font-size: 14px !important;
                 border-right: 1px solid #000 !important;
                 border-left: none !important;
                 line-height: 1.3 !important;
@@ -850,7 +850,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
                 border-bottom: 1px solid #000 !important;
                 border-right: 1px solid #000 !important;
                 border-left: none !important;
-                font-size: 7px !important;
+                font-size: 14px !important;
                 line-height: 1.3 !important;
                 vertical-align: middle !important;
                 font-weight: 500 !important;
@@ -890,7 +890,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             }
             
             .footer-text {
-                font-size: 8px !important;
+                font-size: 14px !important;
                 font-weight: 600 !important;
                 line-height: 1.4 !important;
             }
@@ -928,7 +928,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         const receiptTitle = doc.createElement('div');
         receiptTitle.className = 'receipt-title';
         receiptTitle.style.cssText = `
-            font-size: 16px !important;
+            font-size: 14px !important;
             font-weight: 700 !important;
             margin: 0 !important;
             display: inline !important;
@@ -938,7 +938,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         const number = doc.createElement('span');
         number.className = 'receipt-number';
         number.style.cssText = `
-            font-size: 16px !important;
+            font-size: 14px !important;
             font-weight: 700 !important;
             margin: 0 !important;
             display: inline !important;
@@ -961,12 +961,12 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             const dateTimeRow = doc.createElement('div');
             dateTimeRow.className = 'info-row';
             dateTimeRow.style.marginBottom = '3px';
-            dateTimeRow.style.fontSize = '9px';
+            dateTimeRow.style.fontSize = '14px';
             dateTimeRow.innerHTML = `
-                <span class="label" style="font-size: 16px; font-weight: 900;">التاريخ:</span>
-                <span class="value" style="font-size: 16px; font-weight: 900; margin-left: 10px;">${originalMeta[0].textContent.replace('التاريخ: ', '')}</span>
-                <span class="label" style="font-size: 16px; font-weight: 900; margin-right: 15px;">الوقت:</span>
-                <span class="value" style="font-size: 16px; font-weight: 900;">${originalMeta[1].textContent.replace('الوقت: ', '')}</span>
+                <span class="label" style="font-size: 14px; font-weight: 900;">التاريخ:</span>
+                <span class="value" style="font-size: 14px; font-weight: 900; margin-left: 10px;">${originalMeta[0].textContent.replace('التاريخ: ', '')}</span>
+                <span class="label" style="font-size: 14px; font-weight: 900; margin-right: 15px;">الوقت:</span>
+                <span class="value" style="font-size: 14px; font-weight: 900;">${originalMeta[1].textContent.replace('الوقت: ', '')}</span>
             `;
             info.appendChild(dateTimeRow);
         }
@@ -985,7 +985,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         if (originalTable) {
             const table = doc.createElement('table');
             table.className = 'items-table';
-            table.style.fontSize = '16px';
+            table.style.fontSize = '14px';
             
             // Copy header and remove القسم column
             const thead = originalTable.querySelector('thead');
@@ -998,7 +998,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
                         if (th.textContent === 'القسم') {
                             th.remove();
                         } else {
-                            th.style.fontSize = '16px';
+                            th.style.fontSize = '14px';
                             th.style.fontWeight = '900';
                         }
                     });
@@ -1017,7 +1017,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
                         if (index === 0) { // First column is القسم
                             td.remove();
                         } else {
-                            td.style.fontSize = '16px';
+                            td.style.fontSize = '14px';
                             td.style.padding = '4px 8px';
                         }
                     });
