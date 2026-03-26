@@ -1212,14 +1212,16 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
     prevPageBtn.addEventListener('click', function () { if (listPage > 1) { listPage -= 1; loadSupplies(); } });
     nextPageBtn.addEventListener('click', function () { if (listPage < totalPages) { listPage += 1; loadSupplies(); } });
     applyFilterBtn.addEventListener('click', function () { listPage = 1; loadSupplies(); });
-    printReceiptBtn.addEventListener('click', function () {
-        const selectedSupply = getSelectedSupply();
-        if (selectedSupply) {
-            loadSupplyDetails(selectedSupply.id, true);
-        } else {
-            showAlert('warning', 'الرجاء تحديد إيصال للطباعة');
-        }
-    });
+    if (printReceiptBtn) {
+        printReceiptBtn.addEventListener('click', function () {
+            const selectedSupply = getSelectedSupply();
+            if (selectedSupply) {
+                loadSupplyDetails(selectedSupply.id, true);
+            } else {
+                showAlert('warning', 'الرجاء تحديد إيصال للطباعة');
+            }
+        });
+    }
 
     createRow();
     loadSupplies();
