@@ -700,7 +700,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         style.textContent = `
             @page {
                 size: 80mm auto;
-                margin: 2mm;
+                margin: 3mm;
             }
 
             * {
@@ -714,11 +714,11 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
                 margin: 0 !important;
                 padding: 0 !important;
                 background: #ffffff !important;
-                width: 80mm !important;
-                max-width: 80mm !important;
+                width: 100% !important;
+                max-width: 100% !important;
                 overflow: hidden !important;
                 font-family: 'Tajawal', 'Cairo', 'Arial', sans-serif !important;
-                font-size: 14px !important;
+                font-size: 13px !important;
                 line-height: 1.3 !important;
                 color: #000 !important;
                 direction: rtl !important;
@@ -733,12 +733,9 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
 
             .receipt-80mm {
                 width: 100% !important;
-                max-width: 76mm !important;
-                margin: 0 auto !important;
-                padding: 2mm !important;
+                margin: 0 !important;
+                padding: 1mm !important;
                 border: 1px solid #000 !important;
-                page-break-inside: avoid !important;
-                break-inside: avoid !important;
                 overflow: hidden !important;
                 box-sizing: border-box !important;
                 direction: rtl !important;
@@ -845,7 +842,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
                 padding: 0.5mm 0.3mm !important;
                 text-align: center !important;
                 font-weight: 700 !important;
-                font-size: 14px !important;
+                font-size: 12px !important;
                 border-right: 1px solid #000 !important;
                 border-left: none !important;
                 line-height: 1.3 !important;
@@ -863,7 +860,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
                 border-bottom: 1px solid #000 !important;
                 border-right: 1px solid #000 !important;
                 border-left: none !important;
-                font-size: 14px !important;
+                font-size: 12px !important;
                 line-height: 1.3 !important;
                 vertical-align: middle !important;
                 font-weight: 500 !important;
