@@ -2748,11 +2748,11 @@ if (file_exists($specificationsModulePath)) {
                     <option value="half">نص (PKG-001)</option>
                     <option value="quarter">ربع (PKG-041)</option>
                     <option value="third">ثلث (PKG-041)</option>
-                    <option value="custom" selected>نوع مخصص</option>
+                    <option value="custom">نوع مخصص</option>
                 </select>
                 <small class="text-muted">اختر نوع الكرتونة المستخدمة في تعبئة المنتج (اختياري - سيتم تطبيق الخصم التلقائي إذا تم اختياره)</small>
             </div>
-            
+
             <!-- حقول النوع المخصص للتعديل -->
             <div class="mb-3" id="editCustomCartonCardFields" style="display: none;">
                 <div class="row">
@@ -3187,6 +3187,26 @@ document.getElementById('editCartonType')?.addEventListener('change', function()
                 typeSelect.required = false;
                 // لا نمسح القيم لأنها قد تكون موجودة من قبل
             }
+        }
+    }
+});
+
+// معالجة تغيير نوع الكرتونة في نموذج التعديل (Card للموبايل)
+document.getElementById('editCartonCardType')?.addEventListener('change', function() {
+    const customFields = document.getElementById('editCustomCartonCardFields');
+    if (customFields) {
+        if (this.value === 'custom') {
+            customFields.style.display = 'block';
+            const quantityInput = document.getElementById('editCustomCartonCardQuantity');
+            const typeSelect = document.getElementById('editCustomCartonCardTypeId');
+            if (quantityInput) quantityInput.required = true;
+            if (typeSelect) typeSelect.required = true;
+        } else {
+            customFields.style.display = 'none';
+            const quantityInput = document.getElementById('editCustomCartonCardQuantity');
+            const typeSelect = document.getElementById('editCustomCartonCardTypeId');
+            if (quantityInput) quantityInput.required = false;
+            if (typeSelect) typeSelect.required = false;
         }
     }
 });
