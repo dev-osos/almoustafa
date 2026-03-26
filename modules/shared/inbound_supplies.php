@@ -700,19 +700,19 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         style.textContent = `
             @page {
                 size: 80mm auto;
-                margin: 0mm;
-                padding: 0mm;
+                margin: 2mm;
             }
-            
+
             * {
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
                 color-adjust: exact !important;
+                box-sizing: border-box !important;
             }
-            
+
             html, body {
                 margin: 0 !important;
-                padding-top: 4px !important;
+                padding: 0 !important;
                 background: #ffffff !important;
                 width: 80mm !important;
                 max-width: 80mm !important;
@@ -725,17 +725,18 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
                 text-align: right !important;
                 font-weight: 500 !important;
             }
-            
+
             body * {
-                max-width: 80mm !important;
+                max-width: 100% !important;
                 box-sizing: border-box !important;
             }
-            
+
             .receipt-80mm {
-                width: 80mm !important;
-                max-width: 80mm !important;
-                margin: 0 !important;
-                padding-top: 4px !important;
+                width: 100% !important;
+                max-width: 76mm !important;
+                margin: 0 auto !important;
+                padding: 2mm !important;
+                border: 1px solid #000 !important;
                 page-break-inside: avoid !important;
                 break-inside: avoid !important;
                 overflow: hidden !important;
@@ -826,11 +827,13 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
                 width: 100% !important;
                 max-width: 100% !important;
                 border-collapse: collapse !important;
-                font-size: 14px !important;
+                font-size: 13px !important;
                 margin-top: 0.5px !important;
                 table-layout: fixed !important;
                 border-spacing: 0 !important;
                 box-sizing: border-box !important;
+                word-wrap: break-word !important;
+                overflow-wrap: break-word !important;
             }
             
             .items-table thead {
