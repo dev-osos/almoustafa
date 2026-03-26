@@ -4001,7 +4001,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                                 $hasCustomer = trim((string)($task['customer_name'] ?? '')) !== '' || trim((string)($task['customer_phone'] ?? '')) !== '';
                                                 $receiptTotal = isset($task['receipt_total']) ? (float)$task['receipt_total'] : 0;
                                                 $isShippingOrderType = ($displayType === 'telegraph' || $displayType === 'shipping_company');
-                                                $canShowApproveBtn = !$taskApproved && $receiptTotal >= 0 && ($hasCustomer || $isShippingOrderType);
+                                                $canShowApproveBtn = !$taskApproved && ($hasCustomer || $isShippingOrderType);
                                                 if ($canShowApproveBtn):
                                                 ?>
                                                 <li>
@@ -6725,8 +6725,8 @@ window.openApproveInvoiceCard = function(taskId, customerName, receiptTotal, ord
     var netPriceInput = collapse && collapse.querySelector('#approveInvoiceCardNetParcelPrice');
     var isShippingMode = (orderType === 'telegraph' || orderType === 'shipping_company');
     if (taskIdInput) taskIdInput.value = taskId || '';
-    if (totalInput) totalInput.value = (receiptTotal != null && receiptTotal > 0) ? String(receiptTotal) : '';
-    if (totalDisplay) totalDisplay.textContent = (receiptTotal != null && receiptTotal > 0) ? parseFloat(receiptTotal).toFixed(2) + ' ج.م' : '—';
+    if (totalInput) totalInput.value = (receiptTotal != null) ? String(receiptTotal) : '';
+    if (totalDisplay) totalDisplay.textContent = (receiptTotal != null) ? parseFloat(receiptTotal).toFixed(2) + ' ج.م' : '—';
     if (forShippingInput) forShippingInput.value = isShippingMode ? '1' : '0';
     if (customerBlock) customerBlock.style.display = isShippingMode ? 'none' : 'block';
     if (shippingBlock) shippingBlock.style.display = isShippingMode ? 'block' : 'none';
