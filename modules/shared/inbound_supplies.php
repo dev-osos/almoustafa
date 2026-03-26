@@ -61,14 +61,14 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         <div class="row g-2 align-items-end">
             <div class="col-md-3"><label class="form-label mb-1">من تاريخ</label><input type="date" id="filterDateFrom" class="form-control"></div>
             <div class="col-md-3"><label class="form-label mb-1">إلى تاريخ</label><input type="date" id="filterDateTo" class="form-control"></div>
-            <div class="col-md-4"><label class="form-label mb-1">بحث برقم الوارد</label><input type="text" id="filterSearch" class="form-control"></div>
+            <div class="col-md-4"><label class="form-label mb-1">بحث برقم الايصال</label><input type="text" id="filterSearch" class="form-control"></div>
             <div class="col-md-2 d-grid"><button type="button" class="btn btn-primary" id="applyFilterBtn">تصفية</button></div>
         </div>
     </div>
     <div class="card-body">
         <div class="table-responsive">
             <table class="table table-bordered align-middle">
-                <thead><tr><th>رقم الوارد</th><th>التاريخ</th><th>المستخدم</th><th>العناصر</th><th>إجراءات</th></tr></thead>
+                <thead><tr><th>رقم الايصال</th><th>التاريخ</th><th>المستخدم</th><th>العناصر</th><th>إجراءات</th></tr></thead>
                 <tbody id="suppliesTableBody"><tr><td colspan="5" class="text-center text-muted">جاري التحميل...</td></tr></tbody>
             </table>
         </div>
@@ -82,20 +82,8 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
     </div>
 </div>
 
-<div class="modal fade" id="supplyReceiptModal" tabindex="-1">
-    <div class="modal-dialog modal-xl modal-dialog-scrollable">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">إيصال الوارد</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body" id="receiptBody"></div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-outline-dark" id="printReceiptBtn"><i class="bi bi-printer me-1"></i>طباعة</button>
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إغلاق</button>
-            </div>
-        </div>
-    </div>
+<div id="supplyReceiptContainer" style="display: none;">
+    <div id="receiptBody"></div>
 </div>
 
 <script>
@@ -114,10 +102,6 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
     const submitInboundBtn = document.getElementById('submitInboundBtn');
     const tableBody = document.getElementById('suppliesTableBody');
     const receiptBody = document.getElementById('receiptBody');
-    const receiptModalEl = document.getElementById('supplyReceiptModal');
-    const receiptModalInstance = (window.bootstrap && receiptModalEl)
-        ? new window.bootstrap.Modal(receiptModalEl)
-        : null;
     const paginationInfo = document.getElementById('suppliesPaginationInfo');
     const prevPageBtn = document.getElementById('prevPageBtn');
     const nextPageBtn = document.getElementById('nextPageBtn');
@@ -646,14 +630,42 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         table.appendChild(tbody);
         root.appendChild(table);
         receiptBody.appendChild(root);
-        if (receiptModalInstance) {
-            receiptModalInstance.show();
-        } else if (receiptModalEl) {
-            receiptModalEl.classList.add('show');
-            receiptModalEl.style.display = 'block';
-            receiptModalEl.setAttribute('aria-modal', 'true');
-            receiptModalEl.removeAttribute('aria-hidden');
-            document.body.classList.add('modal-open');
+        
+        // Open in new tab
+        const w = window.open('', '_blank');
+        if (w) {
+            w.document.write(`
+                <!DOCTYPE html>
+                <html dir="rtl" lang="ar">
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>إيصال الوارد</title>
+                    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+                    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+                    <style>
+                        body { font-family: 'Tajawal', 'Cairo', sans-serif; }
+                        .table { margin: 20px 0; }
+                        h4 { text-align: center; margin: 20px 0; }
+                        p { margin: 10px 0; }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        ${root.outerHTML}
+                        <div class="text-center mt-4">
+                            <button onclick="window.print()" class="btn btn-primary">
+                                <i class="bi bi-printer me-1"></i>طباعة
+                            </button>
+                            <button onclick="window.close()" class="btn btn-secondary me-2">
+                                إغلاق
+                            </button>
+                        </div>
+                    </div>
+                </body>
+                </html>
+            `);
+            w.document.close();
         }
     }
 
@@ -1062,14 +1074,6 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         w.print();
     }
 
-    function closeReceiptModalFallback() {
-        if (!receiptModalEl || receiptModalInstance) return;
-        receiptModalEl.classList.remove('show');
-        receiptModalEl.style.display = 'none';
-        receiptModalEl.setAttribute('aria-hidden', 'true');
-        receiptModalEl.removeAttribute('aria-modal');
-        document.body.classList.remove('modal-open');
-    }
 
     async function loadSupplies(showLoading = true) {
         clearNode(tableBody);
@@ -1116,7 +1120,20 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             supplies.forEach(s => {
                 const tr = document.createElement('tr');
                 appendCell(tr, s.supply_number || '-');
-                appendCell(tr, s.created_at || '-');
+                
+                // Format date to show only date without time
+                const createdAt = s.created_at || '-';
+                let dateStr = createdAt;
+                if (createdAt !== '-') {
+                    const date = new Date(createdAt);
+                    dateStr = date.toLocaleDateString('ar-SA', { 
+                        year: 'numeric', 
+                        month: '2-digit', 
+                        day: '2-digit' 
+                    });
+                }
+                appendCell(tr, dateStr);
+                
                 appendCell(tr, s.created_by_name || s.created_by_username || '-');
                 appendCell(tr, String(s.items_count || 0));
                 const td = document.createElement('td');
@@ -1182,15 +1199,6 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
     prevPageBtn.addEventListener('click', function () { if (listPage > 1) { listPage -= 1; loadSupplies(); } });
     nextPageBtn.addEventListener('click', function () { if (listPage < totalPages) { listPage += 1; loadSupplies(); } });
     applyFilterBtn.addEventListener('click', function () { listPage = 1; loadSupplies(); });
-    printReceiptBtn.addEventListener('click', printReceipt);
-    if (!receiptModalInstance && receiptModalEl) {
-        receiptModalEl.querySelectorAll('[data-bs-dismiss="modal"], .btn-close').forEach(btn => {
-            btn.addEventListener('click', closeReceiptModalFallback);
-        });
-        receiptModalEl.addEventListener('click', function (e) {
-            if (e.target === receiptModalEl) closeReceiptModalFallback();
-        });
-    }
 
     createRow();
     loadSupplies();
