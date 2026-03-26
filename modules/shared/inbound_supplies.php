@@ -963,10 +963,10 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             dateTimeRow.style.marginBottom = '3px';
             dateTimeRow.style.fontSize = '9px';
             dateTimeRow.innerHTML = `
-                <span class="label" style="font-size: 9px; font-weight: 600;">التاريخ:</span>
-                <span class="value" style="font-size: 9px; font-weight: 500; margin-left: 10px;">${originalMeta[0].textContent.replace('التاريخ: ', '')}</span>
-                <span class="label" style="font-size: 9px; font-weight: 600; margin-right: 15px;">الوقت:</span>
-                <span class="value" style="font-size: 9px; font-weight: 500;">${originalMeta[1].textContent.replace('الوقت: ', '')}</span>
+                <span class="label" style="font-size: 16px; font-weight: 900;">التاريخ:</span>
+                <span class="value" style="font-size: 16px; font-weight: 900; margin-left: 10px;">${originalMeta[0].textContent.replace('التاريخ: ', '')}</span>
+                <span class="label" style="font-size: 16px; font-weight: 900; margin-right: 15px;">الوقت:</span>
+                <span class="value" style="font-size: 16px; font-weight: 900;">${originalMeta[1].textContent.replace('الوقت: ', '')}</span>
             `;
             info.appendChild(dateTimeRow);
         }
@@ -985,17 +985,44 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         if (originalTable) {
             const table = doc.createElement('table');
             table.className = 'items-table';
+            table.style.fontSize = '16px';
             
-            // Copy header
+            // Copy header and remove القسم column
             const thead = originalTable.querySelector('thead');
             if (thead) {
-                table.appendChild(thead.cloneNode(true));
+                const newThead = thead.cloneNode(true);
+                const headerRow = newThead.querySelector('tr');
+                if (headerRow) {
+                    const headers = headerRow.querySelectorAll('th');
+                    headers.forEach((th, index) => {
+                        if (th.textContent === 'القسم') {
+                            th.remove();
+                        } else {
+                            th.style.fontSize = '16px';
+                            th.style.fontWeight = '900';
+                        }
+                    });
+                }
+                table.appendChild(newThead);
             }
             
-            // Copy body
+            // Copy body and remove القسم column
             const tbody = originalTable.querySelector('tbody');
             if (tbody) {
-                table.appendChild(tbody.cloneNode(true));
+                const newTbody = tbody.cloneNode(true);
+                const rows = newTbody.querySelectorAll('tr');
+                rows.forEach(row => {
+                    const cells = row.querySelectorAll('td');
+                    cells.forEach((td, index) => {
+                        if (index === 0) { // First column is القسم
+                            td.remove();
+                        } else {
+                            td.style.fontSize = '16px';
+                            td.style.padding = '4px 8px';
+                        }
+                    });
+                });
+                table.appendChild(newTbody);
             }
             
             items.appendChild(table);
@@ -1011,13 +1038,13 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         footerText.className = 'footer-text';
         footerText.innerHTML = `
             <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; direction: rtl; text-align: right;">
-                <div style="flex: 1; text-align: center; border-top: 1px solid #000; padding-top: 3px; margin-left: 5px;">
-                    <div style="font-size: 8px; margin-bottom: 2px; font-weight: 600; font-family: 'Tajawal', 'Cairo', 'Arial', sans-serif;">توقيع أمين المخزن</div>
-                    <div style="height: 10px;"></div>
+                <div style="flex: 1; text-align: center; border-top: 1px solid #000; padding-top: 8px; margin-left: 5px;">
+                    <div style="font-size: 14px; margin-bottom: 8px; font-weight: 600; font-family: 'Tajawal', 'Cairo', 'Arial', sans-serif;">توقيع أمين المخزن</div>
+                    <div style="height: 40px;"></div>
                 </div>
-                <div style="flex: 1; text-align: center; border-top: 1px solid #000; padding-top: 3px; margin-right: 5px;">
-                    <div style="font-size: 8px; margin-bottom: 2px; font-weight: 600; font-family: 'Tajawal', 'Cairo', 'Arial', sans-serif;">يعتمد</div>
-                    <div style="height: 10px;"></div>
+                <div style="flex: 1; text-align: center; border-top: 1px solid #000; padding-top: 8px; margin-right: 5px;">
+                    <div style="font-size: 14px; margin-bottom: 8px; font-weight: 600; font-family: 'Tajawal', 'Cairo', 'Arial', sans-serif;">يعتمد</div>
+                    <div style="height: 40px;"></div>
                 </div>
             </div>
         `;
