@@ -4417,6 +4417,7 @@ function copyShippingCollectionResult(btn) {
                     <tr>
                         <th>رقم الفاتورة</th>
                         <th>الإجمالي</th>
+                        <th>الرصيد بعد المعاملة</th>
                         <th>التاريخ</th>
                         <th>الإجراء</th>
                     </tr>
@@ -6997,11 +6998,17 @@ function loadCompanyPaperInvoices(companyId) {
 function displayCompanyPaperInvoices(list) {
     var tbody = document.getElementById('companyPaperInvoicesTableBody');
     if (!tbody) return;
-    tbody.innerHTML = '';
+    while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
     if (!list || list.length === 0) {
         document.getElementById('companyPaperInvoicesEmpty').style.display = 'block';
         document.getElementById('companyPaperInvoicesPaginationWrap').style.display = 'none';
         return;
+    }
+    // حساب الرصيد التراكمي بعد كل معاملة (القائمة مرتبة من الأحدث للأقدم)
+    var runningBalance = 0;
+    for (var i = list.length - 1; i >= 0; i--) {
+        runningBalance += parseFloat(list[i].total_amount || 0);
+        list[i]._running_balance = runningBalance;
     }
     window._companyPaperInvoicesFullList = list;
     window._companyPaperInvoicesPage = 1;
@@ -7032,8 +7039,15 @@ function goToCompanyPaperInvoicesPage(page) {
             var receiptUrl = receiptBase.indexOf('?') >= 0 ? (receiptBase + '&id=' + pi.task_id) : (receiptBase + '?id=' + pi.task_id);
             viewBtn = '<a href="' + receiptUrl + '" target="_blank" class="btn btn-sm btn-outline-success me-1" title="عرض إيصال الأوردر"><i class="bi bi-receipt me-1"></i>عرض الإيصال</a>' + viewBtn;
         }
+        var balance = parseFloat(pi._running_balance || 0);
+        var balanceColor = balance > 0 ? 'text-danger' : (balance < 0 ? 'text-success' : '');
         var tr = document.createElement('tr');
-        tr.innerHTML = '<td>' + safeNum + '</td><td>' + parseFloat(pi.total_amount || 0).toFixed(2) + ' ج.م</td><td>' + dateStr + '</td><td>' + viewBtn + '</td>';
+        var tdNum = document.createElement('td'); tdNum.textContent = pi.invoice_number || ('ورقية-' + pi.id);
+        var tdTotal = document.createElement('td'); tdTotal.textContent = parseFloat(pi.total_amount || 0).toFixed(2) + ' ج.م';
+        var tdBalance = document.createElement('td'); tdBalance.textContent = balance.toFixed(2) + ' ج.م'; if (balanceColor) tdBalance.className = balanceColor + ' fw-bold';
+        var tdDate = document.createElement('td'); tdDate.textContent = dateStr;
+        var tdAction = document.createElement('td'); tdAction.innerHTML = viewBtn;
+        tr.appendChild(tdNum); tr.appendChild(tdTotal); tr.appendChild(tdBalance); tr.appendChild(tdDate); tr.appendChild(tdAction);
         tbody.appendChild(tr);
     });
     document.getElementById('companyPaperInvoicesTableWrap').style.display = 'block';
