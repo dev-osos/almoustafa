@@ -610,7 +610,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         table.className = 'table table-bordered';
         const thead = document.createElement('thead');
         const hr = document.createElement('tr');
-        ['القسم', 'العنصر', 'قبل', 'المضاف', 'بعد'].forEach(h => {
+        ['القسم', 'الصنف', 'قبل', 'وارد', 'بعد'].forEach(h => {
             const th = document.createElement('th');
             th.textContent = h;
             hr.appendChild(th);
