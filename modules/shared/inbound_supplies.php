@@ -746,7 +746,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             
             .receipt-header-80mm {
                 text-align: center !important;
-                padding: 1mm 1mm 0.5mm 1mm !important;
+                padding: 1mm 0.5mm 0.5mm 0.5mm !important;
                 border-bottom: 2px solid #000 !important;
                 width: 100% !important;
                 max-width: 100% !important;
@@ -775,7 +775,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             }
             
             .receipt-info {
-                padding: 0.5mm 1mm !important;
+                padding: 0.5mm 0.5mm !important;
                 width: 100% !important;
                 max-width: 100% !important;
                 box-sizing: border-box !important;
@@ -816,7 +816,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             }
             
             .receipt-items {
-                padding: 0.5mm 1mm !important;
+                padding: 0.5mm 0mm !important;
                 width: 100% !important;
                 max-width: 100% !important;
                 box-sizing: border-box !important;
@@ -839,7 +839,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             }
             
             .items-table th {
-                padding: 1mm 0.5mm !important;
+                padding: 0.5mm 0.3mm !important;
                 text-align: center !important;
                 font-weight: 700 !important;
                 font-size: 14px !important;
@@ -855,7 +855,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             }
             
             .items-table td {
-                padding: 1mm 0.5mm !important;
+                padding: 0.5mm 0.3mm !important;
                 text-align: center !important;
                 border-bottom: 1px solid #000 !important;
                 border-right: 1px solid #000 !important;
@@ -873,25 +873,25 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             }
             
             .items-table .col-item {
-                width: 45% !important;
+                width: 40% !important;
                 text-align: right !important;
-                padding-left: 1mm !important;
-                padding-right: 1mm !important;
+                padding-left: 0.5mm !important;
+                padding-right: 0.5mm !important;
             }
-            
+
             .items-table .col-qty {
-                width: 18% !important;
+                width: 20% !important;
             }
-            
+
             .items-table .col-before,
             .items-table .col-added,
             .items-table .col-after {
-                width: 12.33% !important;
+                width: 20% !important;
             }
             
             .receipt-footer {
                 text-align: center !important;
-                padding: 1mm 0.5mm !important;
+                padding: 0.5mm 0.5mm !important;
                 border-top: 1px solid #000 !important;
                 width: 100% !important;
                 max-width: 100% !important;
@@ -1044,7 +1044,6 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
                     <div style="height: 25px;"></div>
                 </div>
                 <div style="flex: 1; text-align: center; border-top: 1px solid #000; padding-top: 4px; margin-right: 5px;">
-                    <div style="font-size: 14px; margin-bottom: 4px; font-weight: 600; font-family: 'Tajawal', 'Cairo', 'Arial', sans-serif;">يعتمد</div>
                     <div style="height: 25px;"></div>
                 </div>
             </div>
@@ -1057,8 +1056,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         approvalStamp.style.cssText = 'text-align: center; margin-top: 20px; padding: 10px; border: 2px solid #000; border-radius: 5px;';
         approvalStamp.innerHTML = `
             <div style="font-size: 16px; font-weight: 700; margin-bottom: 5px;">ختم الاعتماد</div>
-            <div style="font-size: 12px; font-weight: 500;">تم الاستلام والاعتماد</div>
-            <div style="font-size: 10px; margin-top: 5px;">التاريخ: ${new Date().toLocaleDateString('ar-SA')}</div>
+            <div style="font-size: 10px; margin-top: 5px;">التاريخ: </div>
         `;
         footer.appendChild(approvalStamp);
         
