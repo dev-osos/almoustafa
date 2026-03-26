@@ -702,7 +702,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             
             html, body {
                 margin: 0 !important;
-                padding: 0 !important;
+                padding-top: 4px !important;
                 background: #ffffff !important;
                 width: 80mm !important;
                 max-width: 80mm !important;
@@ -725,7 +725,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
                 width: 80mm !important;
                 max-width: 80mm !important;
                 margin: 0 !important;
-                padding: 0 !important;
+                padding-top: 4px !important;
                 page-break-inside: avoid !important;
                 break-inside: avoid !important;
                 overflow: hidden !important;
@@ -736,7 +736,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             
             .receipt-header-80mm {
                 text-align: center !important;
-                padding: 1.5mm 1.5mm 1mm 1.5mm !important;
+                padding: 1mm 1mm 0.5mm 1mm !important;
                 border-bottom: 2px solid #000 !important;
                 width: 100% !important;
                 max-width: 100% !important;
@@ -746,7 +746,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             .receipt-title {
                 font-size: 14px !important;
                 font-weight: 700 !important;
-                margin-bottom: 3px !important;
+                margin-bottom: 4px !important;
                 text-transform: uppercase !important;
                 line-height: 1.3 !important;
                 font-family: 'Tajawal', 'Cairo', 'Arial', sans-serif !important;
@@ -755,17 +755,17 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             .receipt-number {
                 font-size: 14px !important;
                 font-weight: 600 !important;
-                margin-bottom: 3px !important;
+                margin-bottom: 4px !important;
                 font-family: 'Tajawal', 'Cairo', 'Arial', sans-serif !important;
             }
             
             .receipt-divider {
                 border-top: 1px solid #000 !important;
-                margin: 2px 0 !important;
+                margin: 1px 0 !important;
             }
             
             .receipt-info {
-                padding: 0.8mm 1.5mm !important;
+                padding: 0.5mm 1mm !important;
                 width: 100% !important;
                 max-width: 100% !important;
                 box-sizing: border-box !important;
@@ -806,7 +806,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             }
             
             .receipt-items {
-                padding: 0.8mm 1.5mm !important;
+                padding: 0.5mm 1mm !important;
                 width: 100% !important;
                 max-width: 100% !important;
                 box-sizing: border-box !important;
@@ -817,7 +817,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
                 max-width: 100% !important;
                 border-collapse: collapse !important;
                 font-size: 14px !important;
-                margin-top: 1px !important;
+                margin-top: 0.5px !important;
                 table-layout: fixed !important;
                 border-spacing: 0 !important;
                 box-sizing: border-box !important;
@@ -829,7 +829,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             }
             
             .items-table th {
-                padding: 1.5mm 1mm !important;
+                padding: 1mm 0.5mm !important;
                 text-align: center !important;
                 font-weight: 700 !important;
                 font-size: 14px !important;
@@ -845,7 +845,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             }
             
             .items-table td {
-                padding: 1.5mm 1mm !important;
+                padding: 1mm 0.5mm !important;
                 text-align: center !important;
                 border-bottom: 1px solid #000 !important;
                 border-right: 1px solid #000 !important;
@@ -886,7 +886,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
                 width: 100% !important;
                 max-width: 100% !important;
                 box-sizing: border-box !important;
-                margin-top: 3px !important;
+                margin-top: 1mm !important;
             }
             
             .footer-text {
@@ -919,8 +919,8 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         const titleContainer = doc.createElement('div');
         titleContainer.style.cssText = `
             border: 2px solid #000 !important;
-            padding: 3mm 2mm !important;
-            margin-bottom: 2mm !important;
+            padding: 2mm 1mm !important;
+            margin-bottom: 1mm !important;
             text-align: center !important;
             background: #ffffff !important;
         `;
@@ -960,7 +960,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             // Date and Time in same row
             const dateTimeRow = doc.createElement('div');
             dateTimeRow.className = 'info-row';
-            dateTimeRow.style.marginBottom = '3px';
+            dateTimeRow.style.marginBottom = '1px';
             dateTimeRow.style.fontSize = '14px';
             dateTimeRow.innerHTML = `
                 <span class="label" style="font-size: 14px; font-weight: 900;">التاريخ:</span>
@@ -1038,13 +1038,13 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         footerText.className = 'footer-text';
         footerText.innerHTML = `
             <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; direction: rtl; text-align: right;">
-                <div style="flex: 1; text-align: center; border-top: 1px solid #000; padding-top: 8px; margin-left: 5px;">
-                    <div style="font-size: 14px; margin-bottom: 8px; font-weight: 600; font-family: 'Tajawal', 'Cairo', 'Arial', sans-serif;">توقيع أمين المخزن</div>
-                    <div style="height: 40px;"></div>
+                <div style="flex: 1; text-align: center; border-top: 1px solid #000; padding-top: 4px; margin-left: 5px;">
+                    <div style="font-size: 14px; margin-bottom: 4px; font-weight: 600; font-family: 'Tajawal', 'Cairo', 'Arial', sans-serif;">توقيع أمين المخزن</div>
+                    <div style="height: 25px;"></div>
                 </div>
-                <div style="flex: 1; text-align: center; border-top: 1px solid #000; padding-top: 8px; margin-right: 5px;">
-                    <div style="font-size: 14px; margin-bottom: 8px; font-weight: 600; font-family: 'Tajawal', 'Cairo', 'Arial', sans-serif;">يعتمد</div>
-                    <div style="height: 40px;"></div>
+                <div style="flex: 1; text-align: center; border-top: 1px solid #000; padding-top: 4px; margin-right: 5px;">
+                    <div style="font-size: 14px; margin-bottom: 4px; font-weight: 600; font-family: 'Tajawal', 'Cairo', 'Arial', sans-serif;">يعتمد</div>
+                    <div style="height: 25px;"></div>
                 </div>
             </div>
         `;
