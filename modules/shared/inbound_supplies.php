@@ -63,7 +63,6 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             <div class="col-md-3"><label class="form-label mb-1">إلى تاريخ</label><input type="date" id="filterDateTo" class="form-control"></div>
             <div class="col-md-4"><label class="form-label mb-1">بحث برقم الايصال</label><input type="text" id="filterSearch" class="form-control"></div>
             <div class="col-md-2 d-grid"><button type="button" class="btn btn-primary" id="applyFilterBtn">تصفية</button></div>
-            <div class="col-md-2 d-grid"><button type="button" class="btn btn-success" id="printReceiptBtn"><i class="bi bi-printer me-1"></i>طباعة معاينة</button></div>
         </div>
     </div>
     <div class="card-body">
@@ -1079,6 +1078,16 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
     }
 
 
+    function getSelectedSupply() {
+        const selectedRow = document.querySelector('#suppliesTableBody tr.selected');
+        if (selectedRow) {
+            return {
+                id: selectedRow.dataset.supplyId
+            };
+        }
+        return null;
+    }
+
     async function loadSupplies(showLoading = true) {
         clearNode(tableBody);
         
@@ -1206,7 +1215,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
     printReceiptBtn.addEventListener('click', function () {
         const selectedSupply = getSelectedSupply();
         if (selectedSupply) {
-            loadSupplyDetails(selectedSupply.id, false);
+            loadSupplyDetails(selectedSupply.id, true);
         } else {
             showAlert('warning', 'الرجاء تحديد إيصال للطباعة');
         }
