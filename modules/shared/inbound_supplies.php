@@ -653,14 +653,6 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
                 <body>
                     <div class="container">
                         ${root.outerHTML}
-                        <div class="text-center mt-4">
-                            <button onclick="window.print()" class="btn btn-primary">
-                                <i class="bi bi-printer me-1"></i>طباعة
-                            </button>
-                            <button onclick="window.close()" class="btn btn-secondary me-2">
-                                إغلاق
-                            </button>
-                        </div>
                     </div>
                 </body>
                 </html>
@@ -1065,6 +1057,17 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             </div>
         `;
         footer.appendChild(footerText);
+        
+        // Add approval stamp section
+        const approvalStamp = doc.createElement('div');
+        approvalStamp.className = 'approval-stamp';
+        approvalStamp.style.cssText = 'text-align: center; margin-top: 20px; padding: 10px; border: 2px solid #000; border-radius: 5px;';
+        approvalStamp.innerHTML = `
+            <div style="font-size: 16px; font-weight: 700; margin-bottom: 5px;">ختم الاعتماد</div>
+            <div style="font-size: 12px; font-weight: 500;">تم الاستلام والاعتماد</div>
+            <div style="font-size: 10px; margin-top: 5px;">التاريخ: ${new Date().toLocaleDateString('ar-SA')}</div>
+        `;
+        footer.appendChild(approvalStamp);
         
         receiptDiv.appendChild(footer);
         
