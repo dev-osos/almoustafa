@@ -63,12 +63,13 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             <div class="col-md-3"><label class="form-label mb-1">إلى تاريخ</label><input type="date" id="filterDateTo" class="form-control"></div>
             <div class="col-md-4"><label class="form-label mb-1">بحث برقم الايصال</label><input type="text" id="filterSearch" class="form-control"></div>
             <div class="col-md-2 d-grid"><button type="button" class="btn btn-primary" id="applyFilterBtn">تصفية</button></div>
+            <div class="col-md-2 d-grid"><button type="button" class="btn btn-success" id="printReceiptBtn"><i class="bi bi-printer me-1"></i>طباعة معاينة</button></div>
         </div>
     </div>
     <div class="card-body">
         <div class="table-responsive">
             <table class="table table-bordered align-middle">
-                <thead><tr><th>رقم الايصال</th><th>التاريخ</th><th>المستخدم</th><th>العناصر</th><th>إجراءات</th></tr></thead>
+                <thead><tr><th>رقم الايصال</th><th>التاريخ</th><th>المستخدم</th><th>عدد الاصناف</th><th>إجراءات</th></tr></thead>
                 <tbody id="suppliesTableBody"><tr><td colspan="5" class="text-center text-muted">جاري التحميل...</td></tr></tbody>
             </table>
         </div>
@@ -1202,6 +1203,14 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
     prevPageBtn.addEventListener('click', function () { if (listPage > 1) { listPage -= 1; loadSupplies(); } });
     nextPageBtn.addEventListener('click', function () { if (listPage < totalPages) { listPage += 1; loadSupplies(); } });
     applyFilterBtn.addEventListener('click', function () { listPage = 1; loadSupplies(); });
+    printReceiptBtn.addEventListener('click', function () {
+        const selectedSupply = getSelectedSupply();
+        if (selectedSupply) {
+            loadSupplyDetails(selectedSupply.id, false);
+        } else {
+            showAlert('warning', 'الرجاء تحديد إيصال للطباعة');
+        }
+    });
 
     createRow();
     loadSupplies();
