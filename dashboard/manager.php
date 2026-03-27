@@ -217,20 +217,8 @@ if ($page === 'production_tasks' &&
     exit;
 }
 
-// حل نهائي للكاش: إذا طُلبت أوردرات الإنتاج بدون معامل كسر كاش، نوجّه فوراً لرابط فريد لضمان عدم إرجاع استجابة مخزنة (لا نوجّه طلبات AJAX)
+// منع الكاش لصفحة أوردرات الإنتاج بدون redirect (الـ redirect كان يسبب فقدان الجلسة عند الضغط المتكرر)
 if ($page === 'production_tasks' && ($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && !headers_sent()) {
-    $ajaxAction = trim($_GET['action'] ?? '');
-    $hasBust = isset($_GET['_t']) || isset($_GET['_nocache']) || isset($_GET['_v']);
-    if (!$hasBust && $ajaxAction !== 'get_task_for_edit' && $ajaxAction !== 'get_task_receipt') {
-        $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/dashboard/manager.php';
-        $params = $_GET;
-        $params['_t'] = (string) (time() * 1000);
-        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0, private');
-        header('Pragma: no-cache');
-        header('Expires: Thu, 01 Jan 1970 00:00:00 GMT');
-        header('Location: ' . $path . '?' . http_build_query($params), true, 302);
-        exit;
-    }
     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0, private');
     header('Pragma: no-cache');
     header('Expires: Thu, 01 Jan 1970 00:00:00 GMT');

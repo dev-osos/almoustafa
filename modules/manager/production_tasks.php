@@ -2549,7 +2549,7 @@ if (!empty($_GET['get_order_receipt']) && isset($_GET['order_id'])) {
 // Pagination لجدول آخر المهام
 // Pagination
 $tasksPageNum = isset($_GET['p']) ? max(1, (int)$_GET['p']) : 1;
-$tasksPerPage = 15;
+$tasksPerPage = 40;
 $totalRecentTasks = 0;
 $totalRecentPages = 1;
 
@@ -3155,19 +3155,9 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
 ?>
 
 <script>
-// حل نهائي لمنع الكاش القديم: الطلب الأول قد يعيد كاش، فنجبر طلباً ثانياً بعنوان فريد (_t) لضمان جلب بيانات حية دائماً
 (function() {
     'use strict';
-    var search = window.location.search || '';
-    var hasBust = /[?&]_t=|[?&]_nocache=|[?&]_v=/.test(search);
-    if (!hasBust) {
-        var sep = search.length ? '&' : '?';
-        var newUrl = window.location.pathname + search + sep + '_t=' + Date.now();
-        if (window.location.hash) newUrl += window.location.hash;
-        window.location.replace(newUrl);
-        return;
-    }
-    // إزالة معاملات cache-bust من شريط العنوان بعد التحميل الناجح
+    // تنظيف معاملات cache-bust القديمة من شريط العنوان (إن وجدت)
     var urlParams = new URLSearchParams(window.location.search);
     var changed = false;
     ['_t', '_nocache', '_v', '_refresh'].forEach(function(p) {
@@ -3181,6 +3171,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
         var cleanUrl = window.location.pathname + (qs ? '?' + qs : '') + (window.location.hash || '');
         window.history.replaceState({}, '', cleanUrl);
     }
+    // إعادة تحميل الصفحة عند الرجوع من bfcache لضمان بيانات حديثة
     window.addEventListener('pageshow', function(event) {
         if (event.persisted) {
             window.location.reload();
