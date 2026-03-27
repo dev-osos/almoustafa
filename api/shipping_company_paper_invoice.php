@@ -109,7 +109,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'list') {
         echo json_encode(['success' => false, 'message' => 'معرف الشركة غير صالح'], JSON_UNESCAPED_UNICODE);
         exit;
     }
-    $company = $db->queryOne("SELECT id, name FROM shipping_companies WHERE id = ?", [$companyId]);
+    $company = $db->queryOne("SELECT id, name, balance FROM shipping_companies WHERE id = ?", [$companyId]);
     if (!$company) {
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode(['success' => false, 'message' => 'شركة الشحن غير موجودة'], JSON_UNESCAPED_UNICODE);
@@ -122,20 +122,34 @@ if (isset($_GET['action']) && $_GET['action'] === 'list') {
         exit;
     }
     $hasTaskId = $db->queryOne("SHOW COLUMNS FROM shipping_company_paper_invoices LIKE 'task_id'");
+    $hasNetAmount = $db->queryOne("SHOW COLUMNS FROM shipping_company_paper_invoices LIKE 'net_amount'");
     $selectCols = "id, shipping_company_id, invoice_number, total_amount, image_path, created_at";
     if (!empty($hasTaskId)) {
         $selectCols .= ", task_id";
+    }
+    if (!empty($hasNetAmount)) {
+        $selectCols .= ", net_amount";
     }
     $list = $db->query(
         "SELECT $selectCols FROM shipping_company_paper_invoices WHERE shipping_company_id = ? ORDER BY created_at DESC, id DESC",
         [$companyId]
     );
+
+    // حساب الرصيد بعد كل معاملة بالتراجع من الرصيد الحالي للشركة
+    // الرصيد الحالي = نتيجة كل العمليات (فواتير ورقية + تحصيلات + خصومات + طلبات شحن + ...)
+    // نبدأ من الرصيد الحالي ونطرح تأثير كل فاتورة للخلف
+    $currentBalance = (float)($company['balance'] ?? 0);
     $out = [];
-    foreach ($list ?: [] as $row) {
+    $balance = $currentBalance;
+    foreach ($list ?: [] as $idx => $row) {
+        $balanceAmount = (!empty($hasNetAmount) && isset($row['net_amount']) && $row['net_amount'] !== null)
+            ? (float)$row['net_amount']
+            : (float)$row['total_amount'];
         $item = [
             'id' => (int)$row['id'],
             'invoice_number' => $row['invoice_number'] ?? '',
             'total_amount' => (float)$row['total_amount'],
+            'balance_after' => round($balance, 2),
             'image_path' => $row['image_path'],
             'created_at' => $row['created_at'],
         ];
@@ -145,6 +159,8 @@ if (isset($_GET['action']) && $_GET['action'] === 'list') {
             $item['task_id'] = null;
         }
         $out[] = $item;
+        // التراجع: نطرح تأثير هذه الفاتورة للحصول على الرصيد قبلها
+        $balance -= $balanceAmount;
     }
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode(['success' => true, 'paper_invoices' => $out, 'company_name' => $company['name']], JSON_UNESCAPED_UNICODE);

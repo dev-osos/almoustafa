@@ -2416,6 +2416,23 @@ applyPRGPattern($error, $success);
  * إحصائيات سريعة للمهام التي أنشأها المدير والمحاسب
  * المحاسب والمدير يرون جميع المهام التي أنشأها أي منهما
  */
+
+// جلب معرفات المديرين والمحاسبين مرة واحدة فقط (تُستخدم لاحقاً في الإحصائيات والقائمة)
+$adminIds = [];
+$adminPlaceholders = '';
+if ($isAccountant || $isManager) {
+    $adminUsers = $db->query("
+        SELECT id FROM users
+        WHERE role IN ('manager', 'accountant') AND status = 'active'
+    ");
+    $adminIds = array_map(function($user) {
+        return (int)$user['id'];
+    }, $adminUsers);
+    if (!empty($adminIds)) {
+        $adminPlaceholders = implode(',', array_fill(0, count($adminIds), '?'));
+    }
+}
+
 $statsTemplate = [
     'total' => 0,
     'pending' => 0,
@@ -2430,23 +2447,12 @@ $statsTemplate = [
 
 $stats = $statsTemplate;
 try {
-    // جلب الإحصائيات لجميع المهام التي أنشأها المدير أو المحاسب
     if ($isAccountant || $isManager) {
-        // جلب معرفات جميع المديرين والمحاسبين
-        $adminUsers = $db->query("
-            SELECT id FROM users 
-            WHERE role IN ('manager', 'accountant') AND status = 'active'
-        ");
-        $adminIds = array_map(function($user) {
-            return (int)$user['id'];
-        }, $adminUsers);
-        
         if (!empty($adminIds)) {
-            $placeholders = implode(',', array_fill(0, count($adminIds), '?'));
             $counts = $db->query("
                 SELECT status, COUNT(*) as total
                 FROM tasks
-                WHERE created_by IN ($placeholders)
+                WHERE created_by IN ($adminPlaceholders)
                 AND status != 'cancelled'
                 GROUP BY status
             ", $adminIds);
@@ -2454,7 +2460,6 @@ try {
             $counts = [];
         }
     } else {
-        // للمستخدمين الآخرين، عرض المهام التي أنشأوها فقط
         $counts = $db->query("
             SELECT status, COUNT(*) as total
             FROM tasks
@@ -2606,12 +2611,12 @@ if ($filterDueTo !== '') {
     $searchParams[] = $filterDueTo;
 }
 if ($filterOrderDateFrom !== '') {
-    $searchConditions .= " AND DATE(t.created_at) >= ?";
-    $searchParams[] = $filterOrderDateFrom;
+    $searchConditions .= " AND t.created_at >= ?";
+    $searchParams[] = $filterOrderDateFrom . ' 00:00:00';
 }
 if ($filterOrderDateTo !== '') {
-    $searchConditions .= " AND DATE(t.created_at) <= ?";
-    $searchParams[] = $filterOrderDateTo;
+    $searchConditions .= " AND t.created_at <= ?";
+    $searchParams[] = $filterOrderDateTo . ' 23:59:59';
 }
 if ($filterSearchText !== '') {
     $searchConditions .= " AND (t.title LIKE ? OR t.notes LIKE ? OR t.customer_name LIKE ? OR t.customer_phone LIKE ?)";
@@ -2623,25 +2628,14 @@ if ($filterSearchText !== '') {
 }
 
 try {
-    // جلب عدد المهام الإجمالي (للتقسيم)
+    // جلب عدد المهام الإجمالي (للتقسيم) - يستخدم adminIds المحسوبة مسبقاً
     if ($isAccountant || $isManager) {
-        $adminUsers = $db->query("
-            SELECT id FROM users 
-            WHERE role IN ('manager', 'accountant') AND status = 'active'
-        ");
-        $adminIds = array_map(function($user) {
-            return (int)$user['id'];
-        }, $adminUsers);
-        
         if (!empty($adminIds)) {
-            $placeholders = implode(',', array_fill(0, count($adminIds), '?'));
-            
-            // دمج معايير التصفية والبحث المتقدم
             $countParams = array_merge($adminIds, $statusParams, $searchParams);
-            
+
             $totalRow = $db->queryOne("
                 SELECT COUNT(*) AS total FROM tasks t
-                WHERE t.created_by IN ($placeholders) AND t.status != 'cancelled' $statusCondition $searchConditions
+                WHERE t.created_by IN ($adminPlaceholders) AND t.status != 'cancelled' $statusCondition $searchConditions
             ", $countParams);
             $totalRecentTasks = isset($totalRow['total']) ? (int)$totalRow['total'] : 0;
         }
@@ -2658,34 +2652,23 @@ try {
     $tasksPageNum = min($tasksPageNum, $totalRecentPages);
     $tasksOffset = ($tasksPageNum - 1) * $tasksPerPage;
 
-    // جلب المهام المحدثة مع التقسيم - المحاسب والمدير يرون جميع المهام التي أنشأها أي منهما
+    // جلب المهام المحدثة مع التقسيم - يستخدم adminIds المحسوبة مسبقاً
     if ($isAccountant || $isManager) {
-        // جلب معرفات جميع المديرين والمحاسبين
-        $adminUsers = $db->query("
-            SELECT id FROM users 
-            WHERE role IN ('manager', 'accountant') AND status = 'active'
-        ");
-        $adminIds = array_map(function($user) {
-            return (int)$user['id'];
-        }, $adminUsers);
-        
         if (!empty($adminIds)) {
-            $placeholders = implode(',', array_fill(0, count($adminIds), '?'));
-            
-            // دمج المعايير للاستعلام النهائي (فلتر الحالة + البحث المتقدم + التقسيم)
             $queryParams = array_merge($adminIds, $statusParams, $searchParams, [$tasksPerPage, $tasksOffset]);
-            
+
             $recentTasks = $db->query("
                 SELECT t.id, t.title, t.status, t.priority, t.due_date, t.created_at,
                        t.quantity, t.unit, t.customer_name, t.customer_phone, t.notes, t.product_id, t.related_type, t.related_id, t.task_type,
                        t.local_customer_id, t.total_amount,
                        COALESCE(t.receipt_print_count, 0) AS receipt_print_count,
                        u.full_name AS assigned_name, t.assigned_to,
-                       uCreator.full_name AS creator_name, t.created_by
+                       uCreator.full_name AS creator_name, t.created_by,
+                       uCreator.role AS creator_role
                 FROM tasks t
                 LEFT JOIN users u ON t.assigned_to = u.id
                 LEFT JOIN users uCreator ON t.created_by = uCreator.id
-                WHERE t.created_by IN ($placeholders)
+                WHERE t.created_by IN ($adminPlaceholders)
                 AND t.status != 'cancelled'
                 $statusCondition
                 $searchConditions
@@ -2724,147 +2707,181 @@ try {
             $ph = implode(',', array_fill(0, count($taskIdsForApproved), '?'));
             $approvedRows = $db->query("SELECT task_id FROM customer_task_purchases WHERE task_id IN ($ph)", $taskIdsForApproved);
             $approvedTaskIds = array_column($approvedRows ?: [], 'task_id');
-            $paperTable = $db->queryOne("SHOW TABLES LIKE 'shipping_company_paper_invoices'");
-            if (!empty($paperTable)) {
-                $taskIdCol = $db->queryOne("SHOW COLUMNS FROM shipping_company_paper_invoices LIKE 'task_id'");
-                if (!empty($taskIdCol)) {
-                    $shippingApproved = $db->query("SELECT task_id FROM shipping_company_paper_invoices WHERE task_id IN ($ph) AND task_id IS NOT NULL", $taskIdsForApproved);
-                    foreach ($shippingApproved ?: [] as $row) {
-                        $tid = (int)($row['task_id'] ?? 0);
-                        if ($tid > 0 && !in_array($tid, $approvedTaskIds, true)) {
-                            $approvedTaskIds[] = $tid;
-                        }
+            try {
+                $shippingApproved = $db->query("SELECT task_id FROM shipping_company_paper_invoices WHERE task_id IN ($ph) AND task_id IS NOT NULL", $taskIdsForApproved);
+                foreach ($shippingApproved ?: [] as $row) {
+                    $tid = (int)($row['task_id'] ?? 0);
+                    if ($tid > 0 && !in_array($tid, $approvedTaskIds, true)) {
+                        $approvedTaskIds[] = $tid;
                     }
                 }
+            } catch (Exception $e) {
+                // الجدول أو العمود غير موجود - تجاهل
             }
         }
     }
     
-    // استخراج جميع العمال من notes لكل مهمة واستخراج اسم المنتج
+    // === تجميع البيانات الإضافية بـ batch بدلاً من N+1 ===
+
+    // 1) تجميع كل worker IDs و product IDs من المهام
+    $allWorkerIds = [];
+    $allProductIds = [];
+    $allCreatorIds = [];
+    foreach ($recentTasks as $task) {
+        $notes = $task['notes'] ?? '';
+        if (preg_match('/\[ASSIGNED_WORKERS_IDS\]:\s*([0-9,]+)/', $notes, $matches)) {
+            foreach (array_filter(array_map('intval', explode(',', $matches[1]))) as $wid) {
+                $allWorkerIds[$wid] = true;
+            }
+        }
+        if (!empty($task['product_id'])) {
+            $allProductIds[(int)$task['product_id']] = true;
+        }
+        if (!isset($task['creator_name']) && isset($task['created_by'])) {
+            $allCreatorIds[(int)$task['created_by']] = true;
+        } elseif (isset($task['created_by']) && !isset($task['creator_role'])) {
+            $allCreatorIds[(int)$task['created_by']] = true;
+        }
+    }
+
+    // 2) جلب أسماء العمال دفعة واحدة
+    $workerNames = [];
+    if (!empty($allWorkerIds)) {
+        $wids = array_keys($allWorkerIds);
+        $wph = implode(',', array_fill(0, count($wids), '?'));
+        $wRows = $db->query("SELECT id, full_name FROM users WHERE id IN ($wph)", $wids);
+        foreach ($wRows as $w) {
+            $workerNames[(int)$w['id']] = $w['full_name'];
+        }
+    }
+
+    // 3) جلب أسماء المنتجات دفعة واحدة
+    $productNames = [];
+    if (!empty($allProductIds)) {
+        $pids = array_keys($allProductIds);
+        $pph = implode(',', array_fill(0, count($pids), '?'));
+        $pRows = $db->query("SELECT id, name FROM products WHERE id IN ($pph)", $pids);
+        foreach ($pRows as $p) {
+            $productNames[(int)$p['id']] = $p['name'];
+        }
+    }
+
+    // 4) جلب بيانات المنشئين الناقصة دفعة واحدة
+    $creatorData = [];
+    if (!empty($allCreatorIds)) {
+        $cids = array_keys($allCreatorIds);
+        $cph = implode(',', array_fill(0, count($cids), '?'));
+        $cRows = $db->query("SELECT id, full_name, role FROM users WHERE id IN ($cph)", $cids);
+        foreach ($cRows as $c) {
+            $creatorData[(int)$c['id']] = $c;
+        }
+    }
+
+    // 5) كاش فحص جداول القوالب مرة واحدة
+    $hasUnifiedTemplates = !empty($db->queryOne("SHOW TABLES LIKE 'unified_product_templates'"));
+    $hasProductTemplates = !empty($db->queryOne("SHOW TABLES LIKE 'product_templates'"));
+
+    // 6) تجميع أسماء المنتجات المستخرجة من notes للبحث في القوالب دفعة واحدة
+    $tempProductNamesForTemplates = [];
+    foreach ($recentTasks as $task) {
+        $pid = (int)($task['product_id'] ?? 0);
+        if ($pid > 0 && isset($productNames[$pid])) {
+            continue; // لديه اسم من products
+        }
+        $notes = $task['notes'] ?? '';
+        $tempName = null;
+        if (!empty($notes)) {
+            if (preg_match('/المنتج:\s*(.+?)\s*-\s*الكمية:/i', $notes, $m)) {
+                $tempName = trim($m[1] ?? '');
+            }
+            if (empty($tempName) && preg_match('/المنتج:\s*(.+?)(?:\n|$)/i', $notes, $m2)) {
+                $tempName = trim($m2[1] ?? '');
+            }
+            if (empty($tempName) && preg_match('/المنتج:\s*(.+?)(?:\s*-\s*|$)/i', $notes, $m3)) {
+                $tempName = trim($m3[1] ?? '');
+            }
+            if (!empty($tempName)) {
+                $tempName = trim(trim($tempName), '-');
+                $tempName = trim($tempName);
+                if (!empty($tempName)) {
+                    $tempProductNamesForTemplates[$tempName] = true;
+                }
+            }
+        }
+    }
+
+    // 7) البحث في القوالب دفعة واحدة
+    $validTemplateNames = [];
+    if (!empty($tempProductNamesForTemplates)) {
+        $tNames = array_keys($tempProductNamesForTemplates);
+        $tph = implode(',', array_fill(0, count($tNames), '?'));
+        if ($hasUnifiedTemplates) {
+            $tRows = $db->query("SELECT DISTINCT product_name FROM unified_product_templates WHERE product_name IN ($tph) AND status = 'active'", $tNames);
+            foreach ($tRows as $tr) {
+                $validTemplateNames[trim($tr['product_name'])] = trim($tr['product_name']);
+            }
+        }
+        // البحث في product_templates للأسماء غير الموجودة في unified
+        $missingNames = array_diff($tNames, array_keys($validTemplateNames));
+        if (!empty($missingNames) && $hasProductTemplates) {
+            $mNames = array_values($missingNames);
+            $mph = implode(',', array_fill(0, count($mNames), '?'));
+            $mRows = $db->query("SELECT DISTINCT product_name FROM product_templates WHERE product_name IN ($mph) AND status = 'active'", $mNames);
+            foreach ($mRows as $mr) {
+                $validTemplateNames[trim($mr['product_name'])] = trim($mr['product_name']);
+            }
+        }
+    }
+
+    // 8) تطبيق البيانات المجمعة على كل مهمة
     foreach ($recentTasks as &$task) {
         $notes = $task['notes'] ?? '';
         $allWorkers = [];
-        
-        // محاولة استخراج IDs من notes
+
+        // العمال
         if (preg_match('/\[ASSIGNED_WORKERS_IDS\]:\s*([0-9,]+)/', $notes, $matches)) {
             $workerIds = array_filter(array_map('intval', explode(',', $matches[1])));
-            if (!empty($workerIds)) {
-                $placeholders = implode(',', array_fill(0, count($workerIds), '?'));
-                $workers = $db->query(
-                    "SELECT id, full_name FROM users WHERE id IN ($placeholders) ORDER BY full_name",
-                    $workerIds
-                );
-                foreach ($workers as $worker) {
-                    $allWorkers[] = $worker['full_name'];
+            foreach ($workerIds as $wid) {
+                if (isset($workerNames[$wid])) {
+                    $allWorkers[] = $workerNames[$wid];
                 }
             }
         }
-        
-        // إذا لم نجد عمال من notes، استخدم assigned_to
         if (empty($allWorkers) && !empty($task['assigned_name'])) {
             $allWorkers[] = $task['assigned_name'];
         }
-        
-        // استخراج اسم المنتج من notes والتحقق من وجوده في القوالب
-        // نفس الطريقة المستخدمة في النموذج لعرض اسم القالب
+
+        // المنتج
         $extractedProductName = null;
         $tempProductName = null;
-        
-        // محاولة 1: استخدام product_id للحصول على اسم المنتج من جدول products
-        if (!empty($task['product_id'])) {
-            try {
-                $product = $db->queryOne(
-                    "SELECT name FROM products WHERE id = ? LIMIT 1",
-                    [(int)$task['product_id']]
-                );
-                if ($product && !empty($product['name'])) {
-                    $tempProductName = trim($product['name']);
-                }
-            } catch (Exception $e) {
-                error_log('Error fetching product name from product_id: ' . $e->getMessage());
-            }
+        $pid = (int)($task['product_id'] ?? 0);
+        if ($pid > 0 && isset($productNames[$pid])) {
+            $tempProductName = trim($productNames[$pid]);
         }
-        
-        // محاولة 2: إذا لم نجد من product_id، استخرج اسم المنتج من notes
-        // الصيغة المحفوظة: "المنتج: [اسم المنتج] - الكمية: [الكمية]"
-        // أو: "المنتج: [اسم المنتج]" (إذا لم تكن هناك كمية)
         if (empty($tempProductName) && !empty($notes)) {
-            // محاولة 1: البحث عن "المنتج: [اسم] - الكمية:" (الصيغة القياسية المحفوظة)
             if (preg_match('/المنتج:\s*(.+?)\s*-\s*الكمية:/i', $notes, $productMatches)) {
                 $tempProductName = trim($productMatches[1] ?? '');
             }
-            
-            // محاولة 2: إذا لم نجد، جرب البحث عن "المنتج: [اسم]" فقط (بدون كمية)
             if (empty($tempProductName) && preg_match('/المنتج:\s*(.+?)(?:\n|$)/i', $notes, $productMatches2)) {
                 $tempProductName = trim($productMatches2[1] ?? '');
             }
-            
-            // محاولة 3: البحث البسيط عن "المنتج: " متبوعاً بأي نص حتى "-" أو نهاية السطر
             if (empty($tempProductName) && preg_match('/المنتج:\s*(.+?)(?:\s*-\s*|$)/i', $notes, $productMatches3)) {
                 $tempProductName = trim($productMatches3[1] ?? '');
             }
-            
-            // تنظيف اسم المنتج من أي أحرف زائدة
             if (!empty($tempProductName)) {
-                $tempProductName = trim($tempProductName);
-                // إزالة أي "-" في البداية أو النهاية
-                $tempProductName = trim($tempProductName, '-');
+                $tempProductName = trim(trim($tempProductName), '-');
                 $tempProductName = trim($tempProductName);
             }
         }
-        
-        // محاولة 3: التحقق من وجود الاسم في القوالب (unified_product_templates أو product_templates)
-        // بنفس الطريقة المستخدمة في النموذج
         if (!empty($tempProductName)) {
-            try {
-                // محاولة البحث في unified_product_templates أولاً
-                $unifiedTemplatesCheck = $db->queryOne("SHOW TABLES LIKE 'unified_product_templates'");
-                if (!empty($unifiedTemplatesCheck)) {
-                    $template = $db->queryOne(
-                        "SELECT DISTINCT product_name 
-                         FROM unified_product_templates 
-                         WHERE product_name = ? AND status = 'active' 
-                         LIMIT 1",
-                        [$tempProductName]
-                    );
-                    if ($template && !empty($template['product_name'])) {
-                        $extractedProductName = trim($template['product_name']);
-                    }
-                }
-                
-                // إذا لم نجد في unified_product_templates، جرب product_templates
-                if (empty($extractedProductName)) {
-                    $templatesCheck = $db->queryOne("SHOW TABLES LIKE 'product_templates'");
-                    if (!empty($templatesCheck)) {
-                        $template = $db->queryOne(
-                            "SELECT DISTINCT product_name 
-                             FROM product_templates 
-                             WHERE product_name = ? AND status = 'active' 
-                             LIMIT 1",
-                            [$tempProductName]
-                        );
-                        if ($template && !empty($template['product_name'])) {
-                            $extractedProductName = trim($template['product_name']);
-                        }
-                    }
-                }
-                
-                // إذا لم نجد في القوالب، استخدم الاسم المستخرج من notes مباشرة
-                // (قد يكون منتج مخصص غير موجود في القوالب)
-                if (empty($extractedProductName)) {
-                    $extractedProductName = $tempProductName;
-                }
-            } catch (Exception $e) {
-                error_log('Error checking product name in templates: ' . $e->getMessage());
-                // في حالة الخطأ، استخدم الاسم المستخرج من notes
-                $extractedProductName = $tempProductName;
-            }
+            $extractedProductName = $validTemplateNames[$tempProductName] ?? $tempProductName;
         }
-        
+
         $task['all_workers'] = $allWorkers;
         $task['workers_count'] = count($allWorkers);
         $task['extracted_product_name'] = $extractedProductName;
-        // حساب الإجمالي النهائي: للتليجراف يُحسب عبر TelegraphEx API ليطابق الإيصال المطبوع
+
+        // حساب الإجمالي النهائي
         $taskDisplayType = (strpos($task['related_type'] ?? '', 'manager_') === 0) ? substr($task['related_type'], 8) : ($task['task_type'] ?? 'general');
         if ($taskDisplayType === 'telegraph') {
             $task['receipt_total'] = getTelegraphReceiptTotal($task, $db);
@@ -2872,19 +2889,13 @@ try {
             $task['receipt_total'] = getTaskReceiptTotalFromNotes($task['notes'] ?? '');
         }
 
-        // إضافة creator_name و creator_role إذا لم يكونا موجودين
-        if (!isset($task['creator_name']) && isset($task['created_by'])) {
-            $creator = $db->queryOne("SELECT full_name, role FROM users WHERE id = ?", [$task['created_by']]);
-            if ($creator) {
-                $task['creator_name'] = $creator['full_name'];
-                $task['creator_role'] = $creator['role'];
-            }
-        } elseif (isset($task['created_by']) && !isset($task['creator_role'])) {
-            // إذا كان creator_name موجوداً لكن creator_role غير موجود
-            $creator = $db->queryOne("SELECT role FROM users WHERE id = ?", [$task['created_by']]);
-            if ($creator) {
-                $task['creator_role'] = $creator['role'];
-            }
+        // إضافة creator_name و creator_role من البيانات المجمعة
+        $cid = (int)($task['created_by'] ?? 0);
+        if (!isset($task['creator_name']) && isset($creatorData[$cid])) {
+            $task['creator_name'] = $creatorData[$cid]['full_name'];
+            $task['creator_role'] = $creatorData[$cid]['role'];
+        } elseif (isset($task['created_by']) && !isset($task['creator_role']) && isset($creatorData[$cid])) {
+            $task['creator_role'] = $creatorData[$cid]['role'];
         }
     }
     unset($task);

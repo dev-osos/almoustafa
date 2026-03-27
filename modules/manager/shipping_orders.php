@@ -7004,12 +7004,6 @@ function displayCompanyPaperInvoices(list) {
         document.getElementById('companyPaperInvoicesPaginationWrap').style.display = 'none';
         return;
     }
-    // حساب الرصيد التراكمي بعد كل معاملة (القائمة مرتبة من الأحدث للأقدم)
-    var runningBalance = 0;
-    for (var i = list.length - 1; i >= 0; i--) {
-        runningBalance += parseFloat(list[i].total_amount || 0);
-        list[i]._running_balance = runningBalance;
-    }
     window._companyPaperInvoicesFullList = list;
     window._companyPaperInvoicesPage = 1;
     window._companyPaperInvoicesPerPage = 15;
@@ -7039,7 +7033,7 @@ function goToCompanyPaperInvoicesPage(page) {
             var receiptUrl = receiptBase.indexOf('?') >= 0 ? (receiptBase + '&id=' + pi.task_id) : (receiptBase + '?id=' + pi.task_id);
             viewBtn = '<a href="' + receiptUrl + '" target="_blank" class="btn btn-sm btn-outline-success me-1" title="عرض إيصال الأوردر"><i class="bi bi-receipt me-1"></i>عرض الإيصال</a>' + viewBtn;
         }
-        var balance = parseFloat(pi._running_balance || 0);
+        var balance = parseFloat(pi.balance_after || 0);
         var balanceColor = balance > 0 ? 'text-danger' : (balance < 0 ? 'text-success' : '');
         var tr = document.createElement('tr');
         var tdNum = document.createElement('td'); tdNum.textContent = pi.invoice_number || ('ورقية-' + pi.id);
