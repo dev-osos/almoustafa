@@ -3215,7 +3215,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                     </div>
                 </div>
             </a>
-        </div>
+        </div> 
         <div class="col-4 col-sm-4 col-md-2">
             <a href="?page=production_tasks&status=returned" class="text-decoration-none status-filter-card" data-status="returned">
                 <div class="card <?php echo $statusFilter === 'returned' ? 'bg-secondary text-white' : 'border-secondary'; ?> h-100">
