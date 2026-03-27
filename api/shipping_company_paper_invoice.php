@@ -131,25 +131,103 @@ if (isset($_GET['action']) && $_GET['action'] === 'list') {
         $selectCols .= ", net_amount";
     }
     $list = $db->query(
-        "SELECT $selectCols FROM shipping_company_paper_invoices WHERE shipping_company_id = ? ORDER BY created_at DESC, id DESC",
+        "SELECT $selectCols FROM shipping_company_paper_invoices WHERE shipping_company_id = ? ORDER BY created_at ASC, id ASC",
         [$companyId]
     );
 
-    // حساب الرصيد بعد كل معاملة بالتراجع من الرصيد الحالي للشركة
-    // الرصيد الحالي = نتيجة كل العمليات (فواتير ورقية + تحصيلات + خصومات + طلبات شحن + ...)
-    // نبدأ من الرصيد الحالي ونطرح تأثير كل فاتورة للخلف
-    $currentBalance = (float)($company['balance'] ?? 0);
-    $out = [];
-    $balance = $currentBalance;
-    foreach ($list ?: [] as $idx => $row) {
+    // ===== حساب الرصيد الحقيقي بعد كل فاتورة ورقية =====
+    // نجمع كل الحركات المالية (مثل كشف الحساب) ونحسب الرصيد التراكمي بالترتيب الزمني
+    $movements = [];
+
+    // 1. طلبات الشحن (مدين)
+    $ordersTable = $db->queryOne("SHOW TABLES LIKE 'shipping_company_orders'");
+    if (!empty($ordersTable)) {
+        $orders = $db->query(
+            "SELECT id, total_amount, handed_over_at, created_at, status
+             FROM shipping_company_orders
+             WHERE shipping_company_id = ? AND status IN ('assigned', 'in_transit', 'delivered')
+             ORDER BY COALESCE(handed_over_at, created_at) ASC",
+            [$companyId]
+        ) ?: [];
+        $hasDeliveredAt = false;
+        try { $hasDeliveredAt = !empty($db->queryOne("SHOW COLUMNS FROM shipping_company_orders LIKE 'delivered_at'")); } catch (Throwable $e) {}
+        foreach ($orders as $o) {
+            $date = !empty($o['handed_over_at']) ? $o['handed_over_at'] : $o['created_at'];
+            $movements[] = ['date' => $date, 'sort_id' => (int)$o['id'], 'type_order' => 1, 'amount' => (float)($o['total_amount'] ?? 0)];
+        }
+        // تسليم الطلب للعميل (دائن)
+        if ($hasDeliveredAt) {
+            $delivered = $db->query(
+                "SELECT id, total_amount, delivered_at FROM shipping_company_orders
+                 WHERE shipping_company_id = ? AND status = 'delivered' AND delivered_at IS NOT NULL",
+                [$companyId]
+            ) ?: [];
+            foreach ($delivered as $o) {
+                $movements[] = ['date' => $o['delivered_at'], 'sort_id' => (int)$o['id'] + 400000, 'type_order' => 2, 'amount' => -1 * (float)($o['total_amount'] ?? 0)];
+            }
+        }
+    }
+
+    // 2. التحصيلات (دائن)
+    $colTable = $db->queryOne("SHOW TABLES LIKE 'shipping_company_collections'");
+    if (!empty($colTable)) {
+        $cols = $db->query("SELECT id, amount, date FROM shipping_company_collections WHERE shipping_company_id = ? ORDER BY date ASC", [$companyId]) ?: [];
+        foreach ($cols as $c) {
+            $movements[] = ['date' => $c['date'], 'sort_id' => (int)$c['id'] + 500000, 'type_order' => 3, 'amount' => -1 * (float)($c['amount'] ?? 0)];
+        }
+    }
+
+    // 3. الخصومات (دائن)
+    $dedTable = $db->queryOne("SHOW TABLES LIKE 'shipping_company_deductions'");
+    if (!empty($dedTable)) {
+        $deds = $db->query("SELECT id, amount, created_at FROM shipping_company_deductions WHERE shipping_company_id = ? ORDER BY created_at ASC", [$companyId]) ?: [];
+        foreach ($deds as $d) {
+            $movements[] = ['date' => $d['created_at'], 'sort_id' => (int)$d['id'] + 600000, 'type_order' => 4, 'amount' => -1 * (float)($d['amount'] ?? 0)];
+        }
+    }
+
+    // 4. الفواتير الورقية (مدين)
+    foreach ($list ?: [] as $row) {
         $balanceAmount = (!empty($hasNetAmount) && isset($row['net_amount']) && $row['net_amount'] !== null)
             ? (float)$row['net_amount']
             : (float)$row['total_amount'];
+        $movements[] = [
+            'date' => $row['created_at'],
+            'sort_id' => (int)$row['id'] + 700000,
+            'type_order' => 5,
+            'amount' => $balanceAmount,
+            'paper_invoice_id' => (int)$row['id'],
+        ];
+    }
+
+    // ترتيب زمني ثم حسب نوع الحركة
+    usort($movements, function ($a, $b) {
+        $da = substr($a['date'] ?? '', 0, 10);
+        $db2 = substr($b['date'] ?? '', 0, 10);
+        $c = strcmp($da, $db2);
+        if ($c !== 0) return $c;
+        $to = ($a['type_order'] ?? 9) - ($b['type_order'] ?? 9);
+        return $to !== 0 ? $to : ($a['sort_id'] - $b['sort_id']);
+    });
+
+    // حساب الرصيد التراكمي واستخراج رصيد كل فاتورة ورقية
+    $balanceMap = []; // paper_invoice_id => balance_after
+    $balance = 0.0;
+    foreach ($movements as $m) {
+        $balance += $m['amount'];
+        if (isset($m['paper_invoice_id'])) {
+            $balanceMap[$m['paper_invoice_id']] = round($balance, 2);
+        }
+    }
+
+    // بناء النتيجة النهائية
+    $out = [];
+    foreach ($list ?: [] as $row) {
         $item = [
             'id' => (int)$row['id'],
             'invoice_number' => $row['invoice_number'] ?? '',
             'total_amount' => (float)$row['total_amount'],
-            'balance_after' => round($balance, 2),
+            'balance_after' => $balanceMap[(int)$row['id']] ?? 0,
             'image_path' => $row['image_path'],
             'created_at' => $row['created_at'],
         ];
@@ -159,9 +237,9 @@ if (isset($_GET['action']) && $_GET['action'] === 'list') {
             $item['task_id'] = null;
         }
         $out[] = $item;
-        // التراجع: نطرح تأثير هذه الفاتورة للحصول على الرصيد قبلها
-        $balance -= $balanceAmount;
     }
+    // عكس الترتيب ليكون الأحدث أولاً
+    $out = array_reverse($out);
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode(['success' => true, 'paper_invoices' => $out, 'company_name' => $company['name']], JSON_UNESCAPED_UNICODE);
     exit;

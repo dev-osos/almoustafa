@@ -206,35 +206,39 @@ if (ob_get_level() && function_exists('flush')) {
     @flush();
 }
 
-// جلب القوالب (templates) لعرضها في القائمة المنسدلة
+// جلب القوالب (templates) لعرضها في القائمة المنسدلة - بدون SHOW TABLES
 $productTemplates = [];
+$_ptHasUnifiedTemplates = false;
+$_ptHasProductTemplates = false;
 try {
-    // محاولة جلب من unified_product_templates أولاً (الأحدث)
-    $unifiedTemplatesCheck = $db->queryOne("SHOW TABLES LIKE 'unified_product_templates'");
-    if (!empty($unifiedTemplatesCheck)) {
+    $productTemplates = $db->query("
+        SELECT DISTINCT product_name
+        FROM unified_product_templates
+        WHERE status = 'active'
+        ORDER BY product_name ASC
+    ");
+    $_ptHasUnifiedTemplates = true;
+} catch (Exception $e) {
+    // الجدول غير موجود
+}
+if (empty($productTemplates)) {
+    try {
         $productTemplates = $db->query("
-            SELECT DISTINCT product_name 
-            FROM unified_product_templates 
-            WHERE status = 'active' 
+            SELECT DISTINCT product_name
+            FROM product_templates
+            WHERE status = 'active'
             ORDER BY product_name ASC
         ");
+        $_ptHasProductTemplates = true;
+    } catch (Exception $e) {
+        // الجدول غير موجود
     }
-    
-    // إذا لم توجد قوالب في unified_product_templates، جرب product_templates
-    if (empty($productTemplates)) {
-        $templatesCheck = $db->queryOne("SHOW TABLES LIKE 'product_templates'");
-        if (!empty($templatesCheck)) {
-            $productTemplates = $db->query("
-                SELECT DISTINCT product_name 
-                FROM product_templates 
-                WHERE status = 'active' 
-                ORDER BY product_name ASC
-            ");
-        }
-    }
-} catch (Exception $e) {
-    error_log('Error fetching product templates: ' . $e->getMessage());
-    $productTemplates = [];
+} else {
+    // تحقق إن كان product_templates موجوداً أيضاً (للاستخدام لاحقاً)
+    try {
+        $db->queryOne("SELECT 1 FROM product_templates LIMIT 1");
+        $_ptHasProductTemplates = true;
+    } catch (Exception $e) {}
 }
 
 // تحميل تصنيفات شرينك من qu.json (لحقل التصنيف والكمية الفعلية للخصم)
@@ -260,26 +264,35 @@ if (is_readable($quJsonPath)) {
     }
 }
 
-// جلب قائمة العملاء المحليين — نفس الاستعلام والطريقة تماماً كما في صفحة الأسعار المخصصة
+// جلب قائمة العملاء المحليين
 $localCustomersForDropdown = [];
 try {
-    $t = $db->queryOne("SHOW TABLES LIKE 'local_customers'");
-    if (!empty($t)) {
-        // migration: إضافة أعمدة بيانات التليجراف إن لم تكن موجودة
-        $hasTgGov = $db->queryOne("SHOW COLUMNS FROM local_customers LIKE 'tg_governorate'");
-        if (empty($hasTgGov)) {
-            $db->execute("ALTER TABLE local_customers ADD COLUMN tg_governorate VARCHAR(100) DEFAULT NULL AFTER address");
-            $db->execute("ALTER TABLE local_customers ADD COLUMN tg_gov_id INT DEFAULT NULL AFTER tg_governorate");
-            $db->execute("ALTER TABLE local_customers ADD COLUMN tg_city VARCHAR(100) DEFAULT NULL AFTER tg_gov_id");
-            $db->execute("ALTER TABLE local_customers ADD COLUMN tg_city_id INT DEFAULT NULL AFTER tg_city");
+    // migration checks تعمل مرة واحدة فقط في الجلسة
+    if (empty($_SESSION['_pt_migrated_local_customers'])) {
+        $t = $db->queryOne("SHOW TABLES LIKE 'local_customers'");
+        if (!empty($t)) {
+            $hasTgGov = $db->queryOne("SHOW COLUMNS FROM local_customers LIKE 'tg_governorate'");
+            if (empty($hasTgGov)) {
+                $db->execute("ALTER TABLE local_customers ADD COLUMN tg_governorate VARCHAR(100) DEFAULT NULL AFTER address");
+                $db->execute("ALTER TABLE local_customers ADD COLUMN tg_gov_id INT DEFAULT NULL AFTER tg_governorate");
+                $db->execute("ALTER TABLE local_customers ADD COLUMN tg_city VARCHAR(100) DEFAULT NULL AFTER tg_gov_id");
+                $db->execute("ALTER TABLE local_customers ADD COLUMN tg_city_id INT DEFAULT NULL AFTER tg_city");
+            }
         }
-        $hasPhone = $db->queryOne("SHOW COLUMNS FROM local_customers LIKE 'phone'");
-        $rows = $db->query("SELECT id, name, address, tg_governorate, tg_gov_id, tg_city, tg_city_id" . (!empty($hasPhone) ? ", phone" : "") . " FROM local_customers WHERE status = 'active' ORDER BY name ASC");
+        $_SESSION['_pt_migrated_local_customers'] = 1;
+    }
+    try {
+        $rows = $db->query("SELECT id, name, address, tg_governorate, tg_gov_id, tg_city, tg_city_id, phone FROM local_customers WHERE status = 'active' ORDER BY name ASC");
+    } catch (Exception $e) {
+        // phone column might not exist
+        $rows = $db->query("SELECT id, name, address, tg_governorate, tg_gov_id, tg_city, tg_city_id FROM local_customers WHERE status = 'active' ORDER BY name ASC");
+    }
+    if (!empty($rows)) {
         foreach ($rows as $r) {
             $localCustomersForDropdown[] = [
                 'id'             => (int)$r['id'],
                 'name'           => trim((string)($r['name'] ?? '')),
-                'phone'          => !empty($hasPhone) ? trim((string)($r['phone'] ?? '')) : '',
+                'phone'          => trim((string)($r['phone'] ?? '')),
                 'phones'         => [],
                 'address'        => trim((string)($r['address'] ?? '')),
                 'tg_governorate' => trim((string)($r['tg_governorate'] ?? '')),
@@ -325,155 +338,90 @@ try {
 // قائمة شركات الشحن (لاعتماد الفاتورة عند نوع الأوردر تليجراف/شركة شحن)
 $shippingCompaniesForDropdown = [];
 try {
-    $t = $db->queryOne("SHOW TABLES LIKE 'shipping_companies'");
-    if (!empty($t)) {
-        $hasStatus = $db->queryOne("SHOW COLUMNS FROM shipping_companies LIKE 'status'");
-        $sql = "SELECT id, name FROM shipping_companies " . (!empty($hasStatus) ? "WHERE status = 'active' " : "") . "ORDER BY name ASC";
-        $rows = $db->query($sql);
-        foreach ($rows ?: [] as $r) {
-            $shippingCompaniesForDropdown[] = ['id' => (int)$r['id'], 'name' => trim((string)($r['name'] ?? ''))];
-        }
+    $rows = $db->query("SELECT id, name FROM shipping_companies WHERE status = 'active' ORDER BY name ASC");
+    foreach ($rows ?: [] as $r) {
+        $shippingCompaniesForDropdown[] = ['id' => (int)$r['id'], 'name' => trim((string)($r['name'] ?? ''))];
     }
 } catch (Throwable $e) {
-    error_log('production_tasks shipping companies: ' . $e->getMessage());
+    // الجدول أو العمود غير موجود
 }
 
 /**
- * تأكد من وجود جدول المهام (tasks)
+ * Migration checks - تعمل مرة واحدة فقط في الجلسة لتجنب ~20 استعلام SHOW على كل تحميل صفحة
  */
-try {
-    $tableCheck = $db->queryOne("SHOW TABLES LIKE 'tasks'");
-    if (empty($tableCheck)) {
-        $db->execute("
-            CREATE TABLE IF NOT EXISTS `tasks` (
-              `id` int(11) NOT NULL AUTO_INCREMENT,
-              `title` varchar(255) NOT NULL,
-              `description` text DEFAULT NULL,
-              `assigned_to` int(11) DEFAULT NULL,
-              `created_by` int(11) NOT NULL,
-              `priority` enum('low','normal','high','urgent') DEFAULT 'normal',
-              `status` enum('pending','received','in_progress','completed','delivered','returned','cancelled') DEFAULT 'pending',
-              `due_date` date DEFAULT NULL,
-              `completed_at` timestamp NULL DEFAULT NULL,
-              `received_at` timestamp NULL DEFAULT NULL,
-              `started_at` timestamp NULL DEFAULT NULL,
-              `related_type` varchar(50) DEFAULT NULL,
-              `related_id` int(11) DEFAULT NULL,
-              `product_id` int(11) DEFAULT NULL,
-              `quantity` decimal(10,2) DEFAULT NULL,
-              `notes` text DEFAULT NULL,
-              `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-              `updated_at` timestamp NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
-              PRIMARY KEY (`id`),
-              KEY `assigned_to` (`assigned_to`),
-              KEY `created_by` (`created_by`),
-              KEY `status` (`status`),
-              KEY `priority` (`priority`),
-              KEY `due_date` (`due_date`),
-              KEY `product_id` (`product_id`),
-              CONSTRAINT `tasks_ibfk_1` FOREIGN KEY (`assigned_to`) REFERENCES `users` (`id`) ON DELETE SET NULL,
-              CONSTRAINT `tasks_ibfk_2` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE CASCADE,
-              CONSTRAINT `tasks_ibfk_3` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON DELETE SET NULL
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-        ");
-    }
-} catch (Exception $e) {
-    error_log('Manager task page table check error: ' . $e->getMessage());
-}
+if (empty($_SESSION['_pt_migrations_done'])) {
+    try {
+        $tableCheck = $db->queryOne("SHOW TABLES LIKE 'tasks'");
+        if (empty($tableCheck)) {
+            $db->execute("
+                CREATE TABLE IF NOT EXISTS `tasks` (
+                  `id` int(11) NOT NULL AUTO_INCREMENT,
+                  `title` varchar(255) NOT NULL,
+                  `description` text DEFAULT NULL,
+                  `assigned_to` int(11) DEFAULT NULL,
+                  `created_by` int(11) NOT NULL,
+                  `priority` enum('low','normal','high','urgent') DEFAULT 'normal',
+                  `status` enum('pending','received','in_progress','completed','delivered','returned','cancelled') DEFAULT 'pending',
+                  `due_date` date DEFAULT NULL,
+                  `completed_at` timestamp NULL DEFAULT NULL,
+                  `received_at` timestamp NULL DEFAULT NULL,
+                  `started_at` timestamp NULL DEFAULT NULL,
+                  `related_type` varchar(50) DEFAULT NULL,
+                  `related_id` int(11) DEFAULT NULL,
+                  `product_id` int(11) DEFAULT NULL,
+                  `quantity` decimal(10,2) DEFAULT NULL,
+                  `notes` text DEFAULT NULL,
+                  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                  `updated_at` timestamp NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+                  PRIMARY KEY (`id`),
+                  KEY `assigned_to` (`assigned_to`),
+                  KEY `created_by` (`created_by`),
+                  KEY `status` (`status`),
+                  KEY `priority` (`priority`),
+                  KEY `due_date` (`due_date`),
+                  KEY `product_id` (`product_id`),
+                  CONSTRAINT `tasks_ibfk_1` FOREIGN KEY (`assigned_to`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+                  CONSTRAINT `tasks_ibfk_2` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+                  CONSTRAINT `tasks_ibfk_3` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON DELETE SET NULL
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            ");
+        }
 
-// التحقق من وجود عمود template_id وإضافته إذا لم يكن موجوداً
-try {
-    $templateIdColumn = $db->queryOne("SHOW COLUMNS FROM tasks LIKE 'template_id'");
-    if (empty($templateIdColumn)) {
-        $db->execute("ALTER TABLE tasks ADD COLUMN template_id int(11) NULL AFTER product_id");
-        $db->execute("ALTER TABLE tasks ADD KEY template_id (template_id)");
-        error_log('Added template_id column to tasks table');
-    }
-} catch (Exception $e) {
-    error_log('Error checking/adding template_id column: ' . $e->getMessage());
-}
+        // إضافة الأعمدة الناقصة دفعة واحدة
+        $columns = array_column($db->query("SHOW COLUMNS FROM tasks") ?: [], 'Field');
+        $columnsMap = array_flip($columns);
 
-// التحقق من وجود عمود product_name وإضافته إذا لم يكن موجوداً
-try {
-    $productNameColumn = $db->queryOne("SHOW COLUMNS FROM tasks LIKE 'product_name'");
-    if (empty($productNameColumn)) {
-        $db->execute("ALTER TABLE tasks ADD COLUMN product_name VARCHAR(255) NULL AFTER template_id");
-        error_log('Added product_name column to tasks table');
+        if (!isset($columnsMap['template_id'])) {
+            $db->execute("ALTER TABLE tasks ADD COLUMN template_id int(11) NULL AFTER product_id");
+            try { $db->execute("ALTER TABLE tasks ADD KEY template_id (template_id)"); } catch (Exception $e) {}
+        }
+        if (!isset($columnsMap['product_name'])) {
+            $db->execute("ALTER TABLE tasks ADD COLUMN product_name VARCHAR(255) NULL AFTER template_id");
+        }
+        if (!isset($columnsMap['unit'])) {
+            $db->execute("ALTER TABLE tasks ADD COLUMN unit VARCHAR(50) NULL DEFAULT 'قطعة' AFTER quantity");
+        }
+        if (!isset($columnsMap['customer_name'])) {
+            $db->execute("ALTER TABLE tasks ADD COLUMN customer_name VARCHAR(255) NULL AFTER unit");
+        }
+        if (!isset($columnsMap['customer_phone'])) {
+            $db->execute("ALTER TABLE tasks ADD COLUMN customer_phone VARCHAR(50) NULL AFTER customer_name");
+        }
+        if (!isset($columnsMap['receipt_print_count'])) {
+            $db->execute("ALTER TABLE tasks ADD COLUMN receipt_print_count INT UNSIGNED NOT NULL DEFAULT 0 AFTER notes");
+        }
+        if (!isset($columnsMap['local_customer_id'])) {
+            $db->execute("ALTER TABLE tasks ADD COLUMN local_customer_id INT(11) NULL AFTER customer_phone");
+        }
+        if (!isset($columnsMap['total_amount'])) {
+            $db->execute("ALTER TABLE tasks ADD COLUMN total_amount DECIMAL(15,2) NULL AFTER local_customer_id");
+        }
+    } catch (Exception $e) {
+        error_log('Manager task page migration error: ' . $e->getMessage());
     }
-} catch (Exception $e) {
-    error_log('Error checking/adding product_name column: ' . $e->getMessage());
-}
 
-// التحقق من وجود عمود unit وإضافته إذا لم يكن موجوداً
-try {
-    $unitColumn = $db->queryOne("SHOW COLUMNS FROM tasks LIKE 'unit'");
-    if (empty($unitColumn)) {
-        $db->execute("ALTER TABLE tasks ADD COLUMN unit VARCHAR(50) NULL DEFAULT 'قطعة' AFTER quantity");
-        error_log('Added unit column to tasks table');
-    }
-} catch (Exception $e) {
-    error_log('Error checking/adding unit column: ' . $e->getMessage());
-}
-
-// التحقق من وجود عمود customer_name وإضافته إذا لم يكن موجوداً
-try {
-    $customerNameColumn = $db->queryOne("SHOW COLUMNS FROM tasks LIKE 'customer_name'");
-    if (empty($customerNameColumn)) {
-        $db->execute("ALTER TABLE tasks ADD COLUMN customer_name VARCHAR(255) NULL AFTER unit");
-        error_log('Added customer_name column to tasks table');
-    }
-} catch (Exception $e) {
-    error_log('Error checking/adding customer_name column: ' . $e->getMessage());
-}
-
-// التحقق من وجود عمود customer_phone وإضافته إذا لم يكن موجوداً
-try {
-    $customerPhoneColumn = $db->queryOne("SHOW COLUMNS FROM tasks LIKE 'customer_phone'");
-    if (empty($customerPhoneColumn)) {
-        $db->execute("ALTER TABLE tasks ADD COLUMN customer_phone VARCHAR(50) NULL AFTER customer_name");
-        error_log('Added customer_phone column to tasks table');
-    }
-} catch (Exception $e) {
-    error_log('Error checking/adding customer_phone column: ' . $e->getMessage());
-}
-
-// التحقق من وجود عمود receipt_print_count لتتبع عدد مرات طباعة إيصال الأوردر
-try {
-    $receiptPrintCountColumn = $db->queryOne("SHOW COLUMNS FROM tasks LIKE 'receipt_print_count'");
-    if (empty($receiptPrintCountColumn)) {
-        $db->execute("ALTER TABLE tasks ADD COLUMN receipt_print_count INT UNSIGNED NOT NULL DEFAULT 0 AFTER notes");
-        error_log('Added receipt_print_count column to tasks table');
-    }
-} catch (Exception $e) {
-    error_log('Error checking/adding receipt_print_count column: ' . $e->getMessage());
-}
-
-// عمود معرف العميل المحلي (لربط الأوردر بالعميل عند اعتماد الفاتورة)
-try {
-    $col = $db->queryOne("SHOW COLUMNS FROM tasks LIKE 'local_customer_id'");
-    if (empty($col)) {
-        $db->execute("ALTER TABLE tasks ADD COLUMN local_customer_id INT(11) NULL AFTER customer_phone");
-        error_log('Added local_customer_id column to tasks table');
-    }
-} catch (Exception $e) {
-    error_log('Error checking/adding local_customer_id column: ' . $e->getMessage());
-}
-
-// عمود الإجمالي النهائي (يُملأ عند اعتماد الفاتورة)
-try {
-    $col = $db->queryOne("SHOW COLUMNS FROM tasks LIKE 'total_amount'");
-    if (empty($col)) {
-        $db->execute("ALTER TABLE tasks ADD COLUMN total_amount DECIMAL(15,2) NULL AFTER local_customer_id");
-        error_log('Added total_amount column to tasks table');
-    }
-} catch (Exception $e) {
-    error_log('Error checking/adding total_amount column: ' . $e->getMessage());
-}
-
-// جدول سجل مشتريات الأوردرات المعتمدة (أوردر إنتاج → عميل محلي)
-try {
-    $t = $db->queryOne("SHOW TABLES LIKE 'customer_task_purchases'");
-    if (empty($t)) {
+    // جدول سجل مشتريات الأوردرات المعتمدة
+    try {
         $db->execute("
             CREATE TABLE IF NOT EXISTS `customer_task_purchases` (
               `id` int(11) NOT NULL AUTO_INCREMENT,
@@ -489,28 +437,25 @@ try {
               KEY `task_date` (`task_date`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ");
-        error_log('Created customer_task_purchases table');
-    }
-} catch (Exception $e) {
-    error_log('Error creating customer_task_purchases table: ' . $e->getMessage());
-}
+    } catch (Exception $e) {}
 
-// أعمدة إضافية لجدول الفواتير الورقية لشركات الشحن (صافي سعر الطرد + ربط الأوردر)
-try {
-    $t = $db->queryOne("SHOW TABLES LIKE 'shipping_company_paper_invoices'");
-    if (!empty($t)) {
-        $colNet = $db->queryOne("SHOW COLUMNS FROM shipping_company_paper_invoices LIKE 'net_amount'");
-        if (empty($colNet)) {
-            $db->execute("ALTER TABLE shipping_company_paper_invoices ADD COLUMN net_amount DECIMAL(15,2) NULL COMMENT 'صافي سعر الطرد (يُضاف لديون الشركة)' AFTER total_amount");
+    // أعمدة إضافية لجدول الفواتير الورقية
+    try {
+        $t = $db->queryOne("SHOW TABLES LIKE 'shipping_company_paper_invoices'");
+        if (!empty($t)) {
+            $shipCols = array_column($db->query("SHOW COLUMNS FROM shipping_company_paper_invoices") ?: [], 'Field');
+            $shipColsMap = array_flip($shipCols);
+            if (!isset($shipColsMap['net_amount'])) {
+                $db->execute("ALTER TABLE shipping_company_paper_invoices ADD COLUMN net_amount DECIMAL(15,2) NULL COMMENT 'صافي سعر الطرد' AFTER total_amount");
+            }
+            if (!isset($shipColsMap['task_id'])) {
+                $db->execute("ALTER TABLE shipping_company_paper_invoices ADD COLUMN task_id INT(11) NULL COMMENT 'ربط بأوردر الإنتاج' AFTER net_amount");
+                $db->execute("ALTER TABLE shipping_company_paper_invoices ADD UNIQUE KEY task_id_unique (task_id)");
+            }
         }
-        $colTask = $db->queryOne("SHOW COLUMNS FROM shipping_company_paper_invoices LIKE 'task_id'");
-        if (empty($colTask)) {
-            $db->execute("ALTER TABLE shipping_company_paper_invoices ADD COLUMN task_id INT(11) NULL COMMENT 'ربط بأوردر الإنتاج' AFTER net_amount");
-            $db->execute("ALTER TABLE shipping_company_paper_invoices ADD UNIQUE KEY task_id_unique (task_id)");
-        }
-    }
-} catch (Exception $e) {
-    error_log('production_tasks: shipping_company_paper_invoices columns: ' . $e->getMessage());
+    } catch (Exception $e) {}
+
+    $_SESSION['_pt_migrations_done'] = 1;
 }
 
 /**
@@ -2778,8 +2723,8 @@ try {
     }
 
     // 5) كاش فحص جداول القوالب مرة واحدة
-    $hasUnifiedTemplates = !empty($db->queryOne("SHOW TABLES LIKE 'unified_product_templates'"));
-    $hasProductTemplates = !empty($db->queryOne("SHOW TABLES LIKE 'product_templates'"));
+    $hasUnifiedTemplates = $_ptHasUnifiedTemplates;
+    $hasProductTemplates = $_ptHasProductTemplates;
 
     // 6) تجميع أسماء المنتجات المستخرجة من notes للبحث في القوالب دفعة واحدة
     $tempProductNamesForTemplates = [];
@@ -2881,10 +2826,12 @@ try {
         $task['workers_count'] = count($allWorkers);
         $task['extracted_product_name'] = $extractedProductName;
 
-        // حساب الإجمالي النهائي
+        // حساب الإجمالي النهائي - التلغراف يُحسب لاحقاً عبر AJAX لتجنب HTTP calls أثناء التحميل
         $taskDisplayType = (strpos($task['related_type'] ?? '', 'manager_') === 0) ? substr($task['related_type'], 8) : ($task['task_type'] ?? 'general');
         if ($taskDisplayType === 'telegraph') {
-            $task['receipt_total'] = getTelegraphReceiptTotal($task, $db);
+            // حساب مبدئي من notes بدون HTTP call - التحديث الدقيق يتم عبر AJAX
+            $task['receipt_total'] = getTaskReceiptTotalFromNotes($task['notes'] ?? '');
+            $task['_needs_telegraph_calc'] = true;
         } else {
             $task['receipt_total'] = getTaskReceiptTotalFromNotes($task['notes'] ?? '');
         }
