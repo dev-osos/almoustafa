@@ -218,6 +218,13 @@ switch ($role) {
                 'badge' => null
             ],
             [
+                'title' => 'تسجيل المرتجعات',
+                'icon' => 'bi-arrow-return-left',
+                'url' => $baseUrl . 'manager.php?page=register_returns',
+                'active' => ($currentPage === 'manager.php' && $currentPageParam === 'register_returns'),
+                'badge' => null
+            ],
+            [
                 'title' => isset($lang['menu_salaries']) ? $lang['menu_salaries'] : 'الرواتب',
                 'icon' => 'bi-currency-dollar',
                 'url' => $baseUrl . 'manager.php?page=salaries',
@@ -491,6 +498,13 @@ switch ($role) {
                 'icon' => 'bi-box-arrow-in-down',
                 'url' => $baseUrl . 'accountant.php?page=inbound_supplies',
                 'active' => ($currentPage === 'accountant.php' && $currentPageParam === 'inbound_supplies'),
+                'badge' => null
+            ],
+            [
+                'title' => 'تسجيل المرتجعات',
+                'icon' => 'bi-arrow-return-left',
+                'url' => $baseUrl . 'accountant.php?page=register_returns',
+                'active' => ($currentPage === 'accountant.php' && $currentPageParam === 'register_returns'),
                 'badge' => null
             ],
             [
