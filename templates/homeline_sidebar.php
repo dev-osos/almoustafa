@@ -246,13 +246,6 @@ switch ($role) {
                 'badge' => '<span class="badge" id="approvalBadge">0</span>'
             ],
             [
-                'title' => isset($lang['menu_returns_exchanges']) ? $lang['menu_returns_exchanges'] : 'المرتجعات',
-                'icon' => 'bi-arrow-left-right',
-                'url' => $baseUrl . 'manager.php?page=returns_overview',
-                'active' => ($currentPage === 'manager.php' && $currentPageParam === 'returns_overview'),
-                'badge' => null
-            ],
-            [
                 'title' => 'أرصدة العملاء الدائنة',
                 'icon' => 'bi-wallet2',
                 'url' => $baseUrl . 'manager.php?page=customer_credit_balances',
@@ -540,13 +533,6 @@ switch ($role) {
                 'icon' => 'bi-wallet2',
                 'url' => $baseUrl . 'accountant.php?page=my_salary',
                 'active' => ($currentPage === 'accountant.php' && $currentPageParam === 'my_salary'),
-                'badge' => null
-            ],
-            [
-                'title' => 'المرتجعات',
-                'icon' => 'bi-arrow-return-left',
-                'url' => $baseUrl . 'accountant.php?page=returns',
-                'active' => ($currentPage === 'accountant.php' && $currentPageParam === 'returns'),
                 'badge' => null
             ],
             [
