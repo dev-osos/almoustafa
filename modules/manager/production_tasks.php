@@ -3164,9 +3164,9 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
         </div>
     <?php endif; ?>
 
-    <div class="row g-2 mb-3">
+    <div class="row g-2 mb-3" id="statusFilterCards">
         <div class="col-4 col-sm-4 col-md-2">
-            <a href="?page=production_tasks" class="text-decoration-none">
+            <a href="?page=production_tasks" class="text-decoration-none status-filter-card" data-status="all">
                 <div class="card <?php echo $statusFilter === '' || $statusFilter === 'all' ? 'bg-primary text-white' : 'border-primary'; ?> h-100">
                     <div class="card-body text-center py-2 px-2">
                         <div class="<?php echo $statusFilter === '' || $statusFilter === 'all' ? 'text-white-50' : 'text-muted'; ?> small mb-1">إجمالي الاوردرات</div>
@@ -3176,7 +3176,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
             </a>
         </div>
         <div class="col-4 col-sm-4 col-md-2">
-            <a href="?page=production_tasks&status=pending" class="text-decoration-none">
+            <a href="?page=production_tasks&status=pending" class="text-decoration-none status-filter-card" data-status="pending">
                 <div class="card <?php echo $statusFilter === 'pending' ? 'bg-warning text-dark' : 'border-warning'; ?> h-100">
                     <div class="card-body text-center py-2 px-2">
                         <div class="<?php echo $statusFilter === 'pending' ? 'text-dark-50' : 'text-muted'; ?> small mb-1">معلقة</div>
@@ -3185,9 +3185,9 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                 </div>
             </a>
         </div>
-        
+
         <div class="col-4 col-sm-4 col-md-2">
-            <a href="?page=production_tasks&status=completed" class="text-decoration-none">
+            <a href="?page=production_tasks&status=completed" class="text-decoration-none status-filter-card" data-status="completed">
                 <div class="card <?php echo $statusFilter === 'completed' ? 'bg-success text-white' : 'border-success'; ?> h-100">
                     <div class="card-body text-center py-2 px-2">
                         <div class="<?php echo $statusFilter === 'completed' ? 'text-white-50' : 'text-muted'; ?> small mb-1">مكتملة</div>
@@ -3197,7 +3197,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
             </a>
         </div>
         <div class="col-4 col-sm-4 col-md-2">
-            <a href="?page=production_tasks&status=with_delegate" class="text-decoration-none">
+            <a href="?page=production_tasks&status=with_delegate" class="text-decoration-none status-filter-card" data-status="with_delegate">
                 <div class="card <?php echo $statusFilter === 'with_delegate' ? 'bg-info text-white' : 'border-info'; ?> h-100">
                     <div class="card-body text-center py-2 px-2">
                         <div class="<?php echo $statusFilter === 'with_delegate' ? 'text-white-50' : 'text-muted'; ?> small mb-1">مع المندوب</div>
@@ -3207,7 +3207,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
             </a>
         </div>
         <div class="col-4 col-sm-4 col-md-2">
-            <a href="?page=production_tasks&status=delivered" class="text-decoration-none">
+            <a href="?page=production_tasks&status=delivered" class="text-decoration-none status-filter-card" data-status="delivered">
                 <div class="card <?php echo $statusFilter === 'delivered' ? 'bg-success text-white' : 'border-success'; ?> h-100">
                     <div class="card-body text-center py-2 px-2">
                         <div class="<?php echo $statusFilter === 'delivered' ? 'text-white-50' : 'text-muted'; ?> small mb-1">تم التوصيل</div>
@@ -3217,7 +3217,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
             </a>
         </div>
         <div class="col-4 col-sm-4 col-md-2">
-            <a href="?page=production_tasks&status=returned" class="text-decoration-none">
+            <a href="?page=production_tasks&status=returned" class="text-decoration-none status-filter-card" data-status="returned">
                 <div class="card <?php echo $statusFilter === 'returned' ? 'bg-secondary text-white' : 'border-secondary'; ?> h-100">
                     <div class="card-body text-center py-2 px-2">
                         <div class="<?php echo $statusFilter === 'returned' ? 'text-white-50' : 'text-muted'; ?> small mb-1">تم الارجاع</div>
@@ -4193,6 +4193,132 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
         if (!targetPage) return;
         e.preventDefault();
         doAjaxPage(targetPage);
+    });
+})();
+</script>
+
+<!-- فلترة ديناميكية بالضغط على بطاقات الحالة بدون ريفريش -->
+<script>
+(function() {
+    'use strict';
+    var statusCards = document.querySelectorAll('.status-filter-card');
+    if (!statusCards.length) return;
+
+    var statusStyles = {
+        'all':           { bg: 'bg-primary',   text: 'text-white', border: 'border-primary', countClass: 'text-primary', labelActive: 'text-white-50' },
+        'pending':       { bg: 'bg-warning',   text: 'text-dark',  border: 'border-warning', countClass: 'text-warning', labelActive: 'text-dark-50' },
+        'completed':     { bg: 'bg-success',   text: 'text-white', border: 'border-success', countClass: 'text-success', labelActive: 'text-white-50' },
+        'with_delegate': { bg: 'bg-info',      text: 'text-white', border: 'border-info',    countClass: 'text-info',    labelActive: 'text-white-50' },
+        'delivered':     { bg: 'bg-success',    text: 'text-white', border: 'border-success', countClass: 'text-success', labelActive: 'text-white-50' },
+        'returned':      { bg: 'bg-secondary',  text: 'text-white', border: 'border-secondary', countClass: 'text-secondary', labelActive: 'text-white-50' }
+    };
+
+    function updateCardStyles(activeStatus) {
+        statusCards.forEach(function(link) {
+            var s = link.getAttribute('data-status');
+            var style = statusStyles[s] || statusStyles['all'];
+            var card = link.querySelector('.card');
+            var label = card.querySelector('.small');
+            var count = card.querySelector('.fs-5');
+            var isActive = (s === activeStatus);
+
+            card.classList.remove(style.bg, style.text, style.border);
+            if (label) label.classList.remove('text-muted', style.labelActive);
+            if (count) count.classList.remove(style.countClass, style.text);
+
+            if (isActive) {
+                card.classList.add(style.bg, style.text);
+                if (label) label.classList.add(style.labelActive);
+                if (count) count.classList.add(style.text);
+            } else {
+                card.classList.add(style.border);
+                if (label) label.classList.add('text-muted');
+                if (count) count.classList.add(style.countClass);
+            }
+        });
+    }
+
+    function doStatusFilter(status) {
+        var url = status === 'all' ? '?page=production_tasks' : '?page=production_tasks&status=' + encodeURIComponent(status);
+        var tbody = document.getElementById('recentTasksTableBody');
+        var wrapper = tbody ? tbody.closest('.table-responsive') : null;
+        if (wrapper) wrapper.style.opacity = '0.5';
+
+        updateCardStyles(status);
+
+        fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function(r) { return r.text(); })
+            .then(function(responseHtml) {
+                var parser = new DOMParser();
+                var doc = parser.parseFromString(responseHtml, 'text/html');
+
+                // Update table body using safe DOM replacement
+                var newTbody = doc.getElementById('recentTasksTableBody');
+                if (tbody && newTbody) {
+                    while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+                    while (newTbody.firstChild) tbody.appendChild(newTbody.firstChild);
+                }
+
+                // Update pagination
+                var paginationNav = document.getElementById('recentTasksPagination');
+                var newPagination = doc.getElementById('recentTasksPagination');
+                if (paginationNav && newPagination) {
+                    while (paginationNav.firstChild) paginationNav.removeChild(paginationNav.firstChild);
+                    while (newPagination.firstChild) paginationNav.appendChild(newPagination.firstChild);
+                } else if (paginationNav && !newPagination) {
+                    while (paginationNav.firstChild) paginationNav.removeChild(paginationNav.firstChild);
+                }
+
+                // Update page counter
+                var allSmall = document.querySelectorAll('.card-header .text-muted.small');
+                var oldCounter = null;
+                allSmall.forEach(function(el) {
+                    if (el.textContent.indexOf('صفحة') !== -1) oldCounter = el;
+                });
+                var newCounter = null;
+                doc.querySelectorAll('.card-header .text-muted.small').forEach(function(el) {
+                    if (el.textContent.indexOf('صفحة') !== -1) newCounter = el;
+                });
+                if (oldCounter && newCounter) oldCounter.textContent = newCounter.textContent;
+
+                // Update stats on cards
+                var newCards = doc.querySelectorAll('.status-filter-card');
+                newCards.forEach(function(newLink) {
+                    var s = newLink.getAttribute('data-status');
+                    var newCount = newLink.querySelector('.fs-5');
+                    if (!newCount) return;
+                    statusCards.forEach(function(oldLink) {
+                        if (oldLink.getAttribute('data-status') === s) {
+                            var oldCount = oldLink.querySelector('.fs-5');
+                            if (oldCount) oldCount.textContent = newCount.textContent;
+                        }
+                    });
+                });
+
+                if (wrapper) wrapper.style.opacity = '';
+
+                // Re-init dropdowns
+                if (typeof bootstrap !== 'undefined' && bootstrap.Dropdown) {
+                    tbody.querySelectorAll('[data-bs-toggle="dropdown"]').forEach(function(toggle) {
+                        var existing = bootstrap.Dropdown.getInstance(toggle);
+                        if (existing) { try { existing.dispose(); } catch(e) {} }
+                        new bootstrap.Dropdown(toggle);
+                    });
+                }
+
+                history.replaceState(null, '', url);
+            })
+            .catch(function() {
+                if (wrapper) wrapper.style.opacity = '';
+                window.location.href = url;
+            });
+    }
+
+    statusCards.forEach(function(link) {
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            doStatusFilter(link.getAttribute('data-status'));
+        });
     });
 })();
 </script>

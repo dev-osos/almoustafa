@@ -4417,7 +4417,6 @@ function copyShippingCollectionResult(btn) {
                     <tr>
                         <th>رقم الفاتورة</th>
                         <th>الإجمالي</th>
-                        <th>الرصيد بعد المعاملة</th>
                         <th>التاريخ</th>
                         <th>الإجراء</th>
                     </tr>
@@ -7033,15 +7032,12 @@ function goToCompanyPaperInvoicesPage(page) {
             var receiptUrl = receiptBase.indexOf('?') >= 0 ? (receiptBase + '&id=' + pi.task_id) : (receiptBase + '?id=' + pi.task_id);
             viewBtn = '<a href="' + receiptUrl + '" target="_blank" class="btn btn-sm btn-outline-success me-1" title="عرض إيصال الأوردر"><i class="bi bi-receipt me-1"></i>عرض الإيصال</a>' + viewBtn;
         }
-        var balance = parseFloat(pi.balance_after || 0);
-        var balanceColor = balance > 0 ? 'text-danger' : (balance < 0 ? 'text-success' : '');
         var tr = document.createElement('tr');
         var tdNum = document.createElement('td'); tdNum.textContent = pi.invoice_number || ('ورقية-' + pi.id);
         var tdTotal = document.createElement('td'); tdTotal.textContent = parseFloat(pi.total_amount || 0).toFixed(2) + ' ج.م';
-        var tdBalance = document.createElement('td'); tdBalance.textContent = balance.toFixed(2) + ' ج.م'; if (balanceColor) tdBalance.className = balanceColor + ' fw-bold';
         var tdDate = document.createElement('td'); tdDate.textContent = dateStr;
         var tdAction = document.createElement('td'); tdAction.innerHTML = viewBtn;
-        tr.appendChild(tdNum); tr.appendChild(tdTotal); tr.appendChild(tdBalance); tr.appendChild(tdDate); tr.appendChild(tdAction);
+        tr.appendChild(tdNum); tr.appendChild(tdTotal); tr.appendChild(tdDate); tr.appendChild(tdAction);
         tbody.appendChild(tr);
     });
     document.getElementById('companyPaperInvoicesTableWrap').style.display = 'block';
