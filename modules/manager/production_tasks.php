@@ -3126,6 +3126,20 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
     });
     // إخفاء شاشة التحميل العامة عند تحميل الصفحة (مهم عند الفلترة بتاريخ الطلب أو غيرها)
     if (typeof window.resetPageLoading === 'function') window.resetPageLoading();
+
+    // منع الضغط المزدوج على بطاقات الفلترة (يسبب فقدان الجلسة بسبب طلبات متزامنة)
+    var filterCardsClicked = false;
+    document.addEventListener('click', function(e) {
+        var cardLink = e.target.closest('.row.g-2.mb-3 a[href*="page=production_tasks"]');
+        if (!cardLink) return;
+        if (filterCardsClicked) {
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+        }
+        filterCardsClicked = true;
+        setTimeout(function() { filterCardsClicked = false; }, 3000);
+    }, true);
 })();
 </script>
 
