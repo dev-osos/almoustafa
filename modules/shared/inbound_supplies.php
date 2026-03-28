@@ -132,7 +132,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
     }
 
     async function getItems(department) {
-        const url = new URL(apiUrl, window.location.origin);
+        const url = new URL(apiUrl, window.location.href);
         url.searchParams.set('action', 'get_items');
         url.searchParams.set('department', department);
         const res = await fetch(url.toString(), { credentials: 'same-origin' });
@@ -667,7 +667,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         if (printAfter) {
             printWindow = window.open('', '_blank');
         }
-        const url = new URL(apiUrl, window.location.origin);
+        const url = new URL(apiUrl, window.location.href);
         url.searchParams.set('action', 'get_supply_details');
         url.searchParams.set('id', String(id));
         const res = await fetch(url.toString(), { credentials: 'same-origin' });
@@ -1092,14 +1092,14 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             tableBody.appendChild(waitTr);
         }
 
-        const url = new URL(apiUrl, window.location.origin);
-        url.searchParams.set('action', 'get_supplies');
-        url.searchParams.set('page', String(listPage));
-        if (filterDateFrom.value) url.searchParams.set('date_from', filterDateFrom.value);
-        if (filterDateTo.value) url.searchParams.set('date_to', filterDateTo.value);
-        if (filterSearch.value.trim()) url.searchParams.set('search', filterSearch.value.trim());
-
         try {
+            const url = new URL(apiUrl, window.location.href);
+            url.searchParams.set('action', 'get_supplies');
+            url.searchParams.set('page', String(listPage));
+            if (filterDateFrom.value) url.searchParams.set('date_from', filterDateFrom.value);
+            if (filterDateTo.value) url.searchParams.set('date_to', filterDateTo.value);
+            if (filterSearch.value.trim()) url.searchParams.set('search', filterSearch.value.trim());
+
             const res = await fetch(url.toString(), { credentials: 'same-origin' });
             const data = await res.json();
             if (!data.success) throw new Error('failed');

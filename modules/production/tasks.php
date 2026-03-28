@@ -25,75 +25,41 @@ require_once __DIR__ . '/../../includes/table_styles.php';
 
 requireRole(['production', 'accountant', 'manager', 'developer', 'driver']);
 
-// التحقق من وجود عمود product_name في جدول tasks وإضافته إذا لم يكن موجوداً
-try {
-    $db = db();
-    $productNameColumn = $db->queryOne("SHOW COLUMNS FROM tasks LIKE 'product_name'");
-    if (empty($productNameColumn)) {
-        // محاولة إضافة الحقل بعد template_id إذا كان موجوداً
-        $templateIdColumn = $db->queryOne("SHOW COLUMNS FROM tasks LIKE 'template_id'");
-        if (!empty($templateIdColumn)) {
-            $db->execute("ALTER TABLE tasks ADD COLUMN product_name VARCHAR(255) NULL AFTER template_id");
-        } else {
-            // إذا لم يكن template_id موجوداً، أضف بعد product_id
-            $db->execute("ALTER TABLE tasks ADD COLUMN product_name VARCHAR(255) NULL AFTER product_id");
+// تشغيل migration checks مرة واحدة فقط في الجلسة لتجنب SHOW COLUMNS المتكرر
+if (empty($_SESSION['_prod_tasks_migrations_done'])) {
+    try {
+        $db = db();
+        $columns = array_column($db->query("SHOW COLUMNS FROM tasks") ?: [], 'Field');
+        $columnsMap = array_flip($columns);
+
+        if (!isset($columnsMap['product_name'])) {
+            $afterCol = isset($columnsMap['template_id']) ? 'template_id' : 'product_id';
+            $db->execute("ALTER TABLE tasks ADD COLUMN product_name VARCHAR(255) NULL AFTER $afterCol");
         }
-        error_log('Added product_name column to tasks table in production/tasks.php');
-    }
-    
-    // التحقق من وجود عمود task_type في جدول tasks وإضافته إذا لم يكن موجوداً
-    $taskTypeColumn = $db->queryOne("SHOW COLUMNS FROM tasks LIKE 'task_type'");
-    if (empty($taskTypeColumn)) {
-        // إضافة الحقل بعد status
-        $db->execute("ALTER TABLE tasks ADD COLUMN task_type VARCHAR(50) NULL DEFAULT 'general' AFTER status");
-        error_log('Added task_type column to tasks table in production/tasks.php');
-    }
-    
-    // التحقق من وجود عمود unit في جدول tasks وإضافته إذا لم يكن موجوداً
-    $unitColumn = $db->queryOne("SHOW COLUMNS FROM tasks LIKE 'unit'");
-    if (empty($unitColumn)) {
-        // إضافة الحقل بعد quantity
-        $db->execute("ALTER TABLE tasks ADD COLUMN unit VARCHAR(50) NULL DEFAULT 'قطعة' AFTER quantity");
-        error_log('Added unit column to tasks table in production/tasks.php');
-    }
-    // التحقق من وجود عمود customer_name في جدول tasks
-    $customerNameColumn = $db->queryOne("SHOW COLUMNS FROM tasks LIKE 'customer_name'");
-    if (empty($customerNameColumn)) {
-        $db->execute("ALTER TABLE tasks ADD COLUMN customer_name VARCHAR(255) NULL DEFAULT NULL AFTER unit");
-        error_log('Added customer_name column to tasks table in production/tasks.php');
-    }
-    // التحقق من وجود عمود customer_phone في جدول tasks
-    $customerPhoneColumn = $db->queryOne("SHOW COLUMNS FROM tasks LIKE 'customer_phone'");
-    if (empty($customerPhoneColumn)) {
-        $db->execute("ALTER TABLE tasks ADD COLUMN customer_phone VARCHAR(50) NULL DEFAULT NULL AFTER customer_name");
-        error_log('Added customer_phone column to tasks table in production/tasks.php');
-    }
-    // التحقق من وجود عمود receipt_print_count لتتبع عدد مرات طباعة إيصال الأوردر
-    $receiptPrintCountColumn = $db->queryOne("SHOW COLUMNS FROM tasks LIKE 'receipt_print_count'");
-    if (empty($receiptPrintCountColumn)) {
-        $db->execute("ALTER TABLE tasks ADD COLUMN receipt_print_count INT UNSIGNED NOT NULL DEFAULT 0 AFTER notes");
-        error_log('Added receipt_print_count column to tasks table in production/tasks.php');
-    }
-    // توسيع عمود status ليشمل "تم التوصيل" و "تم الارجاع" و "مع المندوب"
-    $statusColumn = $db->queryOne("SHOW COLUMNS FROM tasks LIKE 'status'");
-    if (!empty($statusColumn['Type'])) {
-        $typeStr = (string) $statusColumn['Type'];
-        if (stripos($typeStr, 'with_delegate') === false) {
-            $db->execute("ALTER TABLE tasks MODIFY COLUMN status ENUM('pending','received','in_progress','completed','with_delegate','with_driver','delivered','returned','cancelled') DEFAULT 'pending'");
-            error_log('Extended tasks.status ENUM with with_delegate in production/tasks.php');
+        if (!isset($columnsMap['task_type'])) {
+            $db->execute("ALTER TABLE tasks ADD COLUMN task_type VARCHAR(50) NULL DEFAULT 'general' AFTER status");
         }
-    }
-    $statusColumn2 = $db->queryOne("SHOW COLUMNS FROM tasks LIKE 'status'");
-    if (!empty($statusColumn2['Type'])) {
-        $typeStr2 = (string) $statusColumn2['Type'];
-        if (stripos($typeStr2, 'with_driver') === false) {
-            $db->execute("ALTER TABLE tasks MODIFY COLUMN status ENUM('pending','received','in_progress','completed','with_delegate','with_driver','delivered','returned','cancelled') DEFAULT 'pending'");
-            error_log('Extended tasks.status ENUM with with_driver');
+        if (!isset($columnsMap['unit'])) {
+            $db->execute("ALTER TABLE tasks ADD COLUMN unit VARCHAR(50) NULL DEFAULT 'قطعة' AFTER quantity");
         }
-    }
-    $daTable = $db->queryOne("SHOW TABLES LIKE 'driver_assignments'");
-    if (empty($daTable)) {
-        $db->execute("CREATE TABLE driver_assignments (
+        if (!isset($columnsMap['customer_name'])) {
+            $db->execute("ALTER TABLE tasks ADD COLUMN customer_name VARCHAR(255) NULL DEFAULT NULL AFTER unit");
+        }
+        if (!isset($columnsMap['customer_phone'])) {
+            $db->execute("ALTER TABLE tasks ADD COLUMN customer_phone VARCHAR(50) NULL DEFAULT NULL AFTER customer_name");
+        }
+        if (!isset($columnsMap['receipt_print_count'])) {
+            $db->execute("ALTER TABLE tasks ADD COLUMN receipt_print_count INT UNSIGNED NOT NULL DEFAULT 0 AFTER notes");
+        }
+        // توسيع عمود status ليشمل كل الحالات المطلوبة
+        if (isset($columnsMap['status'])) {
+            $statusCol = $db->queryOne("SHOW COLUMNS FROM tasks LIKE 'status'");
+            if (!empty($statusCol['Type']) && stripos((string)$statusCol['Type'], 'with_driver') === false) {
+                $db->execute("ALTER TABLE tasks MODIFY COLUMN status ENUM('pending','received','in_progress','completed','with_delegate','with_driver','delivered','returned','cancelled') DEFAULT 'pending'");
+            }
+        }
+        // إنشاء جدول driver_assignments إذا لم يكن موجوداً
+        $db->execute("CREATE TABLE IF NOT EXISTS driver_assignments (
             id INT AUTO_INCREMENT PRIMARY KEY,
             task_id INT NOT NULL,
             driver_id INT NOT NULL,
@@ -107,10 +73,10 @@ try {
             INDEX idx_da_task (task_id),
             INDEX idx_da_driver_status (driver_id, status)
         )");
-        error_log('Created driver_assignments table');
+        $_SESSION['_prod_tasks_migrations_done'] = 1;
+    } catch (Exception $e) {
+        error_log('Error checking/adding columns in production/tasks.php: ' . $e->getMessage());
     }
-} catch (Exception $e) {
-    error_log('Error checking/adding columns in production/tasks.php: ' . $e->getMessage());
 }
 
 // إضافة cache headers لمنع تخزين الصفحة والتأكد من جلب البيانات المحدثة
@@ -1207,53 +1173,32 @@ $totalRow = $db->queryOne('SELECT COUNT(*) AS total FROM tasks t ' . $whereClaus
 $totalTasks = isset($totalRow['total']) ? (int) $totalRow['total'] : 0;
 $totalPages = max(1, (int) ceil($totalTasks / $perPage));
 
-// التحقق من وجود جداول القوالب قبل إضافة JOIN
-$unifiedTemplatesExists = !empty($db->queryOne("SHOW TABLES LIKE 'unified_product_templates'"));
-$productTemplatesExists = !empty($db->queryOne("SHOW TABLES LIKE 'product_templates'"));
-// #region agent log
-// كتابة آمنة في debug.log - التحقق من وجود المجلد أولاً
-$debugLogPath = __DIR__ . '/../../.cursor/debug.log';
-$debugLogDir = dirname($debugLogPath);
-if (!is_dir($debugLogDir)) {
-    @mkdir($debugLogDir, 0755, true);
+// التحقق من وجود جداول القوالب وcustomer_orders - محفوظ في الجلسة
+if (!isset($_SESSION['_prod_tasks_table_flags'])) {
+    $_SESSION['_prod_tasks_table_flags'] = [
+        'unified_templates' => !empty($db->queryOne("SHOW TABLES LIKE 'unified_product_templates'")),
+        'product_templates' => !empty($db->queryOne("SHOW TABLES LIKE 'product_templates'")),
+        'customer_orders' => !empty($db->queryOne("SHOW TABLES LIKE 'customer_orders'")),
+    ];
 }
-if (is_dir($debugLogDir) && is_writable($debugLogDir)) {
-    @file_put_contents($debugLogPath, json_encode([
-        'timestamp' => time() * 1000,
-        'location' => 'tasks.php:' . __LINE__,
-        'message' => 'Template tables check',
-        'data' => [
-            'unifiedTemplatesExists' => $unifiedTemplatesExists,
-            'productTemplatesExists' => $productTemplatesExists
-        ],
-        'sessionId' => 'debug-session',
-        'runId' => 'run1',
-        'hypothesisId' => 'B'
-    ]) . "\n", FILE_APPEND);
-}
-// #endregion
+$unifiedTemplatesExists = $_SESSION['_prod_tasks_table_flags']['unified_templates'];
+$productTemplatesExists = $_SESSION['_prod_tasks_table_flags']['product_templates'];
+$customerOrdersExists = $_SESSION['_prod_tasks_table_flags']['customer_orders'];
 
-// SQL query لجلب المهام مع استخدام t.product_name مباشرة من الجدول (نفس طريقة طلبات العملاء)
-// استخدام t.product_name مباشرة قبل t.* لتجنب أي تعارض
-// إضافة JOIN مع جداول القوالب لجلب اسم القالب عند وجود template_id
 $templateJoins = '';
 $templateSelect = '';
 if ($unifiedTemplatesExists && $productTemplatesExists) {
-    // كلا الجدولين موجودان: استخدام COALESCE للبحث في كليهما
     $templateSelect = ', COALESCE(upt.product_name, pt.product_name) AS template_name';
     $templateJoins = 'LEFT JOIN unified_product_templates upt ON t.template_id = upt.id AND upt.status = \'active\' ';
     $templateJoins .= 'LEFT JOIN product_templates pt ON t.template_id = pt.id AND pt.status = \'active\' ';
 } elseif ($unifiedTemplatesExists) {
-    // فقط unified_product_templates موجود
     $templateSelect = ', upt.product_name AS template_name';
     $templateJoins = 'LEFT JOIN unified_product_templates upt ON t.template_id = upt.id AND upt.status = \'active\' ';
 } elseif ($productTemplatesExists) {
-    // فقط product_templates موجود
     $templateSelect = ', pt.product_name AS template_name';
     $templateJoins = 'LEFT JOIN product_templates pt ON t.template_id = pt.id AND pt.status = \'active\' ';
 }
 
-$customerOrdersExists = !empty($db->queryOne("SHOW TABLES LIKE 'customer_orders'"));
 $orderCustomerJoin = '';
 $customerDisplaySelect = ", t.customer_name, t.customer_phone, COALESCE(NULLIF(TRIM(IFNULL(t.customer_name,'')), ''), '') AS customer_display";
 if ($customerOrdersExists) {
@@ -1280,29 +1225,6 @@ ORDER BY t.created_at DESC, t.id DESC
 LIMIT ? OFFSET ?";
 
 $queryParams = array_merge($params, [$perPage, $offset]);
-// #region agent log
-// كتابة آمنة في debug.log - التحقق من وجود المجلد أولاً
-$debugLogPath = __DIR__ . '/../../.cursor/debug.log';
-$debugLogDir = dirname($debugLogPath);
-if (!is_dir($debugLogDir)) {
-    @mkdir($debugLogDir, 0755, true);
-}
-if (is_dir($debugLogDir) && is_writable($debugLogDir)) {
-    @file_put_contents($debugLogPath, json_encode([
-        'timestamp' => time() * 1000,
-        'location' => 'tasks.php:' . __LINE__,
-        'message' => 'SQL query with template joins',
-        'data' => [
-            'templateSelect' => $templateSelect,
-            'templateJoins' => $templateJoins,
-            'sql_preview' => substr($taskSql, 0, 200) . '...'
-        ],
-        'sessionId' => 'debug-session',
-        'runId' => 'run1',
-        'hypothesisId' => 'B'
-    ]) . "\n", FILE_APPEND);
-}
-// #endregion
 $tasks = $db->query($taskSql, $queryParams);
 
 // Batch-fetch pending driver assignments for visible tasks
@@ -1326,186 +1248,85 @@ if (($isProduction || $isDriver) && !empty($tasks)) {
         $ph = implode(',', array_fill(0, count($taskIdsForApproved), '?'));
         $approvedRows = $db->query("SELECT task_id FROM customer_task_purchases WHERE task_id IN ($ph)", $taskIdsForApproved);
         $approvedTaskIds = array_column($approvedRows ?: [], 'task_id');
-        $paperTable = $db->queryOne("SHOW TABLES LIKE 'shipping_company_paper_invoices'");
-        if (!empty($paperTable)) {
-            $taskIdCol = $db->queryOne("SHOW COLUMNS FROM shipping_company_paper_invoices LIKE 'task_id'");
-            if (!empty($taskIdCol)) {
-                $shippingApproved = $db->query("SELECT task_id FROM shipping_company_paper_invoices WHERE task_id IN ($ph) AND task_id IS NOT NULL", $taskIdsForApproved);
-                foreach ($shippingApproved ?: [] as $row) {
-                    $tid = (int)($row['task_id'] ?? 0);
-                    if ($tid > 0 && !in_array($tid, $approvedTaskIds, true)) {
-                        $approvedTaskIds[] = $tid;
-                    }
+        try {
+            $shippingApproved = $db->query("SELECT task_id FROM shipping_company_paper_invoices WHERE task_id IN ($ph) AND task_id IS NOT NULL", $taskIdsForApproved);
+            foreach ($shippingApproved ?: [] as $row) {
+                $tid = (int)($row['task_id'] ?? 0);
+                if ($tid > 0 && !in_array($tid, $approvedTaskIds, true)) {
+                    $approvedTaskIds[] = $tid;
                 }
             }
+        } catch (Throwable $e) {
+            // الجدول أو العمود غير موجود
         }
     }
 }
 
-// استخراج جميع العمال من notes لكل مهمة واستخراج اسم المنتج من notes إذا لم يكن موجوداً
-foreach ($tasks as &$task) {
-    // #region agent log
-    $logPath = '../../.cursor/debug.log';
-    $logData = [
-        'task_id' => $task['id'] ?? 0,
-        'template_id' => $task['template_id'] ?? null,
-        'template_name' => $task['template_name'] ?? null,
-        'product_name' => $task['product_name'] ?? null,
-        'product_id' => $task['product_id'] ?? null,
-        'has_template_name_key' => isset($task['template_name']),
-        'all_keys' => array_keys($task)
-    ];
-    $logEntry = json_encode([
-        'timestamp' => time() * 1000,
-        'location' => 'tasks.php:' . __LINE__,
-        'message' => 'Task raw data from database',
-        'data' => $logData,
-        'sessionId' => 'debug-session',
-        'runId' => 'run1',
-        'hypothesisId' => 'B'
-    ]) . "\n";
-    @file_put_contents($logPath, $logEntry, FILE_APPEND);
-    error_log('DEBUG: Task ' . ($task['id'] ?? 0) . ' - template_id: ' . ($task['template_id'] ?? 'NULL') . ', template_name: ' . ($task['template_name'] ?? 'NULL'));
-    // #endregion
+// ── Batch: جمع كل worker IDs من notes أولاً ثم استعلام واحد ──
+$allWorkerIds = [];
+$taskWorkerIdMap = []; // task index => [worker ids]
+foreach ($tasks as $idx => $task) {
+    $notes = $task['notes'] ?? '';
+    if (preg_match('/\[ASSIGNED_WORKERS_IDS\]:\s*([0-9,]+)/', $notes, $matches)) {
+        $wids = array_filter(array_map('intval', explode(',', $matches[1])));
+        $taskWorkerIdMap[$idx] = $wids;
+        foreach ($wids as $wid) {
+            $allWorkerIds[$wid] = true;
+        }
+    }
+}
+// استعلام واحد لجلب أسماء كل العمال
+$workerNames = [];
+if (!empty($allWorkerIds)) {
+    $wids = array_keys($allWorkerIds);
+    $wph = implode(',', array_fill(0, count($wids), '?'));
+    $wRows = $db->query("SELECT id, full_name FROM users WHERE id IN ($wph)", $wids);
+    foreach ($wRows ?: [] as $w) {
+        $workerNames[(int)$w['id']] = $w['full_name'];
+    }
+}
+
+// معالجة كل مهمة: تعيين العمال واسم المنتج
+foreach ($tasks as $idx => &$task) {
     $notes = $task['notes'] ?? '';
     $allWorkers = [];
-    
-    // محاولة استخراج IDs من notes
-    if (preg_match('/\[ASSIGNED_WORKERS_IDS\]:\s*([0-9,]+)/', $notes, $matches)) {
-        $workerIds = array_filter(array_map('intval', explode(',', $matches[1])));
-        if (!empty($workerIds)) {
-            $placeholders = implode(',', array_fill(0, count($workerIds), '?'));
-            $workers = $db->query(
-                "SELECT id, full_name FROM users WHERE id IN ($placeholders) ORDER BY full_name",
-                $workerIds
-            );
-            foreach ($workers as $worker) {
-                $allWorkers[] = $worker['full_name'];
+
+    // تطبيق أسماء العمال من الـ batch cache
+    if (isset($taskWorkerIdMap[$idx])) {
+        foreach ($taskWorkerIdMap[$idx] as $wid) {
+            if (isset($workerNames[$wid])) {
+                $allWorkers[] = $workerNames[$wid];
             }
         }
     }
-    
-    // إذا لم نجد عمال من notes، استخدم assigned_to
     if (empty($allWorkers) && !empty($task['assigned_to_name'])) {
         $allWorkers[] = $task['assigned_to_name'];
     }
-    
-    // استخدام اسم المنتج/القالب مباشرة من حقل product_name في جدول tasks
-    // نفس الطريقة المستخدمة في طلبات العملاء (السطر 1107-1109 في customer_orders.php):
-    // أولاً التحقق من product_name المحفوظ مباشرة في الجدول
+
+    // تحديد اسم المنتج بالأولوية: product_name > template_name > product_name_from_db > notes
     $finalProductName = null;
-    
-    // الأولوية الأولى: استخدام product_name من الجدول مباشرة (نفس طريقة طلبات العملاء)
-    // نفس الكود في customer_orders.php السطر 1107: if (!empty($item['product_name']))
-    // التحقق من وجود القيمة وعدم كونها NULL أو فارغة
-    if (isset($task['product_name']) && $task['product_name'] !== null && $task['product_name'] !== '') {
-        $trimmedName = trim((string)$task['product_name']);
-        if ($trimmedName !== '') {
-            $finalProductName = $trimmedName;
-        }
+    if (!empty(trim((string)($task['product_name'] ?? '')))) {
+        $finalProductName = trim((string)$task['product_name']);
     }
-    
-    // الأولوية الثانية: استخدام template_name من JOIN مع جداول القوالب (عند وجود template_id)
-    // هذا يحل المشكلة عندما يتم حفظ template_id ولكن product_name يكون NULL
-    // #region agent log
-    $logPath = '../../.cursor/debug.log';
-    $logData = [
-        'task_id' => $task['id'] ?? 0,
-        'template_id' => $task['template_id'] ?? null,
-        'product_name_before' => $task['product_name'] ?? null,
-        'template_name' => $task['template_name'] ?? null,
-        'finalProductName_before_template' => $finalProductName,
-        'template_name_empty' => empty($task['template_name']),
-        'template_name_isset' => isset($task['template_name'])
-    ];
-    $logEntry = json_encode([
-        'timestamp' => time() * 1000,
-        'location' => 'tasks.php:' . __LINE__,
-        'message' => 'Checking template_name for task',
-        'data' => $logData,
-        'sessionId' => 'debug-session',
-        'runId' => 'run1',
-        'hypothesisId' => 'A'
-    ]) . "\n";
-    @file_put_contents($logPath, $logEntry, FILE_APPEND);
-    error_log('DEBUG: Task ' . ($task['id'] ?? 0) . ' - Checking template_name. template_id: ' . ($task['template_id'] ?? 'NULL') . ', template_name: ' . var_export($task['template_name'] ?? null, true) . ', empty: ' . (empty($task['template_name']) ? 'YES' : 'NO'));
-    // #endregion
-    if (empty($finalProductName) && !empty($task['template_name'])) {
-        $trimmedName = trim((string)$task['template_name']);
-        if ($trimmedName !== '') {
-            $finalProductName = $trimmedName;
-            // #region agent log
-            $logEntry = json_encode([
-                'timestamp' => time() * 1000,
-                'location' => 'tasks.php:' . __LINE__,
-                'message' => 'Using template_name as finalProductName',
-                'data' => ['task_id' => $task['id'] ?? 0, 'template_name' => $trimmedName, 'finalProductName' => $finalProductName],
-                'sessionId' => 'debug-session',
-                'runId' => 'run1',
-                'hypothesisId' => 'A'
-            ]) . "\n";
-            @file_put_contents($logPath, $logEntry, FILE_APPEND);
-            error_log('DEBUG: Task ' . ($task['id'] ?? 0) . ' - Using template_name: ' . $trimmedName);
-            // #endregion
-        }
+    if (empty($finalProductName) && !empty(trim((string)($task['template_name'] ?? '')))) {
+        $finalProductName = trim((string)$task['template_name']);
     }
-    
-    // الأولوية الثالثة: استخدام product_name_from_db من JOIN مع products (للتوافق مع المهام القديمة)
-    if (empty($finalProductName) && !empty($task['product_name_from_db'])) {
-        $trimmedName = trim((string)$task['product_name_from_db']);
-        if ($trimmedName !== '') {
-            $finalProductName = $trimmedName;
-        }
+    if (empty($finalProductName) && !empty(trim((string)($task['product_name_from_db'] ?? '')))) {
+        $finalProductName = trim((string)$task['product_name_from_db']);
     }
-    
-    // الأولوية الرابعة: استخراج من notes (للتوافق مع المهام القديمة جداً)
     if (empty($finalProductName) && !empty($notes)) {
-        // البحث عن "المنتج: " متبوعاً باسم المنتج
-        if (preg_match('/المنتج:\s*([^\n\r]+?)\s*-\s*الكمية:/i', $notes, $productMatches)) {
-            $finalProductName = trim($productMatches[1] ?? '');
-        } elseif (preg_match('/المنتج:\s*([^\n\r]+?)(?:\n|$)/i', $notes, $productMatches2)) {
-            $finalProductName = trim($productMatches2[1] ?? '');
-            $finalProductName = preg_replace('/\s*-\s*الكمية:.*$/i', '', $finalProductName);
-            $finalProductName = trim($finalProductName);
-        } elseif (preg_match('/المنتج:\s*([^\n\r]+)/i', $notes, $productMatches3)) {
-            $finalProductName = trim($productMatches3[1] ?? '');
-            $finalProductName = preg_replace('/\s*-\s*الكمية:.*$/i', '', $finalProductName);
-            $finalProductName = trim($finalProductName);
+        if (preg_match('/المنتج:\s*([^\n\r]+?)\s*-\s*الكمية:/i', $notes, $pm)) {
+            $finalProductName = trim($pm[1] ?? '');
+        } elseif (preg_match('/المنتج:\s*([^\n\r]+?)(?:\n|$)/i', $notes, $pm)) {
+            $finalProductName = trim(preg_replace('/\s*-\s*الكمية:.*$/i', '', trim($pm[1] ?? '')));
         }
-        
         if (!empty($finalProductName)) {
-            $finalProductName = trim($finalProductName, '-');
-            $finalProductName = trim($finalProductName);
+            $finalProductName = trim($finalProductName, '- ');
         }
     }
-    
-    // تعيين اسم المنتج النهائي (نفس طريقة طلبات العملاء - السطر 1971)
-    // في customer_orders.php: echo htmlspecialchars($item['product_name'] ?? '-');
-    // استخدام القيمة الفارغة بدلاً من null لضمان العرض الصحيح
+
     $task['product_name'] = !empty($finalProductName) ? $finalProductName : '';
-    // #region agent log
-    // كتابة آمنة في debug.log - التحقق من وجود المجلد أولاً
-    $debugLogPath = __DIR__ . '/../../.cursor/debug.log';
-    $debugLogDir = dirname($debugLogPath);
-    if (!is_dir($debugLogDir)) {
-        @mkdir($debugLogDir, 0755, true);
-    }
-    if (is_dir($debugLogDir) && is_writable($debugLogDir)) {
-        @file_put_contents($debugLogPath, json_encode([
-            'timestamp' => time() * 1000,
-            'location' => 'tasks.php:' . __LINE__,
-            'message' => 'Final product_name assigned to task',
-            'data' => ['task_id' => $task['id'] ?? 0, 'final_product_name' => $task['product_name']],
-            'sessionId' => 'debug-session',
-            'runId' => 'run1',
-            'hypothesisId' => 'A'
-        ]) . "\n", FILE_APPEND);
-    }
-    // #endregion
-    
-    // إزالة product_name_from_db لأنه لم يعد مطلوباً
     unset($task['product_name_from_db']);
-    
     $task['all_workers'] = $allWorkers;
     $task['workers_count'] = count($allWorkers);
 }
@@ -1513,76 +1334,35 @@ unset($task);
 
 $users = $db->query("SELECT id, full_name FROM users WHERE status = 'active' AND role = 'production' ORDER BY full_name");
 
-// Fetch active drivers for driver assignment
 $drivers = $db->query("SELECT id, full_name FROM users WHERE status = 'active' AND role = 'driver' ORDER BY full_name");
 if (!is_array($drivers)) $drivers = [];
 
-// جلب القوالب (templates) لعرضها في القائمة المنسدلة
+// ── جلب القوالب مع batch lookup لـ product IDs ──
 $products = [];
 try {
-    // محاولة جلب من unified_product_templates أولاً (الأحدث)
-    $unifiedTemplatesCheck = $db->queryOne("SHOW TABLES LIKE 'unified_product_templates'");
-    if (!empty($unifiedTemplatesCheck)) {
-        $unifiedTemplates = $db->query("
-            SELECT DISTINCT product_name as name
-            FROM unified_product_templates 
-            WHERE status = 'active' 
-            ORDER BY product_name ASC
-        ");
-        foreach ($unifiedTemplates as $template) {
-            // البحث عن product_id المقابل في جدول products
-            $product = $db->queryOne(
-                "SELECT id FROM products WHERE name = ? AND status = 'active' LIMIT 1",
-                [$template['name']]
-            );
-            if ($product && !empty($product['id'])) {
-                $products[] = [
-                    'id' => (int)$product['id'],
-                    'name' => $template['name']
-                ];
-            } else {
-                // إذا لم يتم العثور على product_id، استخدم id سالب للتمييز
-                // سنبحث عن product_id عند الحفظ باستخدام product_name
-                // نستخدم id سالب كبير لتجنب التعارض مع أي product_id حقيقي
-                $products[] = [
-                    'id' => -999999, // سيتم التعامل معه عند الحفظ
-                    'name' => $template['name']
-                ];
-            }
-        }
+    $templateNames = [];
+    if ($unifiedTemplatesExists) {
+        $templateNames = $db->query("SELECT DISTINCT product_name as name FROM unified_product_templates WHERE status = 'active' ORDER BY product_name ASC") ?: [];
     }
-    
-    // إذا لم توجد قوالب في unified_product_templates، جرب product_templates
-    if (empty($products)) {
-        $templatesCheck = $db->queryOne("SHOW TABLES LIKE 'product_templates'");
-        if (!empty($templatesCheck)) {
-            $legacyTemplates = $db->query("
-                SELECT DISTINCT product_name as name
-                FROM product_templates 
-                WHERE status = 'active' 
-                ORDER BY product_name ASC
-            ");
-            foreach ($legacyTemplates as $template) {
-                // البحث عن product_id المقابل في جدول products
-                $product = $db->queryOne(
-                    "SELECT id FROM products WHERE name = ? AND status = 'active' LIMIT 1",
-                    [$template['name']]
-                );
-                if ($product && !empty($product['id'])) {
-                    $products[] = [
-                        'id' => (int)$product['id'],
-                        'name' => $template['name']
-                    ];
-                } else {
-                    // إذا لم يتم العثور على product_id، استخدم id سالب للتمييز
-                    // سنبحث عن product_id عند الحفظ باستخدام product_name
-                    // نستخدم id سالب كبير لتجنب التعارض مع أي product_id حقيقي
-                    $products[] = [
-                        'id' => -999999, // سيتم التعامل معه عند الحفظ
-                        'name' => $template['name']
-                    ];
-                }
-            }
+    if (empty($templateNames) && $productTemplatesExists) {
+        $templateNames = $db->query("SELECT DISTINCT product_name as name FROM product_templates WHERE status = 'active' ORDER BY product_name ASC") ?: [];
+    }
+
+    if (!empty($templateNames)) {
+        // Batch: جلب كل product IDs بإستعلام واحد
+        $tNames = array_column($templateNames, 'name');
+        $tph = implode(',', array_fill(0, count($tNames), '?'));
+        $pRows = $db->query("SELECT id, name FROM products WHERE name IN ($tph) AND status = 'active'", $tNames);
+        $productIdMap = [];
+        foreach ($pRows ?: [] as $pr) {
+            $productIdMap[trim($pr['name'])] = (int)$pr['id'];
+        }
+        foreach ($templateNames as $template) {
+            $name = $template['name'];
+            $products[] = [
+                'id' => $productIdMap[trim($name)] ?? -999999,
+                'name' => $name
+            ];
         }
     }
     

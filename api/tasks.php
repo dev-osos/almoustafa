@@ -129,36 +129,44 @@ try {
     $queryParams = array_merge($params, [$perPage, $offset]);
     $tasks = $db->query($taskSql, $queryParams);
     
-    // معالجة المهام (استخراج العمال من notes)
-    foreach ($tasks as &$task) {
+    // ── Batch: جمع كل worker IDs ثم استعلام واحد ──
+    $allWorkerIds = [];
+    $taskWorkerIdMap = [];
+    foreach ($tasks as $idx => $task) {
         $notes = $task['notes'] ?? '';
-        $allWorkers = [];
-        
-        // محاولة استخراج IDs من notes
         if (preg_match('/\[ASSIGNED_WORKERS_IDS\]:\s*([0-9,]+)/', $notes, $matches)) {
-            $workerIds = array_filter(array_map('intval', explode(',', $matches[1])));
-            if (!empty($workerIds)) {
-                $placeholders = implode(',', array_fill(0, count($workerIds), '?'));
-                $workers = $db->query(
-                    "SELECT id, full_name FROM users WHERE id IN ($placeholders) ORDER BY full_name",
-                    $workerIds
-                );
-                foreach ($workers as $worker) {
-                    $allWorkers[] = $worker['full_name'];
+            $wids = array_filter(array_map('intval', explode(',', $matches[1])));
+            $taskWorkerIdMap[$idx] = $wids;
+            foreach ($wids as $wid) {
+                $allWorkerIds[$wid] = true;
+            }
+        }
+    }
+    $workerNames = [];
+    if (!empty($allWorkerIds)) {
+        $wids = array_keys($allWorkerIds);
+        $wph = implode(',', array_fill(0, count($wids), '?'));
+        $wRows = $db->query("SELECT id, full_name FROM users WHERE id IN ($wph)", $wids);
+        foreach ($wRows ?: [] as $w) {
+            $workerNames[(int)$w['id']] = $w['full_name'];
+        }
+    }
+
+    foreach ($tasks as $idx => &$task) {
+        $allWorkers = [];
+        if (isset($taskWorkerIdMap[$idx])) {
+            foreach ($taskWorkerIdMap[$idx] as $wid) {
+                if (isset($workerNames[$wid])) {
+                    $allWorkers[] = $workerNames[$wid];
                 }
             }
         }
-        
-        // إذا لم نجد عمال من notes، استخدم assigned_to
         if (empty($allWorkers) && !empty($task['assigned_to_name'])) {
             $allWorkers[] = $task['assigned_to_name'];
         }
-        
         $task['all_workers'] = $allWorkers;
         $task['workers_count'] = count($allWorkers);
-        
-        // تنظيف البيانات الحساسة
-        unset($task['notes']); // إزالة notes من الاستجابة
+        unset($task['notes']);
     }
     unset($task);
     

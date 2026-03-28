@@ -815,14 +815,14 @@ $apiUrl = getRelativeUrl('api/register_returns.php');
             tableBody.appendChild(waitTr);
         }
 
-        var url = new URL(apiUrl, window.location.origin);
-        url.searchParams.set('action', 'get_returns');
-        url.searchParams.set('page', String(listPage));
-        if (filterDateFrom.value) url.searchParams.set('date_from', filterDateFrom.value);
-        if (filterDateTo.value) url.searchParams.set('date_to', filterDateTo.value);
-        if (filterSearch.value.trim()) url.searchParams.set('search', filterSearch.value.trim());
-
         try {
+            var url = new URL(apiUrl, window.location.href);
+            url.searchParams.set('action', 'get_returns');
+            url.searchParams.set('page', String(listPage));
+            if (filterDateFrom.value) url.searchParams.set('date_from', filterDateFrom.value);
+            if (filterDateTo.value) url.searchParams.set('date_to', filterDateTo.value);
+            if (filterSearch.value.trim()) url.searchParams.set('search', filterSearch.value.trim());
+
             var res = await fetch(url.toString(), { credentials: 'same-origin' });
             var data = await res.json();
             if (!data.success) throw new Error('failed');
