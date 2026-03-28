@@ -255,14 +255,16 @@ function handleSubmitSupply($db, $currentUser) {
 
     try {
         // Insert the supply record to get the ID
+        $tempNumber = '';
+        $userId = (int)$currentUser['id'];
         $stmt = $conn->prepare("INSERT INTO supplies (supply_number, created_at, created_by) VALUES (?, NOW(), ?)");
-        $stmt->bind_param('si', $supplyNumber, $userId);
+        $stmt->bind_param('si', $tempNumber, $userId);
         $stmt->execute();
         $supplyId = $conn->insert_id;
-        
+
         // Use the ID as the supply number
         $supplyNumber = (string)$supplyId;
-        
+
         // Update the supply record with the final number
         $updateStmt = $conn->prepare("UPDATE supplies SET supply_number = ? WHERE id = ?");
         $updateStmt->bind_param('si', $supplyNumber, $supplyId);
