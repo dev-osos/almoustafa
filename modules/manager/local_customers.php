@@ -5505,6 +5505,7 @@ var localPaperInvoicesData = [];
 var localPaperInvoiceReturnsData = [];
 var localCollectionsData = [];
 var localTaskPurchasesData = [];
+var localReturnInvoicesData = [];
 var localPurchaseHistoryCurrentBalance = 0;
 var printTaskReceiptBaseUrl = '<?php echo getRelativeUrl("print_task_receipt.php"); ?>';
 var localSelectedItemsForReturn = [];
@@ -6340,11 +6341,12 @@ function loadLocalCustomerPurchaseHistory() {
             localPaperInvoiceReturnsData = data.paper_invoice_returns || [];
             localCollectionsData = data.collections || [];
             localTaskPurchasesData = data.task_purchases || [];
+            localReturnInvoicesData = data.return_invoices || [];
             localPurchaseHistoryCurrentBalance = (data.customer && data.customer.balance !== undefined) ? parseFloat(data.customer.balance) : 0;
-            console.log('Purchase history data:', localPurchaseHistoryData.length, 'items; paper invoices:', localPaperInvoicesData.length, 'paper returns:', localPaperInvoiceReturnsData.length, 'task purchases:', localTaskPurchasesData.length);
-            
+            console.log('Purchase history data:', localPurchaseHistoryData.length, 'items; paper invoices:', localPaperInvoicesData.length, 'paper returns:', localPaperInvoiceReturnsData.length, 'task purchases:', localTaskPurchasesData.length, 'return invoices:', localReturnInvoicesData.length);
+
             try {
-                displayLocalPurchaseHistory(localPurchaseHistoryData, localPaperInvoicesData, localPaperInvoiceReturnsData, localPurchaseHistoryCurrentBalance, localCollectionsData, localTaskPurchasesData);
+                displayLocalPurchaseHistory(localPurchaseHistoryData, localPaperInvoicesData, localPaperInvoiceReturnsData, localPurchaseHistoryCurrentBalance, localCollectionsData, localTaskPurchasesData, null, localReturnInvoicesData);
             } catch (displayErr) {
                 console.error('displayLocalPurchaseHistory error:', displayErr);
                 if (typeof showError === 'function') showError('خطأ في عرض البيانات', displayErr.message || String(displayErr));
@@ -6426,7 +6428,8 @@ function applyLocalPurchaseHistoryFilters() {
         localPurchaseHistoryCurrentBalance,
         localCollectionsData || [],
         localTaskPurchasesData || [],
-        opts
+        opts,
+        localReturnInvoicesData || []
     );
 }
 window.applyLocalPurchaseHistoryFilters = applyLocalPurchaseHistoryFilters;
@@ -6456,7 +6459,8 @@ function clearLocalPurchaseHistoryFilters() {
         localPurchaseHistoryCurrentBalance,
         localCollectionsData || [],
         localTaskPurchasesData || [],
-        {}
+        {},
+        localReturnInvoicesData || []
     );
 }
 window.clearLocalPurchaseHistoryFilters = clearLocalPurchaseHistoryFilters;
@@ -6841,7 +6845,7 @@ window.submitLocalTaskTransfer = submitLocalTaskTransfer;
 
 // دالة عرض سجل المشتريات (سطر واحد لكل فاتورة) + الفواتير الورقية + مرتجعات الفواتير الورقية + أوردرات معتمدة + التحصيلات + الرصيد بعد كل معاملة
 // معامل سادس: taskPurchases (أوردرات إنتاج معتمدة)، معامل سابع: filterOptions { searchText, dateFrom, dateTo, sortOrder }
-function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns, currentBalance, collections, taskPurchases, filterOptions) {
+function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns, currentBalance, collections, taskPurchases, filterOptions, returnInvoices) {
     history = Array.isArray(history) ? history : (history ? [history] : []);
     paperInvoices = paperInvoices || [];
     paperInvoiceReturns = paperInvoiceReturns || [];
@@ -6969,6 +6973,17 @@ function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns
         const colCreatedBy = (col.created_by_name || '-').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         var labelText = 'تحصيل - ' + (col.collection_number || col.id);
         var entry = { sortDate: normDate(col.date || col.created_at), effect: -amount, labelText: labelText, amountNum: amount, cells: ['<td>' + safeNum + '</td>', '<td class="text-success">' + amount.toFixed(2) + ' ج.م (تحصيل)</td>', '<td>' + dateStr + '</td>', '<td>' + colCreatedBy + '</td>', '<td><span class="text-muted small">تحصيل</span></td>'] };
+        entry.searchableText = buildSearchableText(labelText, amount, dateStr);
+        allEntries.push(entry);
+    });
+    returnInvoices = returnInvoices || [];
+    returnInvoices.forEach(function(ri) {
+        const safeNum = ('مرتجع - ' + (ri.invoice_number || ri.id)).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const dateStr = (ri.return_date || ri.created_at || '-').toString().substring(0, 10);
+        const amount = parseFloat(ri.grand_total || 0);
+        const riCreatedBy = (ri.created_by_name || '-').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        var labelText = 'مرتجع - ' + (ri.invoice_number || ri.id);
+        var entry = { sortDate: normDate(ri.return_date || ri.created_at), effect: -amount, labelText: labelText, amountNum: amount, cells: ['<td class="text-danger">' + safeNum + '</td>', '<td class="text-danger">-' + amount.toFixed(2) + ' ج.م</td>', '<td>' + dateStr + '</td>', '<td>' + riCreatedBy + '</td>', '<td><span class="text-muted small">مرتجع</span></td>'] };
         entry.searchableText = buildSearchableText(labelText, amount, dateStr);
         allEntries.push(entry);
     });

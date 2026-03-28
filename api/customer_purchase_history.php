@@ -252,13 +252,15 @@ function handleGetHistory($currentUser): void
         $paperInvoiceReturns = [];
         $collections = [];
         $taskPurchases = [];
+        $returnInvoices = [];
         if ($isLocalCustomer) {
             $paperInvoices = getLocalCustomerPaperInvoices($db, $customerId);
             $paperInvoiceReturns = getLocalCustomerPaperInvoiceReturns($db, $customerId);
             $collections = getLocalCustomerCollections($db, $customerId);
             $taskPurchases = getLocalCustomerTaskPurchases($db, $customerId);
+            $returnInvoices = getLocalCustomerReturnInvoices($db, $customerId);
         }
-        
+
         returnJsonResponse([
             'success' => true,
             'customer' => [
@@ -272,7 +274,8 @@ function handleGetHistory($currentUser): void
             'paper_invoices' => $paperInvoices,
             'paper_invoice_returns' => $paperInvoiceReturns,
             'collections' => $collections,
-            'task_purchases' => $taskPurchases
+            'task_purchases' => $taskPurchases,
+            'return_invoices' => $returnInvoices
         ]);
         
     } catch (Throwable $e) {
@@ -843,6 +846,46 @@ function getLocalCustomerPaperInvoiceReturns($db, $customerId): array
         return $out;
     } catch (Throwable $e) {
         error_log('getLocalCustomerPaperInvoiceReturns error: ' . $e->getMessage());
+        return [];
+    }
+}
+
+/**
+ * Get local customer return invoices (فواتير المرتجعات من صفحة تسجيل المرتجعات)
+ */
+function getLocalCustomerReturnInvoices($db, $customerId): array
+{
+    try {
+        $tableExists = $db->queryOne("SHOW TABLES LIKE 'return_invoices'");
+        if (empty($tableExists)) {
+            return [];
+        }
+        $rows = $db->query(
+            "SELECT ri.id, ri.invoice_number, ri.grand_total, ri.created_at, ri.created_by,
+                    COALESCE(u.full_name, '') as created_by_name
+             FROM return_invoices ri
+             LEFT JOIN users u ON ri.created_by = u.id
+             WHERE ri.customer_id = ? AND ri.customer_type = 'local'
+             ORDER BY ri.created_at DESC, ri.id DESC",
+            [$customerId]
+        );
+        if (!$rows) {
+            return [];
+        }
+        $out = [];
+        foreach ($rows as $row) {
+            $out[] = [
+                'id' => (int)$row['id'],
+                'invoice_number' => trim($row['invoice_number'] ?? ''),
+                'grand_total' => (float)($row['grand_total'] ?? 0),
+                'created_at' => $row['created_at'] ?? '',
+                'return_date' => isset($row['created_at']) ? date('Y-m-d', strtotime($row['created_at'])) : '',
+                'created_by_name' => $row['created_by_name'] ?? ''
+            ];
+        }
+        return $out;
+    } catch (Throwable $e) {
+        error_log('getLocalCustomerReturnInvoices error: ' . $e->getMessage());
         return [];
     }
 }
