@@ -161,7 +161,7 @@ $dashboardUrl = getDashboardUrl($userRole);
                                    id="fullName" 
                                    name="full_name"
                                    value="<?php echo htmlspecialchars($user['full_name'] ?? ''); ?>"
-                                   required>
+                                   disabled>
                         </div>
                         
                         <!-- رقم الهاتف -->
