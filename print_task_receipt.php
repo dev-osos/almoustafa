@@ -648,7 +648,7 @@ $singleReceipt = count($receipts) === 1;
         <table class="info-table customer-priority-row" style="margin: 12px 0;">
             <tr>
                 <td>العميل:</td>
-                <td><?php echo $customerName !== '' ? htmlspecialchars($customerName) : '-'; ?><?php if ($customerId > 0): ?> <span style="font-size:10px; color:#666;">(#<?php echo $customerId; ?>)</span><?php endif; ?></td>
+                <td><?php echo $customerName !== '' ? htmlspecialchars($customerName) : '-'; ?><?php if ($customerId > 0): ?> <span style="font-size:14px; color:#666;">(#<?php echo $customerId; ?>)</span><?php endif; ?></td>
                 <td>النوع :</td>
                 <td><?php echo htmlspecialchars($taskTypeLabel); ?></td>
             </tr>
