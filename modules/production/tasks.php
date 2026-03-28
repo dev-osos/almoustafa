@@ -79,9 +79,32 @@ try {
     if (!empty($statusColumn['Type'])) {
         $typeStr = (string) $statusColumn['Type'];
         if (stripos($typeStr, 'with_delegate') === false) {
-            $db->execute("ALTER TABLE tasks MODIFY COLUMN status ENUM('pending','received','in_progress','completed','with_delegate','delivered','returned','cancelled') DEFAULT 'pending'");
+            $db->execute("ALTER TABLE tasks MODIFY COLUMN status ENUM('pending','received','in_progress','completed','with_delegate','with_driver','delivered','returned','cancelled') DEFAULT 'pending'");
             error_log('Extended tasks.status ENUM with with_delegate in production/tasks.php');
         }
+    }
+    $statusColumn2 = $db->queryOne("SHOW COLUMNS FROM tasks LIKE 'status'");
+    if (!empty($statusColumn2['Type'])) {
+        $typeStr2 = (string) $statusColumn2['Type'];
+        if (stripos($typeStr2, 'with_driver') === false) {
+            $db->execute("ALTER TABLE tasks MODIFY COLUMN status ENUM('pending','received','in_progress','completed','with_delegate','with_driver','delivered','returned','cancelled') DEFAULT 'pending'");
+            error_log('Extended tasks.status ENUM with with_driver');
+        }
+    }
+    $daTable = $db->queryOne("SHOW TABLES LIKE 'driver_assignments'");
+    if (empty($daTable)) {
+        $db->execute("CREATE TABLE driver_assignments (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            task_id INT NOT NULL,
+            driver_id INT NOT NULL,
+            assigned_by INT NOT NULL,
+            status ENUM('pending','accepted','rejected') DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            responded_at TIMESTAMP NULL,
+            INDEX idx_da_task (task_id),
+            INDEX idx_da_driver_status (driver_id, status)
+        )");
+        error_log('Created driver_assignments table');
     }
 } catch (Exception $e) {
     error_log('Error checking/adding columns in production/tasks.php: ' . $e->getMessage());
@@ -649,7 +672,7 @@ function tasksHandleAction(string $action, array $input, array $context): array
                     throw new RuntimeException('معرف المهمة غير صحيح');
                 }
 
-                $task = $db->queryOne('SELECT assigned_to, status, title, created_by, notes FROM tasks WHERE id = ?', [$taskId]);
+                $task = $db->queryOne('SELECT assigned_to, status, title, created_by, notes, task_type, related_type FROM tasks WHERE id = ?', [$taskId]);
                 if (!$task) {
                     throw new RuntimeException('المهمة غير موجودة');
                 }
@@ -690,6 +713,10 @@ function tasksHandleAction(string $action, array $input, array $context): array
                     }
                     if (($task['status'] ?? '') !== 'completed') {
                         throw new RuntimeException('يمكن تطبيق مع المندوب على المهام المكتملة فقط');
+                    }
+                    $backendTaskType = (strpos((string)($task['related_type'] ?? ''), 'manager_') === 0) ? substr((string)$task['related_type'], 8) : ($task['task_type'] ?? 'general');
+                    if ($backendTaskType !== 'telegraph') {
+                        throw new RuntimeException('مع المندوب متاح فقط لأوردرات التليجراف');
                     }
                 } else {
                     if (!$isProduction) {
@@ -1937,7 +1964,8 @@ function tasksHtml(string $value): string
                                                 if ($workersCheck && (int)$workersCheck['count'] > 0) $isTaskForProduction = true;
                                             }
                                         }
-                                        $canWithDelegate = ($isManager || $isProduction || $isDriver) && ($task['status'] ?? '') === 'completed';
+                                        $canWithDelegateType = (strpos(isset($task['related_type']) ? (string)$task['related_type'] : '', 'manager_') === 0) ? substr((string)$task['related_type'], 8) : ($task['task_type'] ?? 'general');
+                                        $canWithDelegate = ($isManager || $isProduction || $isDriver) && ($task['status'] ?? '') === 'completed' && $canWithDelegateType === 'telegraph';
                                         $canDeliverReturn = ($isManager || $isProduction || $isDriver) && in_array($task['status'] ?? '', ['completed', 'with_delegate'], true);
                                         $canDeliverReturnDriver = in_array($task['status'] ?? '', ['completed', 'with_delegate'], true);
                                         $taskCustomerPhone = isset($task['customer_phone']) ? trim((string) $task['customer_phone']) : '';
@@ -2613,14 +2641,14 @@ function tasksHtml(string $value): string
         'cancelled': 'secondary'
     };
 
-    function buildActionsHtml(taskId, newStatus) {
+    function buildActionsHtml(taskId, newStatus, taskType) {
         var flags = window.TASK_PAGE_FLAGS || {};
         var html = '<div class="btn-group btn-group-sm" role="group">';
         if (flags.isProduction) {
             if (['pending', 'received', 'in_progress'].indexOf(newStatus) !== -1) {
                 html += '<button type="button" class="btn btn-outline-success" onclick="submitTaskAction(\'complete_task\', ' + taskId + ')"><i class="bi bi-check2-circle me-1"></i>إكمال</button>';
             }
-            if (newStatus === 'completed') {
+            if (newStatus === 'completed' && taskType === 'telegraph') {
                 html += '<button type="button" class="btn btn-outline-info btn-sm" onclick="submitTaskAction(\'with_delegate_task\', ' + taskId + ')"><i class="bi bi-person-badge me-1"></i>مع المندوب</button>';
             }
         }
@@ -2650,7 +2678,8 @@ function tasksHtml(string $value): string
             statusCell.innerHTML = '<span class="badge bg-' + cls + '">' + sanitizeText(label) + '</span>';
         }
         if (actionsCell) {
-            actionsCell.innerHTML = buildActionsHtml(taskId, newStatus);
+            var taskType = row.getAttribute('data-task-type') || '';
+            actionsCell.innerHTML = buildActionsHtml(taskId, newStatus, taskType);
         }
     }
 
