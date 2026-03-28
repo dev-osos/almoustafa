@@ -286,16 +286,34 @@ if ($isWalletControlAjax) {
     $selectedUserBalanceRaw = 0;
     $transactionsTotalCountAjax = 0;
     $transactionsTotalPagesAjax = 0;
+    // فلاتر AJAX
+    $ajaxFilterDateFrom = isset($_GET['filter_date_from']) && $_GET['filter_date_from'] !== '' ? $_GET['filter_date_from'] : null;
+    $ajaxFilterDateTo = isset($_GET['filter_date_to']) && $_GET['filter_date_to'] !== '' ? $_GET['filter_date_to'] : null;
+    $ajaxFilterType = isset($_GET['filter_type']) && $_GET['filter_type'] !== '' ? $_GET['filter_type'] : null;
+    $ajaxFilterReason = isset($_GET['filter_reason']) && trim($_GET['filter_reason']) !== '' ? trim($_GET['filter_reason']) : null;
+    $ajaxFilterAmountFrom = isset($_GET['filter_amount_from']) && $_GET['filter_amount_from'] !== '' ? (float)$_GET['filter_amount_from'] : null;
+    $ajaxFilterAmountTo = isset($_GET['filter_amount_to']) && $_GET['filter_amount_to'] !== '' ? (float)$_GET['filter_amount_to'] : null;
+
     if ($selectedUserIdAjax > 0) {
         $selectedUserBalanceRaw = $userBalancesAjax[$selectedUserIdAjax] ?? 0;
         $selectedUserBalanceFormatted = formatCurrency($selectedUserBalanceRaw);
-        $countRowAjax = $db->queryOne("SELECT COUNT(*) AS cnt FROM user_wallet_transactions WHERE user_id = ?", [$selectedUserIdAjax]);
+
+        $txWhereAjax = "WHERE t.user_id = ?";
+        $txParamsAjax = [$selectedUserIdAjax];
+        if ($ajaxFilterDateFrom !== null) { $txWhereAjax .= " AND DATE(t.created_at) >= ?"; $txParamsAjax[] = $ajaxFilterDateFrom; }
+        if ($ajaxFilterDateTo !== null) { $txWhereAjax .= " AND DATE(t.created_at) <= ?"; $txParamsAjax[] = $ajaxFilterDateTo; }
+        if ($ajaxFilterType !== null) { $txWhereAjax .= " AND t.type = ?"; $txParamsAjax[] = $ajaxFilterType; }
+        if ($ajaxFilterReason !== null) { $txWhereAjax .= " AND t.reason LIKE ?"; $txParamsAjax[] = '%' . $ajaxFilterReason . '%'; }
+        if ($ajaxFilterAmountFrom !== null) { $txWhereAjax .= " AND t.amount >= ?"; $txParamsAjax[] = $ajaxFilterAmountFrom; }
+        if ($ajaxFilterAmountTo !== null) { $txWhereAjax .= " AND t.amount <= ?"; $txParamsAjax[] = $ajaxFilterAmountTo; }
+
+        $countRowAjax = $db->queryOne("SELECT COUNT(*) AS cnt FROM user_wallet_transactions t $txWhereAjax", $txParamsAjax);
         $transactionsTotalCountAjax = (int)($countRowAjax['cnt'] ?? 0);
         $transactionsTotalPagesAjax = $transactionsTotalCountAjax > 0 ? (int)ceil($transactionsTotalCountAjax / $perPageAjax) : 0;
         $txOffsetAjax = ($txPageAjax - 1) * $perPageAjax;
         $selectedTransactionsAjax = $db->query(
-            "SELECT t.*, u.full_name as created_by_name FROM user_wallet_transactions t LEFT JOIN users u ON u.id = t.created_by WHERE t.user_id = ? ORDER BY t.created_at DESC LIMIT " . (int)$perPageAjax . " OFFSET " . (int)$txOffsetAjax,
-            [$selectedUserIdAjax]
+            "SELECT t.*, u.full_name as created_by_name FROM user_wallet_transactions t LEFT JOIN users u ON u.id = t.created_by $txWhereAjax ORDER BY t.created_at DESC LIMIT " . (int)$perPageAjax . " OFFSET " . (int)$txOffsetAjax,
+            $txParamsAjax
         ) ?: [];
     }
     $typeLabelsAjax = ['deposit' => 'إيداع', 'withdrawal' => 'سحب', 'custody_add' => 'عهدة', 'custody_retrieve' => 'استرجاع عهدة'];
@@ -547,16 +565,33 @@ $selectedUser = null;
 $selectedTransactions = [];
 $transactionsTotalCount = 0;
 $transactionsTotalPages = 0;
+// فلاتر سجل المعاملات
+$filterDateFrom = isset($_GET['filter_date_from']) && $_GET['filter_date_from'] !== '' ? $_GET['filter_date_from'] : null;
+$filterDateTo = isset($_GET['filter_date_to']) && $_GET['filter_date_to'] !== '' ? $_GET['filter_date_to'] : null;
+$filterType = isset($_GET['filter_type']) && $_GET['filter_type'] !== '' ? $_GET['filter_type'] : null;
+$filterReason = isset($_GET['filter_reason']) && trim($_GET['filter_reason']) !== '' ? trim($_GET['filter_reason']) : null;
+$filterAmountFrom = isset($_GET['filter_amount_from']) && $_GET['filter_amount_from'] !== '' ? (float)$_GET['filter_amount_from'] : null;
+$filterAmountTo = isset($_GET['filter_amount_to']) && $_GET['filter_amount_to'] !== '' ? (float)$_GET['filter_amount_to'] : null;
+
 if ($selectedUserId > 0) {
     $selectedUser = $db->queryOne("SELECT id, full_name, username, role FROM users WHERE id = ? AND role IN ('driver', 'production')", [$selectedUserId]);
     if ($selectedUser) {
-        $countRow = $db->queryOne("SELECT COUNT(*) AS cnt FROM user_wallet_transactions WHERE user_id = ?", [$selectedUserId]);
+        $txWhere = "WHERE t.user_id = ?";
+        $txParams = [$selectedUserId];
+        if ($filterDateFrom !== null) { $txWhere .= " AND DATE(t.created_at) >= ?"; $txParams[] = $filterDateFrom; }
+        if ($filterDateTo !== null) { $txWhere .= " AND DATE(t.created_at) <= ?"; $txParams[] = $filterDateTo; }
+        if ($filterType !== null) { $txWhere .= " AND t.type = ?"; $txParams[] = $filterType; }
+        if ($filterReason !== null) { $txWhere .= " AND t.reason LIKE ?"; $txParams[] = '%' . $filterReason . '%'; }
+        if ($filterAmountFrom !== null) { $txWhere .= " AND t.amount >= ?"; $txParams[] = $filterAmountFrom; }
+        if ($filterAmountTo !== null) { $txWhere .= " AND t.amount <= ?"; $txParams[] = $filterAmountTo; }
+
+        $countRow = $db->queryOne("SELECT COUNT(*) AS cnt FROM user_wallet_transactions t $txWhere", $txParams);
         $transactionsTotalCount = (int)($countRow['cnt'] ?? 0);
         $transactionsTotalPages = $transactionsTotalCount > 0 ? (int)ceil($transactionsTotalCount / $transactionsPerPage) : 0;
         $txOffset = ($txPage - 1) * $transactionsPerPage;
         $selectedTransactions = $db->query(
-            "SELECT t.*, u.full_name as created_by_name FROM user_wallet_transactions t LEFT JOIN users u ON u.id = t.created_by WHERE t.user_id = ? ORDER BY t.created_at DESC LIMIT " . (int)$transactionsPerPage . " OFFSET " . (int)$txOffset,
-            [$selectedUserId]
+            "SELECT t.*, u.full_name as created_by_name FROM user_wallet_transactions t LEFT JOIN users u ON u.id = t.created_by $txWhere ORDER BY t.created_at DESC LIMIT " . (int)$transactionsPerPage . " OFFSET " . (int)$txOffset,
+            $txParams
         ) ?: [];
     }
 }
@@ -739,6 +774,44 @@ $roleLabels = ['driver' => 'سائق', 'production' => 'عامل إنتاج'];
                         <i class="bi bi-journal-text me-2"></i>سجل معاملات <?php echo htmlspecialchars($selectedUser['full_name'] ?: $selectedUser['username']); ?>
                     </div>
                     <div class="card-body p-0">
+                        <div class="p-3 bg-light border-bottom" id="wallets-tx-filters">
+                            <form id="wallets-tx-filter-form" class="row g-2 align-items-end">
+                                <div class="col-6 col-md-2">
+                                    <label class="form-label small mb-1">من تاريخ</label>
+                                    <input type="date" class="form-control form-control-sm" name="filter_date_from" value="<?php echo htmlspecialchars($filterDateFrom ?? ''); ?>">
+                                </div>
+                                <div class="col-6 col-md-2">
+                                    <label class="form-label small mb-1">إلى تاريخ</label>
+                                    <input type="date" class="form-control form-control-sm" name="filter_date_to" value="<?php echo htmlspecialchars($filterDateTo ?? ''); ?>">
+                                </div>
+                                <div class="col-6 col-md-2">
+                                    <label class="form-label small mb-1">النوع</label>
+                                    <select class="form-select form-select-sm" name="filter_type">
+                                        <option value="">الكل</option>
+                                        <option value="deposit" <?php echo ($filterType ?? '') === 'deposit' ? 'selected' : ''; ?>>إيداع</option>
+                                        <option value="withdrawal" <?php echo ($filterType ?? '') === 'withdrawal' ? 'selected' : ''; ?>>سحب</option>
+                                        <option value="custody_add" <?php echo ($filterType ?? '') === 'custody_add' ? 'selected' : ''; ?>>عهدة</option>
+                                        <option value="custody_retrieve" <?php echo ($filterType ?? '') === 'custody_retrieve' ? 'selected' : ''; ?>>استرجاع عهدة</option>
+                                    </select>
+                                </div>
+                                <div class="col-6 col-md-2">
+                                    <label class="form-label small mb-1">السبب / الوصف</label>
+                                    <input type="text" class="form-control form-control-sm" name="filter_reason" placeholder="بحث..." value="<?php echo htmlspecialchars($filterReason ?? ''); ?>">
+                                </div>
+                                <div class="col-6 col-md-1">
+                                    <label class="form-label small mb-1">مبلغ من</label>
+                                    <input type="number" step="0.01" class="form-control form-control-sm" name="filter_amount_from" placeholder="من" value="<?php echo $filterAmountFrom !== null ? htmlspecialchars($filterAmountFrom) : ''; ?>">
+                                </div>
+                                <div class="col-6 col-md-1">
+                                    <label class="form-label small mb-1">مبلغ إلى</label>
+                                    <input type="number" step="0.01" class="form-control form-control-sm" name="filter_amount_to" placeholder="إلى" value="<?php echo $filterAmountTo !== null ? htmlspecialchars($filterAmountTo) : ''; ?>">
+                                </div>
+                                <div class="col-12 col-md-2 d-flex gap-1">
+                                    <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-funnel me-1"></i>فلترة</button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" id="wallets-tx-filter-reset"><i class="bi bi-x-lg"></i></button>
+                                </div>
+                            </form>
+                        </div>
                         <div class="table-responsive">
                             <table class="table table-hover mb-0">
                                 <thead class="table-light">
@@ -1070,6 +1143,28 @@ $roleLabels = ['driver' => 'سائق', 'production' => 'عامل إنتاج'];
                     approveAllUserBtn.disabled = false;
                     approveAllUserBtn.innerHTML = origHtml;
                 });
+        });
+    }
+    // فلترة سجل المعاملات
+    var filterForm = document.getElementById('wallets-tx-filter-form');
+    var filterResetBtn = document.getElementById('wallets-tx-filter-reset');
+    if (filterForm) {
+        filterForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            var params = new URLSearchParams(window.location.search);
+            var fd = new FormData(filterForm);
+            // مسح الفلاتر القديمة
+            ['filter_date_from','filter_date_to','filter_type','filter_reason','filter_amount_from','filter_amount_to'].forEach(function(k) { params.delete(k); });
+            fd.forEach(function(val, key) { if (val !== '') params.set(key, val); });
+            params.set('tx_page', '1');
+            window.location.search = params.toString();
+        });
+    }
+    if (filterResetBtn) {
+        filterResetBtn.addEventListener('click', function() {
+            var params = new URLSearchParams(window.location.search);
+            ['filter_date_from','filter_date_to','filter_type','filter_reason','filter_amount_from','filter_amount_to','tx_page'].forEach(function(k) { params.delete(k); });
+            window.location.search = params.toString();
         });
     }
 })();
