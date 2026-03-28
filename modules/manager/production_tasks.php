@@ -3721,7 +3721,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                 <?php endif; ?>
 
                 <button type="button" class="btn btn-outline-info btn-sm" id="exportSelectedExcelBtn" title="تصدير CSV حسب الفترة">
-                    <i class="bi bi-file-earmark-spreadsheet me-1"></i>شيت فواتير   (<span id="exportSelectedCount">0</span>)
+                    <i class="bi bi-file-earmark-spreadsheet me-1"></i>شيت فواتير 
                 </button>
                 <?php endif; ?>
             </div>

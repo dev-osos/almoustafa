@@ -2168,7 +2168,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             <tr>
                                 <td><strong><?php echo (int)$customer['id']; ?></strong></td>
                                 <td>
-                                    <strong><?php echo htmlspecialchars($customer['name']); ?></strong>
+                                    <strong style="cursor:pointer;" onclick="copyCustomerInfo(<?php echo (int)$customer['id']; ?>, '<?php echo addslashes(htmlspecialchars($customer['name'])); ?>', '<?php echo addslashes(htmlspecialchars($customer['address'] ?? '-')); ?>', '<?php echo number_format(abs((float)($customer['balance'] ?? 0)), 2, '.', ''); ?>')" title="اضغط للنسخ"><?php echo htmlspecialchars($customer['name']); ?></strong>
                                     <?php
                                     $balanceUpdatedAt = isset($customer['balance_updated_at']) ? trim($customer['balance_updated_at']) : '';
                                     if (!empty($balanceUpdatedAt) && function_exists('formatDateTime')): ?>
@@ -10456,5 +10456,21 @@ function closeImportLocalCustomersCard() {
     }
     
     })(); // End runLocalCustomersDOMInit
+
+    function copyCustomerInfo(id, name, address, balance) {
+        var text = id + ' - ' + name + ' - ' + address + ' - ' + balance;
+        navigator.clipboard.writeText(text).then(function() {
+            Swal.fire({icon:'success', title:'تم النسخ', text: text, timer:1500, showConfirmButton:false});
+        }).catch(function() {
+            // fallback
+            var ta = document.createElement('textarea');
+            ta.value = text;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            Swal.fire({icon:'success', title:'تم النسخ', text: text, timer:1500, showConfirmButton:false});
+        });
+    }
 </script>
 <?php endif; ?>
