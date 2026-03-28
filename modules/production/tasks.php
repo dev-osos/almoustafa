@@ -1612,7 +1612,7 @@ if ($isDriver) {
 
 if ($isDriver) {
     // السائق: إحصائيات كل الأوردرات (مكتملة، مع المندوب، تم التوصيل، تم الارجاع)
-    $statsBaseConditions = ["status IN ('completed', 'with_delegate', 'delivered', 'returned')"];
+    $statsBaseConditions = ["status IN ('completed', 'with_delegate', 'with_driver', 'delivered', 'returned')"];
     $statsBaseParams = [];
 } else {
     $statsBaseConditions = [];
@@ -1639,9 +1639,10 @@ $stats = [
     'in_progress' => $buildStatsQuery("status = 'in_progress'"),
     'completed' => $buildStatsQuery("status = 'completed'"),
     'with_delegate' => $buildStatsQuery("status = 'with_delegate'"),
+    'with_driver' => $buildStatsQuery("status = 'with_driver'"),
     'delivered' => $buildStatsQuery("status = 'delivered'"),
     'returned' => $buildStatsQuery("status = 'returned'"),
-    'overdue' => $buildStatsQuery("status NOT IN ('completed','with_delegate','delivered','returned') AND due_date < CURDATE()")
+    'overdue' => $buildStatsQuery("status NOT IN ('completed','with_delegate','with_driver','delivered','returned','cancelled') AND due_date < CURDATE()")
 ];
 
 $tasksJson = tasksSafeJsonEncode($tasks);
@@ -1797,6 +1798,16 @@ function tasksHtml(string $value): string
                     <div class="card-body p-2">
                         <h5 class="<?php echo $statusFilter === 'with_delegate' ? 'text-white' : 'text-info'; ?> mb-0"><?php echo $stats['with_delegate']; ?></h5>
                         <small class="<?php echo $statusFilter === 'with_delegate' ? 'text-white-50' : 'text-muted'; ?>">مع المندوب</small>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-6 col-md-4 col-lg-2">
+            <a href="<?php echo $filterBaseUrl . (strpos($filterBaseUrl, '?') !== false ? '&' : '?'); ?>status=with_driver" class="text-decoration-none">
+                <div class="card <?php echo $statusFilter === 'with_driver' ? 'bg-primary text-white' : 'border-primary'; ?> text-center h-100">
+                    <div class="card-body p-2">
+                        <h5 class="<?php echo $statusFilter === 'with_driver' ? 'text-white' : 'text-primary'; ?> mb-0"><?php echo $stats['with_driver']; ?></h5>
+                        <small class="<?php echo $statusFilter === 'with_driver' ? 'text-white-50' : 'text-muted'; ?>">مع السائق</small>
                     </div>
                 </div>
             </a>
@@ -1986,6 +1997,7 @@ function tasksHtml(string $value): string
                                     'received' => 'مستلمة',
                                     'completed' => 'مكتملة',
                                     'with_delegate' => 'مع المندوب',
+                                    'with_driver' => 'مع السائق',
                                     'delivered' => 'تم التوصيل',
                                     'returned' => 'تم الارجاع',
                                     'cancelled' => 'ملغاة'
@@ -2080,6 +2092,7 @@ function tasksHtml(string $value): string
                                         $canAssignDriver = ($isManager || $isProduction) && ($task['status'] ?? '') === 'completed' && $canWithDelegateType !== 'telegraph' && empty($pendingDriverAssignments[(int) $task['id']]);
                                         $canDeliverReturn = ($isManager || $isProduction || $isDriver) && in_array($task['status'] ?? '', ['completed', 'with_delegate'], true);
                                         $canDeliverReturnDriver = in_array($task['status'] ?? '', ['completed', 'with_delegate'], true);
+                                        $canDeliverAsDriver = $isDriver && ($task['status'] ?? '') === 'with_driver';
                                         $taskCustomerPhone = isset($task['customer_phone']) ? trim((string) $task['customer_phone']) : '';
                                         $hasCustomerPhone = $taskCustomerPhone !== '';
                                         $taskIdInt = (int) $task['id'];
@@ -2099,9 +2112,15 @@ function tasksHtml(string $value): string
                                                 <?php if ($canWithDelegate): ?>
                                                     <li><button type="button" class="dropdown-item" onclick="submitTaskAction('with_delegate_task', <?php echo $taskIdInt; ?>)"><i class="bi bi-person-badge me-2"></i>مع المندوب</button></li>
                                                 <?php endif; ?>
+                                                <?php if ($canAssignDriver): ?>
+                                                    <li><button type="button" class="dropdown-item" onclick="openDriverAssignModal(<?php echo $taskIdInt; ?>)"><i class="bi bi-truck me-2"></i>مع السائق</button></li>
+                                                <?php endif; ?>
                                                 <?php if ($canDeliverReturn || ($isDriver && $canDeliverReturnDriver)): ?>
                                                     <li><button type="button" class="dropdown-item" onclick="submitTaskAction('deliver_task', <?php echo $taskIdInt; ?>)"><i class="bi bi-truck me-2"></i>تم التوصيل</button></li>
                                                     <li><button type="button" class="dropdown-item" onclick="submitTaskAction('return_task', <?php echo $taskIdInt; ?>)"><i class="bi bi-arrow-return-left me-2"></i>تم الارجاع</button></li>
+                                                <?php endif; ?>
+                                                <?php if ($canDeliverAsDriver): ?>
+                                                    <li><button type="button" class="dropdown-item" onclick="submitTaskAction('deliver_task', <?php echo $taskIdInt; ?>)"><i class="bi bi-truck me-2"></i>تم التوصيل</button></li>
                                                 <?php endif; ?>
                                                 <?php if ($isManager): ?>
                                                     <li><button type="button" class="dropdown-item" onclick="viewTask(<?php echo $taskIdInt; ?>)"><i class="bi bi-eye me-2"></i>عرض</button></li>
@@ -2296,6 +2315,85 @@ function tasksHtml(string $value): string
         </div>
     </div>
 </div>
+
+<!-- مودال تعيين سائق -->
+<div class="modal fade" id="driverAssignModal" tabindex="-1" aria-labelledby="driverAssignModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title" id="driverAssignModalLabel"><i class="bi bi-truck me-2"></i>تسليم للسائق</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="إغلاق"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="driverAssignTaskId" value="">
+                <div class="mb-3">
+                    <label for="driverSelect" class="form-label">اختر السائق</label>
+                    <select class="form-select" id="driverSelect">
+                        <option value="">-- اختر سائق --</option>
+                        <?php foreach ($drivers as $drv): ?>
+                            <option value="<?php echo (int) $drv['id']; ?>"><?php echo tasksHtml($drv['full_name']); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">إلغاء</button>
+                <button type="button" class="btn btn-info btn-sm text-white" onclick="submitDriverAssignment()">تسليم</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<?php if ($isDriver && !empty($pendingDriverRequests)): ?>
+<!-- مودال طلبات بانتظار موافقة السائق -->
+<div class="modal fade" id="pendingDriverRequestsModal" tabindex="-1" aria-labelledby="pendingDriverRequestsLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title" id="pendingDriverRequestsLabel">
+                    <i class="bi bi-bell me-2"></i>طلبات بانتظار موافقتك (<?php echo count($pendingDriverRequests); ?>)
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="إغلاق"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="list-group list-group-flush">
+                    <?php foreach ($pendingDriverRequests as $req):
+                        $reqType = (strpos((string)($req['related_type'] ?? ''), 'manager_') === 0) ? substr((string)$req['related_type'], 8) : ($req['task_type'] ?? 'general');
+                        $reqTypeLabels = ['shop_order' => 'اوردر محل', 'cash_customer' => 'عميل نقدي', 'telegraph' => 'تليجراف', 'shipping_company' => 'شركة شحن', 'general' => 'مهمة عامة', 'production' => 'إنتاج منتج'];
+                    ?>
+                    <div class="list-group-item" id="driverRequest-<?php echo (int) $req['assignment_id']; ?>">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div>
+                                <strong>أوردر #<?php echo (int) $req['task_id']; ?></strong>
+                                <span class="badge bg-secondary ms-1"><?php echo tasksHtml($reqTypeLabels[$reqType] ?? $reqType); ?></span>
+                            </div>
+                            <small class="text-muted"><?php echo tasksHtml($req['assigned_by_name'] ?? ''); ?></small>
+                        </div>
+                        <?php if (!empty($req['customer_name'])): ?>
+                            <p class="mb-1 text-muted"><i class="bi bi-person me-1"></i><?php echo tasksHtml($req['customer_name']); ?></p>
+                        <?php endif; ?>
+                        <?php if (!empty($req['product_name'])): ?>
+                            <p class="mb-2 text-muted"><i class="bi bi-box me-1"></i><?php echo tasksHtml($req['product_name']); ?> &times; <?php echo tasksHtml($req['quantity'] ?? ''); ?> <?php echo tasksHtml($req['unit'] ?? ''); ?></p>
+                        <?php endif; ?>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-success btn-sm flex-fill" onclick="respondDriverRequest(<?php echo (int) $req['assignment_id']; ?>, 'accept')">
+                                <i class="bi bi-check-lg me-1"></i>قبول
+                            </button>
+                            <button type="button" class="btn btn-outline-danger btn-sm flex-fill" onclick="respondDriverRequest(<?php echo (int) $req['assignment_id']; ?>, 'reject')">
+                                <i class="bi bi-x-lg me-1"></i>رفض
+                            </button>
+                        </div>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">إغلاق</button>
+            </div>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 
 <!-- ===== Cards للموبايل ===== -->
 
@@ -2738,6 +2836,7 @@ function tasksHtml(string $value): string
         'pending': 'معلقة',
         'completed': 'مكتملة',
         'with_delegate': 'مع المندوب',
+        'with_driver': 'مع السائق',
         'delivered': 'تم التوصيل',
         'returned': 'تم الارجاع',
         'cancelled': 'ملغاة'
@@ -2748,6 +2847,7 @@ function tasksHtml(string $value): string
         'in_progress': 'primary',
         'completed': 'success',
         'with_delegate': 'info',
+        'with_driver': 'primary',
         'delivered': 'success',
         'returned': 'secondary',
         'cancelled': 'secondary'
@@ -2767,6 +2867,9 @@ function tasksHtml(string $value): string
         if ((flags.isManager || flags.isProduction || flags.isDriver) && ['completed', 'with_delegate'].indexOf(newStatus) !== -1) {
             html += '<button type="button" class="btn btn-outline-success btn-sm" onclick="submitTaskAction(\'deliver_task\', ' + taskId + ')"><i class="bi bi-truck me-1"></i>تم التوصيل</button>';
             html += '<button type="button" class="btn btn-outline-secondary btn-sm" onclick="submitTaskAction(\'return_task\', ' + taskId + ')"><i class="bi bi-arrow-return-left me-1"></i>تم الارجاع</button>';
+        }
+        if (flags.isDriver && newStatus === 'with_driver') {
+            html += '<button type="button" class="btn btn-outline-success btn-sm" onclick="submitTaskAction(\'deliver_task\', ' + taskId + ')"><i class="bi bi-truck me-1"></i>تم التوصيل</button>';
         }
         if (flags.isManager) {
             html += '<button type="button" class="btn btn-outline-secondary" onclick="viewTask(' + taskId + ')"><i class="bi bi-eye"></i></button>';
@@ -2856,6 +2959,121 @@ function tasksHtml(string $value): string
         });
     };
 
+    // === Driver Assignment Functions ===
+
+    window.openDriverAssignModal = function(taskId) {
+        document.getElementById('driverAssignTaskId').value = taskId;
+        document.getElementById('driverSelect').value = '';
+        var modal = new bootstrap.Modal(document.getElementById('driverAssignModal'));
+        modal.show();
+    };
+
+    window.submitDriverAssignment = function() {
+        var taskId = parseInt(document.getElementById('driverAssignTaskId').value, 10) || 0;
+        var driverId = parseInt(document.getElementById('driverSelect').value, 10) || 0;
+        if (!taskId || !driverId) {
+            if (typeof window.showToast === 'function') {
+                window.showToast('يجب اختيار سائق', 'danger');
+            } else {
+                alert('يجب اختيار سائق');
+            }
+            return;
+        }
+        var formData = new FormData();
+        formData.append('action', 'assign_to_driver');
+        formData.append('task_id', taskId);
+        formData.append('driver_id', driverId);
+        var url = window.location.href;
+        if (url.indexOf('page=tasks') === -1) {
+            url = url + (url.indexOf('?') !== -1 ? '&' : '?') + 'page=tasks';
+        }
+        fetch(url, {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            body: formData
+        })
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+            var modal = bootstrap.Modal.getInstance(document.getElementById('driverAssignModal'));
+            if (modal) modal.hide();
+            if (data.success) {
+                if (typeof window.showToast === 'function') {
+                    window.showToast(data.success, 'success');
+                } else {
+                    alert(data.success);
+                }
+            } else if (data.error) {
+                if (typeof window.showToast === 'function') {
+                    window.showToast(data.error, 'danger');
+                } else {
+                    alert(data.error);
+                }
+            }
+        })
+        .catch(function(err) {
+            console.error('submitDriverAssignment error:', err);
+            alert('حدث خطأ أثناء تعيين السائق');
+        });
+    };
+
+    window.respondDriverRequest = function(assignmentId, response) {
+        var action = response === 'accept' ? 'accept_driver_assignment' : 'reject_driver_assignment';
+        var formData = new FormData();
+        formData.append('action', action);
+        formData.append('assignment_id', assignmentId);
+        var url = window.location.href;
+        if (url.indexOf('page=tasks') === -1) {
+            url = url + (url.indexOf('?') !== -1 ? '&' : '?') + 'page=tasks';
+        }
+        fetch(url, {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            body: formData
+        })
+        .then(function(resp) { return resp.json(); })
+        .then(function(data) {
+            if (data.success) {
+                var card = document.getElementById('driverRequest-' + assignmentId);
+                if (card) card.remove();
+                var remaining = document.querySelectorAll('#pendingDriverRequestsModal .list-group-item').length;
+                var titleEl = document.getElementById('pendingDriverRequestsLabel');
+                if (titleEl) {
+                    titleEl.textContent = 'طلبات بانتظار موافقتك (' + remaining + ')';
+                }
+                if (remaining === 0) {
+                    var modal = bootstrap.Modal.getInstance(document.getElementById('pendingDriverRequestsModal'));
+                    if (modal) modal.hide();
+                }
+                if (typeof window.showToast === 'function') {
+                    window.showToast(data.success, response === 'accept' ? 'success' : 'warning');
+                }
+                if (response === 'accept') {
+                    setTimeout(function() { window.location.reload(); }, 800);
+                }
+            } else if (data.error) {
+                if (typeof window.showToast === 'function') {
+                    window.showToast(data.error, 'danger');
+                } else {
+                    alert(data.error);
+                }
+            }
+        })
+        .catch(function(err) {
+            console.error('respondDriverRequest error:', err);
+            alert('حدث خطأ');
+        });
+    };
+
+    <?php if ($isDriver && !empty($pendingDriverRequests)): ?>
+    document.addEventListener('DOMContentLoaded', function() {
+        var pendingModal = document.getElementById('pendingDriverRequestsModal');
+        if (pendingModal) {
+            var modal = new bootstrap.Modal(pendingModal);
+            modal.show();
+        }
+    });
+    <?php endif; ?>
+
     window.confirmDeleteTask = function (taskId) {
         if (window.confirm('هل أنت متأكد من حذف هذه المهمة؟')) {
             submitTaskAction('delete_task', taskId);
@@ -2883,6 +3101,7 @@ function tasksHtml(string $value): string
             'received': 'مستلمة',
             'completed': 'مكتملة',
             'with_delegate': 'مع المندوب',
+            'with_driver': 'مع السائق',
             'delivered': 'تم التوصيل',
             'returned': 'تم الارجاع',
             'cancelled': 'ملغاة'
