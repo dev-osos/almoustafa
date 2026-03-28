@@ -718,6 +718,42 @@ function tasksHandleAction(string $action, array $input, array $context): array
                     if ($backendTaskType !== 'telegraph') {
                         throw new RuntimeException('مع المندوب متاح فقط لأوردرات التليجراف');
                     }
+                } elseif ($action === 'assign_to_driver') {
+                    if (!$isManager && !$isProduction) {
+                        throw new RuntimeException('غير مصرح لك بتنفيذ هذا الإجراء');
+                    }
+                    if (($task['status'] ?? '') !== 'completed') {
+                        throw new RuntimeException('يمكن تعيين سائق للمهام المكتملة فقط');
+                    }
+                    $backendTaskType = (strpos((string)($task['related_type'] ?? ''), 'manager_') === 0) ? substr((string)$task['related_type'], 8) : ($task['task_type'] ?? 'general');
+                    if ($backendTaskType === 'telegraph') {
+                        throw new RuntimeException('أوردرات التليجراف تستخدم "مع المندوب"');
+                    }
+                    $existingAssignment = $db->queryOne("SELECT id FROM driver_assignments WHERE task_id = ? AND status = 'pending'", [$taskId]);
+                    if ($existingAssignment) {
+                        throw new RuntimeException('يوجد تعيين سائق معلق لهذه المهمة بالفعل');
+                    }
+                    $driverId = isset($input['driver_id']) ? (int) $input['driver_id'] : 0;
+                    if ($driverId <= 0) {
+                        throw new RuntimeException('يجب اختيار سائق');
+                    }
+                    $driver = $db->queryOne("SELECT id, full_name FROM users WHERE id = ? AND role = 'driver' AND status = 'active'", [$driverId]);
+                    if (!$driver) {
+                        throw new RuntimeException('السائق غير موجود أو غير نشط');
+                    }
+                    $db->execute(
+                        "INSERT INTO driver_assignments (task_id, driver_id, assigned_by, status, created_at) VALUES (?, ?, ?, 'pending', NOW())",
+                        [$taskId, $driverId, $currentUser['id']]
+                    );
+                    logAudit($currentUser['id'], 'assign_to_driver', 'tasks', $taskId, null, ['driver_id' => $driverId]);
+                    try {
+                        $taskTitle = tasksSafeString($task['title'] ?? ('مهمة #' . $taskId));
+                        createNotification($driverId, 'طلب تسليم جديد', 'تم تعيينك لتسليم "' . $taskTitle . '". يرجى الموافقة أو الرفض.', 'info', getDashboardUrl('driver') . '?page=tasks');
+                    } catch (Throwable $e) {
+                        error_log('Driver assignment notification error: ' . $e->getMessage());
+                    }
+                    $result['success'] = 'تم تعيين السائق بنجاح. بانتظار موافقته.';
+                    break;
                 } else {
                     if (!$isProduction) {
                         throw new RuntimeException('غير مصرح لك بتنفيذ هذا الإجراء');
@@ -779,14 +815,14 @@ function tasksHandleAction(string $action, array $input, array $context): array
             case 'change_status':
                 $taskId = isset($input['task_id']) ? (int) $input['task_id'] : 0;
                 $status = $input['status'] ?? 'pending';
-                $validStatuses = ['pending', 'received', 'in_progress', 'completed', 'with_delegate', 'delivered', 'returned', 'cancelled'];
+                $validStatuses = ['pending', 'received', 'in_progress', 'completed', 'with_delegate', 'with_driver', 'delivered', 'returned', 'cancelled'];
 
                 if ($taskId <= 0 || !in_array($status, $validStatuses, true)) {
                     throw new RuntimeException('بيانات غير صحيحة لتحديث المهمة');
                 }
 
                 if ($isDriver) {
-                    $driverAllowedStatuses = ['with_delegate', 'delivered', 'returned'];
+                    $driverAllowedStatuses = ['with_delegate', 'with_driver', 'delivered', 'returned'];
                     if (!in_array($status, $driverAllowedStatuses, true)) {
                         throw new RuntimeException('غير مصرح لك بتغيير حالة المهمة إلى هذه الحالة');
                     }
@@ -797,7 +833,7 @@ function tasksHandleAction(string $action, array $input, array $context): array
                 $setParts = ['status = ?'];
                 $values = [$status];
 
-                $setParts[] = in_array($status, ['completed', 'with_delegate', 'delivered', 'returned'], true) ? 'completed_at = NOW()' : 'completed_at = NULL';
+                $setParts[] = in_array($status, ['completed', 'with_delegate', 'with_driver', 'delivered', 'returned'], true) ? 'completed_at = NOW()' : 'completed_at = NULL';
                 $setParts[] = $status === 'received' ? 'received_at = NOW()' : 'received_at = NULL';
                 $setParts[] = $status === 'in_progress' ? 'started_at = NOW()' : 'started_at = NULL';
 
@@ -824,6 +860,42 @@ function tasksHandleAction(string $action, array $input, array $context): array
                 logAudit($currentUser['id'], 'delete_task', 'tasks', $taskId, null, null);
 
                 $result['success'] = 'تم حذف المهمة بنجاح';
+                break;
+
+            case 'accept_driver_assignment':
+            case 'reject_driver_assignment':
+                if (!$isDriver && !$isManager) {
+                    throw new RuntimeException('غير مصرح لك بتنفيذ هذا الإجراء');
+                }
+                $assignmentId = isset($input['assignment_id']) ? (int) $input['assignment_id'] : 0;
+                if ($assignmentId <= 0) {
+                    throw new RuntimeException('معرف التعيين غير صحيح');
+                }
+                $assignment = $db->queryOne("SELECT da.*, t.title AS task_title FROM driver_assignments da JOIN tasks t ON da.task_id = t.id WHERE da.id = ? AND da.status = 'pending'", [$assignmentId]);
+                if (!$assignment) {
+                    throw new RuntimeException('التعيين غير موجود أو تم الرد عليه مسبقاً');
+                }
+                if (!$isManager && (int) $assignment['driver_id'] !== (int) $currentUser['id']) {
+                    throw new RuntimeException('هذا التعيين ليس موجهاً لك');
+                }
+                if ($action === 'accept_driver_assignment') {
+                    $db->execute("UPDATE driver_assignments SET status = 'accepted', responded_at = NOW() WHERE id = ?", [$assignmentId]);
+                    $db->execute("UPDATE tasks SET status = 'with_driver' WHERE id = ?", [(int) $assignment['task_id']]);
+                    logAudit($currentUser['id'], 'accept_driver_assignment', 'driver_assignments', $assignmentId, null, ['task_id' => $assignment['task_id']]);
+                    $result['success'] = 'تم قبول الطلب بنجاح';
+                    $result['new_status'] = 'with_driver';
+                } else {
+                    $db->execute("UPDATE driver_assignments SET status = 'rejected', responded_at = NOW() WHERE id = ?", [$assignmentId]);
+                    logAudit($currentUser['id'], 'reject_driver_assignment', 'driver_assignments', $assignmentId, null, ['task_id' => $assignment['task_id']]);
+                    try {
+                        $taskTitle = tasksSafeString($assignment['task_title'] ?? ('مهمة #' . $assignment['task_id']));
+                        $driverName = $currentUser['full_name'] ?? $currentUser['username'] ?? 'السائق';
+                        createNotification((int) $assignment['assigned_by'], 'رفض تسليم', $driverName . ' رفض تسليم "' . $taskTitle . '". يمكنك تعيين سائق آخر.', 'warning', getDashboardUrl('production') . '?page=tasks');
+                    } catch (Throwable $e) {
+                        error_log('Driver rejection notification error: ' . $e->getMessage());
+                    }
+                    $result['success'] = 'تم رفض الطلب';
+                }
                 break;
 
             default:
