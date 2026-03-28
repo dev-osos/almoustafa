@@ -2319,85 +2319,6 @@ function tasksHtml(string $value): string
     </div>
 </div>
 
-<!-- مودال تعيين سائق -->
-<div class="modal fade" id="driverAssignModal" tabindex="-1" aria-labelledby="driverAssignModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-sm modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header bg-info text-white">
-                <h5 class="modal-title" id="driverAssignModalLabel"><i class="bi bi-truck me-2"></i>تسليم للسائق</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="إغلاق"></button>
-            </div>
-            <div class="modal-body">
-                <input type="hidden" id="driverAssignTaskId" value="">
-                <div class="mb-3">
-                    <label for="driverSelect" class="form-label">اختر السائق</label>
-                    <select class="form-select" id="driverSelect">
-                        <option value="">-- اختر سائق --</option>
-                        <?php foreach ($drivers as $drv): ?>
-                            <option value="<?php echo (int) $drv['id']; ?>"><?php echo tasksHtml($drv['full_name']); ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">إلغاء</button>
-                <button type="button" class="btn btn-info btn-sm text-white" onclick="submitDriverAssignment()">تسليم</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<?php if ($isDriver && !empty($pendingDriverRequests)): ?>
-<!-- مودال طلبات بانتظار موافقة السائق -->
-<div class="modal fade" id="pendingDriverRequestsModal" tabindex="-1" aria-labelledby="pendingDriverRequestsLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
-        <div class="modal-content">
-            <div class="modal-header bg-warning text-dark">
-                <h5 class="modal-title" id="pendingDriverRequestsLabel">
-                    <i class="bi bi-bell me-2"></i>طلبات بانتظار موافقتك (<?php echo count($pendingDriverRequests); ?>)
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="إغلاق"></button>
-            </div>
-            <div class="modal-body p-0">
-                <div class="list-group list-group-flush">
-                    <?php foreach ($pendingDriverRequests as $req):
-                        $reqType = (strpos((string)($req['related_type'] ?? ''), 'manager_') === 0) ? substr((string)$req['related_type'], 8) : ($req['task_type'] ?? 'general');
-                        $reqTypeLabels = ['shop_order' => 'اوردر محل', 'cash_customer' => 'عميل نقدي', 'telegraph' => 'تليجراف', 'shipping_company' => 'شركة شحن', 'general' => 'مهمة عامة', 'production' => 'إنتاج منتج'];
-                    ?>
-                    <div class="list-group-item" id="driverRequest-<?php echo (int) $req['assignment_id']; ?>">
-                        <div class="d-flex justify-content-between align-items-start mb-2">
-                            <div>
-                                <strong>أوردر #<?php echo (int) $req['task_id']; ?></strong>
-                                <span class="badge bg-secondary ms-1"><?php echo tasksHtml($reqTypeLabels[$reqType] ?? $reqType); ?></span>
-                            </div>
-                            <small class="text-muted"><?php echo tasksHtml($req['assigned_by_name'] ?? ''); ?></small>
-                        </div>
-                        <?php if (!empty($req['customer_name'])): ?>
-                            <p class="mb-1 text-muted"><i class="bi bi-person me-1"></i><?php echo tasksHtml($req['customer_name']); ?></p>
-                        <?php endif; ?>
-                        <?php if (!empty($req['product_name'])): ?>
-                            <p class="mb-2 text-muted"><i class="bi bi-box me-1"></i><?php echo tasksHtml($req['product_name']); ?> &times; <?php echo tasksHtml($req['quantity'] ?? ''); ?> <?php echo tasksHtml($req['unit'] ?? ''); ?></p>
-                        <?php endif; ?>
-                        <div class="d-flex gap-2">
-                            <button type="button" class="btn btn-success btn-sm flex-fill" onclick="respondDriverRequest(<?php echo (int) $req['assignment_id']; ?>, 'accept')">
-                                <i class="bi bi-check-lg me-1"></i>قبول
-                            </button>
-                            <button type="button" class="btn btn-outline-danger btn-sm flex-fill" onclick="respondDriverRequest(<?php echo (int) $req['assignment_id']; ?>, 'reject')">
-                                <i class="bi bi-x-lg me-1"></i>رفض
-                            </button>
-                        </div>
-                    </div>
-                    <?php endforeach; ?>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">إغلاق</button>
-            </div>
-        </div>
-    </div>
-</div>
-<?php endif; ?>
-
 <!-- ===== Cards للموبايل ===== -->
 
 <!-- Card إضافة مهمة للموبايل -->
@@ -2500,6 +2421,85 @@ function tasksHtml(string $value): string
     </div>
 </div>
 
+<?php endif; ?>
+
+<!-- مودال تعيين سائق -->
+<div class="modal fade" id="driverAssignModal" tabindex="-1" aria-labelledby="driverAssignModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title" id="driverAssignModalLabel"><i class="bi bi-truck me-2"></i>تسليم للسائق</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="إغلاق"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="driverAssignTaskId" value="">
+                <div class="mb-3">
+                    <label for="driverSelect" class="form-label">اختر السائق</label>
+                    <select class="form-select" id="driverSelect">
+                        <option value="">-- اختر سائق --</option>
+                        <?php foreach ($drivers as $drv): ?>
+                            <option value="<?php echo (int) $drv['id']; ?>"><?php echo tasksHtml($drv['full_name']); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">إلغاء</button>
+                <button type="button" class="btn btn-info btn-sm text-white" onclick="submitDriverAssignment()">تسليم</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<?php if ($isDriver && !empty($pendingDriverRequests)): ?>
+<!-- مودال طلبات بانتظار موافقة السائق -->
+<div class="modal fade" id="pendingDriverRequestsModal" tabindex="-1" aria-labelledby="pendingDriverRequestsLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title" id="pendingDriverRequestsLabel">
+                    <i class="bi bi-bell me-2"></i>طلبات بانتظار موافقتك (<?php echo count($pendingDriverRequests); ?>)
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="إغلاق"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="list-group list-group-flush">
+                    <?php foreach ($pendingDriverRequests as $req):
+                        $reqType = (strpos((string)($req['related_type'] ?? ''), 'manager_') === 0) ? substr((string)$req['related_type'], 8) : ($req['task_type'] ?? 'general');
+                        $reqTypeLabels = ['shop_order' => 'اوردر محل', 'cash_customer' => 'عميل نقدي', 'telegraph' => 'تليجراف', 'shipping_company' => 'شركة شحن', 'general' => 'مهمة عامة', 'production' => 'إنتاج منتج'];
+                    ?>
+                    <div class="list-group-item" id="driverRequest-<?php echo (int) $req['assignment_id']; ?>">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div>
+                                <strong>أوردر #<?php echo (int) $req['task_id']; ?></strong>
+                                <span class="badge bg-secondary ms-1"><?php echo tasksHtml($reqTypeLabels[$reqType] ?? $reqType); ?></span>
+                            </div>
+                            <small class="text-muted"><?php echo tasksHtml($req['assigned_by_name'] ?? ''); ?></small>
+                        </div>
+                        <?php if (!empty($req['customer_name'])): ?>
+                            <p class="mb-1 text-muted"><i class="bi bi-person me-1"></i><?php echo tasksHtml($req['customer_name']); ?></p>
+                        <?php endif; ?>
+                        <?php if (!empty($req['product_name'])): ?>
+                            <p class="mb-2 text-muted"><i class="bi bi-box me-1"></i><?php echo tasksHtml($req['product_name']); ?> &times; <?php echo tasksHtml($req['quantity'] ?? ''); ?> <?php echo tasksHtml($req['unit'] ?? ''); ?></p>
+                        <?php endif; ?>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-success btn-sm flex-fill" onclick="respondDriverRequest(<?php echo (int) $req['assignment_id']; ?>, 'accept')">
+                                <i class="bi bi-check-lg me-1"></i>قبول
+                            </button>
+                            <button type="button" class="btn btn-outline-danger btn-sm flex-fill" onclick="respondDriverRequest(<?php echo (int) $req['assignment_id']; ?>, 'reject')">
+                                <i class="bi bi-x-lg me-1"></i>رفض
+                            </button>
+                        </div>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">إغلاق</button>
+            </div>
+        </div>
+    </div>
+</div>
 <?php endif; ?>
 
 <form method="POST" action="" id="taskActionForm" style="display: none;">
