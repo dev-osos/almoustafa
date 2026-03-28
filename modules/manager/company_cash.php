@@ -499,8 +499,18 @@ function getCompanyCashTransactionsHtml($db) {
                                     <?php endif; ?>
                                 <?php endif; ?>
                                 <?php if (!$isCollectionFromSalesRep && !$hasAttachment): ?>
-                                    <span class="text-muted small">-</span>
+
                                 <?php endif; ?>
+                                <button type="button" class="btn btn-sm btn-outline-info ms-1 btn-copy-transaction"
+                                    title="نسخ بيانات المعاملة"
+                                    data-date="<?php echo htmlspecialchars(formatDateTime($trans['created_at']), ENT_QUOTES, 'UTF-8'); ?>"
+                                    data-type="<?php echo htmlspecialchars($typeLabels[$trans['type']] ?? $trans['type'], ENT_QUOTES, 'UTF-8'); ?>"
+                                    data-amount="<?php echo htmlspecialchars(formatCurrency($trans['amount']), ENT_QUOTES, 'UTF-8'); ?>"
+                                    data-description="<?php echo htmlspecialchars($trans['description'], ENT_QUOTES, 'UTF-8'); ?>"
+                                    data-reference="<?php echo htmlspecialchars($trans['reference_number'] ?? '-', ENT_QUOTES, 'UTF-8'); ?>"
+                                    data-created-by="<?php echo htmlspecialchars($trans['created_by_name'] ?? '-', ENT_QUOTES, 'UTF-8'); ?>">
+                                    <i class="bi bi-clipboard"></i>
+                                </button>
                             </td>
                         </tr>
                     <?php endforeach; ?>
@@ -2202,6 +2212,25 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 });
+document.addEventListener('click', function(e) {
+    var btn = e.target && e.target.closest && e.target.closest('.btn-copy-transaction');
+    if (btn) {
+        var text = 'التاريخ: ' + btn.dataset.date + '\n' +
+                   'النوع: ' + btn.dataset.type + '\n' +
+                   'المبلغ: ' + btn.dataset.amount + '\n' +
+                   'الوصف: ' + btn.dataset.description + '\n' +
+                   'الرقم المرجعي: ' + btn.dataset.reference + '\n' +
+                   'أنشأه: ' + btn.dataset.createdBy;
+        navigator.clipboard.writeText(text).then(function() {
+            var icon = btn.querySelector('i');
+            if (icon) {
+                icon.className = 'bi bi-check-lg';
+                setTimeout(function() { icon.className = 'bi bi-clipboard'; }, 1500);
+            }
+        });
+    }
+});
+
 function openAttachmentCard(url) {
     var card = document.getElementById('attachmentCard');
     var img = document.getElementById('attachmentCardImg');
