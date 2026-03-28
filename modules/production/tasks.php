@@ -101,6 +101,9 @@ try {
             status ENUM('pending','accepted','rejected') DEFAULT 'pending',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             responded_at TIMESTAMP NULL,
+            FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+            FOREIGN KEY (driver_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (assigned_by) REFERENCES users(id) ON DELETE CASCADE,
             INDEX idx_da_task (task_id),
             INDEX idx_da_driver_status (driver_id, status)
         )");
@@ -3002,6 +3005,7 @@ function tasksHtml(string $value): string
                 } else {
                     alert(data.success);
                 }
+                setTimeout(function() { window.location.reload(); }, 800);
             } else if (data.error) {
                 if (typeof window.showToast === 'function') {
                     window.showToast(data.error, 'danger');
