@@ -2255,7 +2255,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                             </li>
                                             <li>
                                                 <button type="button" class="dropdown-item local-customer-purchase-history-btn" onclick="showLocalCustomerPurchaseHistoryModal(this)" data-customer-id="<?php echo $custId; ?>" data-customer-name="<?php echo $custName; ?>" data-customer-phone="<?php echo $custPhone; ?>" data-customer-address="<?php echo $custAddress; ?>" data-customer-balance="<?php echo $rawBalance; ?>" data-customer-balance-formatted="<?php echo htmlspecialchars($formattedBalance); ?>">
-                                                    <i class="bi bi-receipt me-2"></i>سجل المشتريات
+                                                    <i class="bi bi-receipt me-2"></i>سجل معاملات
                                                 </button>
                                             </li>
                                             <li><hr class="dropdown-divider"></li>
@@ -2767,7 +2767,7 @@ function loadLocalCustomers(page) {
             <div class="modal-header bg-primary text-white">
                 <h5 class="modal-title">
                     <i class="bi bi-receipt me-2"></i>
-                    سجل مشتريات العميل المحلي
+                    سجل معاملات العميل المحلي
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="إغلاق"></button>
             </div>
@@ -2884,7 +2884,7 @@ function loadLocalCustomers(page) {
     <div class="card-header bg-primary text-white">
         <h5 class="mb-0">
             <i class="bi bi-receipt me-2"></i>
-            سجل مشتريات العميل المحلي
+            سجل معاملات العميل المحلي
         </h5>
     </div>
     <div class="card-body">
