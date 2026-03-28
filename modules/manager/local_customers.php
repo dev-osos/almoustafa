@@ -6966,6 +6966,7 @@ function submitLocalTaskTransfer() {
     });
 }
 
+
 // make helpers globally accessible
 window.showLocalTaskTransferModal = showLocalTaskTransferModal;
 window.localResetTaskTransferTarget = localResetTaskTransferTarget;
