@@ -627,6 +627,7 @@ $singleReceipt = count($receipts) === 1;
             $unit = $r['unit'];
             $displayNotes = $r['displayNotes'];
             $customerName = !empty($task['customer_name']) ? $task['customer_name'] : '';
+            $customerId = !empty($task['local_customer_id']) ? (int)$task['local_customer_id'] : 0;
             $createdAt = $task['created_at'] ?? date('Y-m-d H:i:s');
             $dueDate = $task['due_date'] ?? null;
         ?>
@@ -647,7 +648,7 @@ $singleReceipt = count($receipts) === 1;
         <table class="info-table customer-priority-row" style="margin: 12px 0;">
             <tr>
                 <td>العميل:</td>
-                <td><?php echo $customerName !== '' ? htmlspecialchars($customerName) : '-'; ?></td>
+                <td><?php echo $customerName !== '' ? htmlspecialchars($customerName) : '-'; ?><?php if ($customerId > 0): ?> <span style="font-size:10px; color:#666;">(#<?php echo $customerId; ?>)</span><?php endif; ?></td>
                 <td>النوع :</td>
                 <td><?php echo htmlspecialchars($taskTypeLabel); ?></td>
             </tr>
