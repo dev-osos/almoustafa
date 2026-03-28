@@ -6568,6 +6568,136 @@ function showLocalInvoiceDetailsModal(invoiceNumber) {
 }
 window.showLocalInvoiceDetailsModal = showLocalInvoiceDetailsModal;
 
+function showReturnInvoiceDetailsModal(returnId) {
+    if (!returnId) return;
+    var existingModal = document.getElementById('returnInvoiceDetailsModal');
+    if (!existingModal) {
+        var modalDiv = document.createElement('div');
+        modalDiv.className = 'modal fade';
+        modalDiv.id = 'returnInvoiceDetailsModal';
+        modalDiv.tabIndex = -1;
+        modalDiv.dir = 'rtl';
+        modalDiv.innerHTML = '<div class="modal-dialog modal-lg"><div class="modal-content"><div class="modal-header bg-danger text-white">'
+            + '<h5 class="modal-title"><i class="bi bi-arrow-return-left me-2"></i>تفاصيل فاتورة المرتجع</h5>'
+            + '<button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>'
+            + '<div class="modal-body" id="returnInvoiceDetailsBody"></div>'
+            + '<div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إغلاق</button></div>'
+            + '</div></div>';
+        document.body.appendChild(modalDiv);
+        existingModal = modalDiv;
+    }
+    var body = document.getElementById('returnInvoiceDetailsBody');
+    body.textContent = '';
+    var spinner = document.createElement('div');
+    spinner.className = 'text-center py-4';
+    var sp = document.createElement('div');
+    sp.className = 'spinner-border text-danger';
+    spinner.appendChild(sp);
+    var loadText = document.createElement('p');
+    loadText.className = 'mt-2';
+    loadText.textContent = 'جاري التحميل...';
+    spinner.appendChild(loadText);
+    body.appendChild(spinner);
+    var bsModal = bootstrap.Modal.getOrCreateInstance(existingModal);
+    bsModal.show();
+
+    fetch(basePath + '/api/register_returns.php?action=get_return_details&id=' + encodeURIComponent(returnId), {
+        credentials: 'same-origin',
+        headers: { 'Accept': 'application/json' }
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+        body.textContent = '';
+        if (!data.success || !data.return_invoice) {
+            var errDiv = document.createElement('div');
+            errDiv.className = 'alert alert-danger';
+            errDiv.textContent = (data.message || 'تعذر تحميل البيانات');
+            body.appendChild(errDiv);
+            return;
+        }
+        var inv = data.return_invoice;
+        var items = inv.items || [];
+        var dateStr = (inv.created_at || '-').toString().substring(0, 10);
+        var timeStr = (inv.created_at || '').toString().substring(11, 16) || '-';
+
+        // Info section
+        var infoDiv = document.createElement('div');
+        infoDiv.className = 'mb-3';
+        var row = document.createElement('div');
+        row.className = 'row g-2';
+        var fields = [
+            ['رقم الفاتورة', inv.invoice_number || '-'],
+            ['التاريخ', dateStr + ' ' + timeStr],
+            ['العميل', inv.customer_name || '-'],
+            ['المستخدم', inv.created_by_name || inv.created_by_username || '-']
+        ];
+        fields.forEach(function(f) {
+            var col = document.createElement('div');
+            col.className = 'col-6';
+            var strong = document.createElement('strong');
+            strong.textContent = f[0] + ': ';
+            col.appendChild(strong);
+            col.appendChild(document.createTextNode(f[1]));
+            row.appendChild(col);
+        });
+        infoDiv.appendChild(row);
+        body.appendChild(infoDiv);
+
+        // Table
+        var table = document.createElement('table');
+        table.className = 'table table-bordered table-sm';
+        var thead = document.createElement('thead');
+        thead.className = 'table-danger';
+        var headerRow = document.createElement('tr');
+        ['الصنف', 'الكمية', 'سعر الوحدة', 'الإجمالي'].forEach(function(h) {
+            var th = document.createElement('th');
+            th.textContent = h;
+            headerRow.appendChild(th);
+        });
+        thead.appendChild(headerRow);
+        table.appendChild(thead);
+
+        var tbody = document.createElement('tbody');
+        items.forEach(function(it) {
+            var tr = document.createElement('tr');
+            var cells = [
+                it.item_name || '-',
+                String(parseFloat(it.added_quantity || it.quantity || 0)),
+                parseFloat(it.unit_price || 0).toFixed(2) + ' ج.م',
+                parseFloat(it.total_price || 0).toFixed(2) + ' ج.م'
+            ];
+            cells.forEach(function(c) {
+                var td = document.createElement('td');
+                td.textContent = c;
+                tr.appendChild(td);
+            });
+            tbody.appendChild(tr);
+        });
+        // Total row
+        var totalRow = document.createElement('tr');
+        totalRow.className = 'table-danger fw-bold';
+        var totalLabel = document.createElement('td');
+        totalLabel.colSpan = 3;
+        totalLabel.className = 'text-center';
+        totalLabel.textContent = 'الإجمالي';
+        totalRow.appendChild(totalLabel);
+        var totalVal = document.createElement('td');
+        totalVal.textContent = parseFloat(inv.grand_total || 0).toFixed(2) + ' ج.م';
+        totalRow.appendChild(totalVal);
+        tbody.appendChild(totalRow);
+        table.appendChild(tbody);
+        body.appendChild(table);
+    })
+    .catch(function(err) {
+        body.textContent = '';
+        var errDiv = document.createElement('div');
+        errDiv.className = 'alert alert-danger';
+        errDiv.textContent = 'حدث خطأ في الاتصال: ' + err.message;
+        body.appendChild(errDiv);
+    });
+}
+window.showReturnInvoiceDetailsModal = showReturnInvoiceDetailsModal;
+
 function localOpenReturnForInvoiceFromDetails() {
     if (!currentLocalDetailInvoiceNumber) return;
     var detailModal = document.getElementById('localInvoiceDetailsModal');
@@ -6978,8 +7108,10 @@ function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns
         const dateStr = (ri.return_date || ri.created_at || '-').toString().substring(0, 10);
         const amount = parseFloat(ri.grand_total || 0);
         const riCreatedBy = (ri.created_by_name || '-').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const riId = parseInt(ri.id, 10) || 0;
         var labelText = 'مرتجع - ' + (ri.invoice_number || ri.id);
-        var entry = { sortDate: normDate(ri.return_date || ri.created_at), effect: -amount, labelText: labelText, amountNum: amount, cells: ['<td class="text-danger">' + safeNum + '</td>', '<td class="text-danger">-' + amount.toFixed(2) + ' ج.م</td>', '<td>' + dateStr + '</td>', '<td>' + riCreatedBy + '</td>', '<td><span class="text-muted small">مرتجع</span></td>'] };
+        var viewBtn = '<button type="button" class="btn btn-sm btn-outline-danger" onclick="showReturnInvoiceDetailsModal(' + riId + ')" title="عرض فاتورة المرتجع"><i class="bi bi-eye me-1"></i></button>';
+        var entry = { sortDate: normDate(ri.return_date || ri.created_at), effect: -amount, labelText: labelText, amountNum: amount, cells: ['<td class="text-danger">' + safeNum + '</td>', '<td class="text-danger">-' + amount.toFixed(2) + ' ج.م</td>', '<td>' + dateStr + '</td>', '<td>' + riCreatedBy + '</td>', '<td>' + viewBtn + '</td>'] };
         entry.searchableText = buildSearchableText(labelText, amount, dateStr);
         allEntries.push(entry);
     });
