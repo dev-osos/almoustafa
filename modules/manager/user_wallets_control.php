@@ -141,9 +141,11 @@ if ($isWalletControlAjax) {
                         $ph = implode(',', array_fill(0, count($collColumns), '?'));
                         $db->execute("INSERT INTO local_collections (" . implode(',', $collColumns) . ") VALUES ($ph)", $collValues);
                     }
+                    $walletOwner = $db->queryOne("SELECT full_name FROM users WHERE id = ?", [$userId]);
+                    $walletOwnerName = $walletOwner['full_name'] ?? 'مستخدم';
                     $accountantTableExists = $db->queryOne("SHOW TABLES LIKE 'accountant_transactions'");
                     if (!empty($accountantTableExists)) {
-                        $desc = 'تحصيل من عميل محلي (محفظة مستخدم): ' . $customerName;
+                        $desc = 'تحصيل من عميل محلي (محفظة ' . $walletOwnerName . '): ' . $customerName;
                         $ref =  $requestId . '-' . date('Ymd');
                         $db->execute(
                             "INSERT INTO accountant_transactions (transaction_type, amount, description, reference_number, payment_method, status, created_by, approved_by, approved_at) VALUES ('income', ?, ?, ?, 'cash', 'approved', ?, ?, NOW())",
@@ -191,6 +193,8 @@ if ($isWalletControlAjax) {
                 "SELECT * FROM user_wallet_local_collection_requests WHERE user_id = ? AND status = 'pending' ORDER BY id ASC",
                 [$targetUserId]
             ) ?: [];
+            $bulkWalletOwner = $db->queryOne("SELECT full_name FROM users WHERE id = ?", [$targetUserId]);
+            $bulkWalletOwnerName = $bulkWalletOwner['full_name'] ?? 'مستخدم';
             $approvedCount = 0;
             $failMsg = '';
             foreach ($pendingList as $req) {
@@ -225,7 +229,7 @@ if ($isWalletControlAjax) {
                     }
                     $accountantTableExists = $db->queryOne("SHOW TABLES LIKE 'accountant_transactions'");
                     if (!empty($accountantTableExists)) {
-                        $desc = 'تحصيل من عميل محلي (محفظة مستخدم): ' . $customerName;
+                        $desc = 'تحصيل من عميل محلي (محفظة ' . $bulkWalletOwnerName . '): ' . $customerName;
                         $ref = $requestId . '-' . date('Ymd');
                         $db->execute(
                             "INSERT INTO accountant_transactions (transaction_type, amount, description, reference_number, payment_method, status, created_by, approved_by, approved_at) VALUES ('income', ?, ?, ?, 'cash', 'approved', ?, ?, NOW())",
