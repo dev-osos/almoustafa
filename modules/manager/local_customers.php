@@ -2851,9 +2851,10 @@ function loadLocalCustomers(page) {
                         <table class="table table-hover table-bordered">
                             <thead class="table-light">
                                 <tr>
-                                    <th>رقم الفاتورة</th>
-                                    <th>السعر الإجمالي</th>
-                                    <th>تاريخ الشراء</th>
+                                    <th>رقم</th>
+                                    <th> الإجمالي</th>
+                                    <th>بتاريخ </th>
+                                    <th>المنشئ</th>
                                     <th>الرصيد بعد المعاملة</th>
                                     <th style="width: 140px;">إجراءات</th>
                                 </tr>
@@ -2871,9 +2872,6 @@ function loadLocalCustomers(page) {
             <div class="modal-footer">
                 <button type="button" class="btn btn-primary" id="printLocalCustomerStatementBtn" onclick="printLocalCustomerStatement()">
                     <i class="bi bi-printer me-1"></i>طباعة كشف الحساب
-                </button>
-                <button type="button" class="btn btn-success" id="localCustomerReturnBtn" onclick="openLocalCustomerReturnModal()" style="display: inline-block;">
-                    <i class="bi bi-arrow-return-left me-1"></i>إرجاع منتجات
                 </button>
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إغلاق</button>
             </div>
@@ -2972,9 +2970,10 @@ function loadLocalCustomers(page) {
                 <table class="table table-hover table-bordered">
                     <thead class="table-light">
                         <tr>
-                            <th>رقم الفاتورة</th>
-                            <th>السعر الإجمالي</th>
-                            <th>تاريخ الشراء</th>
+                            <th>رقم</th>
+                            <th> الإجمالي</th>
+                            <th>بتاريخ </th>
+                            <th>المنشئ</th>
                             <th>الرصيد بعد المعاملة</th>
                             <th style="width: 140px;">إجراءات</th>
                         </tr>
@@ -6474,6 +6473,7 @@ function groupLocalPurchaseHistoryByInvoice(history) {
                 invoice_number: item.invoice_number || '-',
                 invoice_date: item.invoice_date || '-',
                 total_amount: 0,
+                created_by_name: item.created_by_name || '',
                 items: []
             };
         }
@@ -6912,9 +6912,10 @@ function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns
         const safeNum = invNum.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         const dateStr = (inv.invoice_date || '-').toString().substring(0, 10);
         const amount = parseFloat(inv.total_amount || 0);
+        const createdBy = (inv.created_by_name || '-').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const safeInvNumAttr = invNum.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
         const actionsCell = '<td><button type="button" class="btn btn-sm btn-outline-primary" onclick="showLocalInvoiceDetailsModal(\'' + safeInvNumAttr + '\')" title="عرض الفاتورة"><i class="bi bi-eye me-1"></i></button></td>';
-        var entry = { sortDate: normDate(inv.invoice_date), effect: amount, labelText: invNum, amountNum: amount, cells: ['<td>' + safeNum + '</td>', '<td>' + amount.toFixed(2) + ' ج.م</td>', '<td>' + dateStr + '</td>', actionsCell] };
+        var entry = { sortDate: normDate(inv.invoice_date), effect: amount, labelText: invNum, amountNum: amount, cells: ['<td>' + safeNum + '</td>', '<td>' + amount.toFixed(2) + ' ج.م</td>', '<td>' + dateStr + '</td>', '<td>' + createdBy + '</td>', actionsCell] };
         entry.searchableText = buildSearchableText(invNum, amount, dateStr);
         allEntries.push(entry);
     });
@@ -6922,11 +6923,12 @@ function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns
         const safeNum = (pi.invoice_number || 'ورقية-' + pi.id).replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const dateStr = (pi.invoice_date || pi.created_at || '-').toString().substring(0, 10);
         const amount = parseFloat(pi.total_amount || 0);
+        const piCreatedBy = (pi.created_by_name || '-').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const viewBtn = pi.image_path
             ? '<button type="button" class="btn btn-sm btn-outline-primary" onclick="showPaperInvoiceImage(' + parseInt(pi.id, 10) + ')" title="عرض صورة الفاتورة الورقية"><i class="bi bi-image me-1"></i></button>'
             : '<span class="text-muted small">لا توجد صورة</span>';
         var labelText = (pi.invoice_number || 'ورقية-' + pi.id);
-        var entry = { sortDate: normDate(pi.invoice_date || pi.created_at), effect: -amount, labelText: labelText, amountNum: amount, cells: ['<td>' + safeNum + '</td>', '<td>' + amount.toFixed(2) + ' ج.م</td>', '<td>' + dateStr + '</td>', '<td>' + viewBtn + '</td>'] };
+        var entry = { sortDate: normDate(pi.invoice_date || pi.created_at), effect: -amount, labelText: labelText, amountNum: amount, cells: ['<td>' + safeNum + '</td>', '<td>' + amount.toFixed(2) + ' ج.م</td>', '<td>' + dateStr + '</td>', '<td>' + piCreatedBy + '</td>', '<td>' + viewBtn + '</td>'] };
         entry.searchableText = buildSearchableText(labelText, amount, dateStr);
         allEntries.push(entry);
     });
@@ -6934,11 +6936,12 @@ function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns
         const safeNum = ('مرتجع ورقية - ' + (pr.invoice_number || pr.id)).replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const dateStr = (pr.return_date || pr.created_at || '-').toString().substring(0, 10);
         const returnAmt = parseFloat(pr.return_amount || 0);
+        const prCreatedBy = (pr.created_by_name || '-').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const viewBtn = pr.image_path
             ? '<button type="button" class="btn btn-sm btn-outline-danger" onclick="showPaperInvoiceReturnImage(' + parseInt(pr.id, 10) + ')" title="عرض صورة المرتجع"><i class="bi bi-image me-1"></i></button>'
             : '<span class="text-muted small">لا توجد صورة</span>';
         var labelText = 'مرتجع ورقية - ' + (pr.invoice_number || pr.id);
-        var entry = { sortDate: normDate(pr.return_date || pr.created_at), effect: -returnAmt, labelText: labelText, amountNum: returnAmt, cells: ['<td class="text-danger">' + safeNum + '</td>', '<td class="text-danger">-' + returnAmt.toFixed(2) + ' ج.م</td>', '<td>' + dateStr + '</td>', '<td>' + viewBtn + '</td>'] };
+        var entry = { sortDate: normDate(pr.return_date || pr.created_at), effect: -returnAmt, labelText: labelText, amountNum: returnAmt, cells: ['<td class="text-danger">' + safeNum + '</td>', '<td class="text-danger">-' + returnAmt.toFixed(2) + ' ج.م</td>', '<td>' + dateStr + '</td>', '<td>' + prCreatedBy + '</td>', '<td>' + viewBtn + '</td>'] };
         entry.searchableText = buildSearchableText(labelText, returnAmt, dateStr);
         allEntries.push(entry);
     });
@@ -6949,11 +6952,12 @@ function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns
             var safeNum = taskNum.replace(/</g, '&lt;').replace(/>/g, '&gt;');
             var dateStr = (tp.task_date || tp.created_at || '-').toString().substring(0, 10);
             var amount = parseFloat(tp.total_amount || 0);
+            var tpCreatedBy = (tp.created_by_name || '-').replace(/</g, '&lt;').replace(/>/g, '&gt;');
             var taskId = parseInt(tp.task_id, 10) || 0;
             var receiptUrl = receiptBase ? (receiptBase + (receiptBase.indexOf('?') >= 0 ? '&' : '?') + 'id=' + taskId) : ('print_task_receipt.php?id=' + taskId);
             var transferBtn = '<button type="button" class="btn btn-sm btn-outline-warning ms-1" title="نقل الإيصال" onclick="showLocalTaskTransferModal(' + taskId + ', \'" + safeNum + "\', ' + amount + ')"><i class="bi bi-arrow-left-right"></i></button>';
             var actionsCell = '<td><a href="' + receiptUrl + '" target="_blank" class="btn btn-sm btn-outline-primary" title="إيصال الأوردر"><i class="bi bi-receipt me-1"></i>إيصال</a>' + transferBtn + '</td>';
-            var entry = { sortDate: normDate(tp.task_date || tp.created_at), effect: amount, labelText: taskNum, amountNum: amount, cells: ['<td>' + safeNum + '</td>', '<td>' + amount.toFixed(2) + ' ج.م</td>', '<td>' + dateStr + '</td>', actionsCell] };
+            var entry = { sortDate: normDate(tp.task_date || tp.created_at), effect: amount, labelText: taskNum, amountNum: amount, cells: ['<td>' + safeNum + '</td>', '<td>' + amount.toFixed(2) + ' ج.م</td>', '<td>' + dateStr + '</td>', '<td>' + tpCreatedBy + '</td>', actionsCell] };
             entry.searchableText = buildSearchableText(taskNum, amount, dateStr);
             allEntries.push(entry);
         });
@@ -6962,8 +6966,9 @@ function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns
         const safeNum = ('تحصيل - ' + (col.collection_number || col.id)).replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const dateStr = (col.date || col.created_at || '-').toString().substring(0, 10);
         const amount = parseFloat(col.amount || 0);
+        const colCreatedBy = (col.created_by_name || '-').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         var labelText = 'تحصيل - ' + (col.collection_number || col.id);
-        var entry = { sortDate: normDate(col.date || col.created_at), effect: -amount, labelText: labelText, amountNum: amount, cells: ['<td>' + safeNum + '</td>', '<td class="text-success">' + amount.toFixed(2) + ' ج.م (تحصيل)</td>', '<td>' + dateStr + '</td>', '<td><span class="text-muted small">تحصيل</span></td>'] };
+        var entry = { sortDate: normDate(col.date || col.created_at), effect: -amount, labelText: labelText, amountNum: amount, cells: ['<td>' + safeNum + '</td>', '<td class="text-success">' + amount.toFixed(2) + ' ج.م (تحصيل)</td>', '<td>' + dateStr + '</td>', '<td>' + colCreatedBy + '</td>', '<td><span class="text-muted small">تحصيل</span></td>'] };
         entry.searchableText = buildSearchableText(labelText, amount, dateStr);
         allEntries.push(entry);
     });
@@ -6996,13 +7001,13 @@ function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns
         balanceAfter += allEntries[j].effect;
         var e = allEntries[j];
         var balanceCell = '<td>' + formatBalance(balanceAfter) + '</td>';
-        rows.push(e.cells[0] + e.cells[1] + e.cells[2] + balanceCell + e.cells[3]);
+        rows.push(e.cells[0] + e.cells[1] + e.cells[2] + (e.cells[3] || '<td>-</td>') + balanceCell + (e.cells[4] || ''));
     }
     
     const hasInvoices = rows.length > 0;
     
     if (!hasInvoices) {
-        var emptyRow = '<tr><td colspan="5" class="text-center text-muted py-4"><i class="bi bi-info-circle me-2"></i>لا توجد مشتريات مسجلة لهذا العميل</td></tr>';
+        var emptyRow = '<tr><td colspan="6" class="text-center text-muted py-4"><i class="bi bi-info-circle me-2"></i>لا توجد مشتريات مسجلة لهذا العميل</td></tr>';
         if (tableBodyCard) tableBodyCard.innerHTML = emptyRow;
         if (tableBodyModal) tableBodyModal.innerHTML = emptyRow;
         document.getElementById('localPurchaseHistoryPaginationWrap').style.display = 'none';

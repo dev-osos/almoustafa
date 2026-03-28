@@ -362,7 +362,7 @@ function getLocalCustomerPurchaseHistory($db, $customerId): array
             return [];
         }
         
-        $query = "SELECT 
+        $query = "SELECT
             i.id as invoice_id,
             i.invoice_number,
             i.date as invoice_date,
@@ -370,6 +370,8 @@ function getLocalCustomerPurchaseHistory($db, $customerId): array
             i.paid_amount,
             i.status as invoice_status,
             i.customer_id as invoice_customer_id,
+            i.created_by,
+            COALESCE(uc.full_name, '') as created_by_name,
             ii.id as invoice_item_id,
             ii.product_id,
             $productSelect,
@@ -381,6 +383,7 @@ function getLocalCustomerPurchaseHistory($db, $customerId): array
         FROM local_invoices i
         INNER JOIN local_invoice_items ii ON i.id = ii.invoice_id
         LEFT JOIN products p ON ii.product_id = p.id
+        LEFT JOIN users uc ON i.created_by = uc.id
         WHERE i.customer_id = ? AND i.customer_id IS NOT NULL AND i.customer_id > 0
         ORDER BY i.date DESC, i.id DESC, ii.id ASC";
         
@@ -424,7 +427,7 @@ function getLocalCustomerPaperInvoices($db, $customerId): array
             @$db->rawQuery("ALTER TABLE local_customer_paper_invoices ADD COLUMN invoice_number varchar(100) DEFAULT NULL COMMENT 'رقم الفاتورة (يدوي)' AFTER customer_id");
         }
         $rows = $db->query(
-            "SELECT id, customer_id, invoice_number, total_amount, image_path, created_at FROM local_customer_paper_invoices WHERE customer_id = ? ORDER BY created_at DESC, id DESC",
+            "SELECT p.id, p.customer_id, p.invoice_number, p.total_amount, p.image_path, p.created_at, p.created_by, COALESCE(u.full_name, '') as created_by_name FROM local_customer_paper_invoices p LEFT JOIN users u ON p.created_by = u.id WHERE p.customer_id = ? ORDER BY p.created_at DESC, p.id DESC",
             [$customerId]
         );
         if (!$rows) {
@@ -440,7 +443,8 @@ function getLocalCustomerPaperInvoices($db, $customerId): array
                 'image_path' => $row['image_path'] ?? '',
                 'created_at' => $row['created_at'] ?? '',
                 'invoice_number' => $invNum,
-                'invoice_date' => isset($row['created_at']) ? date('Y-m-d', strtotime($row['created_at'])) : ''
+                'invoice_date' => isset($row['created_at']) ? date('Y-m-d', strtotime($row['created_at'])) : '',
+                'created_by_name' => $row['created_by_name'] ?? ''
             ];
         }
         return $out;
@@ -817,7 +821,7 @@ function getLocalCustomerPaperInvoiceReturns($db, $customerId): array
             return [];
         }
         $rows = $db->query(
-            "SELECT id, customer_id, invoice_number, return_amount, image_path, created_at FROM local_customer_paper_invoice_returns WHERE customer_id = ? ORDER BY created_at DESC, id DESC",
+            "SELECT r.id, r.customer_id, r.invoice_number, r.return_amount, r.image_path, r.created_at, r.created_by, COALESCE(u.full_name, '') as created_by_name FROM local_customer_paper_invoice_returns r LEFT JOIN users u ON r.created_by = u.id WHERE r.customer_id = ? ORDER BY r.created_at DESC, r.id DESC",
             [$customerId]
         );
         if (!$rows) {
@@ -832,7 +836,8 @@ function getLocalCustomerPaperInvoiceReturns($db, $customerId): array
                 'return_amount' => (float)($row['return_amount'] ?? 0),
                 'image_path' => $row['image_path'] ?? '',
                 'created_at' => $row['created_at'] ?? '',
-                'return_date' => isset($row['created_at']) ? date('Y-m-d', strtotime($row['created_at'])) : ''
+                'return_date' => isset($row['created_at']) ? date('Y-m-d', strtotime($row['created_at'])) : '',
+                'created_by_name' => $row['created_by_name'] ?? ''
             ];
         }
         return $out;
@@ -853,7 +858,7 @@ function getLocalCustomerTaskPurchases($db, $customerId): array
             return [];
         }
         $rows = $db->query(
-            "SELECT id, local_customer_id, task_id, task_number, total_amount, task_date, created_at FROM customer_task_purchases WHERE local_customer_id = ? ORDER BY task_date DESC, id DESC",
+            "SELECT ctp.id, ctp.local_customer_id, ctp.task_id, ctp.task_number, ctp.total_amount, ctp.task_date, ctp.created_at, t.created_by, COALESCE(u.full_name, '') as created_by_name FROM customer_task_purchases ctp LEFT JOIN tasks t ON ctp.task_id = t.id LEFT JOIN users u ON t.created_by = u.id WHERE ctp.local_customer_id = ? ORDER BY ctp.task_date DESC, ctp.id DESC",
             [$customerId]
         );
         if (!$rows) {
@@ -868,6 +873,7 @@ function getLocalCustomerTaskPurchases($db, $customerId): array
                 'total_amount' => (float)($row['total_amount'] ?? 0),
                 'task_date' => $row['task_date'] ?? '',
                 'created_at' => $row['created_at'] ?? '',
+                'created_by_name' => $row['created_by_name'] ?? ''
             ];
         }
         return $out;
@@ -887,7 +893,7 @@ function getLocalCustomerCollections($db, $customerId): array
         if (empty($tableExists)) {
             return [];
         }
-        $sql = "SELECT id, customer_id, collection_number, amount, date, payment_method, notes, created_at FROM local_collections WHERE customer_id = ? ORDER BY date ASC, id ASC";
+        $sql = "SELECT c.id, c.customer_id, c.collection_number, c.amount, c.date, c.payment_method, c.notes, c.created_at, c.collected_by, COALESCE(u.full_name, '') as created_by_name FROM local_collections c LEFT JOIN users u ON c.collected_by = u.id WHERE c.customer_id = ? ORDER BY c.date ASC, c.id ASC";
         $rows = $db->query($sql, [$customerId]);
         if (!$rows) {
             return [];
@@ -902,7 +908,8 @@ function getLocalCustomerCollections($db, $customerId): array
                 'date' => isset($row['date']) ? date('Y-m-d', strtotime($row['date'])) : '',
                 'payment_method' => $row['payment_method'] ?? 'cash',
                 'notes' => $row['notes'] ?? '',
-                'created_at' => $row['created_at'] ?? ''
+                'created_at' => $row['created_at'] ?? '',
+                'created_by_name' => $row['created_by_name'] ?? ''
             ];
         }
         return $out;
