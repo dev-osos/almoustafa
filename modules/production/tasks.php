@@ -1121,14 +1121,19 @@ if ($overdueFilter) {
     $whereConditions[] = 't.due_date < CURDATE()';
 }
 
-// السائق يرى كل الأوردرات: مكتملة، مع المندوب، تم التوصيل، تم الارجاع — والفلترة تعمل ضمنها
+// السائق يرى: مكتملة، مع المندوب، تم التوصيل، تم الارجاع + مع السائق (المعينة له فقط)
 if ($isDriver) {
-    $driverAllowedStatuses = ['completed', 'with_delegate', 'delivered', 'returned'];
-    if ($statusFilter !== '' && in_array($statusFilter, $driverAllowedStatuses, true)) {
+    $driverAllowedStatuses = ['completed', 'with_delegate', 'with_driver', 'delivered', 'returned'];
+    if ($statusFilter === 'with_driver') {
+        $whereConditions[] = "t.status = 'with_driver'";
+        $whereConditions[] = "t.id IN (SELECT task_id FROM driver_assignments WHERE driver_id = ? AND status = 'accepted')";
+        $params[] = $currentUser['id'];
+    } elseif ($statusFilter !== '' && in_array($statusFilter, $driverAllowedStatuses, true)) {
         $whereConditions[] = 't.status = ?';
         $params[] = $statusFilter;
     } else {
-        $whereConditions[] = "t.status IN ('completed', 'with_delegate', 'delivered', 'returned')";
+        $whereConditions[] = "(t.status IN ('completed', 'with_delegate', 'delivered', 'returned') OR (t.status = 'with_driver' AND t.id IN (SELECT task_id FROM driver_assignments WHERE driver_id = ? AND status = 'accepted')))";
+        $params[] = $currentUser['id'];
     }
 } elseif ($statusFilter !== '') {
     $whereConditions[] = 't.status = ?';
@@ -1296,6 +1301,19 @@ if (is_dir($debugLogDir) && is_writable($debugLogDir)) {
 }
 // #endregion
 $tasks = $db->query($taskSql, $queryParams);
+
+// Batch-fetch pending driver assignments for visible tasks
+$pendingDriverAssignments = [];
+if (!empty($tasks)) {
+    $taskIds = array_map(function ($t) { return (int) $t['id']; }, $tasks);
+    $placeholders = implode(',', array_fill(0, count($taskIds), '?'));
+    $daRows = $db->query("SELECT task_id FROM driver_assignments WHERE task_id IN ($placeholders) AND status = 'pending'", $taskIds);
+    if (is_array($daRows)) {
+        foreach ($daRows as $daRow) {
+            $pendingDriverAssignments[(int) $daRow['task_id']] = true;
+        }
+    }
+}
 
 // معرفات المهام التي تم اعتماد فاتورتها (للعرض في جدول عمال الإنتاج والسائق)
 $approvedTaskIds = [];
@@ -1492,6 +1510,10 @@ unset($task);
 
 $users = $db->query("SELECT id, full_name FROM users WHERE status = 'active' AND role = 'production' ORDER BY full_name");
 
+// Fetch active drivers for driver assignment
+$drivers = $db->query("SELECT id, full_name FROM users WHERE status = 'active' AND role = 'driver' ORDER BY full_name");
+if (!is_array($drivers)) $drivers = [];
+
 // جلب القوالب (templates) لعرضها في القائمة المنسدلة
 $products = [];
 try {
@@ -1569,6 +1591,23 @@ try {
     error_log('Error fetching product templates: ' . $e->getMessage());
     // في حالة الخطأ، جلب من products مباشرة
     $products = $db->query("SELECT id, name FROM products WHERE status = 'active' ORDER BY name");
+}
+
+// Fetch pending driver assignments for current driver
+$pendingDriverRequests = [];
+if ($isDriver) {
+    $pendingDriverRequests = $db->query(
+        "SELECT da.id AS assignment_id, da.task_id, da.created_at AS assigned_at,
+                t.title, t.customer_name, t.product_name, t.quantity, t.unit, t.task_type, t.related_type,
+                uAssign.full_name AS assigned_by_name
+         FROM driver_assignments da
+         JOIN tasks t ON da.task_id = t.id
+         LEFT JOIN users uAssign ON da.assigned_by = uAssign.id
+         WHERE da.driver_id = ? AND da.status = 'pending'
+         ORDER BY da.created_at DESC",
+        [$currentUser['id']]
+    );
+    if (!is_array($pendingDriverRequests)) $pendingDriverRequests = [];
 }
 
 if ($isDriver) {
@@ -2038,6 +2077,7 @@ function tasksHtml(string $value): string
                                         }
                                         $canWithDelegateType = (strpos(isset($task['related_type']) ? (string)$task['related_type'] : '', 'manager_') === 0) ? substr((string)$task['related_type'], 8) : ($task['task_type'] ?? 'general');
                                         $canWithDelegate = ($isManager || $isProduction || $isDriver) && ($task['status'] ?? '') === 'completed' && $canWithDelegateType === 'telegraph';
+                                        $canAssignDriver = ($isManager || $isProduction) && ($task['status'] ?? '') === 'completed' && $canWithDelegateType !== 'telegraph' && empty($pendingDriverAssignments[(int) $task['id']]);
                                         $canDeliverReturn = ($isManager || $isProduction || $isDriver) && in_array($task['status'] ?? '', ['completed', 'with_delegate'], true);
                                         $canDeliverReturnDriver = in_array($task['status'] ?? '', ['completed', 'with_delegate'], true);
                                         $taskCustomerPhone = isset($task['customer_phone']) ? trim((string) $task['customer_phone']) : '';
