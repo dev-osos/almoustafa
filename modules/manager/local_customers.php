@@ -6956,7 +6956,7 @@ function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns
             var tpCreatedBy = (tp.created_by_name || '-').replace(/</g, '&lt;').replace(/>/g, '&gt;');
             var taskId = parseInt(tp.task_id, 10) || 0;
             var receiptUrl = receiptBase ? (receiptBase + (receiptBase.indexOf('?') >= 0 ? '&' : '?') + 'id=' + taskId) : ('print_task_receipt.php?id=' + taskId);
-            var actionsCell = '<td><a href="' + receiptUrl + '" target="_blank" class="btn btn-sm btn-outline-primary" title="إيصال الأوردر"><i class="bi bi-receipt me-1"></i></a>' + transferBtn + '</td>';
+            var actionsCell = '<td><a href="' + receiptUrl + '" target="_blank" class="btn btn-sm btn-outline-primary" title="إيصال الأوردر"><i class="bi bi-receipt me-1"></i></a></td>';
             var entry = { sortDate: normDate(tp.task_date || tp.created_at), effect: amount, labelText: taskNum, amountNum: amount, cells: ['<td>' + safeNum + '</td>', '<td>' + amount.toFixed(2) + ' ج.م</td>', '<td>' + dateStr + '</td>', '<td>' + tpCreatedBy + '</td>', actionsCell] };
             entry.searchableText = buildSearchableText(taskNum, amount, dateStr);
             allEntries.push(entry);
