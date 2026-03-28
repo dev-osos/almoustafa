@@ -6570,6 +6570,7 @@ window.showLocalInvoiceDetailsModal = showLocalInvoiceDetailsModal;
 
 function showReturnInvoiceDetailsModal(returnId) {
     if (!returnId) return;
+    var basePath = (typeof window.LOCAL_CUSTOMERS_CONFIG !== 'undefined' && window.LOCAL_CUSTOMERS_CONFIG.apiBase) ? window.LOCAL_CUSTOMERS_CONFIG.apiBase : '';
     var existingModal = document.getElementById('returnInvoiceDetailsModal');
     if (!existingModal) {
         var modalDiv = document.createElement('div');
