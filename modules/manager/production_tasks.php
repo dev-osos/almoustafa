@@ -3206,6 +3206,18 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                 </div>
             </a>
         </div>
+        
+        <div class="col-4 col-sm-4 col-md-2">
+            <a href="?page=production_tasks&status=with_driver" class="text-decoration-none status-filter-card" data-status="with_driver">
+                <div class="card <?php echo $statusFilter === 'with_driver' ? 'bg-warning text-white' : 'border-warning'; ?> h-100">
+                    <div class="card-body text-center py-2 px-2">
+                        <div class="<?php echo $statusFilter === 'with_driver' ? 'text-white-50' : 'text-muted'; ?> small mb-1">مع السائق</div>
+                        <div class="fs-5 <?php echo $statusFilter === 'with_driver' ? 'text-white' : 'text-warning'; ?> fw-semibold"><?php echo $stats['with_driver']; ?></div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        
         <div class="col-4 col-sm-4 col-md-2">
             <a href="?page=production_tasks&status=delivered" class="text-decoration-none status-filter-card" data-status="delivered">
                 <div class="card <?php echo $statusFilter === 'delivered' ? 'bg-success text-white' : 'border-success'; ?> h-100">
