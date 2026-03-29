@@ -2640,26 +2640,47 @@ function tasksHtml(string $value): string
 
     function buildActionsHtml(taskId, newStatus, taskType) {
         var flags = window.TASK_PAGE_FLAGS || {};
-        var html = '<div class="btn-group btn-group-sm" role="group">';
-        if (flags.isProduction) {
-            if (['pending', 'received', 'in_progress'].indexOf(newStatus) !== -1) {
-                html += '<button type="button" class="btn btn-outline-success" onclick="submitTaskAction(\'complete_task\', ' + taskId + ')"><i class="bi bi-check2-circle me-1"></i>إكمال</button>';
-            }
-            if (newStatus === 'completed' && taskType === 'telegraph') {
-                html += '<button type="button" class="btn btn-outline-info btn-sm" onclick="submitTaskAction(\'with_delegate_task\', ' + taskId + ')"><i class="bi bi-person-badge me-1"></i>مع المندوب</button>';
-            }
-        }
-        if ((flags.isManager || flags.isProduction || flags.isDriver) && ['completed', 'with_delegate', 'with_driver'].indexOf(newStatus) !== -1) {
-            html += '<button type="button" class="btn btn-outline-success btn-sm" onclick="submitTaskAction(\'deliver_task\', ' + taskId + ')"><i class="bi bi-truck me-1"></i>تم التوصيل</button>';
-            html += '<button type="button" class="btn btn-outline-secondary btn-sm" onclick="submitTaskAction(\'return_task\', ' + taskId + ')"><i class="bi bi-arrow-return-left me-1"></i>تم الارجاع</button>';
-        }
-        if (flags.isManager) {
-            html += '<button type="button" class="btn btn-outline-secondary" onclick="viewTask(' + taskId + ')"><i class="bi bi-eye"></i></button>';
-            html += '<button type="button" class="btn btn-outline-danger" onclick="confirmDeleteTask(' + taskId + ')"><i class="bi bi-trash"></i></button>';
-        }
+        var dropdownId = 'taskActionsDropdown' + taskId;
+        var items = '';
+
+        // طباعة إيصال
         if (flags.isManager || flags.isProduction || flags.isDriver) {
-            html += '<a href="' + printTaskReceiptBase + '?id=' + taskId + '" target="_blank" class="btn btn-outline-primary" title="طباعة إيصال المهمة"><i class="bi bi-printer"></i></a>';
+            items += '<li><a class="dropdown-item" href="' + printTaskReceiptBase + '?id=' + taskId + '" target="_blank"><i class="bi bi-printer me-2"></i>طباعة إيصال</a></li>';
+            items += '<li><hr class="dropdown-divider"></li>';
         }
+
+        // إكمال (لعمال الإنتاج عندما تكون الحالة معلقة أو مستلمة أو قيد التنفيذ)
+        if (flags.isProduction && ['pending', 'received', 'in_progress'].indexOf(newStatus) !== -1) {
+            items += '<li><button type="button" class="dropdown-item" onclick="submitTaskAction(\'complete_task\', ' + taskId + ')"><i class="bi bi-check2-circle me-2"></i>إكمال</button></li>';
+        }
+
+        // مع المندوب (نوع برقية، مكتملة)
+        if ((flags.isManager || flags.isProduction || flags.isDriver) && newStatus === 'completed' && taskType === 'telegraph') {
+            items += '<li><button type="button" class="dropdown-item" onclick="submitTaskAction(\'with_delegate_task\', ' + taskId + ')"><i class="bi bi-person-badge me-2"></i>مع المندوب</button></li>';
+        }
+
+        // مع السائق (غير برقية، مكتملة، مدير أو إنتاج)
+        if ((flags.isManager || flags.isProduction) && newStatus === 'completed' && taskType !== 'telegraph') {
+            items += '<li><button type="button" class="dropdown-item" onclick="openDriverAssignModal(' + taskId + ')"><i class="bi bi-truck me-2"></i>مع السائق</button></li>';
+        }
+
+        // تم التوصيل وتم الارجاع
+        if ((flags.isManager || flags.isProduction || flags.isDriver) && ['completed', 'with_delegate', 'with_driver'].indexOf(newStatus) !== -1) {
+            items += '<li><button type="button" class="dropdown-item" onclick="submitTaskAction(\'deliver_task\', ' + taskId + ')"><i class="bi bi-truck me-2"></i>تم التوصيل</button></li>';
+            items += '<li><button type="button" class="dropdown-item" onclick="submitTaskAction(\'return_task\', ' + taskId + ')"><i class="bi bi-arrow-return-left me-2"></i>تم الارجاع</button></li>';
+        }
+
+        // عرض وحذف (للمدير فقط)
+        if (flags.isManager) {
+            items += '<li><button type="button" class="dropdown-item" onclick="viewTask(' + taskId + ')"><i class="bi bi-eye me-2"></i>عرض</button></li>';
+            items += '<li><button type="button" class="dropdown-item text-danger" onclick="confirmDeleteTask(' + taskId + ')"><i class="bi bi-trash me-2"></i>حذف</button></li>';
+        }
+
+        var html = '<div class="dropdown">';
+        html += '<button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" id="' + dropdownId + '">';
+        html += '<i class="bi bi-three-dots-vertical me-1"></i>إجراءات';
+        html += '</button>';
+        html += '<ul class="dropdown-menu dropdown-menu-end" aria-labelledby="' + dropdownId + '">' + items + '</ul>';
         html += '</div>';
         return html;
     }
