@@ -2385,6 +2385,7 @@ $statsTemplate = [
     'in_progress' => 0,
     'completed' => 0,
     'with_delegate' => 0,
+    'with_driver' => 0,
     'delivered' => 0,
     'returned' => 0,
     'cancelled' => 0
@@ -2422,7 +2423,7 @@ try {
     }
     // حساب الإجمالي من مجموع الحالات (أدق من COUNT المنفرد ويتجنب truncation في بعض بيئات MySQL/PHP)
     $stats['total'] = (int)$stats['pending'] + (int)$stats['received'] + (int)$stats['in_progress']
-        + (int)$stats['completed'] + (int)$stats['with_delegate'] + (int)$stats['delivered'] + (int)$stats['returned'];
+        + (int)$stats['completed'] + (int)$stats['with_delegate'] + (int)$stats['with_driver'] + (int)$stats['delivered'] + (int)$stats['returned'];
 } catch (Exception $e) {
     error_log('Manager task stats error: ' . $e->getMessage());
 }
