@@ -7878,45 +7878,46 @@ document.addEventListener('click', function (e) {
                 if (parcelEl) parcelEl.value = d.tg_parcel_desc || '';
             }, 200);
 
-            // 8. المنتجات — نفس منطق duplicateOrderById + fillProductRowForDuplicate
+            // 8. المنتجات
             var container = document.getElementById('productsContainer');
             if (container && d.products && Array.isArray(d.products) && d.products.length > 0) {
-                // مسح الصفوف الحالية
                 container.querySelectorAll('.product-row').forEach(function (r) { r.remove(); });
 
-                // الصف الأول
-                if (typeof window._addCreateProductRow === 'function') window._addCreateProductRow();
-                else { var ab = document.getElementById('addProductBtn'); if (ab) ab.click(); }
-                var firstRow = container.querySelector('.product-row');
-                if (firstRow && typeof fillProductRowForDuplicate === 'function') {
-                    fillProductRowForDuplicate(firstRow, d.products[0]);
-                    // تطبيق نوع المنتج على الصف الأول
-                    var typeSelector = firstRow.querySelector('.product-type-selector');
-                    if (typeSelector && d.products[0].item_type) {
-                        typeSelector.value = d.products[0].item_type;
-                        typeSelector.dispatchEvent(new Event('change'));
-                    }
-                    var catEl2 = firstRow.querySelector('.product-category-input');
-                    if (catEl2 && d.products[0].category) { catEl2.value = d.products[0].category; catEl2.dispatchEvent(new Event('change')); }
-                }
-
-                // الصفوف الإضافية
-                for (var i = 1; i < d.products.length; i++) {
+                d.products.forEach(function (prod) {
                     if (typeof window._addCreateProductRow === 'function') window._addCreateProductRow();
-                    else { var ab2 = document.getElementById('addProductBtn'); if (ab2) ab2.click(); }
-                    var allRows = container.querySelectorAll('.product-row');
-                    var newRow = allRows[allRows.length - 1];
-                    if (newRow && typeof fillProductRowForDuplicate === 'function') {
-                        fillProductRowForDuplicate(newRow, d.products[i]);
-                        var typeSelector2 = newRow.querySelector('.product-type-selector');
-                        if (typeSelector2 && d.products[i].item_type) {
-                            typeSelector2.value = d.products[i].item_type;
-                            typeSelector2.dispatchEvent(new Event('change'));
-                        }
-                        var catEl3 = newRow.querySelector('.product-category-input');
-                        if (catEl3 && d.products[i].category) { catEl3.value = d.products[i].category; catEl3.dispatchEvent(new Event('change')); }
+                    else { var ab = document.getElementById('addProductBtn'); if (ab) ab.click(); }
+
+                    var rows = container.querySelectorAll('.product-row');
+                    var row = rows[rows.length - 1];
+                    if (!row) return;
+
+                    // أولاً: تعيين النوع لأنه يمسح الاسم عند التغيير
+                    var typeSel = row.querySelector('.product-type-selector');
+                    if (typeSel && prod.item_type) {
+                        typeSel.value = prod.item_type;
+                        typeSel.dispatchEvent(new Event('change'));
                     }
-                }
+
+                    // ثانياً: تعيين الاسم بعد مسح النوع له
+                    var nameEl = row.querySelector('.product-name-input');
+                    if (nameEl) nameEl.value = prod.name || '';
+
+                    // باقي الحقول
+                    var unitEl = row.querySelector('.product-unit-input');
+                    if (unitEl && prod.unit) unitEl.value = prod.unit;
+
+                    var catEl = row.querySelector('.product-category-input');
+                    if (catEl && prod.category) catEl.value = prod.category;
+
+                    var qtyEl = row.querySelector('.product-quantity-input');
+                    if (qtyEl && prod.quantity != null) qtyEl.value = prod.quantity;
+
+                    var priceEl = row.querySelector('.product-price-input');
+                    if (priceEl && prod.price != null) priceEl.value = prod.price;
+
+                    var totalEl = row.querySelector('.product-line-total-input');
+                    if (totalEl && prod.line_total != null) totalEl.value = prod.line_total;
+                });
             }
 
             // 9. إعادة حساب الإجماليات
