@@ -350,6 +350,10 @@ try {
  * Migration checks - تعمل مرة واحدة فقط في الجلسة لتجنب ~20 استعلام SHOW على كل تحميل صفحة
  */
 $hasStatusChangedBy = false;
+$columns = array_column($db->query("SHOW COLUMNS FROM tasks") ?: [], 'Field');
+$columnsMap = array_flip($columns);
+$hasStatusChangedBy = isset($columnsMap['status_changed_by']);
+
 if (empty($_SESSION['_pt_migrations_done'])) {
     try {
         $tableCheck = $db->queryOne("SHOW TABLES LIKE 'tasks'");
@@ -1062,6 +1066,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $values = [$title, $details ?: null, $currentUser['id'], $priority, 'pending', $relatedTypeValue, $currentUser['id']];
                 $placeholders = ['?', '?', '?', '?', '?', '?', '?'];
 
+                if (!$hasStatusChangedBy) {
+                    array_pop($columns);
+                    array_pop($values);
+                    array_pop($placeholders);
+                }
+
                 // وضع أول عامل في assigned_to للتوافق مع الكود الحالي
                 $firstAssignee = !empty($assignees) ? (int)$assignees[0] : 0;
                 if ($firstAssignee > 0) {
@@ -1539,8 +1549,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 
                 $updateFields[] = 'updated_at = NOW()';
-                $updateFields[] = 'status_changed_by = ?';
-                $updateValues[] = $currentUser['id'];
+                
+                if ($hasStatusChangedBy) {
+                    $updateFields[] = 'status_changed_by = ?';
+                    $updateValues[] = $currentUser['id'];
+                }
                 
                 $sql = "UPDATE tasks SET " . implode(', ', $updateFields) . " WHERE id = ?";
                 $updateValues[] = $taskId;
