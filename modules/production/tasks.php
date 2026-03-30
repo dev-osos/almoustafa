@@ -1574,9 +1574,9 @@ function tasksHtml(string $value): string
     if ($filterOrderDateTo !== '') { $filterBaseUrl .= '&order_date_to=' . rawurlencode($filterOrderDateTo); }
     ?>
     <?php if (!defined('TASKS_PARTIAL_TABLE') || !TASKS_PARTIAL_TABLE): ?>
-    <div class="row g-2 mb-3">
+    <div class="row g-2 mb-3" id="taskStatusFilterCards">
         <div class="col-6 col-md-4 col-lg-2">
-            <a href="<?php echo $filterBaseUrl; ?>" class="text-decoration-none">
+            <a href="<?php echo $filterBaseUrl; ?>" class="text-decoration-none task-status-filter-card" data-status="all">
                 <div class="card <?php echo $statusFilter === '' && !$overdueFilter ? 'bg-primary text-white' : 'border-primary'; ?> text-center h-100">
                     <div class="card-body p-2">
                         <h5 class="<?php echo $statusFilter === '' && !$overdueFilter ? 'text-white' : 'text-primary'; ?> mb-0"><?php echo $stats['total']; ?></h5>
@@ -1586,7 +1586,7 @@ function tasksHtml(string $value): string
             </a>
         </div>
         <div class="col-6 col-md-4 col-lg-2">
-            <a href="<?php echo $filterBaseUrl . (strpos($filterBaseUrl, '?') !== false ? '&' : '?'); ?>status=pending" class="text-decoration-none">
+            <a href="<?php echo $filterBaseUrl . (strpos($filterBaseUrl, '?') !== false ? '&' : '?'); ?>status=pending" class="text-decoration-none task-status-filter-card" data-status="pending">
                 <div class="card <?php echo $statusFilter === 'pending' ? 'bg-warning text-dark' : 'border-warning'; ?> text-center h-100">
                     <div class="card-body p-2">
                         <h5 class="<?php echo $statusFilter === 'pending' ? 'text-dark' : 'text-warning'; ?> mb-0"><?php echo $stats['pending']; ?></h5>
@@ -1597,7 +1597,7 @@ function tasksHtml(string $value): string
         </div>
 
         <div class="col-6 col-md-4 col-lg-2">
-            <a href="<?php echo $filterBaseUrl . (strpos($filterBaseUrl, '?') !== false ? '&' : '?'); ?>status=completed" class="text-decoration-none">
+            <a href="<?php echo $filterBaseUrl . (strpos($filterBaseUrl, '?') !== false ? '&' : '?'); ?>status=completed" class="text-decoration-none task-status-filter-card" data-status="completed">
                 <div class="card <?php echo $statusFilter === 'completed' ? 'bg-success text-white' : 'border-success'; ?> text-center h-100">
                     <div class="card-body p-2">
                         <h5 class="<?php echo $statusFilter === 'completed' ? 'text-white' : 'text-success'; ?> mb-0"><?php echo $stats['completed']; ?></h5>
@@ -1607,7 +1607,7 @@ function tasksHtml(string $value): string
             </a>
         </div>
         <div class="col-6 col-md-4 col-lg-2">
-            <a href="<?php echo $filterBaseUrl . (strpos($filterBaseUrl, '?') !== false ? '&' : '?'); ?>status=with_delegate" class="text-decoration-none">
+            <a href="<?php echo $filterBaseUrl . (strpos($filterBaseUrl, '?') !== false ? '&' : '?'); ?>status=with_delegate" class="text-decoration-none task-status-filter-card" data-status="with_delegate">
                 <div class="card <?php echo $statusFilter === 'with_delegate' ? 'bg-info text-white' : 'border-info'; ?> text-center h-100">
                     <div class="card-body p-2">
                         <h5 class="<?php echo $statusFilter === 'with_delegate' ? 'text-white' : 'text-info'; ?> mb-0"><?php echo $stats['with_delegate']; ?></h5>
@@ -1617,7 +1617,7 @@ function tasksHtml(string $value): string
             </a>
         </div>
         <div class="col-6 col-md-4 col-lg-2">
-            <a href="<?php echo $filterBaseUrl . (strpos($filterBaseUrl, '?') !== false ? '&' : '?'); ?>status=with_driver" class="text-decoration-none">
+            <a href="<?php echo $filterBaseUrl . (strpos($filterBaseUrl, '?') !== false ? '&' : '?'); ?>status=with_driver" class="text-decoration-none task-status-filter-card" data-status="with_driver">
                 <div class="card <?php echo $statusFilter === 'with_driver' ? 'bg-primary text-white' : 'border-primary'; ?> text-center h-100">
                     <div class="card-body p-2">
                         <h5 class="<?php echo $statusFilter === 'with_driver' ? 'text-white' : 'text-primary'; ?> mb-0"><?php echo $stats['with_driver']; ?></h5>
@@ -1627,7 +1627,7 @@ function tasksHtml(string $value): string
             </a>
         </div>
         <div class="col-6 col-md-4 col-lg-2">
-            <a href="<?php echo $filterBaseUrl . (strpos($filterBaseUrl, '?') !== false ? '&' : '?'); ?>status=delivered" class="text-decoration-none">
+            <a href="<?php echo $filterBaseUrl . (strpos($filterBaseUrl, '?') !== false ? '&' : '?'); ?>status=delivered" class="text-decoration-none task-status-filter-card" data-status="delivered">
                 <div class="card <?php echo $statusFilter === 'delivered' ? 'bg-success text-white' : 'border-success'; ?> text-center h-100">
                     <div class="card-body p-2">
                         <h5 class="<?php echo $statusFilter === 'delivered' ? 'text-white' : 'text-success'; ?> mb-0"><?php echo $stats['delivered']; ?></h5>
@@ -1637,7 +1637,7 @@ function tasksHtml(string $value): string
             </a>
         </div>
         <div class="col-6 col-md-4 col-lg-2">
-            <a href="<?php echo $filterBaseUrl . (strpos($filterBaseUrl, '?') !== false ? '&' : '?'); ?>status=returned" class="text-decoration-none">
+            <a href="<?php echo $filterBaseUrl . (strpos($filterBaseUrl, '?') !== false ? '&' : '?'); ?>status=returned" class="text-decoration-none task-status-filter-card" data-status="returned">
                 <div class="card <?php echo $statusFilter === 'returned' ? 'bg-secondary text-white' : 'border-secondary'; ?> text-center h-100">
                     <div class="card-body p-2">
                         <h5 class="<?php echo $statusFilter === 'returned' ? 'text-white' : 'text-secondary'; ?> mb-0"><?php echo $stats['returned']; ?></h5>
@@ -1662,7 +1662,7 @@ function tasksHtml(string $value): string
         <div class="card-body p-3">
             <form method="GET" action="" id="tasksFilterForm">
                 <input type="hidden" name="page" value="tasks">
-                <?php if ($statusFilter !== ''): ?><input type="hidden" name="status" value="<?php echo htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8'); ?>"><?php endif; ?>
+                <input type="hidden" name="status" id="tasksStatusFilterInput" value="<?php echo htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8'); ?>">
                 <?php if ($priorityFilter !== ''): ?><input type="hidden" name="priority" value="<?php echo htmlspecialchars($priorityFilter, ENT_QUOTES, 'UTF-8'); ?>"><?php endif; ?>
                 <?php if ($overdueFilter): ?><input type="hidden" name="overdue" value="1"><?php endif; ?>
                 <!-- بحث متقدم ديناميكي — يفلتر الجدول فوراً مع أي مدخلات -->
@@ -1840,7 +1840,7 @@ function tasksHtml(string $value): string
                                 $relatedType = isset($task['related_type']) ? (string)$task['related_type'] : '';
                                 $displayType = (strpos($relatedType, 'manager_') === 0) ? substr($relatedType, 8) : ($task['task_type'] ?? 'general');
                                 ?>
-                                <tr class="tasks-filter-row <?php echo $overdue ? 'table-danger' : ''; ?>" data-task-id="<?php echo (int) $task['id']; ?>" data-search="<?php echo htmlspecialchars($rowSearchText, ENT_QUOTES, 'UTF-8'); ?>" data-customer="<?php echo htmlspecialchars(trim((string)($task['customer_display'] ?? '') . ' ' . (string)($task['customer_phone'] ?? '')), ENT_QUOTES, 'UTF-8'); ?>" data-task-type="<?php echo htmlspecialchars($displayType, ENT_QUOTES, 'UTF-8'); ?>" data-due-date="<?php echo htmlspecialchars($rowDueDate, ENT_QUOTES, 'UTF-8'); ?>" data-order-date="<?php echo htmlspecialchars($rowOrderDate, ENT_QUOTES, 'UTF-8'); ?>" data-assigned="<?php echo (int)($task['assigned_to'] ?? 0); ?>">
+                                <tr class="tasks-filter-row <?php echo $overdue ? 'table-danger' : ''; ?>" data-task-id="<?php echo (int) $task['id']; ?>" data-status="<?php echo htmlspecialchars((string)($task['status'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" data-search="<?php echo htmlspecialchars($rowSearchText, ENT_QUOTES, 'UTF-8'); ?>" data-customer="<?php echo htmlspecialchars(trim((string)($task['customer_display'] ?? '') . ' ' . (string)($task['customer_phone'] ?? '')), ENT_QUOTES, 'UTF-8'); ?>" data-task-type="<?php echo htmlspecialchars($displayType, ENT_QUOTES, 'UTF-8'); ?>" data-due-date="<?php echo htmlspecialchars($rowDueDate, ENT_QUOTES, 'UTF-8'); ?>" data-order-date="<?php echo htmlspecialchars($rowOrderDate, ENT_QUOTES, 'UTF-8'); ?>" data-assigned="<?php echo (int)($task['assigned_to'] ?? 0); ?>">
                                     <?php if ($isManager || $isProduction): ?>
                                     <td>
                                         <input type="checkbox" class="form-check-input task-print-checkbox" value="<?php echo (int) $task['id']; ?>" data-print-url="<?php echo htmlspecialchars(getRelativeUrl('print_task_receipt.php?id=' . (int) $task['id']), ENT_QUOTES, 'UTF-8'); ?>">
@@ -3107,6 +3107,8 @@ function tasksHtml(string $value): string
     var orderFromEl = document.getElementById('tasksFilterOrderDateFrom');
     var orderToEl = document.getElementById('tasksFilterOrderDateTo');
     var assignedEl = document.getElementById('tasksFilterAssigned');
+    var statusInputEl = document.getElementById('tasksStatusFilterInput');
+    var statusCards = document.querySelectorAll('.task-status-filter-card');
 
     function normalize(s) {
         if (typeof s !== 'string') return '';
@@ -3124,6 +3126,7 @@ function tasksHtml(string $value): string
         var orderTo = orderToEl ? (orderToEl.value || '').trim() : '';
         var assigned = assignedEl ? (assignedEl.value || '0') : '0';
         var assignedNum = parseInt(assigned, 10) || 0;
+        var status = statusInputEl ? (statusInputEl.value || '').trim() : '';
 
         var rows = tbody.querySelectorAll('tr.tasks-filter-row');
         rows.forEach(function(tr) {
@@ -3136,7 +3139,9 @@ function tasksHtml(string $value): string
             var rowOrderDate = (tr.getAttribute('data-order-date') || '').trim();
             var rowAssigned = tr.getAttribute('data-assigned') || '0';
             var rowAssignedNum = parseInt(rowAssigned, 10) || 0;
+            var rowStatus = (tr.getAttribute('data-status') || '').trim();
 
+            if (status && rowStatus !== status) show = false;
             if (searchText && rowSearch.indexOf(searchText) === -1) show = false;
             if (taskId && rowTaskId.indexOf(taskId) === -1) show = false;
             if (customer && rowCustomer.indexOf(customer) === -1) show = false;
@@ -3148,6 +3153,40 @@ function tasksHtml(string $value): string
             if (assignedNum > 0 && rowAssignedNum !== assignedNum) show = false;
 
             tr.style.display = show ? '' : 'none';
+        });
+    }
+
+    function updateStatusCards(activeStatus) {
+        activeStatus = (activeStatus || '').trim();
+        statusCards.forEach(function(link) {
+            var status = (link.getAttribute('data-status') || 'all').trim();
+            var isActive = (status === 'all' && activeStatus === '') || status === activeStatus;
+            var card = link.querySelector('.card');
+            var number = link.querySelector('h5');
+            var small = link.querySelector('small');
+            if (!card || !number || !small) return;
+
+            if (status === 'pending') {
+                card.className = 'card text-center h-100 ' + (isActive ? 'bg-warning text-dark' : 'border-warning');
+                number.className = (isActive ? 'text-dark' : 'text-warning') + ' mb-0';
+                small.className = isActive ? 'text-dark-50' : 'text-muted';
+            } else if (status === 'completed' || status === 'delivered') {
+                card.className = 'card text-center h-100 ' + (isActive ? 'bg-success text-white' : 'border-success');
+                number.className = (isActive ? 'text-white' : 'text-success') + ' mb-0';
+                small.className = isActive ? 'text-white-50' : 'text-muted';
+            } else if (status === 'with_delegate') {
+                card.className = 'card text-center h-100 ' + (isActive ? 'bg-info text-white' : 'border-info');
+                number.className = (isActive ? 'text-white' : 'text-info') + ' mb-0';
+                small.className = isActive ? 'text-white-50' : 'text-muted';
+            } else if (status === 'with_driver' || status === 'all') {
+                card.className = 'card text-center h-100 ' + (isActive ? 'bg-primary text-white' : 'border-primary');
+                number.className = (isActive ? 'text-white' : 'text-primary') + ' mb-0';
+                small.className = isActive ? 'text-white-50' : 'text-muted';
+            } else if (status === 'returned') {
+                card.className = 'card text-center h-100 ' + (isActive ? 'bg-secondary text-white' : 'border-secondary');
+                number.className = (isActive ? 'text-white' : 'text-secondary') + ' mb-0';
+                small.className = isActive ? 'text-white-50' : 'text-muted';
+            }
         });
     }
 
@@ -3171,6 +3210,20 @@ function tasksHtml(string $value): string
         form.addEventListener('submit', function(e) { e.preventDefault(); doAjaxTasksPage(1); });
     }
 
+    statusCards.forEach(function(link) {
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            var nextStatus = (this.getAttribute('data-status') || 'all').trim();
+            if (statusInputEl) {
+                statusInputEl.value = nextStatus === 'all' ? '' : nextStatus;
+            }
+            updateStatusCards(statusInputEl ? statusInputEl.value : '');
+            applyTasksFilter();
+            doAjaxTasksPage(1);
+        });
+    });
+
+    updateStatusCards(statusInputEl ? statusInputEl.value : '');
     applyTasksFilter();
 
     window.addEventListener('tasks-table-updated', applyTasksFilter);
@@ -3202,6 +3255,7 @@ function tasksHtml(string $value): string
                 }
                 if (wrapper) wrapper.style.opacity = '';
                 applyTasksFilter();
+                updateStatusCards(statusInputEl ? statusInputEl.value : '');
                 window.dispatchEvent(new Event('tasks-table-updated'));
                 history.replaceState(null, '', url);
             })
