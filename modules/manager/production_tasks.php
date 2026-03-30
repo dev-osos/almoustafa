@@ -1570,6 +1570,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $draft = $db->queryOne("SELECT * FROM task_drafts WHERE id = ? AND created_by = ? LIMIT 1", [$draftId, $currentUser['id']]);
             if (!$draft) { echo json_encode(['success' => false, 'error' => 'المسودة غير موجودة'], JSON_UNESCAPED_UNICODE); exit; }
             $data = json_decode($draft['draft_data'], true) ?: [];
+            if (isset($data['products']) && is_array($data['products'])) {
+                $data['products'] = array_values($data['products']);
+            }
             echo json_encode(['success' => true, 'data' => $data, 'draft_id' => $draftId, 'draft_name' => $draft['draft_name']], JSON_UNESCAPED_UNICODE);
         } catch (Exception $e) {
             echo json_encode(['success' => false, 'error' => 'خطأ في تحميل المسودة'], JSON_UNESCAPED_UNICODE);
@@ -6784,6 +6787,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // تصدير دوال داخلية للاستخدام في تكرار الأوردر
     window._addCreateProductRow = addProductRow;
     window._updateCreateTaskSummary = updateCreateTaskSummary;
+    window._resetProductIndex = function() { productIndex = 0; };
 });
 
 // دالة لتحديث step حقل الكمية بناءً على الوحدة المختارة
@@ -7880,10 +7884,15 @@ document.addEventListener('click', function (e) {
 
             // 8. المنتجات
             var container = document.getElementById('productsContainer');
-            if (container && d.products && Array.isArray(d.products) && d.products.length > 0) {
+            var draftProducts = d.products;
+            if (draftProducts && !Array.isArray(draftProducts) && typeof draftProducts === 'object') {
+                draftProducts = Object.values(draftProducts);
+            }
+            if (container && draftProducts && Array.isArray(draftProducts) && draftProducts.length > 0) {
                 container.querySelectorAll('.product-row').forEach(function (r) { r.remove(); });
+                if (typeof window._resetProductIndex === 'function') window._resetProductIndex();
 
-                d.products.forEach(function (prod) {
+                draftProducts.forEach(function (prod) {
                     if (typeof window._addCreateProductRow === 'function') window._addCreateProductRow();
                     else { var ab = document.getElementById('addProductBtn'); if (ab) ab.click(); }
 
