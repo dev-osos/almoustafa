@@ -119,21 +119,6 @@ $baseUrl = getDashboardUrl();
                 </a>
             </li>
             
-            <li class="nav-item">
-                <a class="nav-link <?php echo (isset($_GET['page']) && $_GET['page'] === 'product_storage') ? 'active' : ''; ?>" 
-                   href="<?php echo $baseUrl; ?>sales.php?page=product_storage">
-                    <i class="bi bi-arrow-left-right"></i>
-                    <span>تشوين المنتجات</span>
-                </a>
-            </li>
-            
-            <li class="nav-item">
-                <a class="nav-link <?php echo (isset($_GET['page']) && $_GET['page'] === 'transferred_to_me') ? 'active' : ''; ?>" 
-                   href="<?php echo $baseUrl; ?>sales.php?page=transferred_to_me">
-                    <i class="bi bi-inbox"></i>
-                    <span>المنتجات المنقولة لي</span>
-                </a>
-            </li>
             
             <li class="nav-item">
                 <a class="nav-link <?php echo (isset($_GET['page']) && $_GET['page'] === 'pos') ? 'active' : ''; ?>"
