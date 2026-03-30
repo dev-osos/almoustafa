@@ -453,22 +453,6 @@ if (empty($_SESSION['_pt_migrations_done'])) {
         ");
     } catch (Exception $e) {}
 
-    // جدول المسودات
-    try {
-        $db->execute("
-            CREATE TABLE IF NOT EXISTS `task_drafts` (
-              `id` int(11) NOT NULL AUTO_INCREMENT,
-              `created_by` int(11) NOT NULL,
-              `draft_name` varchar(255) NULL,
-              `draft_data` longtext NOT NULL,
-              `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-              `updated_at` timestamp NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
-              PRIMARY KEY (`id`),
-              KEY `created_by` (`created_by`)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-        ");
-    } catch (Exception $e) {}
-
     // أعمدة إضافية لجدول الفواتير الورقية
     try {
         $t = $db->queryOne("SHOW TABLES LIKE 'shipping_company_paper_invoices'");
@@ -486,6 +470,27 @@ if (empty($_SESSION['_pt_migrations_done'])) {
     } catch (Exception $e) {}
 
     $_SESSION['_pt_migrations_done'] = 1;
+}
+
+// إنشاء جدول المسودات بشكل مستقل (خارج session-gate لضمان التنفيذ دائماً)
+if (empty($_SESSION['_pt_drafts_table_done'])) {
+    try {
+        $db->execute("
+            CREATE TABLE IF NOT EXISTS `task_drafts` (
+              `id` int(11) NOT NULL AUTO_INCREMENT,
+              `created_by` int(11) NOT NULL,
+              `draft_name` varchar(255) NULL,
+              `draft_data` longtext NOT NULL,
+              `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              `updated_at` timestamp NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+              PRIMARY KEY (`id`),
+              KEY `created_by` (`created_by`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+        $_SESSION['_pt_drafts_table_done'] = 1;
+    } catch (Exception $e) {
+        error_log('task_drafts migration error: ' . $e->getMessage());
+    }
 }
 
 /**
