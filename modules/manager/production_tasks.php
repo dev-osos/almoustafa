@@ -1537,7 +1537,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (isset($_POST[$f])) $draftData[$f] = $_POST[$f];
             }
             if (isset($_POST['products']) && is_array($_POST['products'])) {
-                $draftData['products'] = $_POST['products'];
+                $draftData['products'] = array_values($_POST['products']);
             }
             $customerName = trim($_POST['customer_name'] ?? '');
             $taskType     = trim($_POST['task_type'] ?? '');
