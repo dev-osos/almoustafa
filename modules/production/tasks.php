@@ -58,9 +58,6 @@ if (empty($_SESSION['_prod_tasks_migrations_done'])) {
                 $db->execute("ALTER TABLE tasks MODIFY COLUMN status ENUM('pending','received','in_progress','completed','with_delegate','with_driver','delivered','returned','cancelled') DEFAULT 'pending'");
             }
         }
-        if (!isset($columnsMap['status_changed_by'])) {
-            $db->execute("ALTER TABLE tasks ADD COLUMN status_changed_by INT(11) NULL AFTER updated_at");
-        }
         // إنشاء جدول driver_assignments إذا لم يكن موجوداً
         $db->execute("CREATE TABLE IF NOT EXISTS driver_assignments (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -102,7 +99,21 @@ $isManager = ($currentUser['role'] ?? '') === 'manager';
 $isProduction = ($currentUser['role'] ?? '') === 'production';
 $isDriver = ($currentUser['role'] ?? '') === 'driver';
 
-$hasStatusChangedBy = in_array('status_changed_by', array_column($db->query("SHOW COLUMNS FROM tasks") ?: [], 'Field'), true);
+$hasStatusChangedBy = false;
+if (empty($_SESSION['_prod_status_changed_by_done'])) {
+    try {
+        $scbCols = array_column($db->query("SHOW COLUMNS FROM tasks") ?: [], 'Field');
+        if (!in_array('status_changed_by', $scbCols, true)) {
+            $db->execute("ALTER TABLE tasks ADD COLUMN status_changed_by INT(11) NULL");
+        }
+        $hasStatusChangedBy = true;
+        $_SESSION['_prod_status_changed_by_done'] = 1;
+    } catch (Exception $e) {
+        error_log('status_changed_by migration error: ' . $e->getMessage());
+    }
+} else {
+    $hasStatusChangedBy = true;
+}
 
 if (!function_exists('tasksSafeString')) {
     function tasksSafeString($value)
