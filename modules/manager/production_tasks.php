@@ -5,6 +5,7 @@
 
 $isGetTaskForEdit = ($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && isset($_GET['action']) && $_GET['action'] === 'get_task_for_edit' && isset($_GET['task_id']);
 $isGetTaskReceipt = ($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && isset($_GET['action']) && $_GET['action'] === 'get_task_receipt' && isset($_GET['task_id']);
+$isDraftAjaxAction = ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && in_array($_POST['action'] ?? '', ['save_task_draft', 'load_task_draft', 'delete_task_draft'], true);
 
 // منع الكاش عند التبديل بين الأوردرات/الحسابات لضمان عدم رجوع أي كاش قديم
 if (!headers_sent()) {
@@ -13,7 +14,7 @@ if (!headers_sent()) {
     header('Pragma: no-cache');
     header('Expires: 0');
 }
-if (!$isGetTaskForEdit && !$isGetTaskReceipt && !headers_sent()) {
+if (!$isGetTaskForEdit && !$isGetTaskReceipt && !$isDraftAjaxAction && !headers_sent()) {
     header('Content-Type: text/html; charset=UTF-8');
 }
 mb_internal_encoding('UTF-8');
@@ -1522,6 +1523,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     } elseif ($action === 'save_task_draft') {
+        while (ob_get_level()) ob_end_clean();
         header('Content-Type: application/json; charset=utf-8');
         try {
             $draftData = [];
@@ -1555,6 +1557,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
 
     } elseif ($action === 'load_task_draft') {
+        while (ob_get_level()) ob_end_clean();
         header('Content-Type: application/json; charset=utf-8');
         $draftId = intval($_POST['draft_id'] ?? 0);
         if ($draftId <= 0) { echo json_encode(['success' => false, 'error' => 'معرف غير صحيح'], JSON_UNESCAPED_UNICODE); exit; }
@@ -1569,6 +1572,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
 
     } elseif ($action === 'delete_task_draft') {
+        while (ob_get_level()) ob_end_clean();
         header('Content-Type: application/json; charset=utf-8');
         $draftId = intval($_POST['draft_id'] ?? 0);
         if ($draftId <= 0) { echo json_encode(['success' => false, 'error' => 'معرف غير صحيح'], JSON_UNESCAPED_UNICODE); exit; }
