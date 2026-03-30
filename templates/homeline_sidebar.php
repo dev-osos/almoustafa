@@ -66,6 +66,7 @@ if (empty($role) && function_exists('getUserFromToken')) {
 }
 
 $currentPageParam = trim($_GET['page'] ?? '');
+$currentFocus = trim($_GET['focus'] ?? '');
 
 // محاولة تحديد role من الصفحة الحالية إذا كان غير معروف
 if (empty($role)) {
@@ -729,6 +730,7 @@ switch ($role) {
     
     case 'production':
         $menuItems = [
+            ['divider' => true, 'title' => 'الرئيسية'],
             [
                 'title' => isset($lang['dashboard']) ? $lang['dashboard'] : 'لوحة التحكم',
                 'icon' => 'bi-speedometer2',
@@ -743,12 +745,12 @@ switch ($role) {
                 'active' => ($currentPage === 'production.php' && $currentPageParam === 'chat'),
                 'badge' => null
             ],
-            ['divider' => true, 'title' => isset($lang['production_section']) ? $lang['production_section'] : 'الإنتاج'],
+            ['divider' => true, 'title' => 'التشغيل والمتابعة'],
             [
                 'title' => isset($lang['menu_production']) ? $lang['menu_production'] : 'الإنتاج',
                 'icon' => 'bi-box-seam',
                 'url' => $baseUrl . 'production.php?page=production',
-                'active' => ($currentPage === 'production.php' && $currentPageParam === 'production'),
+                'active' => ($currentPage === 'production.php' && $currentPageParam === 'production' && $currentFocus !== 'warehouse-damage-log'),
                 'badge' => null
             ],
             [
@@ -766,56 +768,42 @@ switch ($role) {
                 'badge' => null
             ],
             [
-                'title' => 'مخزن أدوات التعبئة',
-                'icon' => 'bi-box-seam',
-                'url' => $baseUrl . 'production.php?page=packaging_warehouse',
-                'active' => ($currentPage === 'production.php' && $currentPageParam === 'packaging_warehouse'),
-                'badge' => null
-            ],
-            [
-                'title' => 'مخزن الخامات',
-                'icon' => 'bi-box-seam',
-                'url' => $baseUrl . 'production.php?page=raw_materials_warehouse',
-                'active' => ($currentPage === 'production.php' && $currentPageParam === 'raw_materials_warehouse'),
-                'badge' => null
-            ],
-            [
-                'title' => 'تسجيل الواردات',
-                'icon' => 'bi-box-arrow-in-down',
-                'url' => $baseUrl . 'production.php?page=inbound_supplies',
-                'active' => ($currentPage === 'production.php' && $currentPageParam === 'inbound_supplies'),
-                'badge' => null
-            ],
-            [
-                'title' => 'مخزن توالف المصنع',
-                'icon' => 'bi-trash',
-                'url' => $baseUrl . 'production.php?page=factory_waste_warehouse',
-                'active' => ($currentPage === 'production.php' && $currentPageParam === 'factory_waste_warehouse'),
-                'badge' => null
-            ],
-            [
-                'title' => 'مخزن المنتجات',
-                'icon' => 'bi-boxes',
-                'url' => $baseUrl . 'production.php?page=inventory',
-                'active' => ($currentPage === 'production.php' && $currentPageParam === 'inventory'),
-                'badge' => null
-            ],
-            [
-                'title' => 'منتجات الشركة',
-                'icon' => 'bi-box-seam',
-                'url' => $baseUrl . 'production.php?page=company_products',
-                'active' => ($currentPage === 'production.php' && $currentPageParam === 'company_products'),
-                'badge' => null
-            ],
-            
-            
-            [
                 'title' => isset($lang['menu_attendance']) ? $lang['menu_attendance'] : 'الحضور',
                 'icon' => 'bi-calendar-check',
                 'url' => getRelativeUrl('attendance.php'),
                 'active' => ($currentPage === 'attendance.php'),
                 'badge' => null
             ],
+            ['divider' => true, 'title' => 'المخازن'],
+            [
+                'title' => 'مخزن الخامات',
+                'icon' => 'bi-droplet-half',
+                'url' => $baseUrl . 'production.php?page=raw_materials_warehouse',
+                'active' => ($currentPage === 'production.php' && $currentPageParam === 'raw_materials_warehouse'),
+                'badge' => null
+            ],
+            [
+                'title' => 'مخزن أدوات التعبئة',
+                'icon' => 'bi-box2-heart',
+                'url' => $baseUrl . 'production.php?page=packaging_warehouse',
+                'active' => ($currentPage === 'production.php' && $currentPageParam === 'packaging_warehouse'),
+                'badge' => null
+            ],
+            [
+                'title' => 'منتجات الشركة',
+                'icon' => 'bi-box-seam-fill',
+                'url' => $baseUrl . 'production.php?page=inventory',
+                'active' => ($currentPage === 'production.php' && $currentPageParam === 'inventory'),
+                'badge' => null
+            ],
+            [
+                'title' => 'مخزن توالف المصنع',
+                'icon' => 'bi-exclamation-triangle',
+                'url' => $baseUrl . 'production.php?page=production&focus=warehouse-damage-log#warehouse-damage-log',
+                'active' => ($currentPage === 'production.php' && $currentPageParam === 'production' && $currentFocus === 'warehouse-damage-log'),
+                'badge' => null
+            ],
+            ['divider' => true, 'title' => 'الحساب الشخصي'],
             [
                 'title' => isset($lang['my_salary']) ? $lang['my_salary'] : 'مرتبي',
                 'icon' => 'bi-wallet2',
@@ -830,7 +818,7 @@ switch ($role) {
                 'active' => ($currentPage === 'production.php' && $currentPageParam === 'user_wallet'),
                 'badge' => null
             ],
-            ['divider' => true, 'title' => 'أدوات'],
+            ['divider' => true, 'title' => 'الأدوات'],
             [
                 'title' => 'قارئ أرقام التشغيلات',
                 'icon' => 'bi-upc-scan',
@@ -1002,19 +990,26 @@ if (empty($menuItems)) {
             if (searchInput) {
                 searchInput.addEventListener('input', function() {
                     const filter = this.value.toLowerCase().trim();
-                    const navItems = document.querySelectorAll('.homeline-sidebar .nav-item');
-                    
-                    navItems.forEach(function(item) {
-                        const link = item.querySelector('.nav-link');
-                        if (link) {
+                    const sidebarGroups = document.querySelectorAll('.homeline-sidebar .sidebar-menu-group');
+
+                    sidebarGroups.forEach(function(group) {
+                        const navItems = group.querySelectorAll('.nav-item');
+                        let hasVisibleItem = false;
+
+                        navItems.forEach(function(item) {
+                            const link = item.querySelector('.nav-link');
+                            if (!link) return;
                             const text = link.textContent.toLowerCase();
-                            // البحث في النص والنص الفرعي (إذا وجد)
-                            if (text.includes(filter)) {
-                                item.style.display = '';
-                                // تمييز النص المطابق (اختياري - بسيط حالياً)
-                            } else {
-                                item.style.display = 'none';
+                            const matched = !filter || text.includes(filter);
+                            item.style.display = matched ? '' : 'none';
+                            if (matched) {
+                                hasVisibleItem = true;
                             }
+                        });
+
+                        group.style.display = hasVisibleItem ? '' : 'none';
+                        if (filter && hasVisibleItem) {
+                            group.setAttribute('open', 'open');
                         }
                     });
                 });
@@ -1024,25 +1019,69 @@ if (empty($menuItems)) {
     </div>
 
     <nav class="sidebar-nav">
-        <ul class="nav">
+        <ul class="nav flex-column">
             <?php
-            foreach ($menuItems as $item): if (!isset($item['divider'])): ?>
-                <li class="nav-item">
-                    <a class="nav-link <?php echo $item['active'] ? 'active' : ''; ?>" 
-                       href="<?php echo htmlspecialchars($item['url']); ?>"
-                       <?php if (!empty($item['no_ajax'])): ?>data-ajax="false"<?php endif; ?>
-                       data-no-splash="true">
-                        <i class="bi <?php echo htmlspecialchars($item['icon']); ?>"></i>
-                        <span><?php echo htmlspecialchars($item['title']); ?></span>
-                        <?php if ($item['badge']): ?>
-                            <?php echo $item['badge']; ?>
-                        <?php endif; ?>
-                    </a>
-                </li>
-            <?php
-                endif;
-            endforeach;
+            $groupedMenuItems = [];
+            $currentGroupIndex = -1;
+            foreach ($menuItems as $item) {
+                if (isset($item['divider']) && $item['divider']) {
+                    $groupedMenuItems[] = [
+                        'title' => trim((string) ($item['title'] ?? 'القائمة')) ?: 'القائمة',
+                        'items' => []
+                    ];
+                    $currentGroupIndex = count($groupedMenuItems) - 1;
+                    continue;
+                }
+
+                if ($currentGroupIndex < 0) {
+                    $groupedMenuItems[] = [
+                        'title' => 'الرئيسية',
+                        'items' => []
+                    ];
+                    $currentGroupIndex = 0;
+                }
+
+                $groupedMenuItems[$currentGroupIndex]['items'][] = $item;
+            }
+
+            foreach ($groupedMenuItems as $groupIndex => $group):
+                $groupItems = $group['items'] ?? [];
+                if (empty($groupItems)) {
+                    continue;
+                }
+                $groupHasActive = false;
+                foreach ($groupItems as $groupItem) {
+                    if (!empty($groupItem['active'])) {
+                        $groupHasActive = true;
+                        break;
+                    }
+                }
             ?>
+                <li class="sidebar-group-wrapper">
+                    <details class="sidebar-menu-group" <?php echo ($groupHasActive || $groupIndex === 0) ? 'open' : ''; ?>>
+                        <summary class="sidebar-menu-summary">
+                            <span class="sidebar-menu-summary-text"><?php echo htmlspecialchars($group['title']); ?></span>
+                            <i class="bi bi-chevron-down"></i>
+                        </summary>
+                        <ul class="nav flex-column sidebar-group-links">
+                            <?php foreach ($groupItems as $item): ?>
+                                <li class="nav-item">
+                                    <a class="nav-link <?php echo !empty($item['active']) ? 'active' : ''; ?>"
+                                       href="<?php echo htmlspecialchars($item['url']); ?>"
+                                       <?php if (!empty($item['no_ajax'])): ?>data-ajax="false"<?php endif; ?>
+                                       data-no-splash="true">
+                                        <i class="bi <?php echo htmlspecialchars($item['icon']); ?>"></i>
+                                        <span><?php echo htmlspecialchars($item['title']); ?></span>
+                                        <?php if (!empty($item['badge'])): ?>
+                                            <?php echo $item['badge']; ?>
+                                        <?php endif; ?>
+                                    </a>
+                                </li>
+                            <?php endforeach; ?>
+                        </ul>
+                    </details>
+                </li>
+            <?php endforeach; ?>
         </ul>
     </nav>
 
@@ -1085,6 +1124,46 @@ if (empty($menuItems)) {
 </aside>
 
 <style>
+.homeline-sidebar .sidebar-group-wrapper {
+    list-style: none;
+}
+.homeline-sidebar .sidebar-menu-group {
+    margin: 0.2rem 0 0.45rem;
+    border-radius: 12px;
+    background: rgba(15, 23, 42, 0.03);
+    overflow: hidden;
+}
+.homeline-sidebar .sidebar-menu-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.75rem 0.95rem;
+    cursor: pointer;
+    font-weight: 700;
+    color: #1f2937;
+    user-select: none;
+    list-style: none;
+}
+.homeline-sidebar .sidebar-menu-summary::-webkit-details-marker {
+    display: none;
+}
+.homeline-sidebar .sidebar-menu-summary-text {
+    font-size: 0.92rem;
+}
+.homeline-sidebar .sidebar-menu-summary .bi-chevron-down {
+    transition: transform 0.2s ease;
+    font-size: 0.8rem;
+}
+.homeline-sidebar .sidebar-menu-group[open] .sidebar-menu-summary .bi-chevron-down {
+    transform: rotate(180deg);
+}
+.homeline-sidebar .sidebar-group-links {
+    padding: 0 0 0.4rem;
+}
+.homeline-sidebar .sidebar-group-links .nav-link {
+    padding-inline-start: 1.25rem;
+}
 .homeline-sidebar .homeline-sidebar-profile-section {
     margin-top: auto;
     padding: 1rem 1rem 1.25rem;
