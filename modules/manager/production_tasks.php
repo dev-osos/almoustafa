@@ -7811,73 +7811,54 @@ document.addEventListener('click', function (e) {
         .then(function (r) { return r.json(); })
         .then(function (res) {
             if (!res.success) { alert(res.error || 'تعذر تحميل المسودة'); return; }
-            var data = res.data;
+            var d = res.data;
 
-            // 1. فتح النموذج إذا كان مطوياً
+            // 1. فتح النموذج
             var collapseEl = document.getElementById('createTaskFormCollapse');
             if (collapseEl && !collapseEl.classList.contains('show')) {
-                if (typeof bootstrap !== 'undefined') {
-                    bootstrap.Collapse.getOrCreateInstance(collapseEl).show();
-                } else {
-                    collapseEl.classList.add('show');
-                }
+                if (typeof bootstrap !== 'undefined') bootstrap.Collapse.getOrCreateInstance(collapseEl).show();
+                else collapseEl.classList.add('show');
             }
 
-            // 2. نوع الأوردر (يجب أولاً لإظهار/إخفاء حقول التليجراف)
-            var ttSelect = document.querySelector('#createTaskForm [name="task_type"]');
-            if (ttSelect && data.task_type) {
-                ttSelect.value = data.task_type;
-                ttSelect.dispatchEvent(new Event('change'));
-            }
+            // 2. نوع الأوردر
+            var typeEl = document.getElementById('taskTypeSelect');
+            if (typeEl) { typeEl.value = d.task_type || 'shop_order'; typeEl.dispatchEvent(new Event('change')); }
 
-            // 3. الأولوية وتاريخ التسليم
-            var prEl = document.querySelector('#createTaskForm [name="priority"]');
-            if (prEl && data.priority) prEl.value = data.priority;
+            // 3. الأولوية والتاريخ
+            var prEl = document.querySelector('#createTaskFormCollapse select[name="priority"]');
+            if (prEl) prEl.value = d.priority || 'normal';
+            var ddEl = document.querySelector('#createTaskFormCollapse input[name="due_date"]');
+            if (ddEl) ddEl.value = d.due_date || '';
 
-            var ddEl = document.querySelector('#createTaskForm [name="due_date"]');
-            if (ddEl && data.due_date) ddEl.value = data.due_date;
-
-            // 4. اختيار العميل
-            var customerType = data.customer_type_radio_task || 'local';
+            // 4. العميل (نفس منطق duplicateOrderById)
+            var customerType = d.customer_type_radio_task || 'local';
             var radioEl = document.getElementById('ct_task_' + customerType);
             if (radioEl) { radioEl.checked = true; radioEl.dispatchEvent(new Event('change')); }
 
-            // اسم العميل — الحقل المخفي للإرسال + حقل البحث المرئي
             var hiddenNameEl = document.getElementById('submit_customer_name');
-            if (hiddenNameEl) hiddenNameEl.value = data.customer_name || '';
+            if (hiddenNameEl) hiddenNameEl.value = d.customer_name || '';
+            var localSearchEl = document.getElementById('local_customer_search_task');
+            if (localSearchEl) localSearchEl.value = d.customer_name || '';
+            var repSearchEl = document.getElementById('rep_customer_search_task');
+            if (repSearchEl && customerType === 'rep') repSearchEl.value = d.customer_name || '';
+            var phoneEl2 = document.getElementById('submit_customer_phone');
+            if (phoneEl2) phoneEl2.value = d.customer_phone || '';
+            var lcIdEl = document.getElementById('local_customer_id_task');
+            if (lcIdEl) lcIdEl.value = d.local_customer_id || '';
 
-            if (customerType === 'rep') {
-                var repSearchEl = document.getElementById('rep_customer_search_task');
-                if (repSearchEl) repSearchEl.value = data.customer_name || '';
-                var repIdEl = document.getElementById('rep_customer_id_task');
-                if (repIdEl) repIdEl.value = data.local_customer_id || '';
-            } else {
-                var localSearchEl = document.getElementById('local_customer_search_task');
-                if (localSearchEl) localSearchEl.value = data.customer_name || '';
-                var lcIdEl = document.getElementById('local_customer_id_task');
-                if (lcIdEl) lcIdEl.value = data.local_customer_id || '';
-            }
+            // 5. عنوان الأوردر والملاحظات
+            var titleEl2 = document.getElementById('createOrderTitle');
+            if (titleEl2) titleEl2.value = d.order_title || '';
+            var detEl = document.querySelector('#createTaskFormCollapse textarea[name="details"]');
+            if (detEl) detEl.value = d.details || '';
 
-            // رقم الهاتف
-            var phoneEl = document.getElementById('submit_customer_phone');
-            if (phoneEl) phoneEl.value = data.customer_phone || '';
-
-            // 5. عنوان التوصيل
-            var otEl = document.getElementById('createOrderTitle');
-            if (otEl) otEl.value = data.order_title || '';
-
-            // 6. ملاحظات
-            var detEl = document.querySelector('#createTaskForm [name="details"]');
-            if (detEl) detEl.value = data.details || '';
-
-            // 7. رسوم الشحن والخصم
+            // 6. الشحن والخصم
             var sfEl = document.getElementById('createTaskShippingFees');
-            if (sfEl) { sfEl.value = data.shipping_fees || '0'; sfEl.dispatchEvent(new Event('input')); }
-
+            if (sfEl) { sfEl.value = (d.shipping_fees != null) ? d.shipping_fees : 0; sfEl.dispatchEvent(new Event('input')); }
             var discEl = document.getElementById('createTaskDiscount');
-            if (discEl) { discEl.value = data.discount || '0'; discEl.dispatchEvent(new Event('input')); }
+            if (discEl) { discEl.value = (d.discount != null) ? d.discount : 0; discEl.dispatchEvent(new Event('input')); }
 
-            // 8. حقول التليجراف (بعد تغيير نوع الأوردر بقليل)
+            // 7. حقول التليجراف
             setTimeout(function () {
                 var govEl = document.getElementById('createGov');
                 var govSearchEl = document.getElementById('createGovSearch');
@@ -7885,79 +7866,65 @@ document.addEventListener('click', function (e) {
                 var cityEl = document.getElementById('createCity');
                 var citySearchEl = document.getElementById('createCitySearch');
                 var cityIdEl = document.getElementById('createCityId');
-                var weightEl = document.getElementById('createTgWeight');
+                if (govEl) govEl.value = d.tg_governorate || '';
+                if (govSearchEl) govSearchEl.value = d.tg_governorate || '';
+                if (govIdEl) govIdEl.value = d.tg_gov_id || '';
+                if (cityEl) cityEl.value = d.tg_city || '';
+                if (citySearchEl) citySearchEl.value = d.tg_city || '';
+                if (cityIdEl) cityIdEl.value = d.tg_city_id || '';
+                var weightEl2 = document.getElementById('createTgWeight');
+                if (weightEl2) weightEl2.value = d.tg_weight || '';
                 var parcelEl = document.getElementById('createTgParcelDesc');
+                if (parcelEl) parcelEl.value = d.tg_parcel_desc || '';
+            }, 200);
 
-                if (govEl) govEl.value = data.tg_governorate || '';
-                if (govSearchEl) govSearchEl.value = data.tg_governorate || '';
-                if (govIdEl) govIdEl.value = data.tg_gov_id || '';
-                if (cityEl) cityEl.value = data.tg_city || '';
-                if (citySearchEl) citySearchEl.value = data.tg_city || '';
-                if (cityIdEl) cityIdEl.value = data.tg_city_id || '';
-                if (weightEl) weightEl.value = data.tg_weight || '';
-                if (parcelEl) parcelEl.value = data.tg_parcel_desc || '';
-            }, 250);
+            // 8. المنتجات — نفس منطق duplicateOrderById + fillProductRowForDuplicate
+            var container = document.getElementById('productsContainer');
+            if (container && d.products && Array.isArray(d.products) && d.products.length > 0) {
+                // مسح الصفوف الحالية
+                container.querySelectorAll('.product-row').forEach(function (r) { r.remove(); });
 
-            // 9. المنتجات
-            if (data.products && Array.isArray(data.products) && data.products.length > 0) {
-                var container = document.getElementById('productsContainer');
-                if (container) {
-                    // مسح جميع الصفوف الحالية
-                    container.querySelectorAll('.product-row').forEach(function (r) { r.remove(); });
+                // الصف الأول
+                if (typeof window._addCreateProductRow === 'function') window._addCreateProductRow();
+                else { var ab = document.getElementById('addProductBtn'); if (ab) ab.click(); }
+                var firstRow = container.querySelector('.product-row');
+                if (firstRow && typeof fillProductRowForDuplicate === 'function') {
+                    fillProductRowForDuplicate(firstRow, d.products[0]);
+                    // تطبيق نوع المنتج على الصف الأول
+                    var typeSelector = firstRow.querySelector('.product-type-selector');
+                    if (typeSelector && d.products[0].item_type) {
+                        typeSelector.value = d.products[0].item_type;
+                        typeSelector.dispatchEvent(new Event('change'));
+                    }
+                    var catEl2 = firstRow.querySelector('.product-category-input');
+                    if (catEl2 && d.products[0].category) { catEl2.value = d.products[0].category; catEl2.dispatchEvent(new Event('change')); }
+                }
 
-                    data.products.forEach(function (prod) {
-                        // إضافة صف جديد
-                        if (typeof addProductRow === 'function') addProductRow();
-
-                        var rows = container.querySelectorAll('.product-row');
-                        var row = rows[rows.length - 1];
-                        if (!row) return;
-
-                        var typeEl = row.querySelector('.product-type-selector');
-                        if (typeEl && prod.item_type) {
-                            typeEl.value = prod.item_type;
-                            typeEl.dispatchEvent(new Event('change'));
+                // الصفوف الإضافية
+                for (var i = 1; i < d.products.length; i++) {
+                    if (typeof window._addCreateProductRow === 'function') window._addCreateProductRow();
+                    else { var ab2 = document.getElementById('addProductBtn'); if (ab2) ab2.click(); }
+                    var allRows = container.querySelectorAll('.product-row');
+                    var newRow = allRows[allRows.length - 1];
+                    if (newRow && typeof fillProductRowForDuplicate === 'function') {
+                        fillProductRowForDuplicate(newRow, d.products[i]);
+                        var typeSelector2 = newRow.querySelector('.product-type-selector');
+                        if (typeSelector2 && d.products[i].item_type) {
+                            typeSelector2.value = d.products[i].item_type;
+                            typeSelector2.dispatchEvent(new Event('change'));
                         }
-                        var nameEl = row.querySelector('.product-name-input');
-                        if (nameEl && prod.name) nameEl.value = prod.name;
-
-                        var unitEl = row.querySelector('.product-unit-input');
-                        if (unitEl && prod.unit) {
-                            unitEl.value = prod.unit;
-                            unitEl.dispatchEvent(new Event('change'));
-                        }
-                        var catEl = row.querySelector('.product-category-input');
-                        if (catEl && prod.category) {
-                            catEl.value = prod.category;
-                            catEl.dispatchEvent(new Event('change'));
-                        }
-                        var qtyEl = row.querySelector('.product-quantity-input');
-                        if (qtyEl && prod.quantity !== undefined) {
-                            qtyEl.value = prod.quantity;
-                            qtyEl.dispatchEvent(new Event('input'));
-                        }
-                        var priceEl = row.querySelector('.product-price-input');
-                        if (priceEl && prod.price !== undefined) {
-                            priceEl.value = prod.price;
-                            priceEl.dispatchEvent(new Event('input'));
-                        }
-                        var totalEl = row.querySelector('.product-line-total-input');
-                        if (totalEl && prod.line_total !== undefined) {
-                            totalEl.value = prod.line_total;
-                            totalEl.dispatchEvent(new Event('input'));
-                        }
-                    });
+                        var catEl3 = newRow.querySelector('.product-category-input');
+                        if (catEl3 && d.products[i].category) { catEl3.value = d.products[i].category; catEl3.dispatchEvent(new Event('change')); }
+                    }
                 }
             }
 
-            // 10. إعادة حساب الإجماليات
+            // 9. إعادة حساب الإجماليات
             setTimeout(function () {
                 if (typeof updateCreateTaskSummary === 'function') updateCreateTaskSummary();
-            }, 100);
+            }, 150);
 
-            // تعيين المسودة الحالية
             if (currentDraftIdInput) currentDraftIdInput.value = res.draft_id;
-
             showDraftToast('تم تحميل المسودة: ' + res.draft_name);
             window.scrollTo({ top: 0, behavior: 'smooth' });
         })
