@@ -743,8 +743,8 @@ function tasksHandleAction(string $action, array $input, array $context): array
 
                 $update = $statusMap[$action];
                 $db->execute(
-                    "UPDATE tasks SET status = ?, {$update['column']} = NOW() WHERE id = ?",
-                    [$update['status'], $taskId]
+                    "UPDATE tasks SET status = ?, {$update['column']} = NOW(), status_changed_by = ? WHERE id = ?",
+                    [$update['status'], $currentUser['id'], $taskId]
                 );
 
                 logAudit($currentUser['id'], $action, 'tasks', $taskId, null, ['status' => $update['status']]);
@@ -801,8 +801,8 @@ function tasksHandleAction(string $action, array $input, array $context): array
                     throw new RuntimeException('غير مصرح لك بتغيير حالة المهمة');
                 }
 
-                $setParts = ['status = ?'];
-                $values = [$status];
+                $setParts = ['status = ?', 'status_changed_by = ?'];
+                $values = [$status, $currentUser['id']];
 
                 $setParts[] = in_array($status, ['completed', 'with_delegate', 'with_driver', 'delivered', 'returned'], true) ? 'completed_at = NOW()' : 'completed_at = NULL';
                 $setParts[] = $status === 'received' ? 'received_at = NOW()' : 'received_at = NULL';
