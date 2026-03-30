@@ -4763,7 +4763,7 @@ $advanceStatusLabels = [
         <div class="row g-2 mb-4">
             <?php foreach ($deductionsByUser as $uid => $info): ?>
             <div class="col-6 col-md-3 col-lg-2">
-                <div class="card border-danger h-100 text-center py-2 px-1" style="border-width:1.5px;">
+                <div class="card border-danger h-100 text-center py-2 px-1 deduction-card" style="border-width:1.5px; cursor:pointer;" onclick="filterPendingDeductions('<?php echo addslashes(htmlspecialchars($info['name'])); ?>')">
                     <div class="card-body p-1">
                         <div class="fw-semibold text-truncate small mb-1" title="<?php echo htmlspecialchars($info['name']); ?>">
                             <?php echo htmlspecialchars($info['name']); ?>
@@ -4777,6 +4777,7 @@ $advanceStatusLabels = [
             </div>
             <?php endforeach; ?>
         </div>
+        <button onclick="filterPendingDeductions('')" class="btn btn-sm btn-outline-primary mb-3">عرض الكل</button>
         <?php endif; ?>
 
         <form method="post" class="mb-4">
@@ -6895,6 +6896,42 @@ function printSalaryStatementCard() {
     }
     
     return false;
+}
+
+function filterPendingDeductions(userName) {
+    const tbody = document.querySelector('#pending-deductions-card tbody');
+    if (!tbody) return;
+    
+    const rows = tbody.querySelectorAll('tr');
+    rows.forEach(row => {
+        const firstCell = row.querySelector('td:first-child');
+        if (firstCell) {
+            const name = firstCell.textContent.trim();
+            if (userName === '' || name === userName) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        }
+    });
+    
+    // Highlight selected card
+    document.querySelectorAll('.deduction-card').forEach(card => {
+        card.classList.remove('selected');
+        card.style.borderColor = ''; // Reset border
+    });
+    
+    if (userName !== '') {
+        // Find and highlight the clicked card
+        const cards = document.querySelectorAll('.deduction-card');
+        cards.forEach(card => {
+            const nameElement = card.querySelector('.fw-semibold');
+            if (nameElement && nameElement.textContent.trim() === userName) {
+                card.classList.add('selected');
+                card.style.borderColor = '#0d6efd'; // Blue border for selected
+            }
+        });
+    }
 }
 </script>
 
