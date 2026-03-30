@@ -349,6 +349,7 @@ try {
 /**
  * Migration checks - تعمل مرة واحدة فقط في الجلسة لتجنب ~20 استعلام SHOW على كل تحميل صفحة
  */
+$hasStatusChangedBy = false;
 if (empty($_SESSION['_pt_migrations_done'])) {
     try {
         $tableCheck = $db->queryOne("SHOW TABLES LIKE 'tasks'");
