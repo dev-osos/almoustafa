@@ -80,6 +80,12 @@ $apiUrl = getRelativeUrl('api/register_returns.php');
 
             <!-- Item Rows -->
             <div id="returnRows"></div>
+
+            <div class="mb-3">
+                <label for="returnNotes" class="form-label">ملاحظات</label>
+                <textarea class="form-control" id="returnNotes" rows="3" placeholder="اكتب أي ملاحظات تريد طباعتها أسفل فاتورة المرتجعات..."></textarea>
+            </div>
+
             <div class="d-flex gap-2">
                 <button type="button" class="btn btn-outline-primary" id="addReturnRowBtn"><i class="bi bi-plus-circle me-1"></i>إضافة صف</button>
                 <button type="submit" class="btn btn-success" id="submitReturnBtn"><i class="bi bi-check2-circle me-1"></i>حفظ فاتورة المرتجعات</button>
@@ -147,6 +153,7 @@ $apiUrl = getRelativeUrl('api/register_returns.php');
     const filterDateTo = document.getElementById('retFilterDateTo');
     const filterSearch = document.getElementById('retFilterSearch');
     const applyFilterBtn = document.getElementById('retApplyFilterBtn');
+    const returnNotesInput = document.getElementById('returnNotes');
 
     const customerSearchInput = document.getElementById('customerSearchInput');
     const customerDropdown = document.getElementById('customerDropdown');
@@ -695,6 +702,14 @@ $apiUrl = getRelativeUrl('api/register_returns.php');
         }
         itemsHTML += '<tr style="font-weight:700"><td colspan="3" style="text-align:center">الإجمالي النهائي</td><td>' + parseFloat(inv.grand_total || 0).toFixed(2) + ' ج.م</td></tr>';
 
+        var notesText = String(inv.notes || '').trim();
+        var notesHTML = notesText
+            ? '<div class="return-notes-block" style="margin-top:16px;border-top:1px dashed #000;padding-top:10px;">'
+                + '<div style="font-weight:700;margin-bottom:6px;">ملاحظات:</div>'
+                + '<div class="return-notes-text" style="white-space:pre-line;">' + notesText + '</div>'
+              + '</div>'
+            : '';
+
         return '<div id="returnReceiptPrintable"><h4 style="text-align:center;margin:20px 0">فاتورة مرتجعات رقم - ' + (inv.invoice_number || '-') + '</h4>'
             + '<p>التاريخ: ' + dateStr + '</p>'
             + '<p>الوقت: ' + timeStr + '</p>'
@@ -702,7 +717,9 @@ $apiUrl = getRelativeUrl('api/register_returns.php');
             + '<p>العميل: ' + (inv.customer_name || '-') + '</p>'
             + '<table class="table table-bordered" style="border:2px solid #000;font-weight:600">'
             + '<thead><tr><th>الصنف</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th></tr></thead>'
-            + '<tbody>' + itemsHTML + '</tbody></table></div>';
+            + '<tbody>' + itemsHTML + '</tbody></table>'
+            + notesHTML
+            + '</div>';
     }
 
     function renderReturnReceipt(inv) {
@@ -747,6 +764,7 @@ $apiUrl = getRelativeUrl('api/register_returns.php');
         var originalMeta = src.querySelectorAll('p');
         var originalTable = src.querySelector('table');
         var originalTitle = src.querySelector('h4');
+        var originalNotes = src.querySelector('.return-notes-text');
 
         var receiptHTML = '<div class="receipt-80mm">';
         receiptHTML += '<div class="receipt-header-80mm"><div class="receipt-title">' + (originalTitle ? originalTitle.textContent : 'فاتورة مرتجعات') + '</div></div>';
@@ -765,6 +783,13 @@ $apiUrl = getRelativeUrl('api/register_returns.php');
             clonedTable.querySelectorAll('th').forEach(function(th) { th.style.fontSize = '14px'; th.style.fontWeight = '900'; });
             clonedTable.querySelectorAll('td').forEach(function(td) { td.style.fontSize = '14px'; td.style.padding = '4px 8px'; });
             receiptHTML += clonedTable.outerHTML;
+        }
+
+        if (originalNotes && originalNotes.textContent.trim() !== '') {
+            receiptHTML += '<div style="margin-top:4px;border-top:1px dashed #000;padding-top:4px;">'
+                + '<div style="font-size:14px;font-weight:700;margin-bottom:2px;">ملاحظات:</div>'
+                + '<div style="font-size:13px;white-space:pre-line;">' + originalNotes.textContent + '</div>'
+                + '</div>';
         }
 
         receiptHTML += '<div class="receipt-footer"><div style="display:flex;justify-content:space-between;width:100%;direction:rtl;"><div style="flex:1;text-align:center;border-top:1px solid #000;padding-top:4px;margin-left:5px;"><div style="font-size:14px;font-weight:600;">توقيع أمين المخزن</div><div style="height:25px;"></div></div><div style="flex:1;text-align:center;border-top:1px solid #000;padding-top:4px;margin-right:5px;"><div style="height:25px;"></div></div></div></div>';
@@ -913,6 +938,7 @@ $apiUrl = getRelativeUrl('api/register_returns.php');
                 body: JSON.stringify({
                     customer_id: parseInt(selectedCustomerId.value),
                     customer_type: selectedCustomerType.value,
+                    notes: returnNotesInput ? returnNotesInput.value.trim() : '',
                     rows: rows
                 })
             });
@@ -928,6 +954,7 @@ $apiUrl = getRelativeUrl('api/register_returns.php');
             selectedCustomerType.value = '';
             customerInfoBox.classList.add('d-none');
             grandTotalDisplay.textContent = '0.00';
+            if (returnNotesInput) returnNotesInput.value = '';
 
             renderReturnReceipt(data.return_invoice);
             loadReturns(false);

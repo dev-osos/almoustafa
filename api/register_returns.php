@@ -282,6 +282,7 @@ function handleSubmitReturn($db, $currentUser) {
 
     $customerId = intval($input['customer_id'] ?? 0);
     $customerType = trim($input['customer_type'] ?? '');
+    $notes = trim((string)($input['notes'] ?? ''));
     $rows = $input['rows'] ?? [];
 
     if ($customerId <= 0 || !in_array($customerType, ['local', 'delegate'])) {
@@ -319,8 +320,9 @@ function handleSubmitReturn($db, $currentUser) {
 
     try {
         // Create return invoice record
-        $stmt = $conn->prepare("INSERT INTO return_invoices (invoice_number, customer_id, customer_type, created_by, created_at) VALUES ('', ?, ?, ?, NOW())");
-        $stmt->bind_param('isi', $customerId, $customerType, $currentUser['id']);
+        $notesValue = ($notes !== '') ? $notes : null;
+        $stmt = $conn->prepare("INSERT INTO return_invoices (invoice_number, customer_id, customer_type, notes, created_by, created_at) VALUES ('', ?, ?, ?, ?, NOW())");
+        $stmt->bind_param('issi', $customerId, $customerType, $notesValue, $currentUser['id']);
         $stmt->execute();
         $returnId = $conn->insert_id;
 
@@ -422,6 +424,7 @@ function handleSubmitReturn($db, $currentUser) {
                 'balance_after' => $newBalance,
                 'created_at' => date('Y-m-d H:i:s'),
                 'created_by' => $currentUser['full_name'] ?? $currentUser['username'],
+                'notes' => $notes,
                 'items' => $resultItems
             ]
         ]);
@@ -531,6 +534,7 @@ function ensureReturnInvoiceTablesExist($db) {
             `invoice_number` varchar(50) NOT NULL,
             `customer_id` int(11) NOT NULL,
             `customer_type` varchar(20) NOT NULL DEFAULT 'local',
+            `notes` text DEFAULT NULL,
             `grand_total` decimal(15,2) DEFAULT 0.00,
             `created_by` int(11) NOT NULL,
             `created_at` timestamp DEFAULT CURRENT_TIMESTAMP,
@@ -539,6 +543,11 @@ function ensureReturnInvoiceTablesExist($db) {
             KEY `customer_type` (`customer_type`),
             KEY `created_at` (`created_at`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    }
+
+    $notesColumnExists = $db->queryOne("SHOW COLUMNS FROM return_invoices LIKE 'notes'");
+    if (empty($notesColumnExists)) {
+        $db->getConnection()->query("ALTER TABLE `return_invoices` ADD COLUMN `notes` TEXT DEFAULT NULL AFTER `customer_type`");
     }
 
     $tableExists2 = $db->queryOne("SHOW TABLES LIKE 'return_invoice_items'");
