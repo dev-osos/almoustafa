@@ -416,6 +416,9 @@ if (empty($_SESSION['_pt_migrations_done'])) {
         if (!isset($columnsMap['total_amount'])) {
             $db->execute("ALTER TABLE tasks ADD COLUMN total_amount DECIMAL(15,2) NULL AFTER local_customer_id");
         }
+        if (!isset($columnsMap['status_changed_by'])) {
+            $db->execute("ALTER TABLE tasks ADD COLUMN status_changed_by INT(11) NULL AFTER updated_at");
+        }
     } catch (Exception $e) {
         error_log('Manager task page migration error: ' . $e->getMessage());
     }
@@ -1049,9 +1052,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // لا يتم خصم الكمية من المخزون هنا — يتم الخصم عند اعتماد الفاتورة فقط
 
                 // إنشاء مهمة واحدة فقط مع حفظ جميع العمال
-                $columns = ['title', 'description', 'created_by', 'priority', 'status', 'related_type'];
-                $values = [$title, $details ?: null, $currentUser['id'], $priority, 'pending', $relatedTypeValue];
-                $placeholders = ['?', '?', '?', '?', '?', '?'];
+                $columns = ['title', 'description', 'created_by', 'priority', 'status', 'related_type', 'status_changed_by'];
+                $values = [$title, $details ?: null, $currentUser['id'], $priority, 'pending', $relatedTypeValue, $currentUser['id']];
+                $placeholders = ['?', '?', '?', '?', '?', '?', '?'];
 
                 // وضع أول عامل في assigned_to للتوافق مع الكود الحالي
                 $firstAssignee = !empty($assignees) ? (int)$assignees[0] : 0;
@@ -1530,6 +1533,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 
                 $updateFields[] = 'updated_at = NOW()';
+                $updateFields[] = 'status_changed_by = ?';
+                $updateValues[] = $currentUser['id'];
                 
                 $sql = "UPDATE tasks SET " . implode(', ', $updateFields) . " WHERE id = ?";
                 $updateValues[] = $taskId;
@@ -2610,10 +2615,12 @@ try {
                        COALESCE(t.receipt_print_count, 0) AS receipt_print_count,
                        u.full_name AS assigned_name, t.assigned_to,
                        uCreator.full_name AS creator_name, t.created_by,
-                       uCreator.role AS creator_role
+                       uCreator.role AS creator_role,
+                       uStatus.full_name AS status_changed_by_name, t.status_changed_by
                 FROM tasks t
                 LEFT JOIN users u ON t.assigned_to = u.id
                 LEFT JOIN users uCreator ON t.created_by = uCreator.id
+                LEFT JOIN users uStatus ON t.status_changed_by = uStatus.id
                 WHERE t.created_by IN ($adminPlaceholders)
                 AND t.status != 'cancelled'
                 $statusCondition
@@ -2633,9 +2640,11 @@ try {
                    t.quantity, t.unit, t.customer_name, t.customer_phone, t.notes, t.product_id, t.related_type, t.related_id, t.task_type,
                    t.local_customer_id, t.total_amount,
                    COALESCE(t.receipt_print_count, 0) AS receipt_print_count,
-                   u.full_name AS assigned_name, t.assigned_to
+                   u.full_name AS assigned_name, t.assigned_to,
+                   uStatus.full_name AS status_changed_by_name, t.status_changed_by
             FROM tasks t
             LEFT JOIN users u ON t.assigned_to = u.id
+            LEFT JOIN users uStatus ON t.status_changed_by = uStatus.id
             WHERE t.created_by = ?
             AND t.status != 'cancelled'
             $statusCondition
@@ -3922,6 +3931,11 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                         <span class="badge bg-<?php echo htmlspecialchars($statusMeta['class']); ?>">
                                             <?php echo htmlspecialchars($statusMeta['label']); ?>
                                         </span>
+                                        <?php if (!empty($task['status_changed_by_name'])): ?>
+                                        <div class="text-muted small mt-1">
+                                            <i class="bi bi-person me-1"></i><?php echo htmlspecialchars($task['status_changed_by_name']); ?>
+                                        </div>
+                                        <?php endif; ?>
                                     </td>
                                     <td>
                                         <?php

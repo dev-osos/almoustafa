@@ -448,6 +448,12 @@ $singleReceipt = count($receipts) === 1;
             font-size: 13px;
         }
         
+        .sort-icon {
+            font-size: 12px;
+            color: #666;
+            margin-left: 5px;
+        }
+        
         .products-table thead {
             background-color: #f8f9fa;
         }
@@ -662,13 +668,13 @@ $singleReceipt = count($receipts) === 1;
         
         <div class="section-title">تفاصيل الاوردر</div>
         <?php if (!empty($products)): ?>
-        <table class="products-table">
+        <table class="products-table" id="products-table">
             <thead>
                 <tr>
-                    <th style="width: 35%;">المنتج</th>
-                    <th style="width: 20%; text-align: center;">ك</th>
-                    <th style="width: 20%; text-align: center;">السعر</th>
-                    <th style="width: 25%; text-align: center;">اجمالي</th>
+                    <th style="width: 35%; cursor: pointer;" data-column="name">المنتج <span class="sort-icon">↕</span></th>
+                    <th style="width: 20%; text-align: center; cursor: pointer;" data-column="quantity">ك <span class="sort-icon">↕</span></th>
+                    <th style="width: 20%; text-align: center; cursor: pointer;" data-column="price">السعر <span class="sort-icon">↕</span></th>
+                    <th style="width: 25%; text-align: center; cursor: pointer;" data-column="total">اجمالي <span class="sort-icon">↕</span></th>
                 </tr>
             </thead>
             <tbody>
@@ -949,6 +955,72 @@ $singleReceipt = count($receipts) === 1;
                 }, i * 400);
             });
         }
+
+        // Table sorting functionality
+        var sortDirections = {};
+        function sortTable(column) {
+            var table = document.getElementById('products-table');
+            if (!table) return;
+            var tbody = table.querySelector('tbody');
+            if (!tbody) return;
+            var rows = Array.from(tbody.querySelectorAll('tr'));
+            if (rows.length <= 1) return; // No need to sort if only one row or less
+
+            var direction = sortDirections[column] || 'asc';
+            sortDirections[column] = direction === 'asc' ? 'desc' : 'asc';
+
+            rows.sort(function(a, b) {
+                var aVal, bVal;
+                switch (column) {
+                    case 'name':
+                        aVal = a.cells[0].textContent.trim();
+                        bVal = b.cells[0].textContent.trim();
+                        return direction === 'asc' ? aVal.localeCompare(bVal, 'ar') : bVal.localeCompare(aVal, 'ar');
+                    case 'quantity':
+                        aVal = parseFloat(a.cells[1].textContent.replace(/[^\d.-]/g, '')) || 0;
+                        bVal = parseFloat(b.cells[1].textContent.replace(/[^\d.-]/g, '')) || 0;
+                        return direction === 'asc' ? aVal - bVal : bVal - aVal;
+                    case 'price':
+                        aVal = parseFloat(a.cells[2].textContent.replace(/[^\d.-]/g, '')) || 0;
+                        bVal = parseFloat(b.cells[2].textContent.replace(/[^\d.-]/g, '')) || 0;
+                        return direction === 'asc' ? aVal - bVal : bVal - aVal;
+                    case 'total':
+                        aVal = parseFloat(a.cells[3].textContent.replace(/[^\d.-]/g, '')) || 0;
+                        bVal = parseFloat(b.cells[3].textContent.replace(/[^\d.-]/g, '')) || 0;
+                        return direction === 'asc' ? aVal - bVal : bVal - aVal;
+                    default:
+                        return 0;
+                }
+            });
+
+            // Re-append sorted rows
+            rows.forEach(function(row) {
+                tbody.appendChild(row);
+            });
+
+            // Update sort icons
+            var headers = table.querySelectorAll('th[data-column]');
+            headers.forEach(function(th) {
+                var icon = th.querySelector('.sort-icon');
+                if (th.dataset.column === column) {
+                    icon.textContent = direction === 'asc' ? '↑' : '↓';
+                } else {
+                    icon.textContent = '↕';
+                }
+            });
+        }
+
+        // Add event listeners to table headers
+        document.addEventListener('DOMContentLoaded', function() {
+            var headers = document.querySelectorAll('#products-table th[data-column]');
+            headers.forEach(function(th) {
+                th.addEventListener('click', function() {
+                    var column = this.dataset.column;
+                    sortTable(column);
+                });
+            });
+        });
+
         window.onload = function() {
             if (window.location.search.includes('print=1')) {
                 setTimeout(function() { window.print(); }, 500);
