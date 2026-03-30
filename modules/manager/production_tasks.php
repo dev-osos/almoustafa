@@ -416,6 +416,9 @@ if (empty($_SESSION['_pt_migrations_done'])) {
         if (!isset($columnsMap['total_amount'])) {
             $db->execute("ALTER TABLE tasks ADD COLUMN total_amount DECIMAL(15,2) NULL AFTER local_customer_id");
         }
+        if (!isset($columnsMap['updated_at'])) {
+            $db->execute("ALTER TABLE tasks ADD COLUMN updated_at TIMESTAMP NULL DEFAULT NULL AFTER created_at");
+        }
         if (!isset($columnsMap['status_changed_by'])) {
             $db->execute("ALTER TABLE tasks ADD COLUMN status_changed_by INT(11) NULL AFTER updated_at");
         }
