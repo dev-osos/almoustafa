@@ -7813,7 +7813,7 @@ document.addEventListener('click', function (e) {
             if (!res.success) { alert(res.error || 'تعذر تحميل المسودة'); return; }
             var data = res.data;
 
-            // فتح النموذج إذا كان مطوياً
+            // 1. فتح النموذج إذا كان مطوياً
             var collapseEl = document.getElementById('createTaskFormCollapse');
             if (collapseEl && !collapseEl.classList.contains('show')) {
                 if (typeof bootstrap !== 'undefined') {
@@ -7823,95 +7823,140 @@ document.addEventListener('click', function (e) {
                 }
             }
 
-            // تعيين نوع الأوردر
-            if (data.task_type) {
-                var ttSelect = document.getElementById('createTaskType') || document.querySelector('[name="task_type"]');
-                if (ttSelect) { ttSelect.value = data.task_type; ttSelect.dispatchEvent(new Event('change')); }
+            // 2. نوع الأوردر (يجب أولاً لإظهار/إخفاء حقول التليجراف)
+            var ttSelect = document.querySelector('#createTaskForm [name="task_type"]');
+            if (ttSelect && data.task_type) {
+                ttSelect.value = data.task_type;
+                ttSelect.dispatchEvent(new Event('change'));
             }
-            // الأولوية
-            if (data.priority) {
-                var prSelect = document.querySelector('[name="priority"]');
-                if (prSelect) prSelect.value = data.priority;
+
+            // 3. الأولوية وتاريخ التسليم
+            var prEl = document.querySelector('#createTaskForm [name="priority"]');
+            if (prEl && data.priority) prEl.value = data.priority;
+
+            var ddEl = document.querySelector('#createTaskForm [name="due_date"]');
+            if (ddEl && data.due_date) ddEl.value = data.due_date;
+
+            // 4. اختيار العميل
+            var customerType = data.customer_type_radio_task || 'local';
+            var radioEl = document.getElementById('ct_task_' + customerType);
+            if (radioEl) { radioEl.checked = true; radioEl.dispatchEvent(new Event('change')); }
+
+            // اسم العميل — الحقل المخفي للإرسال + حقل البحث المرئي
+            var hiddenNameEl = document.getElementById('submit_customer_name');
+            if (hiddenNameEl) hiddenNameEl.value = data.customer_name || '';
+
+            if (customerType === 'rep') {
+                var repSearchEl = document.getElementById('rep_customer_search_task');
+                if (repSearchEl) repSearchEl.value = data.customer_name || '';
+                var repIdEl = document.getElementById('rep_customer_id_task');
+                if (repIdEl) repIdEl.value = data.local_customer_id || '';
+            } else {
+                var localSearchEl = document.getElementById('local_customer_search_task');
+                if (localSearchEl) localSearchEl.value = data.customer_name || '';
+                var lcIdEl = document.getElementById('local_customer_id_task');
+                if (lcIdEl) lcIdEl.value = data.local_customer_id || '';
             }
-            // تاريخ التسليم
-            if (data.due_date) {
-                var ddInput = document.querySelector('[name="due_date"]');
-                if (ddInput) ddInput.value = data.due_date;
-            }
-            // اسم العميل
-            if (data.customer_name !== undefined) {
-                var cnInput = document.querySelector('[name="customer_name"]');
-                if (cnInput) { cnInput.value = data.customer_name; cnInput.dispatchEvent(new Event('input')); }
-            }
-            // رقم هاتف العميل
-            if (data.customer_phone !== undefined) {
-                var cpInput = document.querySelector('[name="customer_phone"]');
-                if (cpInput) cpInput.value = data.customer_phone;
-            }
-            // local_customer_id
-            if (data.local_customer_id !== undefined) {
-                var lcInput = document.querySelector('[name="local_customer_id"]');
-                if (lcInput) lcInput.value = data.local_customer_id;
-            }
-            // العنوان / الاتجاهات
-            if (data.order_title !== undefined) {
-                var otInput = document.querySelector('[name="order_title"]');
-                if (otInput) otInput.value = data.order_title;
-            }
-            // تليجراف
-            ['tg_governorate','tg_gov_id','tg_city','tg_city_id','tg_weight','tg_parcel_desc'].forEach(function (f) {
-                if (data[f] !== undefined) {
-                    var el = document.querySelector('[name="' + f + '"]');
-                    if (el) { el.value = data[f]; el.dispatchEvent(new Event('change')); }
+
+            // رقم الهاتف
+            var phoneEl = document.getElementById('submit_customer_phone');
+            if (phoneEl) phoneEl.value = data.customer_phone || '';
+
+            // 5. عنوان التوصيل
+            var otEl = document.getElementById('createOrderTitle');
+            if (otEl) otEl.value = data.order_title || '';
+
+            // 6. ملاحظات
+            var detEl = document.querySelector('#createTaskForm [name="details"]');
+            if (detEl) detEl.value = data.details || '';
+
+            // 7. رسوم الشحن والخصم
+            var sfEl = document.getElementById('createTaskShippingFees');
+            if (sfEl) { sfEl.value = data.shipping_fees || '0'; sfEl.dispatchEvent(new Event('input')); }
+
+            var discEl = document.getElementById('createTaskDiscount');
+            if (discEl) { discEl.value = data.discount || '0'; discEl.dispatchEvent(new Event('input')); }
+
+            // 8. حقول التليجراف (بعد تغيير نوع الأوردر بقليل)
+            setTimeout(function () {
+                var govEl = document.getElementById('createGov');
+                var govSearchEl = document.getElementById('createGovSearch');
+                var govIdEl = document.getElementById('createGovId');
+                var cityEl = document.getElementById('createCity');
+                var citySearchEl = document.getElementById('createCitySearch');
+                var cityIdEl = document.getElementById('createCityId');
+                var weightEl = document.getElementById('createTgWeight');
+                var parcelEl = document.getElementById('createTgParcelDesc');
+
+                if (govEl) govEl.value = data.tg_governorate || '';
+                if (govSearchEl) govSearchEl.value = data.tg_governorate || '';
+                if (govIdEl) govIdEl.value = data.tg_gov_id || '';
+                if (cityEl) cityEl.value = data.tg_city || '';
+                if (citySearchEl) citySearchEl.value = data.tg_city || '';
+                if (cityIdEl) cityIdEl.value = data.tg_city_id || '';
+                if (weightEl) weightEl.value = data.tg_weight || '';
+                if (parcelEl) parcelEl.value = data.tg_parcel_desc || '';
+            }, 250);
+
+            // 9. المنتجات
+            if (data.products && Array.isArray(data.products) && data.products.length > 0) {
+                var container = document.getElementById('productsContainer');
+                if (container) {
+                    // مسح جميع الصفوف الحالية
+                    container.querySelectorAll('.product-row').forEach(function (r) { r.remove(); });
+
+                    data.products.forEach(function (prod) {
+                        // إضافة صف جديد
+                        if (typeof addProductRow === 'function') addProductRow();
+
+                        var rows = container.querySelectorAll('.product-row');
+                        var row = rows[rows.length - 1];
+                        if (!row) return;
+
+                        var typeEl = row.querySelector('.product-type-selector');
+                        if (typeEl && prod.item_type) {
+                            typeEl.value = prod.item_type;
+                            typeEl.dispatchEvent(new Event('change'));
+                        }
+                        var nameEl = row.querySelector('.product-name-input');
+                        if (nameEl && prod.name) nameEl.value = prod.name;
+
+                        var unitEl = row.querySelector('.product-unit-input');
+                        if (unitEl && prod.unit) {
+                            unitEl.value = prod.unit;
+                            unitEl.dispatchEvent(new Event('change'));
+                        }
+                        var catEl = row.querySelector('.product-category-input');
+                        if (catEl && prod.category) {
+                            catEl.value = prod.category;
+                            catEl.dispatchEvent(new Event('change'));
+                        }
+                        var qtyEl = row.querySelector('.product-quantity-input');
+                        if (qtyEl && prod.quantity !== undefined) {
+                            qtyEl.value = prod.quantity;
+                            qtyEl.dispatchEvent(new Event('input'));
+                        }
+                        var priceEl = row.querySelector('.product-price-input');
+                        if (priceEl && prod.price !== undefined) {
+                            priceEl.value = prod.price;
+                            priceEl.dispatchEvent(new Event('input'));
+                        }
+                        var totalEl = row.querySelector('.product-line-total-input');
+                        if (totalEl && prod.line_total !== undefined) {
+                            totalEl.value = prod.line_total;
+                            totalEl.dispatchEvent(new Event('input'));
+                        }
+                    });
                 }
-            });
-            // الملاحظات
-            if (data.details !== undefined) {
-                var detInput = document.querySelector('[name="details"]');
-                if (detInput) detInput.value = data.details;
             }
-            // رسوم الشحن والخصم
-            if (data.shipping_fees !== undefined) {
-                var sfInput = document.querySelector('[name="shipping_fees"]');
-                if (sfInput) { sfInput.value = data.shipping_fees; sfInput.dispatchEvent(new Event('input')); }
-            }
-            if (data.discount !== undefined) {
-                var discInput = document.querySelector('[name="discount"]');
-                if (discInput) { discInput.value = data.discount; discInput.dispatchEvent(new Event('input')); }
-            }
+
+            // 10. إعادة حساب الإجماليات
+            setTimeout(function () {
+                if (typeof updateCreateTaskSummary === 'function') updateCreateTaskSummary();
+            }, 100);
 
             // تعيين المسودة الحالية
             if (currentDraftIdInput) currentDraftIdInput.value = res.draft_id;
-
-            // المنتجات — إعادة البناء
-            if (data.products && Array.isArray(data.products) && data.products.length > 0) {
-                setTimeout(function () {
-                    var productsContainer = document.getElementById('productsContainer') || document.querySelector('.products-container');
-                    if (!productsContainer) return;
-
-                    // مسح المنتجات الحالية وإضافة المسودة
-                    var removeButtons = productsContainer.querySelectorAll('.remove-product-btn, [onclick*="removeProduct"]');
-                    removeButtons.forEach(function (btn) { if (productsContainer.querySelectorAll('.product-row, .product-item').length > 1) btn.click(); });
-
-                    data.products.forEach(function (prod, idx) {
-                        if (idx > 0) {
-                            var addBtn = document.getElementById('addProductBtn') || document.querySelector('[onclick*="addProduct"]');
-                            if (addBtn) addBtn.click();
-                        }
-                        setTimeout(function () {
-                            var rows = productsContainer.querySelectorAll('.product-row, [data-product-index], .product-item');
-                            var row = rows[idx];
-                            if (!row) return;
-                            ['name','quantity','unit','category','price','item_type'].forEach(function (f) {
-                                if (prod[f] !== undefined) {
-                                    var el = row.querySelector('[name*="[' + f + ']"]');
-                                    if (el) { el.value = prod[f]; el.dispatchEvent(new Event('change')); el.dispatchEvent(new Event('input')); }
-                                }
-                            });
-                        }, 100 * (idx + 1));
-                    });
-                }, 300);
-            }
 
             showDraftToast('تم تحميل المسودة: ' + res.draft_name);
             window.scrollTo({ top: 0, behavior: 'smooth' });
