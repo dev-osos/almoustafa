@@ -58,6 +58,9 @@ if (empty($_SESSION['_prod_tasks_migrations_done'])) {
                 $db->execute("ALTER TABLE tasks MODIFY COLUMN status ENUM('pending','received','in_progress','completed','with_delegate','with_driver','delivered','returned','cancelled') DEFAULT 'pending'");
             }
         }
+        if (!isset($columnsMap['status_changed_by'])) {
+            $db->execute("ALTER TABLE tasks ADD COLUMN status_changed_by INT(11) NULL AFTER updated_at");
+        }
         // إنشاء جدول driver_assignments إذا لم يكن موجوداً
         $db->execute("CREATE TABLE IF NOT EXISTS driver_assignments (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -98,6 +101,8 @@ $successMessages = [];
 $isManager = ($currentUser['role'] ?? '') === 'manager';
 $isProduction = ($currentUser['role'] ?? '') === 'production';
 $isDriver = ($currentUser['role'] ?? '') === 'driver';
+
+$hasStatusChangedBy = in_array('status_changed_by', array_column($db->query("SHOW COLUMNS FROM tasks") ?: [], 'Field'), true);
 
 if (!function_exists('tasksSafeString')) {
     function tasksSafeString($value)
@@ -742,10 +747,17 @@ function tasksHandleAction(string $action, array $input, array $context): array
                 ];
 
                 $update = $statusMap[$action];
-                $db->execute(
-                    "UPDATE tasks SET status = ?, {$update['column']} = NOW(), status_changed_by = ? WHERE id = ?",
-                    [$update['status'], $currentUser['id'], $taskId]
-                );
+                if ($hasStatusChangedBy) {
+                    $db->execute(
+                        "UPDATE tasks SET status = ?, {$update['column']} = NOW(), status_changed_by = ? WHERE id = ?",
+                        [$update['status'], $currentUser['id'], $taskId]
+                    );
+                } else {
+                    $db->execute(
+                        "UPDATE tasks SET status = ?, {$update['column']} = NOW() WHERE id = ?",
+                        [$update['status'], $taskId]
+                    );
+                }
 
                 logAudit($currentUser['id'], $action, 'tasks', $taskId, null, ['status' => $update['status']]);
 
@@ -801,8 +813,12 @@ function tasksHandleAction(string $action, array $input, array $context): array
                     throw new RuntimeException('غير مصرح لك بتغيير حالة المهمة');
                 }
 
-                $setParts = ['status = ?', 'status_changed_by = ?'];
-                $values = [$status, $currentUser['id']];
+                $setParts = ['status = ?'];
+                $values = [$status];
+                if ($hasStatusChangedBy) {
+                    $setParts[] = 'status_changed_by = ?';
+                    $values[] = $currentUser['id'];
+                }
 
                 $setParts[] = in_array($status, ['completed', 'with_delegate', 'with_driver', 'delivered', 'returned'], true) ? 'completed_at = NOW()' : 'completed_at = NULL';
                 $setParts[] = $status === 'received' ? 'received_at = NOW()' : 'received_at = NULL';
