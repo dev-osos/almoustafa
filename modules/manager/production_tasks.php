@@ -391,6 +391,8 @@ if (empty($_SESSION['_pt_migrations_done'])) {
         $columns = array_column($db->query("SHOW COLUMNS FROM tasks") ?: [], 'Field');
         $columnsMap = array_flip($columns);
 
+        $hasStatusChangedBy = isset($columnsMap['status_changed_by']);
+
         if (!isset($columnsMap['template_id'])) {
             $db->execute("ALTER TABLE tasks ADD COLUMN template_id int(11) NULL AFTER product_id");
             try { $db->execute("ALTER TABLE tasks ADD KEY template_id (template_id)"); } catch (Exception $e) {}
@@ -2611,19 +2613,24 @@ try {
         if (!empty($adminIds)) {
             $queryParams = array_merge($adminIds, $statusParams, $searchParams, [$tasksPerPage, $tasksOffset]);
 
+            $selectFields = "t.id, t.title, t.status, t.priority, t.due_date, t.created_at,
+                   t.quantity, t.unit, t.customer_name, t.customer_phone, t.notes, t.product_id, t.related_type, t.related_id, t.task_type,
+                   t.local_customer_id, t.total_amount,
+                   COALESCE(t.receipt_print_count, 0) AS receipt_print_count,
+                   u.full_name AS assigned_name, t.assigned_to,
+                   uCreator.full_name AS creator_name, t.created_by,
+                   uCreator.role AS creator_role";
+            $joins = "LEFT JOIN users u ON t.assigned_to = u.id
+                LEFT JOIN users uCreator ON t.created_by = uCreator.id";
+            if ($hasStatusChangedBy) {
+                $selectFields .= ", uStatus.full_name AS status_changed_by_name, t.status_changed_by";
+                $joins .= " LEFT JOIN users uStatus ON t.status_changed_by = uStatus.id";
+            }
+
             $recentTasks = $db->query("
-                SELECT t.id, t.title, t.status, t.priority, t.due_date, t.created_at,
-                       t.quantity, t.unit, t.customer_name, t.customer_phone, t.notes, t.product_id, t.related_type, t.related_id, t.task_type,
-                       t.local_customer_id, t.total_amount,
-                       COALESCE(t.receipt_print_count, 0) AS receipt_print_count,
-                       u.full_name AS assigned_name, t.assigned_to,
-                       uCreator.full_name AS creator_name, t.created_by,
-                       uCreator.role AS creator_role,
-                       uStatus.full_name AS status_changed_by_name, t.status_changed_by
+                SELECT $selectFields
                 FROM tasks t
-                LEFT JOIN users u ON t.assigned_to = u.id
-                LEFT JOIN users uCreator ON t.created_by = uCreator.id
-                LEFT JOIN users uStatus ON t.status_changed_by = uStatus.id
+                $joins
                 WHERE t.created_by IN ($adminPlaceholders)
                 AND t.status != 'cancelled'
                 $statusCondition
@@ -2638,16 +2645,21 @@ try {
         // للمستخدمين الآخرين، عرض المهام التي أنشأوها فقط
         $queryParams = array_merge([$currentUser['id']], $statusParams, $searchParams, [$tasksPerPage, $tasksOffset]);
         
+        $selectFields = "t.id, t.title, t.status, t.priority, t.due_date, t.created_at,
+               t.quantity, t.unit, t.customer_name, t.customer_phone, t.notes, t.product_id, t.related_type, t.related_id, t.task_type,
+               t.local_customer_id, t.total_amount,
+               COALESCE(t.receipt_print_count, 0) AS receipt_print_count,
+               u.full_name AS assigned_name, t.assigned_to";
+        $joins = "LEFT JOIN users u ON t.assigned_to = u.id";
+        if ($hasStatusChangedBy) {
+            $selectFields .= ", uStatus.full_name AS status_changed_by_name, t.status_changed_by";
+            $joins .= " LEFT JOIN users uStatus ON t.status_changed_by = uStatus.id";
+        }
+
         $recentTasks = $db->query("
-            SELECT t.id, t.title, t.status, t.priority, t.due_date, t.created_at,
-                   t.quantity, t.unit, t.customer_name, t.customer_phone, t.notes, t.product_id, t.related_type, t.related_id, t.task_type,
-                   t.local_customer_id, t.total_amount,
-                   COALESCE(t.receipt_print_count, 0) AS receipt_print_count,
-                   u.full_name AS assigned_name, t.assigned_to,
-                   uStatus.full_name AS status_changed_by_name, t.status_changed_by
+            SELECT $selectFields
             FROM tasks t
-            LEFT JOIN users u ON t.assigned_to = u.id
-            LEFT JOIN users uStatus ON t.status_changed_by = uStatus.id
+            $joins
             WHERE t.created_by = ?
             AND t.status != 'cancelled'
             $statusCondition
