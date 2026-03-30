@@ -7377,7 +7377,7 @@ $lang = isset($translations) ? $translations : [];
         </div>
     </div>
 
-    <div class="card production-report-card shadow-sm mb-4">
+    <div class="card production-report-card shadow-sm mb-4" id="warehouse-damage-log" style="scroll-margin-top: 90px;">
         <div class="card-header bg-danger text-white d-flex flex-wrap justify-content-between align-items-center gap-2">
             <div class="d-flex align-items-center gap-2">
                 <i class="bi bi-exclamation-octagon"></i>
