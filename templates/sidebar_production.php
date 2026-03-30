@@ -14,11 +14,12 @@ $baseUrl = getDashboardUrl();
 $currentDashboardPage = isset($_GET['page']) ? (string) $_GET['page'] : '';
 $currentFocus = isset($_GET['focus']) ? (string) $_GET['focus'] : '';
 $isAttendancePage = $currentPage === 'attendance.php';
+$sidebarPreferenceUserKey = 'production_sidebar_groups_' . (isset($currentUser['id']) ? (int) $currentUser['id'] : 0);
 
-$isOverviewOpen = $currentPage === 'production.php' && in_array($currentDashboardPage, ['', 'chat', 'product_specifications'], true);
-$isOperationsOpen = ($currentPage === 'production.php' && in_array($currentDashboardPage, ['production', 'tasks', 'daily_collection_my_tables'], true)) || $isAttendancePage;
-$isWarehousesOpen = ($currentPage === 'production.php' && in_array($currentDashboardPage, ['raw_materials_warehouse', 'packaging_warehouse', 'inventory'], true)) || ($currentDashboardPage === 'production' && $currentFocus === 'warehouse-damage-log');
-$isToolsOpen = $currentPage === 'production.php' && in_array($currentDashboardPage, ['batch_reader'], true);
+$isOverviewOpen = false;
+$isOperationsOpen = false;
+$isWarehousesOpen = false;
+$isToolsOpen = false;
 ?>
 <style>
 .sidebar-group-toggle {
@@ -61,7 +62,7 @@ $isToolsOpen = $currentPage === 'production.php' && in_array($currentDashboardPa
                     </span>
                     <i class="bi bi-chevron-down"></i>
                 </button>
-                <div class="collapse <?php echo $isOverviewOpen ? 'show' : ''; ?>" id="productionSidebarOverview">
+                <div class="collapse <?php echo $isOverviewOpen ? 'show' : ''; ?>" id="productionSidebarOverview" data-sidebar-group="overview">
                     <ul class="nav flex-column sidebar-submenu">
                         <li class="nav-item">
                             <a class="nav-link <?php echo $currentPage === 'production.php' && $currentDashboardPage === '' ? 'active' : ''; ?>" href="<?php echo $baseUrl; ?>production.php">
@@ -93,7 +94,7 @@ $isToolsOpen = $currentPage === 'production.php' && in_array($currentDashboardPa
                     </span>
                     <i class="bi bi-chevron-down"></i>
                 </button>
-                <div class="collapse <?php echo $isOperationsOpen ? 'show' : ''; ?>" id="productionSidebarOperations">
+                <div class="collapse <?php echo $isOperationsOpen ? 'show' : ''; ?>" id="productionSidebarOperations" data-sidebar-group="operations">
                     <ul class="nav flex-column sidebar-submenu">
                         <li class="nav-item">
                             <a class="nav-link <?php echo $currentDashboardPage === 'production' && $currentFocus !== 'warehouse-damage-log' ? 'active' : ''; ?>" href="<?php echo $baseUrl; ?>production.php?page=production">
@@ -131,7 +132,7 @@ $isToolsOpen = $currentPage === 'production.php' && in_array($currentDashboardPa
                     </span>
                     <i class="bi bi-chevron-down"></i>
                 </button>
-                <div class="collapse <?php echo $isWarehousesOpen ? 'show' : ''; ?>" id="productionSidebarWarehouses">
+                <div class="collapse <?php echo $isWarehousesOpen ? 'show' : ''; ?>" id="productionSidebarWarehouses" data-sidebar-group="warehouses">
                     <ul class="nav flex-column sidebar-submenu">
                         <li class="nav-item">
                             <a class="nav-link <?php echo $currentDashboardPage === 'raw_materials_warehouse' ? 'active' : ''; ?>" href="<?php echo $baseUrl; ?>production.php?page=raw_materials_warehouse">
@@ -169,7 +170,7 @@ $isToolsOpen = $currentPage === 'production.php' && in_array($currentDashboardPa
                     </span>
                     <i class="bi bi-chevron-down"></i>
                 </button>
-                <div class="collapse <?php echo $isToolsOpen ? 'show' : ''; ?>" id="productionSidebarTools">
+                <div class="collapse <?php echo $isToolsOpen ? 'show' : ''; ?>" id="productionSidebarTools" data-sidebar-group="tools">
                     <ul class="nav flex-column sidebar-submenu">
                         <li class="nav-item">
                             <a class="nav-link <?php echo $currentDashboardPage === 'batch_reader' ? 'active' : ''; ?>" href="<?php echo $baseUrl; ?>production.php?page=batch_reader">
@@ -182,6 +183,44 @@ $isToolsOpen = $currentPage === 'production.php' && in_array($currentDashboardPa
             </li>
         </ul>
     </nav>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        var storageKey = <?php echo json_encode($sidebarPreferenceUserKey, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
+        var groups = document.querySelectorAll('.sidebar [data-sidebar-group]');
+        var savedState = {};
+
+        try {
+            savedState = JSON.parse(localStorage.getItem(storageKey) || '{}') || {};
+        } catch (error) {
+            savedState = {};
+        }
+
+        groups.forEach(function(group) {
+            var key = group.getAttribute('data-sidebar-group') || '';
+            var shouldOpen = key !== '' && Object.prototype.hasOwnProperty.call(savedState, key)
+                ? !!savedState[key]
+                : false;
+            var toggleBtn = document.querySelector('[data-bs-target="#' + group.id + '"]');
+
+            group.classList.toggle('show', shouldOpen);
+            if (toggleBtn) {
+                toggleBtn.classList.toggle('collapsed', !shouldOpen);
+                toggleBtn.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+            }
+
+            group.addEventListener('shown.bs.collapse', function() {
+                savedState[key] = true;
+                localStorage.setItem(storageKey, JSON.stringify(savedState));
+            });
+
+            group.addEventListener('hidden.bs.collapse', function() {
+                savedState[key] = false;
+                localStorage.setItem(storageKey, JSON.stringify(savedState));
+            });
+        });
+    });
+    </script>
     
     <div class="sidebar-footer">
         <div class="sidebar-footer-item">

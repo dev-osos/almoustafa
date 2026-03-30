@@ -67,6 +67,7 @@ if (empty($role) && function_exists('getUserFromToken')) {
 
 $currentPageParam = trim($_GET['page'] ?? '');
 $currentFocus = trim($_GET['focus'] ?? '');
+$sidebarPreferenceUserKey = 'homeline_sidebar_groups_' . ($role ?: 'guest') . '_' . (isset($currentUser['id']) ? (int) $currentUser['id'] : 0);
 
 // محاولة تحديد role من الصفحة الحالية إذا كان غير معروف
 if (empty($role)) {
@@ -987,11 +988,64 @@ if (empty($menuItems)) {
         <script>
         document.addEventListener('DOMContentLoaded', function() {
             const searchInput = document.getElementById('sidebarSearchInput');
+            const sidebarGroups = Array.from(document.querySelectorAll('.homeline-sidebar .sidebar-menu-group'));
+            const storageKey = <?php echo json_encode($sidebarPreferenceUserKey, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
+            let ignoreToggleSave = false;
+            let savedGroupState = {};
+
+            try {
+                savedGroupState = JSON.parse(localStorage.getItem(storageKey) || '{}') || {};
+            } catch (error) {
+                savedGroupState = {};
+            }
+
+            function applySavedSidebarState() {
+                ignoreToggleSave = true;
+                sidebarGroups.forEach(function(group) {
+                    const groupKey = group.getAttribute('data-group-key') || '';
+                    const shouldOpen = groupKey !== '' && Object.prototype.hasOwnProperty.call(savedGroupState, groupKey)
+                        ? !!savedGroupState[groupKey]
+                        : false;
+
+                    group.style.display = '';
+                    group.querySelectorAll('.nav-item').forEach(function(item) {
+                        item.style.display = '';
+                    });
+
+                    if (shouldOpen) {
+                        group.setAttribute('open', 'open');
+                    } else {
+                        group.removeAttribute('open');
+                    }
+                });
+                ignoreToggleSave = false;
+            }
+
+            applySavedSidebarState();
+
+            sidebarGroups.forEach(function(group) {
+                group.addEventListener('toggle', function() {
+                    if (ignoreToggleSave) return;
+                    if (searchInput && searchInput.value.trim() !== '') return;
+
+                    const groupKey = group.getAttribute('data-group-key') || '';
+                    if (!groupKey) return;
+
+                    savedGroupState[groupKey] = group.open;
+                    localStorage.setItem(storageKey, JSON.stringify(savedGroupState));
+                });
+            });
+
             if (searchInput) {
                 searchInput.addEventListener('input', function() {
                     const filter = this.value.toLowerCase().trim();
-                    const sidebarGroups = document.querySelectorAll('.homeline-sidebar .sidebar-menu-group');
 
+                    if (!filter) {
+                        applySavedSidebarState();
+                        return;
+                    }
+
+                    ignoreToggleSave = true;
                     sidebarGroups.forEach(function(group) {
                         const navItems = group.querySelectorAll('.nav-item');
                         let hasVisibleItem = false;
@@ -1000,7 +1054,7 @@ if (empty($menuItems)) {
                             const link = item.querySelector('.nav-link');
                             if (!link) return;
                             const text = link.textContent.toLowerCase();
-                            const matched = !filter || text.includes(filter);
+                            const matched = text.includes(filter);
                             item.style.display = matched ? '' : 'none';
                             if (matched) {
                                 hasVisibleItem = true;
@@ -1008,10 +1062,13 @@ if (empty($menuItems)) {
                         });
 
                         group.style.display = hasVisibleItem ? '' : 'none';
-                        if (filter && hasVisibleItem) {
+                        if (hasVisibleItem) {
                             group.setAttribute('open', 'open');
+                        } else {
+                            group.removeAttribute('open');
                         }
                     });
+                    ignoreToggleSave = false;
                 });
             }
         });
@@ -1058,7 +1115,7 @@ if (empty($menuItems)) {
                 }
             ?>
                 <li class="sidebar-group-wrapper">
-                    <details class="sidebar-menu-group" <?php echo ($groupHasActive || $groupIndex === 0) ? 'open' : ''; ?>>
+                    <details class="sidebar-menu-group" data-group-key="<?php echo 'group-' . (int) $groupIndex; ?>">
                         <summary class="sidebar-menu-summary">
                             <span class="sidebar-menu-summary-text"><?php echo htmlspecialchars($group['title']); ?></span>
                             <i class="bi bi-chevron-down"></i>
