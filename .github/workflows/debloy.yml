@@ -36,7 +36,6 @@ jobs:
           security: loose
           timeout: 120000
           log-level: verbose
-
           server-dir: /sys/ 
           # اسم جديد لملف الحالة = الإكشن يتجاهل الحالة القديمة ويرفع كل التعديلات في التشغيل القادم 
           state-name: .ftp-deploy-sync-state-v2.json
