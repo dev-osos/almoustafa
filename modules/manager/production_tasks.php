@@ -452,6 +452,22 @@ if (empty($_SESSION['_pt_migrations_done'])) {
         ");
     } catch (Exception $e) {}
 
+    // جدول المسودات
+    try {
+        $db->execute("
+            CREATE TABLE IF NOT EXISTS `task_drafts` (
+              `id` int(11) NOT NULL AUTO_INCREMENT,
+              `created_by` int(11) NOT NULL,
+              `draft_name` varchar(255) NULL,
+              `draft_data` longtext NOT NULL,
+              `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              `updated_at` timestamp NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+              PRIMARY KEY (`id`),
+              KEY `created_by` (`created_by`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+    } catch (Exception $e) {}
+
     // أعمدة إضافية لجدول الفواتير الورقية
     try {
         $t = $db->queryOne("SHOW TABLES LIKE 'shipping_company_paper_invoices'");
@@ -1505,6 +1521,65 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $error = ($e instanceof InvalidArgumentException) ? $e->getMessage() : 'حدث خطأ أثناء إنشاء المهام. يرجى المحاولة مرة أخرى.';
             }
         }
+    } elseif ($action === 'save_task_draft') {
+        header('Content-Type: application/json; charset=utf-8');
+        try {
+            $draftData = [];
+            $allowedDraftFields = ['task_type','priority','due_date','customer_name','local_customer_id','customer_phone','customer_type_radio_task','tg_governorate','tg_gov_id','tg_city','tg_city_id','tg_weight','tg_parcel_desc','order_title','shipping_fees','discount','details'];
+            foreach ($allowedDraftFields as $f) {
+                if (isset($_POST[$f])) $draftData[$f] = $_POST[$f];
+            }
+            if (isset($_POST['products']) && is_array($_POST['products'])) {
+                $draftData['products'] = $_POST['products'];
+            }
+            $customerName = trim($_POST['customer_name'] ?? '');
+            $taskType     = trim($_POST['task_type'] ?? '');
+            $typeLabels   = ['shop_order' => 'محل', 'cash_customer' => 'عميل نقدي', 'telegraph' => 'تليجراف', 'shipping_company' => 'شحن'];
+            $draftName = ($customerName !== '' ? $customerName : 'بدون عميل') . ' - ' . ($typeLabels[$taskType] ?? $taskType) . ' - ' . date('d/m H:i');
+
+            $draftId = intval($_POST['draft_id'] ?? 0);
+            if ($draftId > 0) {
+                $existing = $db->queryOne("SELECT id FROM task_drafts WHERE id = ? AND created_by = ? LIMIT 1", [$draftId, $currentUser['id']]);
+                if ($existing) {
+                    $db->execute("UPDATE task_drafts SET draft_name = ?, draft_data = ?, updated_at = NOW() WHERE id = ?", [$draftName, json_encode($draftData, JSON_UNESCAPED_UNICODE), $draftId]);
+                    echo json_encode(['success' => true, 'draft_id' => $draftId, 'draft_name' => $draftName], JSON_UNESCAPED_UNICODE);
+                    exit;
+                }
+            }
+            $res = $db->execute("INSERT INTO task_drafts (created_by, draft_name, draft_data) VALUES (?, ?, ?)", [$currentUser['id'], $draftName, json_encode($draftData, JSON_UNESCAPED_UNICODE)]);
+            $newId = $res['insert_id'] ?? 0;
+            echo json_encode(['success' => true, 'draft_id' => $newId, 'draft_name' => $draftName], JSON_UNESCAPED_UNICODE);
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'error' => 'تعذر حفظ المسودة'], JSON_UNESCAPED_UNICODE);
+        }
+        exit;
+
+    } elseif ($action === 'load_task_draft') {
+        header('Content-Type: application/json; charset=utf-8');
+        $draftId = intval($_POST['draft_id'] ?? 0);
+        if ($draftId <= 0) { echo json_encode(['success' => false, 'error' => 'معرف غير صحيح'], JSON_UNESCAPED_UNICODE); exit; }
+        try {
+            $draft = $db->queryOne("SELECT * FROM task_drafts WHERE id = ? AND created_by = ? LIMIT 1", [$draftId, $currentUser['id']]);
+            if (!$draft) { echo json_encode(['success' => false, 'error' => 'المسودة غير موجودة'], JSON_UNESCAPED_UNICODE); exit; }
+            $data = json_decode($draft['draft_data'], true) ?: [];
+            echo json_encode(['success' => true, 'data' => $data, 'draft_id' => $draftId, 'draft_name' => $draft['draft_name']], JSON_UNESCAPED_UNICODE);
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'error' => 'خطأ في تحميل المسودة'], JSON_UNESCAPED_UNICODE);
+        }
+        exit;
+
+    } elseif ($action === 'delete_task_draft') {
+        header('Content-Type: application/json; charset=utf-8');
+        $draftId = intval($_POST['draft_id'] ?? 0);
+        if ($draftId <= 0) { echo json_encode(['success' => false, 'error' => 'معرف غير صحيح'], JSON_UNESCAPED_UNICODE); exit; }
+        try {
+            $db->execute("DELETE FROM task_drafts WHERE id = ? AND created_by = ?", [$draftId, $currentUser['id']]);
+            echo json_encode(['success' => true], JSON_UNESCAPED_UNICODE);
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'error' => 'تعذر حذف المسودة'], JSON_UNESCAPED_UNICODE);
+        }
+        exit;
+
     } elseif ($action === 'update_task_status') {
         $taskId = intval($_POST['task_id'] ?? 0);
         $newStatus = trim($_POST['status'] ?? '');
@@ -2452,6 +2527,12 @@ try {
     error_log('Manager task stats error: ' . $e->getMessage());
 }
 
+// تحميل مسودات المستخدم الحالي
+$taskDrafts = [];
+try {
+    $taskDrafts = $db->query("SELECT id, draft_name, created_at, updated_at FROM task_drafts WHERE created_by = ? ORDER BY COALESCE(updated_at, created_at) DESC LIMIT 50", [$currentUser['id']]) ?: [];
+} catch (Exception $e) { $taskDrafts = []; }
+
 $recentTasks = [];
 $statusStyles = [
     'pending' => ['class' => 'warning', 'label' => 'معلقة'],
@@ -3316,7 +3397,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                 <h5 class="mb-0"><i class="bi bi-plus-circle me-2"></i>إنشاء أوردر جديد</h5>
             </div>
             <div class="card-body">
-                <form method="post" action="?page=production_tasks">
+                <form method="post" action="?page=production_tasks" id="createTaskForm">
                     <input type="hidden" name="action" value="create_production_task">
                     <div class="row g-3">
                         <div class="col-md-4">
@@ -3559,7 +3640,9 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             </div>
                         </div>
                     </div>
-                    <div class="d-flex justify-content-end mt-4 gap-2">                        
+                    <div class="d-flex justify-content-end mt-4 gap-2">
+                        <input type="hidden" id="currentDraftId" name="current_draft_id" value="">
+                        <button type="button" class="btn btn-outline-secondary" id="saveDraftBtn"><i class="bi bi-floppy me-1"></i>حفظ كمسودة</button>
                         <button type="submit" class="btn btn-primary"><i class="bi bi-send-check me-1"></i>إرسال المهمة</button>
                     </div>
                 </form>
@@ -3756,6 +3839,47 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
             </div>
         </div>
     </div>
+
+    <?php if (!empty($taskDrafts)): ?>
+    <div class="card shadow-sm mt-4" id="taskDraftsCard">
+        <div class="card-header bg-warning bg-opacity-10 d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 text-warning"><i class="bi bi-floppy me-2"></i>المسودات (<span id="draftsCount"><?php echo count($taskDrafts); ?></span>)</h5>
+        </div>
+        <div class="card-body p-0">
+            <ul class="list-group list-group-flush" id="draftsList">
+                <?php foreach ($taskDrafts as $draft): ?>
+                <li class="list-group-item d-flex justify-content-between align-items-center" id="draft-item-<?php echo (int)$draft['id']; ?>">
+                    <div>
+                        <i class="bi bi-file-earmark-text text-warning me-2"></i>
+                        <strong><?php echo htmlspecialchars($draft['draft_name'] ?? 'مسودة', ENT_QUOTES, 'UTF-8'); ?></strong>
+                        <span class="text-muted small ms-2"><?php
+                            $draftDate = $draft['updated_at'] ?? $draft['created_at'];
+                            echo $draftDate ? date('d/m/Y H:i', strtotime($draftDate)) : '';
+                        ?></span>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="loadDraft(<?php echo (int)$draft['id']; ?>)">
+                            <i class="bi bi-pencil-square me-1"></i>استكمال
+                        </button>
+                        <button type="button" class="btn btn-outline-danger btn-sm" onclick="deleteDraft(<?php echo (int)$draft['id']; ?>)">
+                            <i class="bi bi-trash me-1"></i>حذف
+                        </button>
+                    </div>
+                </li>
+                <?php endforeach; ?>
+            </ul>
+        </div>
+    </div>
+    <?php else: ?>
+    <div id="taskDraftsCard" style="display:none;" class="card shadow-sm mt-4">
+        <div class="card-header bg-warning bg-opacity-10 d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 text-warning"><i class="bi bi-floppy me-2"></i>المسودات (<span id="draftsCount">0</span>)</h5>
+        </div>
+        <div class="card-body p-0">
+            <ul class="list-group list-group-flush" id="draftsList"></ul>
+        </div>
+    </div>
+    <?php endif; ?>
 
     <div class="card shadow-sm mt-4">
         <div class="card-header bg-light d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -7614,5 +7738,254 @@ document.addEventListener('click', function (e) {
         setTimeout(function () { el.textContent = prev; el.style.color = ''; }, 1200);
     });
 });
+</script>
+
+<script>
+(function () {
+    'use strict';
+
+    var currentDraftIdInput = document.getElementById('currentDraftId');
+    var saveDraftBtn = document.getElementById('saveDraftBtn');
+
+    // ====== حفظ المسودة ======
+    if (saveDraftBtn) {
+        saveDraftBtn.addEventListener('click', function () {
+            var form = document.getElementById('createTaskForm') || saveDraftBtn.closest('form');
+            if (!form) return;
+
+            var formData = new FormData(form);
+            formData.set('action', 'save_task_draft');
+            var draftId = currentDraftIdInput ? currentDraftIdInput.value : '';
+            if (draftId) formData.set('draft_id', draftId);
+
+            saveDraftBtn.disabled = true;
+            saveDraftBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>جاري الحفظ...';
+
+            fetch(window.location.href, {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                body: formData,
+                credentials: 'same-origin'
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                saveDraftBtn.disabled = false;
+                saveDraftBtn.innerHTML = '<i class="bi bi-floppy me-1"></i>حفظ كمسودة';
+                if (res.success) {
+                    if (currentDraftIdInput) currentDraftIdInput.value = res.draft_id;
+                    addOrUpdateDraftInList(res.draft_id, res.draft_name);
+                    showDraftToast('تم حفظ المسودة: ' + res.draft_name);
+                } else {
+                    alert(res.error || 'تعذر حفظ المسودة');
+                }
+            })
+            .catch(function () {
+                saveDraftBtn.disabled = false;
+                saveDraftBtn.innerHTML = '<i class="bi bi-floppy me-1"></i>حفظ كمسودة';
+                alert('خطأ في الاتصال');
+            });
+        });
+    }
+
+    // ====== تحميل المسودة في النموذج ======
+    window.loadDraft = function (draftId) {
+        var fd = new FormData();
+        fd.append('action', 'load_task_draft');
+        fd.append('draft_id', draftId);
+
+        fetch(window.location.href, {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            body: fd,
+            credentials: 'same-origin'
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+            if (!res.success) { alert(res.error || 'تعذر تحميل المسودة'); return; }
+            var data = res.data;
+
+            // فتح النموذج إذا كان مطوياً
+            var collapseEl = document.getElementById('createTaskFormCollapse');
+            if (collapseEl && !collapseEl.classList.contains('show')) {
+                if (typeof bootstrap !== 'undefined') {
+                    bootstrap.Collapse.getOrCreateInstance(collapseEl).show();
+                } else {
+                    collapseEl.classList.add('show');
+                }
+            }
+
+            // تعيين نوع الأوردر
+            if (data.task_type) {
+                var ttSelect = document.getElementById('createTaskType') || document.querySelector('[name="task_type"]');
+                if (ttSelect) { ttSelect.value = data.task_type; ttSelect.dispatchEvent(new Event('change')); }
+            }
+            // الأولوية
+            if (data.priority) {
+                var prSelect = document.querySelector('[name="priority"]');
+                if (prSelect) prSelect.value = data.priority;
+            }
+            // تاريخ التسليم
+            if (data.due_date) {
+                var ddInput = document.querySelector('[name="due_date"]');
+                if (ddInput) ddInput.value = data.due_date;
+            }
+            // اسم العميل
+            if (data.customer_name !== undefined) {
+                var cnInput = document.querySelector('[name="customer_name"]');
+                if (cnInput) { cnInput.value = data.customer_name; cnInput.dispatchEvent(new Event('input')); }
+            }
+            // رقم هاتف العميل
+            if (data.customer_phone !== undefined) {
+                var cpInput = document.querySelector('[name="customer_phone"]');
+                if (cpInput) cpInput.value = data.customer_phone;
+            }
+            // local_customer_id
+            if (data.local_customer_id !== undefined) {
+                var lcInput = document.querySelector('[name="local_customer_id"]');
+                if (lcInput) lcInput.value = data.local_customer_id;
+            }
+            // العنوان / الاتجاهات
+            if (data.order_title !== undefined) {
+                var otInput = document.querySelector('[name="order_title"]');
+                if (otInput) otInput.value = data.order_title;
+            }
+            // تليجراف
+            ['tg_governorate','tg_gov_id','tg_city','tg_city_id','tg_weight','tg_parcel_desc'].forEach(function (f) {
+                if (data[f] !== undefined) {
+                    var el = document.querySelector('[name="' + f + '"]');
+                    if (el) { el.value = data[f]; el.dispatchEvent(new Event('change')); }
+                }
+            });
+            // الملاحظات
+            if (data.details !== undefined) {
+                var detInput = document.querySelector('[name="details"]');
+                if (detInput) detInput.value = data.details;
+            }
+            // رسوم الشحن والخصم
+            if (data.shipping_fees !== undefined) {
+                var sfInput = document.querySelector('[name="shipping_fees"]');
+                if (sfInput) { sfInput.value = data.shipping_fees; sfInput.dispatchEvent(new Event('input')); }
+            }
+            if (data.discount !== undefined) {
+                var discInput = document.querySelector('[name="discount"]');
+                if (discInput) { discInput.value = data.discount; discInput.dispatchEvent(new Event('input')); }
+            }
+
+            // تعيين المسودة الحالية
+            if (currentDraftIdInput) currentDraftIdInput.value = res.draft_id;
+
+            // المنتجات — إعادة البناء
+            if (data.products && Array.isArray(data.products) && data.products.length > 0) {
+                setTimeout(function () {
+                    var productsContainer = document.getElementById('productsContainer') || document.querySelector('.products-container');
+                    if (!productsContainer) return;
+
+                    // مسح المنتجات الحالية وإضافة المسودة
+                    var removeButtons = productsContainer.querySelectorAll('.remove-product-btn, [onclick*="removeProduct"]');
+                    removeButtons.forEach(function (btn) { if (productsContainer.querySelectorAll('.product-row, .product-item').length > 1) btn.click(); });
+
+                    data.products.forEach(function (prod, idx) {
+                        if (idx > 0) {
+                            var addBtn = document.getElementById('addProductBtn') || document.querySelector('[onclick*="addProduct"]');
+                            if (addBtn) addBtn.click();
+                        }
+                        setTimeout(function () {
+                            var rows = productsContainer.querySelectorAll('.product-row, [data-product-index], .product-item');
+                            var row = rows[idx];
+                            if (!row) return;
+                            ['name','quantity','unit','category','price','item_type'].forEach(function (f) {
+                                if (prod[f] !== undefined) {
+                                    var el = row.querySelector('[name*="[' + f + ']"]');
+                                    if (el) { el.value = prod[f]; el.dispatchEvent(new Event('change')); el.dispatchEvent(new Event('input')); }
+                                }
+                            });
+                        }, 100 * (idx + 1));
+                    });
+                }, 300);
+            }
+
+            showDraftToast('تم تحميل المسودة: ' + res.draft_name);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        })
+        .catch(function () { alert('خطأ في الاتصال'); });
+    };
+
+    // ====== حذف المسودة ======
+    window.deleteDraft = function (draftId) {
+        if (!confirm('هل تريد حذف هذه المسودة نهائياً؟')) return;
+        var fd = new FormData();
+        fd.append('action', 'delete_task_draft');
+        fd.append('draft_id', draftId);
+
+        fetch(window.location.href, {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            body: fd,
+            credentials: 'same-origin'
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+            if (res.success) {
+                var item = document.getElementById('draft-item-' + draftId);
+                if (item) item.remove();
+                if (currentDraftIdInput && currentDraftIdInput.value == draftId) currentDraftIdInput.value = '';
+                updateDraftsCount();
+                showDraftToast('تم حذف المسودة');
+            } else {
+                alert(res.error || 'تعذر حذف المسودة');
+            }
+        })
+        .catch(function () { alert('خطأ في الاتصال'); });
+    };
+
+    // ====== إضافة / تحديث مسودة في القائمة ======
+    function addOrUpdateDraftInList(draftId, draftName) {
+        var card = document.getElementById('taskDraftsCard');
+        var list = document.getElementById('draftsList');
+        if (!list) return;
+
+        var existing = document.getElementById('draft-item-' + draftId);
+        var now = new Date();
+        var dateStr = ('0' + now.getDate()).slice(-2) + '/' + ('0' + (now.getMonth()+1)).slice(-2) + '/' + now.getFullYear() + ' ' + ('0' + now.getHours()).slice(-2) + ':' + ('0' + now.getMinutes()).slice(-2);
+        var html = '<div><i class="bi bi-file-earmark-text text-warning me-2"></i><strong>' + escHtml(draftName) + '</strong><span class="text-muted small ms-2">' + dateStr + '</span></div>'
+                 + '<div class="d-flex gap-2"><button type="button" class="btn btn-outline-primary btn-sm" onclick="loadDraft(' + draftId + ')"><i class="bi bi-pencil-square me-1"></i>استكمال</button>'
+                 + '<button type="button" class="btn btn-outline-danger btn-sm" onclick="deleteDraft(' + draftId + ')"><i class="bi bi-trash me-1"></i>حذف</button></div>';
+
+        if (existing) {
+            existing.innerHTML = html;
+        } else {
+            var li = document.createElement('li');
+            li.className = 'list-group-item d-flex justify-content-between align-items-center';
+            li.id = 'draft-item-' + draftId;
+            li.innerHTML = html;
+            list.insertBefore(li, list.firstChild);
+        }
+
+        if (card) card.style.display = '';
+        updateDraftsCount();
+    }
+
+    function updateDraftsCount() {
+        var list = document.getElementById('draftsList');
+        var countEl = document.getElementById('draftsCount');
+        var card = document.getElementById('taskDraftsCard');
+        if (!list) return;
+        var count = list.querySelectorAll('li').length;
+        if (countEl) countEl.textContent = count;
+        if (card) card.style.display = count === 0 ? 'none' : '';
+    }
+
+    function escHtml(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function showDraftToast(msg) {
+        var t = document.createElement('div');
+        t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#198754;color:#fff;padding:10px 22px;border-radius:8px;z-index:9999;font-size:0.95rem;box-shadow:0 2px 8px rgba(0,0,0,.2);';
+        t.textContent = msg;
+        document.body.appendChild(t);
+        setTimeout(function () { t.remove(); }, 3000);
+    }
+})();
 </script>
 
