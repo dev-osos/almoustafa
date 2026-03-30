@@ -1738,7 +1738,7 @@ function tasksHtml(string $value): string
             </button>
             <?php endif; ?>
         </div>
-        <div class="card-body p-0">
+        <div class="card-body p-0" id="tasksListContent">
             <?php if (empty($tasks)): ?>
                 <div class="text-center py-5">
                     <i class="bi bi-inbox display-5 text-muted"></i>
@@ -3096,8 +3096,10 @@ function tasksHtml(string $value): string
 <script>
 (function() {
     'use strict';
-    var tbody = document.getElementById('tasksTableBody');
-    if (!tbody) return;
+
+    var form = document.getElementById('tasksFilterForm');
+    if (!form) return;
+
     var searchTextEl = document.getElementById('tasksSearchText');
     var taskIdEl = document.getElementById('tasksFilterTaskId');
     var customerEl = document.getElementById('tasksFilterCustomer');
@@ -3108,7 +3110,18 @@ function tasksHtml(string $value): string
     var orderToEl = document.getElementById('tasksFilterOrderDateTo');
     var assignedEl = document.getElementById('tasksFilterAssigned');
     var statusInputEl = document.getElementById('tasksStatusFilterInput');
-    var statusCards = document.querySelectorAll('.task-status-filter-card');
+
+    function getTbody() {
+        return document.getElementById('tasksTableBody');
+    }
+
+    function getListContent() {
+        return document.getElementById('tasksListContent');
+    }
+
+    function getStatusCards() {
+        return document.querySelectorAll('.task-status-filter-card');
+    }
 
     function normalize(s) {
         if (typeof s !== 'string') return '';
@@ -3116,6 +3129,9 @@ function tasksHtml(string $value): string
     }
 
     function applyTasksFilter() {
+        var tbody = getTbody();
+        if (!tbody) return;
+
         var searchText = searchTextEl ? normalize(searchTextEl.value) : '';
         var taskId = taskIdEl ? String((taskIdEl.value || '').trim()) : '';
         var customer = customerEl ? normalize(customerEl.value) : '';
@@ -3128,8 +3144,7 @@ function tasksHtml(string $value): string
         var assignedNum = parseInt(assigned, 10) || 0;
         var status = statusInputEl ? (statusInputEl.value || '').trim() : '';
 
-        var rows = tbody.querySelectorAll('tr.tasks-filter-row');
-        rows.forEach(function(tr) {
+        tbody.querySelectorAll('tr.tasks-filter-row').forEach(function(tr) {
             var show = true;
             var rowTaskId = String(tr.getAttribute('data-task-id') || '');
             var rowSearch = normalize(tr.getAttribute('data-search') || '');
@@ -3158,7 +3173,7 @@ function tasksHtml(string $value): string
 
     function updateStatusCards(activeStatus) {
         activeStatus = (activeStatus || '').trim();
-        statusCards.forEach(function(link) {
+        getStatusCards().forEach(function(link) {
             var status = (link.getAttribute('data-status') || 'all').trim();
             var isActive = (status === 'all' && activeStatus === '') || status === activeStatus;
             var card = link.querySelector('.card');
@@ -3190,6 +3205,77 @@ function tasksHtml(string $value): string
         });
     }
 
+    function buildAjaxUrl(targetPage) {
+        var fd = new FormData(form);
+        fd.set('p', String(targetPage || 1));
+        var params = [];
+        fd.forEach(function(value, key) {
+            if (value !== '' && value !== '0') {
+                params.push(encodeURIComponent(key) + '=' + encodeURIComponent(value));
+            }
+        });
+        return '?' + params.join('&');
+    }
+
+    function doAjaxTasksPage(targetPage) {
+        var url = buildAjaxUrl(targetPage);
+        var listContent = getListContent();
+
+        if (listContent) {
+            listContent.style.opacity = '0.5';
+            listContent.style.pointerEvents = 'none';
+        }
+
+        fetch(url, {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin'
+        })
+            .then(function(r) { return r.text(); })
+            .then(function(html) {
+                var parser = new DOMParser();
+                var doc = parser.parseFromString(html, 'text/html');
+                var currentListContent = getListContent();
+                var newListContent = doc.getElementById('tasksListContent');
+
+                if (currentListContent && newListContent) {
+                    currentListContent.innerHTML = newListContent.innerHTML;
+                } else {
+                    var currentTbody = getTbody();
+                    var newTbody = doc.getElementById('tasksTableBody');
+                    if (currentTbody && newTbody) {
+                        currentTbody.innerHTML = newTbody.innerHTML;
+                    }
+
+                    var paginationNav = document.getElementById('tasksPagination');
+                    var newPagination = doc.getElementById('tasksPagination');
+                    if (paginationNav && newPagination) {
+                        paginationNav.innerHTML = newPagination.innerHTML;
+                    } else if (paginationNav && !newPagination) {
+                        paginationNav.innerHTML = '';
+                    }
+                }
+
+                var refreshedListContent = getListContent();
+                if (refreshedListContent) {
+                    refreshedListContent.style.opacity = '';
+                    refreshedListContent.style.pointerEvents = '';
+                }
+
+                applyTasksFilter();
+                updateStatusCards(statusInputEl ? statusInputEl.value : '');
+                window.dispatchEvent(new Event('tasks-table-updated'));
+                history.replaceState(null, '', url);
+            })
+            .catch(function() {
+                var refreshedListContent = getListContent();
+                if (refreshedListContent) {
+                    refreshedListContent.style.opacity = '';
+                    refreshedListContent.style.pointerEvents = '';
+                }
+                window.location.href = url;
+            });
+    }
+
     var debounceTimer;
     function scheduleFilter() {
         clearTimeout(debounceTimer);
@@ -3197,7 +3283,7 @@ function tasksHtml(string $value): string
     }
 
     document.querySelectorAll('#tasksFilterForm .tasks-dynamic-filter').forEach(function(el) {
-        if (el.tagName === 'SELECT' || (el.type === 'date')) {
+        if (el.tagName === 'SELECT' || el.type === 'date') {
             el.addEventListener('change', function() { doAjaxTasksPage(1); });
         } else {
             el.addEventListener('input', scheduleFilter);
@@ -3205,67 +3291,26 @@ function tasksHtml(string $value): string
         }
     });
 
-    var form = document.getElementById('tasksFilterForm');
-    if (form) {
-        form.addEventListener('submit', function(e) { e.preventDefault(); doAjaxTasksPage(1); });
-    }
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        doAjaxTasksPage(1);
+    });
 
-    statusCards.forEach(function(link) {
-        link.addEventListener('click', function(e) {
+    document.addEventListener('click', function(e) {
+        var statusCard = e.target && e.target.closest ? e.target.closest('.task-status-filter-card') : null;
+        if (statusCard) {
             e.preventDefault();
-            var nextStatus = (this.getAttribute('data-status') || 'all').trim();
+            e.stopPropagation();
+            var nextStatus = (statusCard.getAttribute('data-status') || 'all').trim();
             if (statusInputEl) {
                 statusInputEl.value = nextStatus === 'all' ? '' : nextStatus;
             }
             updateStatusCards(statusInputEl ? statusInputEl.value : '');
             applyTasksFilter();
             doAjaxTasksPage(1);
-        });
-    });
+            return;
+        }
 
-    updateStatusCards(statusInputEl ? statusInputEl.value : '');
-    applyTasksFilter();
-
-    window.addEventListener('tasks-table-updated', applyTasksFilter);
-
-    // التنقل بين الصفحات بدون ريفريش (AJAX)
-    function doAjaxTasksPage(targetPage) {
-        var fd = new FormData(form);
-        fd.set('p', targetPage);
-        var params = [];
-        fd.forEach(function(value, key) {
-            if (value !== '' && value !== '0') params.push(encodeURIComponent(key) + '=' + encodeURIComponent(value));
-        });
-        var url = '?' + params.join('&');
-        var wrapper = tbody.closest('.table-responsive') || tbody.closest('.dashboard-table-wrapper');
-        if (wrapper) wrapper.style.opacity = '0.5';
-        fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-            .then(function(r) { return r.text(); })
-            .then(function(html) {
-                var parser = new DOMParser();
-                var doc = parser.parseFromString(html, 'text/html');
-                var newTbody = doc.getElementById('tasksTableBody');
-                if (newTbody) tbody.innerHTML = newTbody.innerHTML;
-                var paginationNav = document.getElementById('tasksPagination');
-                var newPagination = doc.getElementById('tasksPagination');
-                if (paginationNav && newPagination) {
-                    paginationNav.innerHTML = newPagination.innerHTML;
-                } else if (paginationNav && !newPagination) {
-                    paginationNav.innerHTML = '';
-                }
-                if (wrapper) wrapper.style.opacity = '';
-                applyTasksFilter();
-                updateStatusCards(statusInputEl ? statusInputEl.value : '');
-                window.dispatchEvent(new Event('tasks-table-updated'));
-                history.replaceState(null, '', url);
-            })
-            .catch(function() {
-                if (wrapper) wrapper.style.opacity = '';
-                window.location.href = url;
-            });
-    }
-
-    document.addEventListener('click', function(e) {
         var link = e.target && e.target.closest ? e.target.closest('a.tasks-page-link') : null;
         if (!link || link.closest('.page-item.disabled')) return;
         var targetPage = link.getAttribute('data-page');
@@ -3273,6 +3318,10 @@ function tasksHtml(string $value): string
         e.preventDefault();
         doAjaxTasksPage(targetPage);
     });
+
+    updateStatusCards(statusInputEl ? statusInputEl.value : '');
+    applyTasksFilter();
+    window.addEventListener('tasks-table-updated', applyTasksFilter);
 })();
 </script>
 
