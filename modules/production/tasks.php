@@ -2793,7 +2793,8 @@ function tasksHtml(string $value): string
         fetch(url, {
             method: 'POST',
             headers: { 'X-Requested-With': 'XMLHttpRequest' },
-            body: formData
+            body: formData,
+            credentials: 'same-origin'
         })
         .then(function(response) { return response.json(); })
         .then(function(data) {
