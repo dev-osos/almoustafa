@@ -1505,6 +1505,14 @@ function tasksHtml(string $value): string
     border-color: #6c757d !important;
     color: #212529 !important;
 }
+.task-status-filter-card {
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    text-align: inherit;
+}
 @media (max-width: 768px) {
     .task-actions-header,
     .task-actions-cell {
@@ -1576,75 +1584,75 @@ function tasksHtml(string $value): string
     <?php if (!defined('TASKS_PARTIAL_TABLE') || !TASKS_PARTIAL_TABLE): ?>
     <div class="row g-2 mb-3" id="taskStatusFilterCards">
         <div class="col-6 col-md-4 col-lg-2">
-            <a href="<?php echo $filterBaseUrl; ?>" class="text-decoration-none task-status-filter-card" data-status="all">
+            <button type="button" class="text-decoration-none task-status-filter-card" data-status="all">
                 <div class="card <?php echo $statusFilter === '' && !$overdueFilter ? 'bg-primary text-white' : 'border-primary'; ?> text-center h-100">
                     <div class="card-body p-2">
                         <h5 class="<?php echo $statusFilter === '' && !$overdueFilter ? 'text-white' : 'text-primary'; ?> mb-0"><?php echo $stats['total']; ?></h5>
                         <small class="<?php echo $statusFilter === '' && !$overdueFilter ? 'text-white-50' : 'text-muted'; ?>">إجمالي الاوردرات</small>
                     </div>
                 </div>
-            </a>
+            </button>
         </div>
         <div class="col-6 col-md-4 col-lg-2">
-            <a href="<?php echo $filterBaseUrl . (strpos($filterBaseUrl, '?') !== false ? '&' : '?'); ?>status=pending" class="text-decoration-none task-status-filter-card" data-status="pending">
+            <button type="button" class="text-decoration-none task-status-filter-card" data-status="pending">
                 <div class="card <?php echo $statusFilter === 'pending' ? 'bg-warning text-dark' : 'border-warning'; ?> text-center h-100">
                     <div class="card-body p-2">
                         <h5 class="<?php echo $statusFilter === 'pending' ? 'text-dark' : 'text-warning'; ?> mb-0"><?php echo $stats['pending']; ?></h5>
                         <small class="<?php echo $statusFilter === 'pending' ? 'text-dark-50' : 'text-muted'; ?>">معلقة</small>
                     </div>
                 </div>
-            </a>
+            </button>
         </div>
 
         <div class="col-6 col-md-4 col-lg-2">
-            <a href="<?php echo $filterBaseUrl . (strpos($filterBaseUrl, '?') !== false ? '&' : '?'); ?>status=completed" class="text-decoration-none task-status-filter-card" data-status="completed">
+            <button type="button" class="text-decoration-none task-status-filter-card" data-status="completed">
                 <div class="card <?php echo $statusFilter === 'completed' ? 'bg-success text-white' : 'border-success'; ?> text-center h-100">
                     <div class="card-body p-2">
                         <h5 class="<?php echo $statusFilter === 'completed' ? 'text-white' : 'text-success'; ?> mb-0"><?php echo $stats['completed']; ?></h5>
                         <small class="<?php echo $statusFilter === 'completed' ? 'text-white-50' : 'text-muted'; ?>">مكتملة</small>
                     </div>
                 </div>
-            </a>
+            </button>
         </div>
         <div class="col-6 col-md-4 col-lg-2">
-            <a href="<?php echo $filterBaseUrl . (strpos($filterBaseUrl, '?') !== false ? '&' : '?'); ?>status=with_delegate" class="text-decoration-none task-status-filter-card" data-status="with_delegate">
+            <button type="button" class="text-decoration-none task-status-filter-card" data-status="with_delegate">
                 <div class="card <?php echo $statusFilter === 'with_delegate' ? 'bg-info text-white' : 'border-info'; ?> text-center h-100">
                     <div class="card-body p-2">
                         <h5 class="<?php echo $statusFilter === 'with_delegate' ? 'text-white' : 'text-info'; ?> mb-0"><?php echo $stats['with_delegate']; ?></h5>
                         <small class="<?php echo $statusFilter === 'with_delegate' ? 'text-white-50' : 'text-muted'; ?>">مع المندوب</small>
                     </div>
                 </div>
-            </a>
+            </button>
         </div>
         <div class="col-6 col-md-4 col-lg-2">
-            <a href="<?php echo $filterBaseUrl . (strpos($filterBaseUrl, '?') !== false ? '&' : '?'); ?>status=with_driver" class="text-decoration-none task-status-filter-card" data-status="with_driver">
+            <button type="button" class="text-decoration-none task-status-filter-card" data-status="with_driver">
                 <div class="card <?php echo $statusFilter === 'with_driver' ? 'bg-primary text-white' : 'border-primary'; ?> text-center h-100">
                     <div class="card-body p-2">
                         <h5 class="<?php echo $statusFilter === 'with_driver' ? 'text-white' : 'text-primary'; ?> mb-0"><?php echo $stats['with_driver']; ?></h5>
                         <small class="<?php echo $statusFilter === 'with_driver' ? 'text-white-50' : 'text-muted'; ?>">مع السائق</small>
                     </div>
                 </div>
-            </a>
+            </button>
         </div>
         <div class="col-6 col-md-4 col-lg-2">
-            <a href="<?php echo $filterBaseUrl . (strpos($filterBaseUrl, '?') !== false ? '&' : '?'); ?>status=delivered" class="text-decoration-none task-status-filter-card" data-status="delivered">
+            <button type="button" class="text-decoration-none task-status-filter-card" data-status="delivered">
                 <div class="card <?php echo $statusFilter === 'delivered' ? 'bg-success text-white' : 'border-success'; ?> text-center h-100">
                     <div class="card-body p-2">
                         <h5 class="<?php echo $statusFilter === 'delivered' ? 'text-white' : 'text-success'; ?> mb-0"><?php echo $stats['delivered']; ?></h5>
                         <small class="<?php echo $statusFilter === 'delivered' ? 'text-white-50' : 'text-muted'; ?>">تم التوصيل</small>
                     </div>
                 </div>
-            </a>
+            </button>
         </div>
         <div class="col-6 col-md-4 col-lg-2">
-            <a href="<?php echo $filterBaseUrl . (strpos($filterBaseUrl, '?') !== false ? '&' : '?'); ?>status=returned" class="text-decoration-none task-status-filter-card" data-status="returned">
+            <button type="button" class="text-decoration-none task-status-filter-card" data-status="returned">
                 <div class="card <?php echo $statusFilter === 'returned' ? 'bg-secondary text-white' : 'border-secondary'; ?> text-center h-100">
                     <div class="card-body p-2">
                         <h5 class="<?php echo $statusFilter === 'returned' ? 'text-white' : 'text-secondary'; ?> mb-0"><?php echo $stats['returned']; ?></h5>
                         <small class="<?php echo $statusFilter === 'returned' ? 'text-white-50' : 'text-muted'; ?>">تم الارجاع</small>
                     </div>
                 </div>
-            </a>
+            </button>
         </div>
         
     </div>
