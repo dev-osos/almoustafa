@@ -839,6 +839,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $discount = (float) str_replace(',', '.', (string) $_POST['discount']);
             if ($discount < 0) $discount = 0;
         }
+        $advancePayment = 0;
+        if (isset($_POST['advance_payment']) && $_POST['advance_payment'] !== '') {
+            $advancePayment = (float) str_replace(',', '.', (string) $_POST['advance_payment']);
+            if ($advancePayment < 0) $advancePayment = 0;
+        }
 
         // تحميل qu.json لحساب الكمية الفعلية للخصم عند الوحدة = شرينك
         $quDataForDeduction = [];
@@ -1240,12 +1245,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $notesParts[] = $assigneesInfo;
                 }
                 
-                // حفظ رسوم الشحن والخصم في notes لعرضها في الإيصال
+                // حفظ رسوم الشحن والخصم والمدفوع مقدماً في notes لعرضها في الإيصال
                 if ($shippingFees > 0) {
                     $notesParts[] = 'رسوم الشحن :' . $shippingFees;
                 }
                 if ($discount > 0) {
                     $notesParts[] = 'الخصم :' . $discount;
+                }
+                if ($advancePayment > 0) {
+                    $notesParts[] = '[ADVANCE_PAYMENT]:' . $advancePayment;
                 }
 
                 $notesValue = !empty($notesParts) ? implode("\n\n", $notesParts) : null;
@@ -2007,6 +2015,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $discount = (float) str_replace(',', '.', (string) $_POST['discount']);
                         if ($discount < 0) $discount = 0;
                     }
+                    $advancePayment = 0;
+                    if (isset($_POST['advance_payment']) && $_POST['advance_payment'] !== '') {
+                        $advancePayment = (float) str_replace(',', '.', (string) $_POST['advance_payment']);
+                        if ($advancePayment < 0) $advancePayment = 0;
+                    }
                     $products = [];
                     if (isset($_POST['products']) && is_array($_POST['products'])) {
                         foreach ($_POST['products'] as $p) {
@@ -2060,6 +2073,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                     if ($discount > 0) {
                         $notesParts[] = 'الخصم :' . $discount;
+                    }
+                    if ($advancePayment > 0) {
+                        $notesParts[] = '[ADVANCE_PAYMENT]:' . $advancePayment;
                     }
                     $notesValue = !empty($notesParts) ? implode("\n\n", $notesParts) : null;
                     $firstProduct = !empty($products) ? $products[0] : null;
@@ -2229,6 +2245,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
             if (preg_match('/\وصف البضاعة :\s*([^\n]+)/', $notes, $m)) {
                 $tgParcelDesc = trim($m[1]);
             }
+            $advancePayment = 0;
+            if (preg_match('/\[ADVANCE_PAYMENT\]:\s*([0-9.]+)/', $notes, $m)) {
+                $advancePayment = (float)$m[1];
+            }
             // استخراج العمال المخصصين
             if (preg_match('/\[ASSIGNED_WORKERS_IDS\]\s*:\s*([0-9,\s]+)/', $notes, $m)) {
                 $assignees = array_filter(array_map('intval', preg_split('/[\s,]+/', trim($m[1]), -1, PREG_SPLIT_NO_EMPTY)));
@@ -2245,6 +2265,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
                 $details = preg_replace('/المنتج:\s*[^\n]+/m', '', $details);
                 $details = preg_replace('/\رسوم الشحن :\s*[0-9.]+/', '', $details);
                 $details = preg_replace('/\الخصم :\s*[0-9.]+/', '', $details);
+                $details = preg_replace('/\[ADVANCE_PAYMENT\]:\s*[0-9.]+/', '', $details);
                 $details = preg_replace('/\عنوان :\s*[^\n]+/', '', $details);
                 $details = preg_replace('/\المحافظة :\s*[^\n]+/', '', $details);
                 $details = preg_replace('/\المدينة :\s*[^\n]+/', '', $details);
@@ -2277,6 +2298,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
                     'assignees' => array_values($assignees),
                     'shipping_fees' => $shippingFees,
                     'discount' => $discount,
+                    'advance_payment' => $advancePayment,
                     'order_title' => $orderTitle,
                     'tg_governorate' => $tgGovernorate,
                     'tg_city' => $tgCity,
@@ -3615,6 +3637,13 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                 <span class="input-group-text">ج.م</span>
                             </div>
                         </div>
+                        <div class="col-12 col-md-6 col-lg-4 mt-2">
+                            <label class="form-label" for="createTaskAdvancePayment">المدفوع مقدماً</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" name="advance_payment" id="createTaskAdvancePayment" step="0.01" min="0" placeholder="0.00" value="0">
+                                <span class="input-group-text">ج.م</span>
+                            </div>
+                        </div>
                         <div class="col-12 mt-3">
                             <div class="card bg-light border-primary border-opacity-25" id="createTaskTotalSummaryCard">
                                 <div class="card-body py-3">
@@ -3646,6 +3675,14 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                         <div class="col-6 col-md-3">
                                             <span class="text-muted">الإجمالي النهائي:</span>
                                             <strong class="d-block fs-5 text-success" id="createTaskFinalTotalDisplay">0.00 ج.م</strong>
+                                        </div>
+                                        <div class="col-6 col-md-3" id="createTaskAdvancePaymentCol" style="display:none;">
+                                            <span class="text-muted">المدفوع مقدماً:</span>
+                                            <strong class="d-block text-primary" id="createTaskAdvancePaymentDisplay">0.00 ج.م</strong>
+                                        </div>
+                                        <div class="col-6 col-md-3" id="createTaskRemainingCol" style="display:none;">
+                                            <span class="text-muted">المتبقي:</span>
+                                            <strong class="d-block fs-5 text-danger" id="createTaskRemainingDisplay">0.00 ج.م</strong>
                                         </div>
                                     </div>
                                 </div>
@@ -3806,6 +3843,13 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                 <span class="input-group-text">ج.م</span>
                             </div>
                         </div>
+                        <div class="col-12 col-md-6 col-lg-4 mt-2">
+                            <label class="form-label" for="editTaskAdvancePayment">المدفوع مقدماً</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" name="advance_payment" id="editTaskAdvancePayment" step="0.01" min="0" placeholder="0.00" value="0">
+                                <span class="input-group-text">ج.م</span>
+                            </div>
+                        </div>
                         <div class="col-12 mt-3">
                             <div class="card bg-light border-primary border-opacity-25" id="editTaskTotalSummaryCard">
                                 <div class="card-body py-3">
@@ -3837,6 +3881,14 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                         <div class="col-6 col-md-3">
                                             <span class="text-muted">الإجمالي النهائي:</span>
                                             <strong class="d-block fs-5 text-success" id="editTaskFinalTotalDisplay">0.00 ج.م</strong>
+                                        </div>
+                                        <div class="col-6 col-md-3" id="editTaskAdvancePaymentCol" style="display:none;">
+                                            <span class="text-muted">المدفوع مقدماً:</span>
+                                            <strong class="d-block text-primary" id="editTaskAdvancePaymentDisplay">0.00 ج.م</strong>
+                                        </div>
+                                        <div class="col-6 col-md-3" id="editTaskRemainingCol" style="display:none;">
+                                            <span class="text-muted">المتبقي:</span>
+                                            <strong class="d-block fs-5 text-danger" id="editTaskRemainingDisplay">0.00 ج.م</strong>
                                         </div>
                                     </div>
                                 </div>
@@ -4769,8 +4821,11 @@ function updateEditTaskSummary() {
     var shipEl = document.getElementById('editTaskShippingDisplay');
     var discountEl = document.getElementById('editTaskDiscountDisplay');
     var finalEl = document.getElementById('editTaskFinalTotalDisplay');
+    var advanceEl = document.getElementById('editTaskAdvancePaymentDisplay');
+    var remainingEl = document.getElementById('editTaskRemainingDisplay');
     var shipInput = document.getElementById('editTaskShippingFees');
     var discountInput = document.getElementById('editTaskDiscount');
+    var advanceInput = document.getElementById('editTaskAdvancePayment');
     if (!container || !subEl || !shipEl || !finalEl) return;
     var subtotal = 0;
     container.querySelectorAll('.edit-product-line-total').forEach(function(input) {
@@ -4784,6 +4839,7 @@ function updateEditTaskSummary() {
         if (!isNaN(v) && v >= 0) shipping = v;
     }
     var discount = (discountInput && !isNaN(parseFloat(discountInput.value))) ? Math.max(0, parseFloat(discountInput.value)) : 0;
+    var advance = (advanceInput && !isNaN(parseFloat(advanceInput.value))) ? Math.max(0, parseFloat(advanceInput.value)) : 0;
     var finalTotal;
     if (isTg) {
         var deliveryCost = window._tgEditDeliveryCost || 0;
@@ -4791,10 +4847,17 @@ function updateEditTaskSummary() {
     } else {
         finalTotal = subtotal + shipping - discount;
     }
+    var remaining = finalTotal - advance;
     subEl.textContent = subtotal.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
     shipEl.textContent = shipping.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
     if (discountEl) discountEl.textContent = discount.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
     finalEl.textContent = finalTotal.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+    if (advanceEl) advanceEl.textContent = advance.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+    if (remainingEl) remainingEl.textContent = remaining.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+    var advanceCol = document.getElementById('editTaskAdvancePaymentCol');
+    var remainingCol = document.getElementById('editTaskRemainingCol');
+    if (advanceCol) advanceCol.style.display = advance > 0 ? '' : 'none';
+    if (remainingCol) remainingCol.style.display = advance > 0 ? '' : 'none';
 }
 function delegateEditSummaryInputs() {
     var form = document.getElementById('editTaskForm');
@@ -4809,7 +4872,7 @@ function delegateEditSummaryInputs() {
                 syncEditPriceFromLineTotal(row);
             }
         }
-        if (e.target.matches('.edit-product-line-total, .edit-product-price, .edit-product-qty') || e.target.id === 'editTaskShippingFees' || e.target.id === 'editTaskDiscount') {
+        if (e.target.matches('.edit-product-line-total, .edit-product-price, .edit-product-qty') || e.target.id === 'editTaskShippingFees' || e.target.id === 'editTaskDiscount' || e.target.id === 'editTaskAdvancePayment') {
             updateEditTaskSummary();
         }
     }
@@ -4913,6 +4976,8 @@ window.openEditTaskModal = function(taskId) {
                 if (shippingEl && (typeof t.shipping_fees === 'string' && t.shipping_fees !== '')) shippingEl.value = t.shipping_fees;
                 var discountEl = document.getElementById('editTaskDiscount');
                 if (discountEl && (typeof t.discount === 'number' || (typeof t.discount === 'string' && t.discount !== ''))) discountEl.value = t.discount;
+                var advancePayEl = document.getElementById('editTaskAdvancePayment');
+                if (advancePayEl) advancePayEl.value = (typeof t.advance_payment === 'number' || (typeof t.advance_payment === 'string' && t.advance_payment !== '')) ? t.advance_payment : 0;
                 var products = Array.isArray(t.products) ? t.products : [];
                 if (products.length === 0) products = [{}];
                 products.forEach(function(p) {
@@ -6277,14 +6342,17 @@ document.addEventListener('DOMContentLoaded', function () {
     // تحديث الإجمالي للصفوف الموجودة عند التحميل
     productsContainer.querySelectorAll('.product-row').forEach(updateProductLineTotal);
     
-    // ملخص الإجمالي النهائي (إجمالي المنتجات + رسوم الشحن - الخصم)
+    // ملخص الإجمالي النهائي (إجمالي المنتجات + رسوم الشحن - الخصم - المدفوع مقدماً)
     function updateCreateTaskSummary() {
         var subtotalEl = document.getElementById('createTaskSubtotalDisplay');
         var shippingEl = document.getElementById('createTaskShippingDisplay');
         var discountEl = document.getElementById('createTaskDiscountDisplay');
         var finalEl = document.getElementById('createTaskFinalTotalDisplay');
+        var advanceEl = document.getElementById('createTaskAdvancePaymentDisplay');
+        var remainingEl = document.getElementById('createTaskRemainingDisplay');
         var shippingInput = document.getElementById('createTaskShippingFees');
         var discountInput = document.getElementById('createTaskDiscount');
+        var advanceInput = document.getElementById('createTaskAdvancePayment');
         if (!subtotalEl || !shippingEl || !finalEl) return;
         var subtotal = 0;
         productsContainer.querySelectorAll('.product-line-total-input').forEach(function(inp) {
@@ -6302,6 +6370,11 @@ document.addEventListener('DOMContentLoaded', function () {
             var v = parseFloat(discountInput.value || '0');
             if (!isNaN(v) && v >= 0) discount = v;
         }
+        var advance = 0;
+        if (advanceInput) {
+            var v = parseFloat(advanceInput.value || '0');
+            if (!isNaN(v) && v >= 0) advance = v;
+        }
         var finalTotal;
         if (isTg) {
             // تليجراف: الإجمالي = إجمالي المنتجات - تكلفة التوصيل
@@ -6310,10 +6383,17 @@ document.addEventListener('DOMContentLoaded', function () {
         } else {
             finalTotal = subtotal + shipping - discount;
         }
+        var remaining = finalTotal - advance;
         subtotalEl.textContent = subtotal.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
         shippingEl.textContent = shipping.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
         if (discountEl) discountEl.textContent = discount.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
         finalEl.textContent = finalTotal.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+        if (advanceEl) advanceEl.textContent = advance.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+        if (remainingEl) remainingEl.textContent = remaining.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ج.م';
+        var advanceCol = document.getElementById('createTaskAdvancePaymentCol');
+        var remainingCol = document.getElementById('createTaskRemainingCol');
+        if (advanceCol) advanceCol.style.display = advance > 0 ? '' : 'none';
+        if (remainingCol) remainingCol.style.display = advance > 0 ? '' : 'none';
     }
     if (document.getElementById('createTaskShippingFees')) {
         document.getElementById('createTaskShippingFees').addEventListener('input', updateCreateTaskSummary);
@@ -6322,6 +6402,10 @@ document.addEventListener('DOMContentLoaded', function () {
     if (document.getElementById('createTaskDiscount')) {
         document.getElementById('createTaskDiscount').addEventListener('input', updateCreateTaskSummary);
         document.getElementById('createTaskDiscount').addEventListener('change', updateCreateTaskSummary);
+    }
+    if (document.getElementById('createTaskAdvancePayment')) {
+        document.getElementById('createTaskAdvancePayment').addEventListener('input', updateCreateTaskSummary);
+        document.getElementById('createTaskAdvancePayment').addEventListener('change', updateCreateTaskSummary);
     }
     updateCreateTaskSummary();
 
@@ -6482,6 +6566,10 @@ document.addEventListener('DOMContentLoaded', function () {
     if (document.getElementById('editTaskDiscount')) {
         document.getElementById('editTaskDiscount').addEventListener('input', fetchEditDeliveryCost);
         document.getElementById('editTaskDiscount').addEventListener('change', fetchEditDeliveryCost);
+    }
+    if (document.getElementById('editTaskAdvancePayment')) {
+        document.getElementById('editTaskAdvancePayment').addEventListener('input', updateEditTaskSummary);
+        document.getElementById('editTaskAdvancePayment').addEventListener('change', updateEditTaskSummary);
     }
     var editProductsContainerEl = document.getElementById('editProductsContainer');
     if (editProductsContainerEl) {
@@ -7686,11 +7774,13 @@ window.duplicateOrderById = function() {
             var detailsEl = document.querySelector('#createTaskFormCollapse textarea[name="details"]');
             if (detailsEl) detailsEl.value = t.details || '';
 
-            // الشحن والخصم
+            // الشحن والخصم والمدفوع مقدماً
             var shippingEl = document.getElementById('createTaskShippingFees');
             if (shippingEl) shippingEl.value = (t.shipping_fees != null) ? t.shipping_fees : 0;
             var discountEl = document.getElementById('createTaskDiscount');
             if (discountEl) discountEl.value = (t.discount != null) ? t.discount : 0;
+            var advanceEl = document.getElementById('createTaskAdvancePayment');
+            if (advanceEl) advanceEl.value = (t.advance_payment != null) ? t.advance_payment : 0;
 
             // المنتجات
             var products = (Array.isArray(t.products) && t.products.length > 0) ? t.products : [{}];

@@ -151,6 +151,7 @@ foreach ($taskIds as $taskId) {
         $displayNotes = preg_replace('/المنتجات\s*:\s*(.+?)(?=\n\s*\n|\[ASSIGNED_WORKERS_IDS\]|$)/su', '', $displayNotes);
         $displayNotes = preg_replace('/\[SHIPPING_FEES\]:\s*[0-9.]+/', '', $displayNotes);
         $displayNotes = preg_replace('/\[DISCOUNT\]:\s*[0-9.]+/', '', $displayNotes);
+        $displayNotes = preg_replace('/\[ADVANCE_PAYMENT\]:\s*[0-9.]+/', '', $displayNotes);
         $displayNotes = preg_replace('/\[ORDER_TITLE\]:\s*[^\n]+/', '', $displayNotes);
         // صيغة قديمة بعد تعديل الأوردر
         $displayNotes = preg_replace('/رسوم\s*الشحن\s*:\s*[0-9.]+/u', '', $displayNotes);
@@ -179,6 +180,12 @@ foreach ($taskIds as $taskId) {
             $discount = (float) $m[1];
         }
     }
+    $advancePayment = 0;
+    if (!empty($notes)) {
+        if (preg_match('/\[ADVANCE_PAYMENT\]:\s*([0-9.]+)/', $notes, $m)) {
+            $advancePayment = (float) $m[1];
+        }
+    }
     $orderTitle = '';
     if (!empty($notes)) {
         if (preg_match('/\[ORDER_TITLE\]:\s*([^\n]+)/', $notes, $m)) {
@@ -200,6 +207,7 @@ foreach ($taskIds as $taskId) {
         'displayNotes' => $displayNotes,
         'shippingFees' => $shippingFees,
         'discount' => $discount,
+        'advancePayment' => $advancePayment,
         'orderTitle' => $orderTitle,
     ];
 }
@@ -737,6 +745,7 @@ $singleReceipt = count($receipts) === 1;
                 <?php 
                 $receiptShippingFees = isset($r['shippingFees']) ? (float)$r['shippingFees'] : 0;
                 $receiptDiscount = isset($r['discount']) ? (float)$r['discount'] : 0;
+                $receiptAdvancePayment = isset($r['advancePayment']) ? (float)$r['advancePayment'] : 0;
                 $finalTotal = $grandTotal + $receiptShippingFees - $receiptDiscount;
 
                 // تليجراف: الإجمالي النهائي = إجمالي المنتجات - تكلفة التوصيل (TelegraphEx)
@@ -819,6 +828,16 @@ $singleReceipt = count($receipts) === 1;
                     <td colspan="4" style="text-align: left; padding: 8px 5px;">الإجمالي النهائي</td>
                     <td style="text-align: center; padding: 8px 5px;"><?php echo number_format($finalTotal, 2); ?> ج.م</td>
                 </tr>
+                <?php if ($receiptAdvancePayment > 0): ?>
+                <tr style="font-weight: 700; background-color: #e3f2fd;">
+                    <td colspan="4" style="text-align: left; padding: 6px 5px;">المدفوع مقدماً</td>
+                    <td style="text-align: center; padding: 6px 5px;">- <?php echo number_format($receiptAdvancePayment, 2); ?> ج.م</td>
+                </tr>
+                <tr style="font-weight: 700; background-color: #fce4ec; border-top: 2px solid #000;">
+                    <td colspan="4" style="text-align: left; padding: 8px 5px;">المتبقي</td>
+                    <td style="text-align: center; padding: 8px 5px;"><?php echo number_format($finalTotal - $receiptAdvancePayment, 2); ?> ج.م</td>
+                </tr>
+                <?php endif; ?>
             </tfoot>
         </table>
         <?php else: ?>
@@ -912,6 +931,18 @@ $singleReceipt = count($receipts) === 1;
                 <td>الإجمالي النهائي</td>
                 <td><?php echo number_format((float)$finalEmpty, 2); ?> ج.م</td>
             </tr>
+            <?php
+            $receiptAdvancePaymentEmpty = isset($r['advancePayment']) ? (float)$r['advancePayment'] : 0;
+            if ($receiptAdvancePaymentEmpty > 0): ?>
+            <tr style="font-weight: 700; background-color: #e3f2fd;">
+                <td>المدفوع مقدماً</td>
+                <td>- <?php echo number_format($receiptAdvancePaymentEmpty, 2); ?> ج.م</td>
+            </tr>
+            <tr style="font-weight: 700; background-color: #fce4ec; border-top: 2px solid #000;">
+                <td>المتبقي</td>
+                <td><?php echo number_format((float)$finalEmpty - $receiptAdvancePaymentEmpty, 2); ?> ج.م</td>
+            </tr>
+            <?php endif; ?>
             <?php endif; ?>
         </table>
         <?php endif; ?>

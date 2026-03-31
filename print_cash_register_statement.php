@@ -982,21 +982,39 @@ $statementTime = date('H:i:s');
     </a>
     
     <script>
-    // إضافة event listener للرابط لفتح الصفحة في نافذة جديدة ثم الطباعة
-    document.addEventListener('DOMContentLoaded', function() {
-        const printButton = document.querySelector('.print-button');
-        if (printButton) {
-            printButton.addEventListener('click', function(e) {
-                // إذا كنا داخل iframe، دع الرابط يفتح في نافذة جديدة بشكل طبيعي
-                // وإلا استخدم window.print()
-                if (window.self === window.top) {
-                    e.preventDefault();
-                    window.print();
+    (function() {
+        function clearOpenerLoading() {
+            try {
+                if (window.opener && !window.opener.closed) {
+                    if (typeof window.opener.resetPageLoading === 'function') window.opener.resetPageLoading();
+                    if (typeof window.opener.hidePageLoading === 'function') window.opener.hidePageLoading();
                 }
-                // إذا كنا داخل iframe، دع الرابط يعمل بشكل طبيعي (يفتح في نافذة جديدة)
-            });
+            } catch (e) {
+                // ignore cross-window issues
+            }
         }
-    });
+
+        // إضافة event listener للرابط لفتح الصفحة في نافذة جديدة ثم الطباعة
+        document.addEventListener('DOMContentLoaded', function() {
+            clearOpenerLoading();
+            const printButton = document.querySelector('.print-button');
+            if (printButton) {
+                printButton.addEventListener('click', function(e) {
+                    clearOpenerLoading();
+                    // إذا كنا داخل iframe، دع الرابط يفتح في نافذة جديدة بشكل طبيعي
+                    // وإلا استخدم window.print()
+                    if (window.self === window.top) {
+                        e.preventDefault();
+                        window.print();
+                    }
+                    // إذا كنا داخل iframe، دع الرابط يعمل بشكل طبيعي (يفتح في نافذة جديدة)
+                });
+            }
+        });
+
+        window.addEventListener('load', clearOpenerLoading);
+        window.addEventListener('afterprint', clearOpenerLoading);
+    })();
     </script>
     
     <div class="statement-wrapper">

@@ -697,10 +697,22 @@ $statusLabels = [
     </div>
     
     <script>
-        // طباعة تلقائية عند فتح الصفحة (اختياري)
-        // window.onload = function() {
-        //     window.print();
-        // }
+        (function() {
+            function clearOpenerLoading() {
+                try {
+                    if (window.opener && !window.opener.closed) {
+                        if (typeof window.opener.resetPageLoading === 'function') window.opener.resetPageLoading();
+                        if (typeof window.opener.hidePageLoading === 'function') window.opener.hidePageLoading();
+                    }
+                } catch (e) {
+                    // ignore cross-window issues
+                }
+            }
+
+            window.addEventListener('load', clearOpenerLoading);
+            window.addEventListener('afterprint', clearOpenerLoading);
+            document.addEventListener('DOMContentLoaded', clearOpenerLoading);
+        })();
     </script>
 </body>
 </html>

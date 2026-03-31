@@ -1769,7 +1769,7 @@ $typeColorMap = [
                     </div>
                     <div class="collapse" id="generateReportCardBodyCollapse">
                     <div class="card-body">
-                        <form method="GET" id="generateReportCardForm" onsubmit="return handleReportCardSubmit(event)" class="row g-3">
+                        <form method="GET" id="generateReportCardForm" onsubmit="return handleReportCardSubmit(event)" class="row g-3" data-no-loading>
                             <div class="col-12">
                                 <div class="alert alert-info mb-0">
                                     <i class="bi bi-info-circle me-2"></i>
@@ -2329,7 +2329,13 @@ function handleReportCardSubmit(event) {
     
     // فتح التقرير في تبويب جديد
     const fullUrl = reportUrl + '?' + params.toString();
+    if (typeof window.resetPageLoading === 'function') window.resetPageLoading();
+    if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
     window.open(fullUrl, '_blank');
+    setTimeout(function() {
+        if (typeof window.resetPageLoading === 'function') window.resetPageLoading();
+        if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
+    }, 150);
     
     // إعادة تعيين النموذج بعد فتح التقرير
     if (form) {
