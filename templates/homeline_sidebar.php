@@ -784,6 +784,13 @@ switch ($role) {
                 'badge' => null
             ],
             [
+                'title' => 'تسجيل الواردات',
+                'icon' => 'bi-box-arrow-in-down',
+                'url' => $baseUrl . 'production.php?page=inbound_supplies',
+                'active' => ($currentPage === 'production.php' && $currentPageParam === 'inbound_supplies'),
+                'badge' => null
+            ],
+            [
                 'title' => 'منتجات الشركة',
                 'icon' => 'bi-box-seam-fill',
                 'url' => $baseUrl . 'production.php?page=inventory',

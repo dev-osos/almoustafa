@@ -147,6 +147,12 @@ $isToolsOpen = false;
                             </a>
                         </li>
                         <li class="nav-item">
+                            <a class="nav-link <?php echo $currentDashboardPage === 'inbound_supplies' ? 'active' : ''; ?>" href="<?php echo $baseUrl; ?>production.php?page=inbound_supplies">
+                                <i class="bi bi-box-arrow-in-down"></i>
+                                <span>تسجيل الواردات</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
                             <a class="nav-link <?php echo $currentDashboardPage === 'inventory' ? 'active' : ''; ?>" href="<?php echo $baseUrl; ?>production.php?page=inventory">
                                 <i class="bi bi-box-seam-fill"></i>
                                 <span>منتجات الشركة</span>
