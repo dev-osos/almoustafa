@@ -762,13 +762,6 @@ switch ($role) {
                 'badge' => null
             ],
             [
-                'title' => 'جداول التحصيل اليومية',
-                'icon' => 'bi-calendar2-range',
-                'url' => $baseUrl . 'production.php?page=daily_collection_my_tables',
-                'active' => ($currentPage === 'production.php' && $currentPageParam === 'daily_collection_my_tables'),
-                'badge' => null
-            ],
-            [
                 'title' => isset($lang['menu_attendance']) ? $lang['menu_attendance'] : 'الحضور',
                 'icon' => 'bi-calendar-check',
                 'url' => getRelativeUrl('attendance.php'),
@@ -800,11 +793,18 @@ switch ($role) {
             [
                 'title' => 'مخزن توالف المصنع',
                 'icon' => 'bi-exclamation-triangle',
-                'url' => $baseUrl . 'production.php?page=production&focus=warehouse-damage-log#warehouse-damage-log',
-                'active' => ($currentPage === 'production.php' && $currentPageParam === 'production' && $currentFocus === 'warehouse-damage-log'),
+                'url' => $baseUrl . 'production.php?page=factory_waste_warehouse',
+                'active' => ($currentPage === 'production.php' && $currentPageParam === 'factory_waste_warehouse'),
                 'badge' => null
             ],
             ['divider' => true, 'title' => 'محافظ و أموال'],
+            [
+                'title' => 'جداول التحصيل اليومية',
+                'icon' => 'bi-calendar2-range',
+                'url' => $baseUrl . 'production.php?page=daily_collection_my_tables',
+                'active' => ($currentPage === 'production.php' && $currentPageParam === 'daily_collection_my_tables'),
+                'badge' => null
+            ],
             [
                 'title' => isset($lang['my_salary']) ? $lang['my_salary'] : 'مرتبي',
                 'icon' => 'bi-wallet2',
@@ -1088,7 +1088,7 @@ if (empty($menuItems)) {
                 'التشغيل اليومي' => 'bi-gear-wide-connected',
                 'المخازن' => 'bi-boxes',
                 'الأدوات' => 'bi-tools',
-                'محافظ و أموال' => 'bi-person-circle',
+                'محافظ و أموال' => 'bi-cash-stack',
                 'عام' => 'bi-list-ul',
                 'إدارة النظام' => 'bi-sliders',
                 'لوحات أخرى' => 'bi-columns-gap',

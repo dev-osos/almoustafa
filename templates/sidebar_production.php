@@ -90,7 +90,7 @@ $isToolsOpen = false;
                 <button class="nav-link sidebar-group-toggle <?php echo $isOperationsOpen ? '' : 'collapsed'; ?>" type="button" data-bs-toggle="collapse" data-bs-target="#productionSidebarOperations" aria-expanded="<?php echo $isOperationsOpen ? 'true' : 'false'; ?>" aria-controls="productionSidebarOperations">
                     <span class="sidebar-group-label">
                         <i class="bi bi-gear-wide-connected"></i>
-                        <span>التشغيل والمتابعة</span>
+                        <span>التشغيل اليومي</span>
                     </span>
                     <i class="bi bi-chevron-down"></i>
                 </button>
@@ -153,7 +153,7 @@ $isToolsOpen = false;
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link <?php echo $currentDashboardPage === 'production' && $currentFocus === 'warehouse-damage-log' ? 'active' : ''; ?>" href="<?php echo $baseUrl; ?>production.php?page=production&amp;focus=warehouse-damage-log#warehouse-damage-log">
+                            <a class="nav-link <?php echo $currentDashboardPage === 'factory_waste_warehouse' ? 'active' : ''; ?>" href="<?php echo $baseUrl; ?>production.php?page=factory_waste_warehouse">
                                 <i class="bi bi-exclamation-triangle"></i>
                                 <span>مخزن توالف المصنع</span>
                             </a>
