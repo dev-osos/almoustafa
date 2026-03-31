@@ -467,7 +467,6 @@ $backUrl = '?page=attendance_management&month=' . urlencode($selectedMonth);
                             <th>متوسط التأخير</th>
                             <th>مرات التأخير</th>
                             <th>عداد التأخيرات</th>
-                            <th>عداد الإنذارات</th>
                             <th>الإجراءات</th>
                         </tr>
                     </thead>
@@ -513,18 +512,7 @@ $backUrl = '?page=attendance_management&month=' . urlencode($selectedMonth);
                                             <i class="bi bi-exclamation-triangle-fill text-danger" title="تم إبلاغ المدير"></i>
                                         <?php endif; ?>
                                     </td>
-                                    <td data-label="عداد الإنذارات">
-                                        <?php 
-                                        $warningCount = $data['warning_count'] ?? 0;
-                                        $warningBadgeClass = $warningCount >= 3 ? 'bg-danger' : ($warningCount > 0 ? 'bg-warning' : 'bg-secondary');
-                                        ?>
-                                        <span class="badge <?php echo $warningBadgeClass; ?>" title="عدد إنذارات نسيان تسجيل الانصراف لهذا الشهر">
-                                            <?php echo $warningCount; ?>
-                                        </span>
-                                        <?php if ($warningCount >= 3): ?>
-                                            <i class="bi bi-exclamation-triangle-fill text-danger" title="تم خصم ساعتين إضافيتين"></i>
-                                        <?php endif; ?>
-                                    </td>
+                                   
                                     <td data-label="الإجراءات">
                                         <a href="?page=attendance_management&month=<?php echo urlencode($selectedMonth); ?>&user_id=<?php echo $userId; ?>" class="btn btn-sm btn-info">
                                             <i class="bi bi-eye"></i> عرض التفاصيل
