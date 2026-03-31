@@ -746,7 +746,7 @@ switch ($role) {
                 'active' => ($currentPage === 'production.php' && $currentPageParam === 'chat'),
                 'badge' => null
             ],
-            ['divider' => true, 'title' => 'التشغيل والمتابعة'],
+            ['divider' => true, 'title' => 'التشغيل اليومي'],
             [
                 'title' => isset($lang['menu_production']) ? $lang['menu_production'] : 'الإنتاج',
                 'icon' => 'bi-box-seam',
