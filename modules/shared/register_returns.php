@@ -88,7 +88,7 @@ $apiUrl = getRelativeUrl('api/register_returns.php');
 
             <div class="d-flex gap-2">
                 <button type="button" class="btn btn-outline-primary" id="addReturnRowBtn"><i class="bi bi-plus-circle me-1"></i>إضافة صف</button>
-                <button type="submit" class="btn btn-success" id="submitReturnBtn"><i class="bi bi-check2-circle me-1"></i>حفظ فاتورة المرتجعات</button>
+                <button type="submit" class="btn btn-success" id="submitReturnBtn" data-no-loading="true"><i class="bi bi-check2-circle me-1"></i>حفظ فاتورة المرتجعات</button>
                 <div class="ms-auto">
                     <strong>الإجمالي: <span id="grandTotalDisplay">0.00</span> ج.م</strong>
                 </div>
@@ -164,6 +164,21 @@ $apiUrl = getRelativeUrl('api/register_returns.php');
     const filterSearch = document.getElementById('retFilterSearch');
     const applyFilterBtn = document.getElementById('retApplyFilterBtn');
     const returnNotesInput = document.getElementById('returnNotes');
+
+    function suppressGlobalLoadingOverlay() {
+        if (typeof window.resetPageLoading === 'function') window.resetPageLoading();
+        if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
+
+        var overlay = document.getElementById('global-loading-overlay');
+        if (overlay) {
+            overlay.classList.remove('is-active');
+            overlay.setAttribute('aria-hidden', 'true');
+        }
+    }
+
+    if (returnForm) returnForm.setAttribute('data-no-loading', 'true');
+    if (submitReturnBtn) submitReturnBtn.setAttribute('data-no-loading', 'true');
+    suppressGlobalLoadingOverlay();
 
     const customerSearchInput = document.getElementById('customerSearchInput');
     const customerDropdown = document.getElementById('customerDropdown');
@@ -934,6 +949,7 @@ $apiUrl = getRelativeUrl('api/register_returns.php');
     // ─── Form Submit ───
     returnForm.addEventListener('submit', async function (e) {
         e.preventDefault();
+        suppressGlobalLoadingOverlay();
 
         if (!selectedCustomerId.value || !selectedCustomerType.value) {
             showAlert('danger', 'يرجى اختيار العميل');
@@ -954,7 +970,7 @@ $apiUrl = getRelativeUrl('api/register_returns.php');
                 credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    customer_id: parseInt(selectedCustomerId.value),
+                    customer_id: parseInt(selectedCustomerId.value, 10),
                     customer_type: selectedCustomerType.value,
                     notes: returnNotesInput ? returnNotesInput.value.trim() : '',
                     rows: rows
@@ -975,11 +991,13 @@ $apiUrl = getRelativeUrl('api/register_returns.php');
             if (returnNotesInput) returnNotesInput.value = '';
 
             renderReturnReceipt(data.return_invoice);
+            suppressGlobalLoadingOverlay();
             loadReturns(false);
         } catch (x) {
             showAlert('danger', x.message || 'حدث خطأ أثناء الحفظ');
         } finally {
             submitReturnBtn.disabled = false;
+            suppressGlobalLoadingOverlay();
         }
     });
 

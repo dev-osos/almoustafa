@@ -263,6 +263,30 @@ function fetchTgDeliveryCost($price, $recipientZoneId, $recipientSubzoneId, $wei
     return $deliveryCost;
 }
 
+if (!function_exists('renderReceiptSummaryGrid')) {
+    function renderReceiptSummaryGrid(array $items): string
+    {
+        if (empty($items)) {
+            return '';
+        }
+
+        $html = '<div class="receipt-summary-grid">';
+        foreach ($items as $item) {
+            $label = htmlspecialchars((string)($item['label'] ?? ''), ENT_QUOTES, 'UTF-8');
+            $valueHtml = (string)($item['value_html'] ?? '');
+            $bgColor = htmlspecialchars((string)($item['bg'] ?? '#f8f8f8'), ENT_QUOTES, 'UTF-8');
+            $extraStyle = (string)($item['style'] ?? '');
+            $html .= '<div class="receipt-summary-item" style="background-color: ' . $bgColor . ';' . $extraStyle . '">';
+            $html .= '<span class="receipt-summary-label">' . $label . '</span>';
+            $html .= '<span class="receipt-summary-value">' . $valueHtml . '</span>';
+            $html .= '</div>';
+        }
+        $html .= '</div>';
+
+        return $html;
+    }
+}
+
 $companyName = COMPANY_NAME;
 $singleReceipt = count($receipts) === 1;
 
@@ -600,6 +624,38 @@ $singleReceipt = count($receipts) === 1;
             background: #218838;
             color: white;
         }
+
+        .receipt-summary-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            width: 100%;
+        }
+
+        .receipt-summary-item {
+            flex: 0 0 calc(50% - 3px);
+            max-width: calc(50% - 3px);
+            border: 1px solid rgba(0, 0, 0, 0.12);
+            border-radius: 6px;
+            padding: 7px 5px;
+            text-align: center;
+            line-height: 1.5;
+        }
+
+        .receipt-summary-label {
+            display: block;
+            font-size: 12px;
+            font-weight: 700;
+            margin-bottom: 2px;
+            color: #111;
+        }
+
+        .receipt-summary-value {
+            display: block;
+            font-size: 13px;
+            font-weight: 700;
+            color: #000;
+        }
     </style>
 </head>
 <body>
@@ -798,46 +854,52 @@ $singleReceipt = count($receipts) === 1;
                         $finalTotal = (float)$grandTotal - (float)$deliveryCost;
                     }
                 }
-                if ($receiptShippingFees > 0): ?>
-                <tr style="font-weight: 700; background-color: #f8f8f8;">
-                    <td colspan="4" style="text-align: left; padding: 6px 5px;">رسوم الشحن</td>
-                    <td style="text-align: center; padding: 6px 5px;"><?php echo number_format($receiptShippingFees, 2); ?> ج.م</td>
-                </tr>
-                <?php endif; ?>
-                <?php if ($receiptDiscount > 0): ?>
-                <tr style="font-weight: 700; background-color: #fff3e0;">
-                    <td colspan="4" style="text-align: left; padding: 6px 5px;">الخصم</td>
-                    <td style="text-align: center; padding: 6px 5px;">- <?php echo number_format($receiptDiscount, 2); ?> ج.م</td>
-                </tr>
-                <?php endif; ?>
-                <?php if ($taskType === 'telegraph'): ?>
-                <tr style="font-weight: 700; background-color: #e3f2fd;">
-                    <td colspan="4" style="text-align: left; padding: 6px 5px;">تكلفة التوصيل (TelegraphEx)</td>
-                    <td style="text-align: center; padding: 6px 5px;">
-                        <?php
-                        if ($deliveryCost !== null) {
-                            echo '- ' . number_format((float)$deliveryCost, 2) . ' ج.م';
-                        } else {
-                            echo '—';
-                        }
-                        ?>
+                $receiptSummaryItems = [];
+                if ($receiptShippingFees > 0) {
+                    $receiptSummaryItems[] = [
+                        'label' => 'رسوم الشحن',
+                        'value_html' => number_format($receiptShippingFees, 2) . ' ج.م',
+                        'bg' => '#f8f8f8'
+                    ];
+                }
+                if ($receiptDiscount > 0) {
+                    $receiptSummaryItems[] = [
+                        'label' => 'الخصم',
+                        'value_html' => '- ' . number_format($receiptDiscount, 2) . ' ج.م',
+                        'bg' => '#fff3e0'
+                    ];
+                }
+                if ($taskType === 'telegraph') {
+                    $receiptSummaryItems[] = [
+                        'label' => 'تكلفة التوصيل',
+                        'value_html' => $deliveryCost !== null ? ('- ' . number_format((float)$deliveryCost, 2) . ' ج.م') : '—',
+                        'bg' => '#e3f2fd'
+                    ];
+                }
+                $receiptSummaryItems[] = [
+                    'label' => 'الإجمالي النهائي',
+                    'value_html' => number_format($finalTotal, 2) . ' ج.م',
+                    'bg' => '#e8f5e9'
+                ];
+                if ($receiptAdvancePayment > 0) {
+                    $receiptSummaryItems[] = [
+                        'label' => 'المدفوع مقدماً',
+                        'value_html' => '- ' . number_format($receiptAdvancePayment, 2) . ' ج.م',
+                        'bg' => '#e3f2fd'
+                    ];
+                    $receiptSummaryItems[] = [
+                        'label' => 'المتبقي',
+                        'value_html' => number_format($finalTotal - $receiptAdvancePayment, 2) . ' ج.م',
+                        'bg' => '#fce4ec',
+                        'style' => 'border-top: 2px solid #000;'
+                    ];
+                }
+                ?>
+                <tr>
+                    <td colspan="5" style="padding: 8px 4px;">
+                        <?php echo renderReceiptSummaryGrid($receiptSummaryItems); ?>
                     </td>
                 </tr>
-                <?php endif; ?>
-                <tr style="font-weight: 700; background-color: #e8f5e9;">
-                    <td colspan="4" style="text-align: left; padding: 8px 5px;">الإجمالي النهائي</td>
-                    <td style="text-align: center; padding: 8px 5px;"><?php echo number_format($finalTotal, 2); ?> ج.م</td>
-                </tr>
-                <?php if ($receiptAdvancePayment > 0): ?>
-                <tr style="font-weight: 700; background-color: #e3f2fd;">
-                    <td colspan="4" style="text-align: left; padding: 6px 5px;">المدفوع مقدماً</td>
-                    <td style="text-align: center; padding: 6px 5px;">- <?php echo number_format($receiptAdvancePayment, 2); ?> ج.م</td>
-                </tr>
-                <tr style="font-weight: 700; background-color: #fce4ec; border-top: 2px solid #000;">
-                    <td colspan="4" style="text-align: left; padding: 8px 5px;">المتبقي</td>
-                    <td style="text-align: center; padding: 8px 5px;"><?php echo number_format($finalTotal - $receiptAdvancePayment, 2); ?> ج.م</td>
-                </tr>
-                <?php endif; ?>
             </tfoot>
         </table>
         <?php else: ?>
@@ -901,48 +963,54 @@ $singleReceipt = count($receipts) === 1;
                 }
             }
             if ($taskType === 'telegraph' || $receiptShippingFeesEmpty > 0 || $receiptDiscountEmpty > 0): ?>
-            <?php if ($receiptShippingFeesEmpty > 0): ?>
-            <tr style="font-weight: 700;">
-                <td>رسوم الشحن</td>
-                <td><?php echo number_format($receiptShippingFeesEmpty, 2); ?> ج.م</td>
-            </tr>
-            <?php endif; ?>
-            <?php if ($receiptDiscountEmpty > 0): ?>
-            <tr style="font-weight: 700;">
-                <td>الخصم</td>
-                <td>- <?php echo number_format($receiptDiscountEmpty, 2); ?> ج.م</td>
-            </tr>
-            <?php endif; ?>
-            <?php if ($taskType === 'telegraph'): ?>
-            <tr style="font-weight: 700; background-color: #e3f2fd;">
-                <td>تكلفة التوصيل (TelegraphEx)</td>
-                <td>
-                    <?php
-                    if ($deliveryCost !== null) {
-                        echo '- ' . number_format((float)$deliveryCost, 2) . ' ج.م';
-                    } else {
-                        echo '—';
-                    }
-                    ?>
+            <?php
+            $receiptSummaryItemsEmpty = [];
+            if ($receiptShippingFeesEmpty > 0) {
+                $receiptSummaryItemsEmpty[] = [
+                    'label' => 'رسوم الشحن',
+                    'value_html' => number_format($receiptShippingFeesEmpty, 2) . ' ج.م',
+                    'bg' => '#f8f8f8'
+                ];
+            }
+            if ($receiptDiscountEmpty > 0) {
+                $receiptSummaryItemsEmpty[] = [
+                    'label' => 'الخصم',
+                    'value_html' => '- ' . number_format($receiptDiscountEmpty, 2) . ' ج.م',
+                    'bg' => '#fff3e0'
+                ];
+            }
+            if ($taskType === 'telegraph') {
+                $receiptSummaryItemsEmpty[] = [
+                    'label' => 'تكلفة التوصيل',
+                    'value_html' => $deliveryCost !== null ? ('- ' . number_format((float)$deliveryCost, 2) . ' ج.م') : '—',
+                    'bg' => '#e3f2fd'
+                ];
+            }
+            $receiptSummaryItemsEmpty[] = [
+                'label' => 'الإجمالي النهائي',
+                'value_html' => number_format((float)$finalEmpty, 2) . ' ج.م',
+                'bg' => '#e8f5e9'
+            ];
+            $receiptAdvancePaymentEmpty = isset($r['advancePayment']) ? (float)$r['advancePayment'] : 0;
+            if ($receiptAdvancePaymentEmpty > 0) {
+                $receiptSummaryItemsEmpty[] = [
+                    'label' => 'المدفوع مقدماً',
+                    'value_html' => '- ' . number_format($receiptAdvancePaymentEmpty, 2) . ' ج.م',
+                    'bg' => '#e3f2fd'
+                ];
+                $receiptSummaryItemsEmpty[] = [
+                    'label' => 'المتبقي',
+                    'value_html' => number_format((float)$finalEmpty - $receiptAdvancePaymentEmpty, 2) . ' ج.م',
+                    'bg' => '#fce4ec',
+                    'style' => 'border-top: 2px solid #000;'
+                ];
+            }
+            ?>
+            <tr>
+                <td colspan="2" style="padding: 8px 4px;">
+                    <?php echo renderReceiptSummaryGrid($receiptSummaryItemsEmpty); ?>
                 </td>
             </tr>
-            <?php endif; ?>
-            <tr style="font-weight: 700; background-color: #e8f5e9;">
-                <td>الإجمالي النهائي</td>
-                <td><?php echo number_format((float)$finalEmpty, 2); ?> ج.م</td>
-            </tr>
-            <?php
-            $receiptAdvancePaymentEmpty = isset($r['advancePayment']) ? (float)$r['advancePayment'] : 0;
-            if ($receiptAdvancePaymentEmpty > 0): ?>
-            <tr style="font-weight: 700; background-color: #e3f2fd;">
-                <td>المدفوع مقدماً</td>
-                <td>- <?php echo number_format($receiptAdvancePaymentEmpty, 2); ?> ج.م</td>
-            </tr>
-            <tr style="font-weight: 700; background-color: #fce4ec; border-top: 2px solid #000;">
-                <td>المتبقي</td>
-                <td><?php echo number_format((float)$finalEmpty - $receiptAdvancePaymentEmpty, 2); ?> ج.م</td>
-            </tr>
-            <?php endif; ?>
             <?php endif; ?>
         </table>
         <?php endif; ?>
