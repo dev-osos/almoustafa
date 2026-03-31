@@ -5058,7 +5058,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
 /* بطاقة سفلية (offcanvas bottom sheet) لإضافة أداة التعبئة */
 #createMaterialModal.offcanvas-bottom {
-    max-height: 150vh;
+    height: 90vh;
+    max-height: 90vh;
     border-radius: 1.25rem 1.25rem 0 0;
     border-top: none;
 }
