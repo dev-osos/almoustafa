@@ -515,10 +515,10 @@ $backUrl = '?page=attendance_management&month=' . urlencode($selectedMonth);
                                    
                                     <td data-label="الإجراءات">
                                         <a href="?page=attendance_management&month=<?php echo urlencode($selectedMonth); ?>&user_id=<?php echo $userId; ?>" class="btn btn-sm btn-info">
-                                            <i class="bi bi-eye"></i> عرض التفاصيل
+                                            <i class="bi bi-eye"></i>
                                         </a>
                                         <a href="<?php echo htmlspecialchars(getRelativeUrl('print_attendance_report.php?user_id=' . (int)$userId . '&month=' . urlencode($selectedMonth))); ?>" target="_blank" class="btn btn-sm btn-outline-secondary" title="طباعة تقرير الحضور لهذا الشهر">
-                                            <i class="bi bi-printer"></i> طباعة تقرير
+                                            <i class="bi bi-printer"></i> 
                                         </a>
                                     </td>
                                 </tr>
