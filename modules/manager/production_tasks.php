@@ -528,7 +528,11 @@ function getTaskReceiptTotalFromNotes($notes)
         || preg_match('/الخصم\s*:\s*([0-9.]+)/u', $notes, $m)) {
         $discount = (float)$m[1];
     }
-    return round($grandTotal + $shipping - $discount, 2);
+    $advancePayment = 0.0;
+    if (preg_match('/\[ADVANCE_PAYMENT\]:\s*([0-9.]+)/', $notes, $m)) {
+        $advancePayment = (float)$m[1];
+    }
+    return round($grandTotal + $shipping - $discount - $advancePayment, 2);
 }
 
 /**
@@ -607,7 +611,11 @@ function getTelegraphReceiptTotal($task, $db)
         return round($grandTotal - $discount, 2);
     }
     $deliveryCost = (float)($fees['delivery'] ?? 0) + (float)($fees['weight'] ?? 0) + (float)($fees['collection'] ?? 0);
-    return round($grandTotal - $deliveryCost, 2);
+    $advancePaymentTg = 0.0;
+    if (preg_match('/\[ADVANCE_PAYMENT\]:\s*([0-9.]+)/', $notes, $mAdv)) {
+        $advancePaymentTg = (float)$mAdv[1];
+    }
+    return round($grandTotal - $deliveryCost - $advancePaymentTg, 2);
 }
 
 /**
@@ -1544,7 +1552,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             foreach ($allowedDraftFields as $f) {
                 if (isset($_POST[$f])) $draftData[$f] = $_POST[$f];
             }
-            if (isset($_POST['products']) && is_array($_POST['products'])) {
+            if (isset($_POST['products_json']) && is_string($_POST['products_json'])) {
+                $decodedProds = json_decode($_POST['products_json'], true);
+                if (is_array($decodedProds)) {
+                    $draftData['products'] = array_values($decodedProds);
+                }
+            } elseif (isset($_POST['products']) && is_array($_POST['products'])) {
+                ksort($_POST['products'], SORT_NUMERIC);
                 $draftData['products'] = array_values($_POST['products']);
             }
             $customerName = trim($_POST['customer_name'] ?? '');
@@ -6967,7 +6981,7 @@ function ensureApproveInvoiceCardExists() {
         '<label class="form-label fw-bold"><i class="bi bi-box-seam me-1"></i>المخزون الذي سيُخصم عند الاعتماد</label>' +
         '<div id="approveInvoiceInventoryContent"><div class="text-muted small text-center py-2"><span class="spinner-border spinner-border-sm me-1"></span>جاري تحميل بيانات المخزون...</div></div>' +
         '</div>' +
-        '<div class="mb-3"><label class="form-label fw-bold">الإجمالي النهائي (من إيصال الأوردر)</label><div id="approveInvoiceCardTotalDisplay" class="form-control bg-light fw-bold"></div></div>' +
+        '<div class="mb-3"><label class="form-label fw-bold">المبلغ الذي سيُضاف للرصيد (المتبقي بعد المدفوع مقدماً)</label><div id="approveInvoiceCardTotalDisplay" class="form-control bg-light fw-bold text-danger"></div></div>' +
         '<div class="d-flex gap-2">' +
         '<button type="button" class="btn btn-secondary w-50" onclick="closeApproveInvoiceCard()"><i class="bi bi-x-circle me-1"></i>إلغاء</button>' +
         '<button type="submit" class="btn btn-success w-50"><i class="bi bi-check2-circle me-1"></i>اعتماد وإضافة للسجل</button>' +
@@ -7860,6 +7874,32 @@ document.addEventListener('click', function (e) {
             formData.set('action', 'save_task_draft');
             var draftId = currentDraftIdInput ? currentDraftIdInput.value : '';
             if (draftId) formData.set('draft_id', draftId);
+
+            // جمع المنتجات من DOM بترتيبها الفعلي لضمان الحفظ الصحيح
+            var _pc = document.getElementById('productsContainer');
+            if (_pc) {
+                var _rows = _pc.querySelectorAll('.product-row');
+                var _prods = [];
+                _rows.forEach(function(_r) {
+                    var _ts = _r.querySelector('.product-type-selector');
+                    var _ni = _r.querySelector('.product-name-input');
+                    var _qi = _r.querySelector('.product-quantity-input');
+                    var _us = _r.querySelector('.product-unit-input');
+                    var _cs = _r.querySelector('.product-category-input');
+                    var _pi = _r.querySelector('.product-price-input');
+                    var _lt = _r.querySelector('.product-line-total-input');
+                    _prods.push({
+                        item_type: _ts ? _ts.value : '',
+                        name: _ni ? _ni.value : '',
+                        quantity: _qi ? _qi.value : '',
+                        unit: _us ? _us.value : '',
+                        category: _cs ? _cs.value : '',
+                        price: _pi ? _pi.value : '',
+                        line_total: _lt ? _lt.value : ''
+                    });
+                });
+                formData.set('products_json', JSON.stringify(_prods));
+            }
 
             saveDraftBtn.disabled = true;
             saveDraftBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>جاري الحفظ...';
