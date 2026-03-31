@@ -3668,7 +3668,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                         </div>
                                         <div class="col-6 col-md-2">
                                             <label class="form-label small">السعر</label>
-                                            <input type="number" class="form-control product-price-input" name="products[0][price]" step="0.01" min="0" placeholder="0.00" id="product-price-0" required>
+                                            <input type="number" class="form-control product-price-input" name="products[0][price]" step="0.001" min="0" placeholder="0.00" id="product-price-0" required>
                                         </div>
                                         <div class="col-6 col-md-2">
                                             <label class="form-label small">الإجمالي</label>
