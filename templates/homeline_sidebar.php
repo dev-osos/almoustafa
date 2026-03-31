@@ -1085,7 +1085,7 @@ if (empty($menuItems)) {
                 'المحاسبة' => 'bi-calculator-fill',
                 'المبيعات' => 'bi-graph-up-arrow',
                 'الإنتاج' => 'bi-box-seam-fill',
-                'التشغيل والمتابعة' => 'bi-gear-wide-connected',
+                'التشغيل اليومي' => 'bi-gear-wide-connected',
                 'المخازن' => 'bi-boxes',
                 'الأدوات' => 'bi-tools',
                 'محافظ و أموال' => 'bi-person-circle',
