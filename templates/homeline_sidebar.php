@@ -804,7 +804,7 @@ switch ($role) {
                 'active' => ($currentPage === 'production.php' && $currentPageParam === 'production' && $currentFocus === 'warehouse-damage-log'),
                 'badge' => null
             ],
-            ['divider' => true, 'title' => 'الحساب الشخصي'],
+            ['divider' => true, 'title' => 'محافظ و أموال'],
             [
                 'title' => isset($lang['my_salary']) ? $lang['my_salary'] : 'مرتبي',
                 'icon' => 'bi-wallet2',
@@ -1088,7 +1088,7 @@ if (empty($menuItems)) {
                 'التشغيل والمتابعة' => 'bi-gear-wide-connected',
                 'المخازن' => 'bi-boxes',
                 'الأدوات' => 'bi-tools',
-                'الحساب الشخصي' => 'bi-person-circle',
+                'محافظ و أموال' => 'bi-person-circle',
                 'عام' => 'bi-list-ul',
                 'إدارة النظام' => 'bi-sliders',
                 'لوحات أخرى' => 'bi-columns-gap',
