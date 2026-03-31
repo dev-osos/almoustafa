@@ -2498,7 +2498,7 @@ $packagingReportGeneratedAt = $packagingReport['generated_at'] ?? date('Y-m-d H:
             <button
                 type="button"
                 class="btn btn-primary"
-                data-bs-toggle="modal"
+                data-bs-toggle="offcanvas"
                 data-bs-target="#createMaterialModal"
             >
                 <i class="bi bi-plus-circle me-1"></i>
@@ -3113,110 +3113,106 @@ document.addEventListener('DOMContentLoaded', function() {
 </div>
 
         <?php if (in_array($currentUser['role'] ?? '', ['manager', 'developer', 'accountant'], true)): ?>
-<div class="modal fade" id="createMaterialModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable">
-        <div class="modal-content">
-            <form method="POST" id="createMaterialForm">
-                <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title"><i class="bi bi-plus-circle me-2"></i>إضافة أداة تعبئة جديدة</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="إغلاق"></button>
-                </div>
-                <div class="modal-body">
-                    <input type="hidden" name="action" value="create_packaging_material">
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <label class="form-label fw-bold">كود الأداة <span class="text-danger">*</span></label>
-                            <div class="input-group">
-                                <input type="text"
-                                       class="form-control"
-                                       id="create_material_code_display"
-                                       value="<?php echo htmlspecialchars($nextMaterialCode, ENT_QUOTES, 'UTF-8'); ?>"
-                                       readonly>
-                            </div>
-                            <input type="hidden"
-                                   name="material_id"
-                                   id="create_material_code"
-                                   value="<?php echo htmlspecialchars($nextMaterialCode, ENT_QUOTES, 'UTF-8'); ?>">
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-bold">اسم الأداة <span class="text-danger">*</span></label>
-                            <input type="text"
-                                   class="form-control"
-                                   name="name"
-                                   required
-                                   maxlength="255"
-                                   placeholder="اسم الأداة">
-                        </div>
-                    </div>
-                    <div class="row g-3 mt-0">
-                        <div class="col-md-6">
-                            <label class="form-label">الفئة / النوع</label>
-                            <select class="form-select" name="type" id="create_material_type">
-                                <option value="">اختر النوع</option>
-                                <?php foreach ($packagingTypeOptions as $typeOption): ?>
-                                    <option value="<?php echo htmlspecialchars($typeOption, ENT_QUOTES, 'UTF-8'); ?>">
-                                        <?php echo htmlspecialchars($typeOption, ENT_QUOTES, 'UTF-8'); ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                            <?php if (empty($packagingTypeOptions)): ?>
-                                <small class="text-muted">لم يتم العثور على أنواع مسجلة. يرجى إضافة الأنواع من جدول أنواع الأدوات.</small>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-                    <div class="row g-3 mt-0">
-                        <div class="col-md-6">
-                            <label class="form-label">الوحدة</label>
-                            <select class="form-select" name="unit" id="addToolUnit" onchange="toggleWeightFields(this.value)">
-                                <option value="قطعة" selected>قطعة</option>
-                                <option value="وزن">وزن</option>
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">الكمية الابتدائية</label>
-                            <div class="input-group">
-                                <input type="number"
-                                       class="form-control"
-                                       name="initial_quantity"
-                                       step="0.01"
-                                       min="0"
-                                       value="0"
-                                       placeholder="0.00">
-                                <span class="input-group-text" id="addToolUnitLabel">قطعة</span>
-                            </div>
-                            <small class="text-muted">يمكن تعديل الكمية لاحقاً من خلال زر "إضافة كمية".</small>
-                        </div>
-                    </div>
-                    <div class="row g-3 mt-0" id="addToolWeightFields" style="display:none;">
-                        <div class="col-md-6">
-                            <label class="form-label">الوزن</label>
-                            <input type="number"
-                                   class="form-control"
-                                   name="weight"
-                                   step="0.001"
-                                   min="0"
-                                   placeholder="مثال: 2">
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">وحدة الوزن</label>
-                            <select class="form-select" name="weight_unit">
-                                <option value="">اختر الوحدة</option>
-                                <option value="كيلوجرام">كيلوجرام</option>
-                                <option value="جرام">جرام</option>
-                            </select>
-                            <small class="text-muted">مثال: ٢ كيلوجرام أكياس</small>
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="bi bi-check-circle me-2"></i>حفظ الأداة
-                    </button>
-                </div>
-            </form>
+<div class="offcanvas offcanvas-bottom" id="createMaterialModal" tabindex="-1" aria-labelledby="createMaterialModalLabel">
+    <form method="POST" id="createMaterialForm" style="display:contents;">
+        <div class="offcanvas-header bg-primary text-white">
+            <h5 class="offcanvas-title" id="createMaterialModalLabel"><i class="bi bi-plus-circle me-2"></i>إضافة أداة تعبئة جديدة</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="إغلاق"></button>
         </div>
-    </div>
+        <div class="offcanvas-body">
+            <input type="hidden" name="action" value="create_packaging_material">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label fw-bold">كود الأداة <span class="text-danger">*</span></label>
+                    <div class="input-group">
+                        <input type="text"
+                               class="form-control"
+                               id="create_material_code_display"
+                               value="<?php echo htmlspecialchars($nextMaterialCode, ENT_QUOTES, 'UTF-8'); ?>"
+                               readonly>
+                    </div>
+                    <input type="hidden"
+                           name="material_id"
+                           id="create_material_code"
+                           value="<?php echo htmlspecialchars($nextMaterialCode, ENT_QUOTES, 'UTF-8'); ?>">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-bold">اسم الأداة <span class="text-danger">*</span></label>
+                    <input type="text"
+                           class="form-control"
+                           name="name"
+                           required
+                           maxlength="255"
+                           placeholder="اسم الأداة">
+                </div>
+            </div>
+            <div class="row g-3 mt-0">
+                <div class="col-md-6">
+                    <label class="form-label">الفئة / النوع</label>
+                    <select class="form-select" name="type" id="create_material_type">
+                        <option value="">اختر النوع</option>
+                        <?php foreach ($packagingTypeOptions as $typeOption): ?>
+                            <option value="<?php echo htmlspecialchars($typeOption, ENT_QUOTES, 'UTF-8'); ?>">
+                                <?php echo htmlspecialchars($typeOption, ENT_QUOTES, 'UTF-8'); ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <?php if (empty($packagingTypeOptions)): ?>
+                        <small class="text-muted">لم يتم العثور على أنواع مسجلة. يرجى إضافة الأنواع من جدول أنواع الأدوات.</small>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <div class="row g-3 mt-0">
+                <div class="col-md-6">
+                    <label class="form-label">الوحدة</label>
+                    <select class="form-select" name="unit" id="addToolUnit" onchange="toggleWeightFields(this.value)">
+                        <option value="قطعة" selected>قطعة</option>
+                        <option value="وزن">وزن</option>
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">الكمية الابتدائية</label>
+                    <div class="input-group">
+                        <input type="number"
+                               class="form-control"
+                               name="initial_quantity"
+                               step="0.01"
+                               min="0"
+                               value="0"
+                               placeholder="0.00">
+                        <span class="input-group-text" id="addToolUnitLabel">قطعة</span>
+                    </div>
+                    <small class="text-muted">يمكن تعديل الكمية لاحقاً من خلال زر "إضافة كمية".</small>
+                </div>
+            </div>
+            <div class="row g-3 mt-0" id="addToolWeightFields" style="display:none;">
+                <div class="col-md-6">
+                    <label class="form-label">الوزن</label>
+                    <input type="number"
+                           class="form-control"
+                           name="weight"
+                           step="0.001"
+                           min="0"
+                           placeholder="مثال: 2">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">وحدة الوزن</label>
+                    <select class="form-select" name="weight_unit">
+                        <option value="">اختر الوحدة</option>
+                        <option value="كيلوجرام">كيلوجرام</option>
+                        <option value="جرام">جرام</option>
+                    </select>
+                    <small class="text-muted">مثال: ٢ كيلوجرام أكياس</small>
+                </div>
+            </div>
+        </div>
+        <div class="p-3 border-top d-flex justify-content-end gap-2">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">إلغاء</button>
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-check-circle me-2"></i>حفظ الأداة
+            </button>
+        </div>
+    </form>
 </div>
 <?php endif; ?>
 
@@ -3901,37 +3897,12 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         if (createMaterialModal) {
-            const isMobile = () => window.innerWidth < 768;
-
-            createMaterialModal.addEventListener('show.bs.modal', () => {
+            createMaterialModal.addEventListener('show.bs.offcanvas', () => {
                 fetchNextCode();
-                if (isMobile()) {
-                    const dialog = createMaterialModal.querySelector('.modal-dialog');
-                    dialog.style.transition = 'transform 0.3s ease-out';
-                    dialog.style.transform = 'translateY(100%)';
-                    requestAnimationFrame(() => {
-                        requestAnimationFrame(() => {
-                            dialog.style.transform = 'translateY(0)';
-                        });
-                    });
-                }
             });
-
-            createMaterialModal.addEventListener('hide.bs.modal', () => {
-                if (isMobile()) {
-                    const dialog = createMaterialModal.querySelector('.modal-dialog');
-                    dialog.style.transform = 'translateY(100%)';
-                }
-            });
-
-            createMaterialModal.addEventListener('hidden.bs.modal', () => {
+            createMaterialModal.addEventListener('hidden.bs.offcanvas', () => {
                 createMaterialForm.reset();
                 fetchNextCode();
-                if (isMobile()) {
-                    const dialog = createMaterialModal.querySelector('.modal-dialog');
-                    dialog.style.transform = '';
-                    dialog.style.transition = '';
-                }
             });
         }
     }
@@ -5085,24 +5056,15 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 }
 
-/* بطاقة سفلية (bottom sheet) لمودال إضافة أداة التعبئة على الهاتف */
-@media (max-width: 767.98px) {
-    #createMaterialModal .modal-dialog {
-        position: absolute !important;
-        bottom: 0 !important;
-        left: 0 !important;
-        right: 0 !important;
-        margin: 0 !important;
-        max-width: 100% !important;
-        transform: none !important;
-    }
+/* بطاقة سفلية (offcanvas bottom sheet) لإضافة أداة التعبئة */
+#createMaterialModal.offcanvas-bottom {
+    max-height: 90vh;
+    border-radius: 1.25rem 1.25rem 0 0;
+    border-top: none;
+}
 
-    #createMaterialModal .modal-content {
-        border-radius: 1.25rem 1.25rem 0 0 !important;
-        border: none !important;
-        max-height: 90vh !important;
-        overflow-y: auto !important;
-    }
+#createMaterialModal .offcanvas-body {
+    overflow-y: auto;
 }
 
 /* تصغير أزرار الإجراءات على الهاتف */
