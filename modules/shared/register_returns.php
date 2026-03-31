@@ -199,6 +199,13 @@ $apiUrl = getRelativeUrl('api/register_returns.php');
         returnAlert.classList.remove('d-none');
     }
 
+    function updateSubmitButtonState() {
+        if (!submitReturnBtn) return;
+        var hasCustomer = !!selectedCustomerId.value && !!selectedCustomerType.value;
+        submitReturnBtn.disabled = !hasCustomer;
+        submitReturnBtn.title = hasCustomer ? '' : 'اختر العميل أولاً';
+    }
+
     function clearNode(node) {
         while (node.firstChild) node.removeChild(node.firstChild);
     }
@@ -277,6 +284,7 @@ $apiUrl = getRelativeUrl('api/register_returns.php');
         const balanceLabel = c.balance > 0 ? 'مدين بمبلغ ' + c.balance.toFixed(2) + ' ج.م' : (c.balance < 0 ? 'دائن بمبلغ ' + Math.abs(c.balance).toFixed(2) + ' ج.م' : 'الرصيد: صفر');
         customerInfoText.innerHTML = '<strong>' + c.name + '</strong> (' + typeLabel + ') | ' + balanceLabel + (c.phone ? ' | هاتف: ' + c.phone : '');
         customerInfoBox.classList.remove('d-none');
+        updateSubmitButtonState();
     }
 
     customerSearchInput.addEventListener('input', function () {
@@ -284,6 +292,7 @@ $apiUrl = getRelativeUrl('api/register_returns.php');
         selectedCustomerId.value = '';
         selectedCustomerType.value = '';
         customerInfoBox.classList.add('d-none');
+        updateSubmitButtonState();
 
         clearTimeout(customerSearchTimer);
         if (val.length < 1) {
@@ -996,11 +1005,12 @@ $apiUrl = getRelativeUrl('api/register_returns.php');
         } catch (x) {
             showAlert('danger', x.message || 'حدث خطأ أثناء الحفظ');
         } finally {
-            submitReturnBtn.disabled = false;
+            updateSubmitButtonState();
             suppressGlobalLoadingOverlay();
         }
     });
 
+    updateSubmitButtonState();
     addReturnRowBtn.addEventListener('click', createRow);
     if (closeReturnReceiptBtn) {
         closeReturnReceiptBtn.addEventListener('click', hideReturnReceiptCard);
