@@ -22,6 +22,144 @@ $db = db();
 $error = '';
 $success = '';
 
+/**
+ * إضافة يوم الجمعة تلقائياً إلى السجلات عند عدم وجود حضور/انصراف مكتمل،
+ * مع احتساب 10 ساعات عمل لذلك اليوم.
+ *
+ * @return array{records: array<int, array<string, mixed>>, extra_hours: float}
+ */
+function addFridayCreditToAttendanceRecords(array $records, string $monthKey): array
+{
+    if (!preg_match('/^\d{4}-\d{2}$/', $monthKey)) {
+        return ['records' => $records, 'extra_hours' => 0.0];
+    }
+
+    $normalizedRecords = [];
+    foreach ($records as $record) {
+        if (!is_array($record)) {
+            continue;
+        }
+
+        $recordDate = trim((string)($record['date'] ?? ''));
+        if ($recordDate === '') {
+            continue;
+        }
+
+        if (!isset($record['check_in_time']) && isset($record['check_in'])) {
+            $record['check_in_time'] = $record['check_in'];
+        }
+        if (!isset($record['check_out_time']) && isset($record['check_out'])) {
+            $record['check_out_time'] = $record['check_out'];
+        }
+
+        $record['work_hours'] = isset($record['work_hours']) ? (float)$record['work_hours'] : 0.0;
+        $normalizedRecords[] = $record;
+    }
+
+    $groupedByDate = [];
+    foreach ($normalizedRecords as $index => $record) {
+        $groupedByDate[(string)$record['date']][] = $index;
+    }
+
+    $extraHours = 0.0;
+    $monthStart = DateTime::createFromFormat('Y-m-d', $monthKey . '-01');
+    if (!$monthStart) {
+        return ['records' => $normalizedRecords, 'extra_hours' => 0.0];
+    }
+
+    $monthEnd = clone $monthStart;
+    $monthEnd->modify('last day of this month');
+
+    for ($cursor = clone $monthStart; $cursor <= $monthEnd; $cursor->modify('+1 day')) {
+        if ((int)$cursor->format('N') !== 5) {
+            continue; // يوم الجمعة فقط
+        }
+
+        $dateStr = $cursor->format('Y-m-d');
+        if (empty($groupedByDate[$dateStr])) {
+            $normalizedRecords[] = [
+                'id' => 'friday-credit-' . $dateStr,
+                'date' => $dateStr,
+                'check_in_time' => null,
+                'check_out_time' => null,
+                'delay_minutes' => 0,
+                'delay_reason' => '',
+                'work_hours' => 10.0,
+                '_friday_auto_credit' => true,
+            ];
+            $extraHours += 10.0;
+            continue;
+        }
+
+        $hasCompleteRecord = false;
+        $maxHoursForDate = 0.0;
+        foreach ($groupedByDate[$dateStr] as $recordIndex) {
+            $checkInValue = trim((string)($normalizedRecords[$recordIndex]['check_in_time'] ?? ''));
+            $checkOutValue = trim((string)($normalizedRecords[$recordIndex]['check_out_time'] ?? ''));
+            $maxHoursForDate = max($maxHoursForDate, (float)($normalizedRecords[$recordIndex]['work_hours'] ?? 0));
+
+            if ($checkInValue !== '' && strpos($checkInValue, '0000-00-00') !== 0 && $checkOutValue !== '' && strpos($checkOutValue, '0000-00-00') !== 0) {
+                $hasCompleteRecord = true;
+                break;
+            }
+        }
+
+        if (!$hasCompleteRecord) {
+            $firstIndex = $groupedByDate[$dateStr][0];
+            $normalizedRecords[$firstIndex]['work_hours'] = max(10.0, $maxHoursForDate);
+            $normalizedRecords[$firstIndex]['_friday_auto_credit'] = true;
+            $extraHours += max(0.0, 10.0 - $maxHoursForDate);
+        }
+    }
+
+    usort($normalizedRecords, function ($a, $b) {
+        $dateComparison = strcmp((string)($b['date'] ?? ''), (string)($a['date'] ?? ''));
+        if ($dateComparison !== 0) {
+            return $dateComparison;
+        }
+
+        $timeA = (string)($a['check_in_time'] ?? '');
+        $timeB = (string)($b['check_in_time'] ?? '');
+        return strcmp($timeB, $timeA);
+    });
+
+    return [
+        'records' => $normalizedRecords,
+        'extra_hours' => round($extraHours, 2),
+    ];
+}
+
+function calculateFridayExtraHoursForMonth(int $userId, string $monthKey): float
+{
+    if ($userId <= 0 || !preg_match('/^\d{4}-\d{2}$/', $monthKey)) {
+        return 0.0;
+    }
+
+    $db = db();
+    $tableCheck = $db->queryOne("SHOW TABLES LIKE 'attendance_records'");
+
+    if (!empty($tableCheck)) {
+        $records = $db->query(
+            "SELECT date, check_in_time, check_out_time, work_hours
+             FROM attendance_records
+             WHERE user_id = ? AND DATE_FORMAT(date, '%Y-%m') = ?
+             ORDER BY date DESC, check_in_time DESC",
+            [$userId, $monthKey]
+        );
+    } else {
+        $records = $db->query(
+            "SELECT date, check_in AS check_in_time, check_out AS check_out_time, 0 AS work_hours
+             FROM attendance
+             WHERE user_id = ? AND DATE_FORMAT(date, '%Y-%m') = ?
+             ORDER BY date DESC, check_in DESC",
+            [$userId, $monthKey]
+        );
+    }
+
+    $augmented = addFridayCreditToAttendanceRecords($records ?: [], $monthKey);
+    return (float)($augmented['extra_hours'] ?? 0.0);
+}
+
 // معالجة POST لتحديث العدادات والصلاحيات
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     requireRole(['accountant', 'manager', 'developer']);
@@ -122,6 +260,7 @@ ensureAttendancePermissionsColumns();
 $userStats = [];
 foreach ($users as $user) {
     $stats = getAttendanceStatistics($user['id'], $selectedMonth);
+    $stats['total_hours'] = round((float)($stats['total_hours'] ?? 0) + calculateFridayExtraHoursForMonth((int)$user['id'], (string)$selectedMonth), 2);
     $delayStats = calculateMonthlyDelaySummary($user['id'], $selectedMonth);
     
     // الحصول على عداد التأخيرات وعداد الإنذارات من جدول users
@@ -146,6 +285,7 @@ if ($selectedUserId > 0) {
     $selectedUser = $db->queryOne("SELECT * FROM users WHERE id = ? AND role != 'manager'", [$selectedUserId]);
     if ($selectedUser) {
         $selectedUserStats = getAttendanceStatistics($selectedUserId, $selectedMonth);
+        $selectedUserStats['total_hours'] = round((float)($selectedUserStats['total_hours'] ?? 0) + calculateFridayExtraHoursForMonth((int)$selectedUserId, (string)$selectedMonth), 2);
         $selectedUserDelay = calculateMonthlyDelaySummary($selectedUserId, $selectedMonth);
         
         // الحصول على سجلات المستخدم
@@ -171,6 +311,16 @@ if ($selectedUserId > 0) {
                     [$selectedUserId, $selectedMonth]
                 );
             }
+        }
+
+        $recordsMonthKey = $selectedDate ? substr((string)$selectedDate, 0, 7) : (string)$selectedMonth;
+        $selectedUserRecordsAugmented = addFridayCreditToAttendanceRecords($selectedUserRecords ?: [], $recordsMonthKey);
+        $selectedUserRecords = $selectedUserRecordsAugmented['records'] ?? [];
+
+        if ($selectedDate) {
+            $selectedUserRecords = array_values(array_filter($selectedUserRecords, function ($record) use ($selectedDate) {
+                return (string)($record['date'] ?? '') === (string)$selectedDate;
+            }));
         }
     }
 }
@@ -411,10 +561,14 @@ $backUrl = '?page=attendance_management&month=' . urlencode($selectedMonth);
                                 <tr>
                                     <td data-label="التاريخ"><?php echo formatDate($record['date']); ?></td>
                                     <td data-label="تسجيل الحضور">
-                                        <strong><?php echo formatDateTime($record['check_in_time']); ?></strong>
+                                        <?php if (!empty($record['check_in_time'])): ?>
+                                            <strong><?php echo formatDateTime($record['check_in_time']); ?></strong>
+                                        <?php else: ?>
+                                            <span class="text-muted">لم يتم التسجيل</span>
+                                        <?php endif; ?>
                                     </td>
                                     <td data-label="تسجيل الانصراف">
-                                        <?php echo $record['check_out_time'] ? formatDateTime($record['check_out_time']) : '<span class="text-muted">لم يتم التسجيل</span>'; ?>
+                                        <?php echo !empty($record['check_out_time']) ? formatDateTime($record['check_out_time']) : '<span class="text-muted">لم يتم التسجيل</span>'; ?>
                                     </td>
                                     <td data-label="التأخير">
                                         <?php if ($record['delay_minutes'] > 0): ?>
@@ -431,10 +585,21 @@ $backUrl = '?page=attendance_management&month=' . urlencode($selectedMonth);
                                         <?php endif; ?>
                                     </td>
                                     <td data-label="ساعات العمل">
-                                        <?php echo isset($record['work_hours']) && $record['work_hours'] > 0 ? formatHours($record['work_hours']) : '-'; ?>
+                                        <?php if (isset($record['work_hours']) && $record['work_hours'] > 0): ?>
+                                            <strong class="<?php echo !empty($record['_friday_auto_credit']) ? 'text-primary' : ''; ?>">
+                                                <?php echo formatHours($record['work_hours']); ?>
+                                            </strong>
+                                            <?php if (!empty($record['_friday_auto_credit'])): ?>
+                                                <div class="text-muted small">جمعة محتسبة تلقائياً</div>
+                                            <?php endif; ?>
+                                        <?php else: ?>
+                                            -
+                                        <?php endif; ?>
                                     </td>
                                     <td data-label="الحالة">
-                                        <?php if ($record['check_out_time']): ?>
+                                        <?php if (!empty($record['_friday_auto_credit'])): ?>
+                                            <span class="badge bg-primary">جمعة محتسبة</span>
+                                        <?php elseif (!empty($record['check_out_time'])): ?>
                                             <span class="badge bg-success">مكتمل</span>
                                         <?php else: ?>
                                             <span class="badge bg-warning">قيد العمل</span>
