@@ -3901,12 +3901,37 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         if (createMaterialModal) {
+            const isMobile = () => window.innerWidth < 768;
+
             createMaterialModal.addEventListener('show.bs.modal', () => {
                 fetchNextCode();
+                if (isMobile()) {
+                    const dialog = createMaterialModal.querySelector('.modal-dialog');
+                    dialog.style.transition = 'transform 0.3s ease-out';
+                    dialog.style.transform = 'translateY(100%)';
+                    requestAnimationFrame(() => {
+                        requestAnimationFrame(() => {
+                            dialog.style.transform = 'translateY(0)';
+                        });
+                    });
+                }
             });
+
+            createMaterialModal.addEventListener('hide.bs.modal', () => {
+                if (isMobile()) {
+                    const dialog = createMaterialModal.querySelector('.modal-dialog');
+                    dialog.style.transform = 'translateY(100%)';
+                }
+            });
+
             createMaterialModal.addEventListener('hidden.bs.modal', () => {
                 createMaterialForm.reset();
                 fetchNextCode();
+                if (isMobile()) {
+                    const dialog = createMaterialModal.querySelector('.modal-dialog');
+                    dialog.style.transform = '';
+                    dialog.style.transition = '';
+                }
             });
         }
     }
@@ -5063,25 +5088,20 @@ document.addEventListener('DOMContentLoaded', function () {
 /* بطاقة سفلية (bottom sheet) لمودال إضافة أداة التعبئة على الهاتف */
 @media (max-width: 767.98px) {
     #createMaterialModal .modal-dialog {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        margin: 0;
-        max-width: 100%;
-        transform: translateY(100%) !important;
-        transition: transform 0.3s ease-out !important;
-    }
-
-    #createMaterialModal.show .modal-dialog {
-        transform: translateY(0) !important;
+        position: absolute !important;
+        bottom: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        margin: 0 !important;
+        max-width: 100% !important;
+        transform: none !important;
     }
 
     #createMaterialModal .modal-content {
-        border-radius: 1.25rem 1.25rem 0 0;
-        border: none;
-        max-height: 90vh;
-        overflow-y: auto;
+        border-radius: 1.25rem 1.25rem 0 0 !important;
+        border: none !important;
+        max-height: 90vh !important;
+        overflow-y: auto !important;
     }
 }
 
