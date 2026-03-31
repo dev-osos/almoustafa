@@ -1079,6 +1079,25 @@ if (empty($menuItems)) {
         <ul class="nav flex-column">
             <?php
             $groupedMenuItems = [];
+            $sidebarGroupIcons = [
+                'الرئيسية' => 'bi-grid-1x2-fill',
+                'الإدارة' => 'bi-briefcase-fill',
+                'المحاسبة' => 'bi-calculator-fill',
+                'المبيعات' => 'bi-graph-up-arrow',
+                'الإنتاج' => 'bi-box-seam-fill',
+                'التشغيل والمتابعة' => 'bi-gear-wide-connected',
+                'المخازن' => 'bi-boxes',
+                'الأدوات' => 'bi-tools',
+                'الحساب الشخصي' => 'bi-person-circle',
+                'عام' => 'bi-list-ul',
+                'إدارة النظام' => 'bi-sliders',
+                'لوحات أخرى' => 'bi-columns-gap',
+                'Finance' => 'bi-cash-stack',
+                'Sales' => 'bi-graph-up',
+                'Warehouses' => 'bi-boxes',
+                'Listing' => 'bi-card-checklist',
+                'Management' => 'bi-kanban-fill'
+            ];
             $currentGroupIndex = -1;
             foreach ($menuItems as $item) {
                 if (isset($item['divider']) && $item['divider']) {
@@ -1113,11 +1132,16 @@ if (empty($menuItems)) {
                         break;
                     }
                 }
+                $groupTitle = trim((string) ($group['title'] ?? 'القائمة')) ?: 'القائمة';
+                $groupIcon = $sidebarGroupIcons[$groupTitle] ?? 'bi-folder2-open';
             ?>
                 <li class="sidebar-group-wrapper">
                     <details class="sidebar-menu-group" data-group-key="<?php echo 'group-' . (int) $groupIndex; ?>">
                         <summary class="sidebar-menu-summary">
-                            <span class="sidebar-menu-summary-text"><?php echo htmlspecialchars($group['title']); ?></span>
+                            <span class="sidebar-menu-summary-label">
+                                <i class="bi <?php echo htmlspecialchars($groupIcon); ?>"></i>
+                                <span class="sidebar-menu-summary-text"><?php echo htmlspecialchars($groupTitle); ?></span>
+                            </span>
                             <i class="bi bi-chevron-down"></i>
                         </summary>
                         <ul class="nav flex-column sidebar-group-links">
@@ -1204,6 +1228,15 @@ if (empty($menuItems)) {
 }
 .homeline-sidebar .sidebar-menu-summary::-webkit-details-marker {
     display: none;
+}
+.homeline-sidebar .sidebar-menu-summary-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+}
+.homeline-sidebar .sidebar-menu-summary-label i {
+    font-size: 0.95rem;
+    color: #2563eb;
 }
 .homeline-sidebar .sidebar-menu-summary-text {
     font-size: 0.92rem;
