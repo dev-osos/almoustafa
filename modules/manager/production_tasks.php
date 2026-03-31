@@ -8128,7 +8128,7 @@ document.addEventListener('click', function (e) {
 
             // 9. إعادة حساب الإجماليات
             setTimeout(function () {
-                if (typeof updateCreateTaskSummary === 'function') updateCreateTaskSummary();
+                if (typeof window._updateCreateTaskSummary === 'function') window._updateCreateTaskSummary();
             }, 150);
 
             if (currentDraftIdInput) currentDraftIdInput.value = res.draft_id;
