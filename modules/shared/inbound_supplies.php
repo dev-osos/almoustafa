@@ -194,7 +194,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         c2.appendChild(itemContainer);
 
         const c3 = document.createElement('div');
-        c3.className = 'col-md-2';
+        c3.className = 'col-md-4';
         const l3 = document.createElement('label');
         l3.className = 'form-label';
         l3.textContent = 'الكمية *';
@@ -203,20 +203,28 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         const qty = document.createElement('input');
         qty.type = 'number';
         qty.className = 'form-control';
-        qty.min = '1';
-        qty.step = '1';
+        qty.min = '0.001';
+        qty.step = 'any';
+        qty.placeholder = '0';
+        const unitSelect = document.createElement('select');
+        unitSelect.className = 'form-select flex-grow-0 unit-select';
+        unitSelect.style.maxWidth = '110px';
+        [['جرام', 'جرام'], ['كيلوجرام', 'كجم'], ['قطعة', 'قطعة']].forEach(([v, l]) => {
+            unitSelect.appendChild(createOption(v, l));
+        });
         const calcBtn = document.createElement('button');
         calcBtn.type = 'button';
         calcBtn.className = 'btn btn-outline-secondary';
         calcBtn.innerHTML = '<i class="bi bi-calculator"></i>';
         calcBtn.title = 'آلة حاسبة';
         qtyContainer.appendChild(qty);
+        qtyContainer.appendChild(unitSelect);
         qtyContainer.appendChild(calcBtn);
         c3.appendChild(l3);
         c3.appendChild(qtyContainer);
 
         const c4 = document.createElement('div');
-        c4.className = 'col-md-1 d-grid';
+        c4.className = 'col-md-auto d-grid';
         const removeBtn = document.createElement('button');
         removeBtn.type = 'button';
         removeBtn.className = 'btn btn-outline-danger';
@@ -264,7 +272,26 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
                 });
                 
                 // Setup autocomplete functionality
-                setupAutocomplete(itemInput, dropdown, item, items);
+                setupAutocomplete(itemInput, dropdown, item, items, function(selectedItem) {
+                    const itemUnit = (selectedItem.unit || '').trim();
+                    let matched = false;
+                    for (let i = 0; i < unitSelect.options.length; i++) {
+                        if (unitSelect.options[i].value === itemUnit) {
+                            unitSelect.value = itemUnit;
+                            matched = true;
+                            break;
+                        }
+                    }
+                    if (!matched && itemUnit) {
+                        // Remove any previously added custom option
+                        const existing = unitSelect.querySelector('option.custom-unit');
+                        if (existing) existing.remove();
+                        const customOpt = createOption(itemUnit, itemUnit);
+                        customOpt.className = 'custom-unit';
+                        unitSelect.appendChild(customOpt);
+                        unitSelect.value = itemUnit;
+                    }
+                });
                 
             } catch (e) {
                 itemInput.disabled = true;
@@ -405,15 +432,15 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         updateDisplay();
     }
 
-    function setupAutocomplete(input, dropdown, select, items) {
+    function setupAutocomplete(input, dropdown, select, items, onSelect) {
         let selectedIndex = -1;
         let filteredItems = [];
-        
+
         input.addEventListener('input', function() {
             const value = this.value.toLowerCase().trim();
             clearNode(dropdown);
             selectedIndex = -1;
-            
+
             if (value.length === 0) {
                 dropdown.style.display = 'none';
                 select.value = '';
@@ -439,6 +466,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
                     select.value = item.id;
                     dropdown.style.display = 'none';
                     selectedIndex = -1;
+                    if (onSelect) onSelect(item);
                 });
                 
                 div.addEventListener('mouseenter', function() {
@@ -490,6 +518,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
                         select.value = selectedItem.id;
                         dropdown.style.display = 'none';
                         selectedIndex = -1;
+                        if (onSelect) onSelect(selectedItem);
                     }
                     break;
                     
@@ -511,23 +540,24 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
 
     function collectRows() {
         return Array.from(inboundRows.querySelectorAll('.border.rounded')).map((r) => {
-            const s = r.querySelectorAll('select');
+            const depSel = r.querySelector('select:not(.unit-select):not(.d-none)');
+            const itemSel = r.querySelector('select.d-none');
+            const unitSel = r.querySelector('select.unit-select');
             const q = r.querySelector('input[type="number"]');
-            const itemInput = r.querySelector('input[type="text"]:not([type="number"])');
-            const dep = s[0].value;
-            const itemSel = s[1];
-            const itemOpt = itemSel.options[itemSel.selectedIndex];
-            
+            const itemInput = r.querySelector('input[type="text"]');
+            const dep = depSel ? depSel.value : '';
+            const itemOpt = itemSel ? itemSel.options[itemSel.selectedIndex] : null;
+
             // Check if user typed a custom item name or selected from dropdown
-            const isCustomItem = itemInput.value && !itemSel.value;
-            
+            const isCustomItem = itemInput.value && !(itemSel && itemSel.value);
+
             return {
                 department: dep,
-                item_id: isCustomItem ? null : parseInt(itemSel.value || '0', 10),
+                item_id: isCustomItem ? null : parseInt((itemSel && itemSel.value) || '0', 10),
                 table: isCustomItem ? '' : (itemOpt ? (itemOpt.dataset.table || '') : ''),
                 quantity_field: isCustomItem ? '' : (itemOpt ? (itemOpt.dataset.field || '') : ''),
                 item_name: isCustomItem ? itemInput.value : (itemOpt ? (itemOpt.dataset.name || '') : ''),
-                unit: isCustomItem ? '' : (itemOpt ? (itemOpt.dataset.unit || '') : ''),
+                unit: unitSel ? unitSel.value : (itemOpt ? (itemOpt.dataset.unit || '') : ''),
                 quantity: parseFloat(q.value || '0'),
                 is_custom_item: isCustomItem
             };
