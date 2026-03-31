@@ -671,16 +671,17 @@ $singleReceipt = count($receipts) === 1;
         <table class="products-table" id="products-table">
             <thead>
                 <tr>
-                    <th style="width: 35%; cursor: pointer;" data-column="name">المنتج <span class="sort-icon">↕</span></th>
-                    <th style="width: 20%; text-align: center; cursor: pointer;" data-column="quantity">ك <span class="sort-icon">↕</span></th>
-                    <th style="width: 20%; text-align: center; cursor: pointer;" data-column="price">السعر <span class="sort-icon">↕</span></th>
-                    <th style="width: 25%; text-align: center; cursor: pointer;" data-column="total">اجمالي <span class="sort-icon">↕</span></th>
+                    <th style="width: 10%; text-align: center;">#</th>
+                    <th style="width: 30%; cursor: pointer;" data-column="name">المنتج <span class="sort-icon">↕</span></th>
+                    <th style="width: 18%; text-align: center; cursor: pointer;" data-column="quantity">ك <span class="sort-icon">↕</span></th>
+                    <th style="width: 18%; text-align: center; cursor: pointer;" data-column="price">السعر <span class="sort-icon">↕</span></th>
+                    <th style="width: 24%; text-align: center; cursor: pointer;" data-column="total">اجمالي <span class="sort-icon">↕</span></th>
                 </tr>
             </thead>
             <tbody>
                 <?php 
                 $grandTotal = 0;
-                foreach ($products as $product): 
+                foreach ($products as $index => $product): 
                     $productQty = $product['quantity'] ?? null;
                     $productUnit = !empty($product['unit']) ? $product['unit'] : $unit;
                     $productPrice = isset($product['price']) && $product['price'] !== null && $product['price'] !== '' ? (float)$product['price'] : null;
@@ -696,6 +697,7 @@ $singleReceipt = count($receipts) === 1;
                     }
                 ?>
                 <tr>
+                    <td class="product-quantity" style="text-align: center;"><?php echo (int)($index + 1); ?></td>
                     <td class="product-name"><?php echo htmlspecialchars($product['name']); ?></td>
                     <td class="product-quantity">
                         <?php 
@@ -729,7 +731,7 @@ $singleReceipt = count($receipts) === 1;
             </tbody>
             <tfoot>
                 <tr style="border-top: 2px solid #000; font-weight: 700; background-color: #f0f0f0;">
-                    <td colspan="3" style="text-align: left; padding: 8px 5px;">الإجمالي</td>
+                    <td colspan="4" style="text-align: left; padding: 8px 5px;">الإجمالي</td>
                     <td style="text-align: center; padding: 8px 5px;"><?php echo number_format($grandTotal, 2); ?> ج.م</td>
                 </tr>
                 <?php 
@@ -789,19 +791,19 @@ $singleReceipt = count($receipts) === 1;
                 }
                 if ($receiptShippingFees > 0): ?>
                 <tr style="font-weight: 700; background-color: #f8f8f8;">
-                    <td colspan="3" style="text-align: left; padding: 6px 5px;">رسوم الشحن</td>
+                    <td colspan="4" style="text-align: left; padding: 6px 5px;">رسوم الشحن</td>
                     <td style="text-align: center; padding: 6px 5px;"><?php echo number_format($receiptShippingFees, 2); ?> ج.م</td>
                 </tr>
                 <?php endif; ?>
                 <?php if ($receiptDiscount > 0): ?>
                 <tr style="font-weight: 700; background-color: #fff3e0;">
-                    <td colspan="3" style="text-align: left; padding: 6px 5px;">الخصم</td>
+                    <td colspan="4" style="text-align: left; padding: 6px 5px;">الخصم</td>
                     <td style="text-align: center; padding: 6px 5px;">- <?php echo number_format($receiptDiscount, 2); ?> ج.م</td>
                 </tr>
                 <?php endif; ?>
                 <?php if ($taskType === 'telegraph'): ?>
                 <tr style="font-weight: 700; background-color: #e3f2fd;">
-                    <td colspan="3" style="text-align: left; padding: 6px 5px;">تكلفة التوصيل (TelegraphEx)</td>
+                    <td colspan="4" style="text-align: left; padding: 6px 5px;">تكلفة التوصيل (TelegraphEx)</td>
                     <td style="text-align: center; padding: 6px 5px;">
                         <?php
                         if ($deliveryCost !== null) {
@@ -814,7 +816,7 @@ $singleReceipt = count($receipts) === 1;
                 </tr>
                 <?php endif; ?>
                 <tr style="font-weight: 700; background-color: #e8f5e9;">
-                    <td colspan="3" style="text-align: left; padding: 8px 5px;">الإجمالي النهائي</td>
+                    <td colspan="4" style="text-align: left; padding: 8px 5px;">الإجمالي النهائي</td>
                     <td style="text-align: center; padding: 8px 5px;"><?php echo number_format($finalTotal, 2); ?> ج.م</td>
                 </tr>
             </tfoot>
@@ -973,20 +975,20 @@ $singleReceipt = count($receipts) === 1;
                 var aVal, bVal;
                 switch (column) {
                     case 'name':
-                        aVal = a.cells[0].textContent.trim();
-                        bVal = b.cells[0].textContent.trim();
+                        aVal = a.cells[1].textContent.trim();
+                        bVal = b.cells[1].textContent.trim();
                         return direction === 'asc' ? aVal.localeCompare(bVal, 'ar') : bVal.localeCompare(aVal, 'ar');
                     case 'quantity':
-                        aVal = parseFloat(a.cells[1].textContent.replace(/[^\d.-]/g, '')) || 0;
-                        bVal = parseFloat(b.cells[1].textContent.replace(/[^\d.-]/g, '')) || 0;
-                        return direction === 'asc' ? aVal - bVal : bVal - aVal;
-                    case 'price':
                         aVal = parseFloat(a.cells[2].textContent.replace(/[^\d.-]/g, '')) || 0;
                         bVal = parseFloat(b.cells[2].textContent.replace(/[^\d.-]/g, '')) || 0;
                         return direction === 'asc' ? aVal - bVal : bVal - aVal;
-                    case 'total':
+                    case 'price':
                         aVal = parseFloat(a.cells[3].textContent.replace(/[^\d.-]/g, '')) || 0;
                         bVal = parseFloat(b.cells[3].textContent.replace(/[^\d.-]/g, '')) || 0;
+                        return direction === 'asc' ? aVal - bVal : bVal - aVal;
+                    case 'total':
+                        aVal = parseFloat(a.cells[4].textContent.replace(/[^\d.-]/g, '')) || 0;
+                        bVal = parseFloat(b.cells[4].textContent.replace(/[^\d.-]/g, '')) || 0;
                         return direction === 'asc' ? aVal - bVal : bVal - aVal;
                     default:
                         return 0;

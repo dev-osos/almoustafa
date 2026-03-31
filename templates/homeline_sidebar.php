@@ -394,7 +394,7 @@ switch ($role) {
                 'active' => false,
                 'badge' => '<span class="badge bg-warning text-dark">قريباً</span>',
                 'disabled' => true,
-                'disabled_hint' => 'تبويب عملاء المتجر قيد التطوير وسيتم تفعيله قريباً.'
+                'title_attr' => 'تبويب عملاء المتجر قيد التطوير وسيتم تفعيله قريباً.'
             ],
             [
                 'title' => 'الأسعار المخصصة',

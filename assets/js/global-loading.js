@@ -36,24 +36,41 @@
     window.hidePageLoading = hidePageLoading;
     window.resetPageLoading = resetPageLoading;
 
+    function isNoLoadingForm(form) {
+        return !form || form.hasAttribute('data-no-loading') || form.dataset.noLoading === 'true';
+    }
+
+    function schedulePageLoading(form, event) {
+        if (isNoLoadingForm(form)) return;
+        if (event && event.__globalLoadingScheduled) return;
+        if (event) event.__globalLoadingScheduled = true;
+
+        setTimeout(function() {
+            if (isNoLoadingForm(form)) return;
+
+            if (event && (event.defaultPrevented || event.returnValue === false)) {
+                resetPageLoading();
+                return;
+            }
+
+            if (typeof form.checkValidity === 'function' && !form.checkValidity()) {
+                resetPageLoading();
+                return;
+            }
+
+            showPageLoading();
+        }, 0);
+    }
+
     function bindFormLoading() {
         overlay = document.getElementById('global-loading-overlay');
-        if (!overlay) return;
-
-        document.querySelectorAll('form:not([data-no-loading])').forEach(function(form) {
-            if (form.dataset.globalLoadingBound === 'true') return;
-            form.dataset.globalLoadingBound = 'true';
-            form.addEventListener('submit', function() {
-                showPageLoading();
-            }, true);
-        });
+        if (!overlay || !document.body) return;
 
         if (!document.body.dataset.globalLoadingSubmitBound) {
             document.body.dataset.globalLoadingSubmitBound = 'true';
             document.body.addEventListener('submit', function(e) {
                 var form = e.target && e.target.tagName === 'FORM' ? e.target : (e.target && e.target.closest ? e.target.closest('form') : null);
-                if (!form || form.dataset.noLoading === 'true') return;
-                showPageLoading();
+                schedulePageLoading(form, e);
             }, true);
         }
 
@@ -63,16 +80,9 @@
 
         if (typeof MutationObserver !== 'undefined') {
             var mo = new MutationObserver(function() {
-                document.querySelectorAll('form:not([data-no-loading]):not([data-global-loading-bound])').forEach(function(form) {
-                    form.dataset.globalLoadingBound = 'true';
-                    form.addEventListener('submit', function() {
-                        showPageLoading();
-                    }, true);
-                });
+                overlay = document.getElementById('global-loading-overlay') || overlay;
             });
-            if (document.body) {
-                mo.observe(document.body, { childList: true, subtree: true });
-            }
+            mo.observe(document.body, { childList: true, subtree: true });
         }
     }
 

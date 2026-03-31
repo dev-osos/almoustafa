@@ -4845,7 +4845,7 @@ $advanceStatusLabels = [
                                 <td><?php echo htmlspecialchars($creatorName); ?></td>
                                 <td><?php echo !empty($pd['created_at']) ? date('Y-m-d H:i', strtotime($pd['created_at'])) : '—'; ?></td>
                                 <td class="text-end">
-                                    <form method="post" class="d-inline" onsubmit="return confirm('حذف هذا الخصم المعلق؟');">
+                                    <form method="post" class="d-inline" onsubmit="if (!confirm('حذف هذا الخصم المعلق؟')) { if (typeof window.resetPageLoading === 'function') window.resetPageLoading(); if (typeof window.hidePageLoading === 'function') window.hidePageLoading(); return false; } return true;">
                                         <input type="hidden" name="action" value="delete_pending_deduction">
                                         <input type="hidden" name="id" value="<?php echo (int)$pd['id']; ?>">
                                         <input type="hidden" name="month" value="<?php echo (int)$selectedMonth; ?>">

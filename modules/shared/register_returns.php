@@ -44,7 +44,7 @@ $apiUrl = getRelativeUrl('api/register_returns.php');
 <div class="card shadow-sm mb-4">
     <div class="card-header"><h5 class="mb-0">نموذج تسجيل المرتجعات</h5></div>
     <div class="card-body">
-        <form id="registerReturnsForm">
+        <form id="registerReturnsForm" data-no-loading>
             <!-- Customer Selection -->
             <div class="border rounded p-3 mb-3">
                 <div class="row g-2 align-items-end">
@@ -125,8 +125,16 @@ $apiUrl = getRelativeUrl('api/register_returns.php');
     </div>
 </div>
 
-<div id="returnReceiptContainer" style="display: none;">
-    <div id="returnReceiptBody"></div>
+<div id="returnReceiptContainer" class="card shadow-sm mt-4 d-none">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="bi bi-receipt me-2"></i>معاينة فاتورة المرتجعات</h5>
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="closeReturnReceiptBtn">
+            <i class="bi bi-x-lg me-1"></i>إغلاق
+        </button>
+    </div>
+    <div class="card-body">
+        <div id="returnReceiptBody"></div>
+    </div>
 </div>
 
 <script>
@@ -145,7 +153,9 @@ $apiUrl = getRelativeUrl('api/register_returns.php');
     const submitReturnBtn = document.getElementById('submitReturnBtn');
     const grandTotalDisplay = document.getElementById('grandTotalDisplay');
     const tableBody = document.getElementById('returnsTableBody');
+    const returnReceiptContainer = document.getElementById('returnReceiptContainer');
     const receiptBody = document.getElementById('returnReceiptBody');
+    const closeReturnReceiptBtn = document.getElementById('closeReturnReceiptBtn');
     const paginationInfo = document.getElementById('returnsPaginationInfo');
     const prevPageBtn = document.getElementById('retPrevPageBtn');
     const nextPageBtn = document.getElementById('retNextPageBtn');
@@ -715,23 +725,31 @@ $apiUrl = getRelativeUrl('api/register_returns.php');
             + '<p>الوقت: ' + timeStr + '</p>'
             + '<p>المستخدم: ' + (inv.created_by_name || inv.created_by_username || inv.created_by || '-') + '</p>'
             + '<p>العميل: ' + (inv.customer_name || '-') + '</p>'
+            + '<div class="table-responsive">'
             + '<table class="table table-bordered" style="border:2px solid #000;font-weight:600">'
             + '<thead><tr><th>الصنف</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th></tr></thead>'
             + '<tbody>' + itemsHTML + '</tbody></table>'
+            + '</div>'
             + notesHTML
             + '</div>';
     }
 
     function renderReturnReceipt(inv) {
         receiptBody.innerHTML = buildReceiptHTML(inv);
-
-        var w = window.open('', '_blank');
-        if (w) {
-            var htmlContent = '<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>فاتورة مرتجعات</title><link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"><style>body { font-family: "Tajawal", "Cairo", sans-serif; } .table { margin: 20px 0; } h4 { text-align: center; margin: 20px 0; } p { margin: 10px 0; }</style></head><body><div class="container">' + receiptBody.innerHTML + '</div></body></html>';
-            w.document.open();
-            w.document.writeln(htmlContent);
-            w.document.close();
+        if (returnReceiptContainer) {
+            returnReceiptContainer.classList.remove('d-none');
+            returnReceiptContainer.style.display = 'block';
+            setTimeout(function () {
+                returnReceiptContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 50);
         }
+    }
+
+    function hideReturnReceiptCard() {
+        if (!returnReceiptContainer) return;
+        returnReceiptContainer.classList.add('d-none');
+        returnReceiptContainer.style.display = 'none';
+        receiptBody.innerHTML = '';
     }
 
     function printReturnReceipt(existingWindow) {
@@ -966,6 +984,9 @@ $apiUrl = getRelativeUrl('api/register_returns.php');
     });
 
     addReturnRowBtn.addEventListener('click', createRow);
+    if (closeReturnReceiptBtn) {
+        closeReturnReceiptBtn.addEventListener('click', hideReturnReceiptCard);
+    }
     prevPageBtn.addEventListener('click', function () { if (listPage > 1) { listPage--; loadReturns(); } });
     nextPageBtn.addEventListener('click', function () { if (listPage < totalPages) { listPage++; loadReturns(); } });
     applyFilterBtn.addEventListener('click', function () { listPage = 1; loadReturns(); });

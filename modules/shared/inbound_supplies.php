@@ -45,7 +45,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
 <div class="card shadow-sm mb-4">
     <div class="card-header"><h5 class="mb-0">نموذج تسجيل الواردات</h5></div>
     <div class="card-body">
-        <form id="inboundSuppliesForm">
+        <form id="inboundSuppliesForm" data-no-loading>
             <div id="inboundRows"></div>
             <div class="d-flex gap-2">
                 <button type="button" class="btn btn-outline-primary" id="addInboundRowBtn"><i class="bi bi-plus-circle me-1"></i>إضافة صف</button>

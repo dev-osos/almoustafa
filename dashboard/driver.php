@@ -215,12 +215,7 @@ $pageDescription = 'لوحة تحكم السائق - الحضور والانصر
                         <?php endif; ?>
                     </div>
 
-                    <div class="card shadow-sm">
-                        <div class="card-body">
-                            <h6 class="card-subtitle mb-2 text-muted"><i class="bi bi-info-circle me-1"></i>ملخص</h6>
-                            <p class="card-text mb-0">من لوحة السائق يمكنك تسجيل الحضور والانصراف ضمن مواعيد العمل (من 1 مساءً إلى 10 مساءً)، وعرض الأوردرات ذات الحالة «مع المندوب» وتحديث حالتها إلى «تم التوصيل» أو «تم الارجاع».</p>
-                        </div>
-                    </div>
+                    
                 </div>
                 <style>
                 .hover-shadow { transition: box-shadow 0.2s ease, transform 0.2s ease; }
