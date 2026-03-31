@@ -466,7 +466,6 @@ $backUrl = '?page=attendance_management&month=' . urlencode($selectedMonth);
                             <th>ساعات العمل</th>
                             <th>متوسط التأخير</th>
                             <th>مرات التأخير</th>
-                            <th>عداد التأخيرات</th>
                             <th>الإجراءات</th>
                         </tr>
                     </thead>
@@ -500,19 +499,6 @@ $backUrl = '?page=attendance_management&month=' . urlencode($selectedMonth);
                                     <td data-label="مرات التأخير">
                                         <span class="badge bg-danger"><?php echo (int) ($data['delay']['delay_days'] ?? 0); ?></span>
                                     </td>
-                                    <td data-label="عداد التأخيرات">
-                                        <?php 
-                                        $delayCount = $data['delay_count'] ?? 0;
-                                        $delayBadgeClass = $delayCount >= 3 ? 'bg-danger' : ($delayCount > 0 ? 'bg-warning' : 'bg-secondary');
-                                        ?>
-                                        <span class="badge <?php echo $delayBadgeClass; ?>" title="عدد حالات التأخير في الحضور لهذا الشهر">
-                                            <?php echo $delayCount; ?>
-                                        </span>
-                                        <?php if ($delayCount >= 3): ?>
-                                            <i class="bi bi-exclamation-triangle-fill text-danger" title="تم إبلاغ المدير"></i>
-                                        <?php endif; ?>
-                                    </td>
-                                   
                                     <td data-label="الإجراءات">
                                         <a href="?page=attendance_management&month=<?php echo urlencode($selectedMonth); ?>&user_id=<?php echo $userId; ?>" class="btn btn-sm btn-info">
                                             <i class="bi bi-eye"></i>
