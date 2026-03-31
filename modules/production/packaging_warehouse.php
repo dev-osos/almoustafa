@@ -5060,6 +5060,31 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 }
 
+/* بطاقة سفلية (bottom sheet) لمودال إضافة أداة التعبئة على الهاتف */
+@media (max-width: 767.98px) {
+    #createMaterialModal .modal-dialog {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        margin: 0;
+        max-width: 100%;
+        transform: translateY(100%) !important;
+        transition: transform 0.3s ease-out !important;
+    }
+
+    #createMaterialModal.show .modal-dialog {
+        transform: translateY(0) !important;
+    }
+
+    #createMaterialModal .modal-content {
+        border-radius: 1.25rem 1.25rem 0 0;
+        border: none;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+}
+
 /* تصغير أزرار الإجراءات على الهاتف */
 @media (max-width: 576px) {
     .table-sm .btn-group .btn {
