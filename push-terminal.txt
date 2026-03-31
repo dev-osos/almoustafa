@@ -1,1 +1,10 @@
 git status --short && echo '---' && git add templates/homeline_sidebar.php && git commit -m "Update homeline sidebar icons" || true && git push dev-osos main && echo '---' && echo 'LOCAL:' && git rev-parse HEAD && echo 'REMOTE:' && git ls-remote dev-osos refs/heads/main | awk '{print $1}'
+
+
+
+ <option value="كرتونة">كرتونة</option>
+                                                <option value="عبوة">عبوة</option>
+                                                <option value="كيلو">كيلو</option>
+                                                <option value="جرام">جرام</option>
+                                                <option value="شرينك">شرينك</option>
+                                                <option value="دسته">دسته</option>

@@ -827,6 +827,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $tgCityId      = isset($_POST['tg_city_id']) && $_POST['tg_city_id'] !== '' ? (int)$_POST['tg_city_id'] : null;
         $tgWeight      = trim($_POST['tg_weight'] ?? '');
         $tgParcelDesc  = trim($_POST['tg_parcel_desc'] ?? '');
+        $countedInput  = trim((string)($_POST['tg_pieces_count'] ?? ''));
         $priority = $_POST['priority'] ?? 'normal';
         $priority = in_array($priority, $allowedPriorities, true) ? $priority : 'normal';
         $dueDate = $_POST['due_date'] ?? '';
@@ -1005,6 +1006,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }, $productionUsers);
         $assignees = array_values(array_intersect($assignees, $allowedAssignees));
 
+        $counted = 0;
+        if ($countedInput !== '') {
+            $normalizedCounted = str_replace(',', '.', $countedInput);
+            if (!is_numeric($normalizedCounted) || (float)$normalizedCounted <= 0) {
+                $error = 'عدد القطع يجب أن يكون أكبر من صفر.';
+            } else {
+                $counted = max(1, (int)ceil((float)$normalizedCounted));
+            }
+        }
+        if ($counted <= 0) {
+            $autoPiecesCount = 0;
+            foreach ($products as $productForCount) {
+                $qtyForCount = isset($productForCount['quantity']) ? (float)$productForCount['quantity'] : 0;
+                if ($qtyForCount > 0) {
+                    $autoPiecesCount += $qtyForCount;
+                }
+            }
+            $counted = max(1, (int)ceil($autoPiecesCount));
+        }
+
+        if ($taskType === 'telegraph' && $error === '') {
+            $normalizedTgWeight = str_replace(',', '.', $tgWeight);
+            $missingTelegraphFields = [];
+
+            if ($customerName === '') $missingTelegraphFields[] = 'اسم العميل';
+            if ($customerPhone === '') $missingTelegraphFields[] = 'رقم العميل';
+            if ($orderTitle === '') $missingTelegraphFields[] = 'العنوان';
+            if ($tgGovernorate === '') $missingTelegraphFields[] = 'المحافظة';
+            if ($tgCity === '') $missingTelegraphFields[] = 'المدينة';
+            if ($tgWeight === '' || !is_numeric($normalizedTgWeight) || (float)$normalizedTgWeight <= 0) $missingTelegraphFields[] = 'الوزن';
+            if ($tgParcelDesc === '') $missingTelegraphFields[] = 'وصف الطرد';
+
+            if (!empty($missingTelegraphFields)) {
+                $error = 'في أوردر التليجراف يجب تعبئة الحقول التالية: ' . implode(' - ', $missingTelegraphFields);
+            } elseif (($tgGovId ?? 0) <= 0 || ($tgCityId ?? 0) <= 0) {
+                $error = 'يرجى اختيار المحافظة والمدينة من القوائم المتاحة.';
+            }
+        }
+
         if ($error !== '') {
             // تم ضبط رسالة الخطأ أعلاه (مثل التحقق من الكمية)
         } elseif ($dueDate && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dueDate)) {
@@ -1134,6 +1174,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 if ($tgWeight !== '') {
                     $notesParts[] = 'الوزن :' . $tgWeight;
+                }
+                if ($counted > 0) {
+                    $notesParts[] = 'عدد القطع :' . $counted;
                 }
                 if ($tgParcelDesc !== '') {
                     $notesParts[] = 'وصف البضاعة :' . $tgParcelDesc;
@@ -1479,7 +1522,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     'openableCode'       => 'Y',
                                     'serviceId'          => 1,
                                     'weight'             => $tgWeightVal,
-                                    'piecesCount'        => 1,
+                                    'piecesCount'        => $counted,
                                     'price'              => $tgFinalTotal,
                                     'size'               => ['length' => 0, 'height' => 0, 'width' => 0],
                                 ],
@@ -1548,7 +1591,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Content-Type: application/json; charset=utf-8');
         try {
             $draftData = [];
-            $allowedDraftFields = ['task_type','priority','due_date','customer_name','local_customer_id','customer_phone','customer_type_radio_task','tg_governorate','tg_gov_id','tg_city','tg_city_id','tg_weight','tg_parcel_desc','order_title','shipping_fees','discount','details'];
+            $allowedDraftFields = ['task_type','priority','due_date','customer_name','local_customer_id','customer_phone','customer_type_radio_task','tg_governorate','tg_gov_id','tg_city','tg_city_id','tg_weight','tg_pieces_count','tg_parcel_desc','order_title','shipping_fees','discount','details'];
             foreach ($allowedDraftFields as $f) {
                 if (isset($_POST[$f])) $draftData[$f] = $_POST[$f];
             }
@@ -2016,6 +2059,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $tgCityId      = isset($_POST['tg_city_id']) && $_POST['tg_city_id'] !== '' ? (int)$_POST['tg_city_id'] : null;
                     $tgWeight      = trim($_POST['tg_weight'] ?? '');
                     $tgParcelDesc  = trim($_POST['tg_parcel_desc'] ?? '');
+                    $countedInput  = trim((string)($_POST['tg_pieces_count'] ?? ''));
                     $assignees = isset($_POST['assigned_to']) && is_array($_POST['assigned_to'])
                         ? array_filter(array_map('intval', $_POST['assigned_to']))
                         : [];
@@ -2046,6 +2090,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $products[] = ['name' => $name, 'quantity' => $qty, 'unit' => $unit, 'price' => $price, 'line_total' => $lineTotal, 'item_type' => trim($p['item_type'] ?? '')];
                         }
                     }
+                    $counted = 0;
+                    if ($countedInput !== '') {
+                        $normalizedCounted = str_replace(',', '.', $countedInput);
+                        if (is_numeric($normalizedCounted) && (float)$normalizedCounted > 0) {
+                            $counted = max(1, (int)ceil((float)$normalizedCounted));
+                        }
+                    }
+                    if ($counted <= 0) {
+                        $autoPiecesCount = 0;
+                        foreach ($products as $productForCount) {
+                            $qtyForCount = isset($productForCount['quantity']) ? (float)$productForCount['quantity'] : 0;
+                            if ($qtyForCount > 0) $autoPiecesCount += $qtyForCount;
+                        }
+                        $counted = max(1, (int)ceil($autoPiecesCount));
+                    }
+
                     $notesParts = [];
                     if ($orderTitle !== '') {
                         $notesParts[] = 'عنوان  :' . $orderTitle;
@@ -2058,6 +2118,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                     if ($tgWeight !== '') {
                         $notesParts[] = 'الوزن :' . $tgWeight;
+                    }
+                    if ($counted > 0) {
+                        $notesParts[] = 'عدد القطع :' . $counted;
                     }
                     if ($tgParcelDesc !== '') {
                         $notesParts[] = 'وصف البضاعة :' . $tgParcelDesc;
@@ -2259,6 +2322,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
             if (preg_match('/\وصف البضاعة :\s*([^\n]+)/', $notes, $m)) {
                 $tgParcelDesc = trim($m[1]);
             }
+            $tgPiecesCount = 0;
+            foreach ($products as $pCount) {
+                $qtyForCount = isset($pCount['quantity']) ? (float)$pCount['quantity'] : 0;
+                if ($qtyForCount > 0) {
+                    $tgPiecesCount += $qtyForCount;
+                }
+            }
+            $tgPiecesCount = max(1, (int)ceil($tgPiecesCount));
+            if (preg_match('/\عدد القطع :\s*([0-9.]+)/u', $notes, $m)) {
+                $tgPiecesCount = max(1, (int)ceil((float)$m[1]));
+            }
             $advancePayment = 0;
             if (preg_match('/\[ADVANCE_PAYMENT\]:\s*([0-9.]+)/', $notes, $m)) {
                 $advancePayment = (float)$m[1];
@@ -2284,6 +2358,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
                 $details = preg_replace('/\المحافظة :\s*[^\n]+/', '', $details);
                 $details = preg_replace('/\المدينة :\s*[^\n]+/', '', $details);
                 $details = preg_replace('/\الوزن :\s*[^\n]+/', '', $details);
+                $details = preg_replace('/\عدد القطع :\s*[^\n]+/u', '', $details);
                 $details = preg_replace('/\وصف البضاعة :\s*[^\n]+/', '', $details);
                 $details = preg_replace('/\n\s*\n\s*\n+/', "\n\n", trim($details));
             }
@@ -2317,6 +2392,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
                     'tg_governorate' => $tgGovernorate,
                     'tg_city' => $tgCity,
                     'tg_weight' => $tgWeight,
+                    'tg_pieces_count' => $tgPiecesCount,
                     'tg_parcel_desc' => $tgParcelDesc
                 ]
             ], JSON_UNESCAPED_UNICODE);
@@ -3460,14 +3536,12 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                         <div class="col-md-4">
                             <label class="form-label">الأولوية</label>
                             <select class="form-select" name="priority">
-                                <option value="low">منخفضة</option>
                                 <option value="normal" selected>عادية</option>
-                                <option value="high">مرتفعة</option>
                                 <option value="urgent">عاجلة</option>
                             </select>
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label">تاريخ الاستحقاق</label>
+                            <label class="form-label">تاريخ التسليم</label>
                             <input type="date" class="form-control" name="due_date" value="">
                         </div>
                         <div class="col-md-4">
@@ -3556,10 +3630,10 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                             <label class="form-label small">النوع</label>
                                             <select class="form-select form-select-sm product-type-selector mb-1" name="products[0][item_type]">
                                                 <option value="">— اختر النوع —</option>
-                                                <option value="external">📦 منتجات خارجية</option>
-                                                <option value="template">🏭 منتجات المصنع</option>
-                                                <option value="raw_material">⚗️ خامات</option>
-                                                <option value="packaging">🧴 أدوات تعبئة</option>
+                                                <option value="external">منتجات خارجية</option>
+                                                <option value="template">منتجات المصنع</option>
+                                                <option value="raw_material">خامات</option>
+                                                <option value="packaging">أدوات تعبئة</option>
                                             </select>
                                             <div class="product-name-wrap position-relative">
                                                 <input type="text" class="form-control product-name-input" name="products[0][name]" placeholder="اختر من القائمة" autocomplete="off" required>
@@ -3589,18 +3663,12 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                         <div class="col-6 col-md-2">
                                             <label class="form-label small">الوحدة</label>
                                             <select class="form-select form-select-sm product-unit-input" name="products[0][unit]" id="product-unit-0" onchange="updateQuantityStep(0)">
-                                                <option value="كرتونة">كرتونة</option>
-                                                <option value="عبوة">عبوة</option>
-                                                <option value="كيلو">كيلو</option>
-                                                <option value="جرام">جرام</option>
-                                                <option value="شرينك">شرينك</option>
-                                                <option value="دسته">دسته</option>
                                                 <option value="قطعة" selected>قطعة</option>
                                             </select>
                                         </div>
                                         <div class="col-6 col-md-2">
                                             <label class="form-label small">السعر</label>
-                                            <input type="number" class="form-control product-price-input" name="products[0][price]" step="0.01" min="0" placeholder="0.00" id="product-price-0" required>
+                                            <input type="number" class="form-control product-price-input" name="products[0][price]" step="0.1" min="0" placeholder="0.00" id="product-price-0" required>
                                         </div>
                                         <div class="col-6 col-md-2">
                                             <label class="form-label small">الإجمالي</label>
@@ -3622,11 +3690,16 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                 <i class="bi bi-plus-circle me-1"></i>إضافة منتج آخر
                             </button>
                             <div class="row g-2 mt-2 d-none" id="createTgParcelWrap">
-                                <div class="col-md-4">
-                                    <label class="form-label">الوزن (كجم)</label>
-                                    <input type="number" class="form-control" name="tg_weight" id="createTgWeight" step="0.01" min="0" placeholder="0.00">
+                                <div class="col-md-3">
+                                    <label class="form-label">عدد القطع</label>
+                                    <input type="number" class="form-control" name="tg_pieces_count" id="createTgPiecesCount" step="1" min="1" placeholder="1" value="1">
+                                    <small class="text-muted">يُحسب تلقائياً ويمكن تعديله يدوياً</small>
                                 </div>
-                                <div class="col-md-8">
+                                <div class="col-md-3">
+                                    <label class="form-label">الوزن (كجم)</label>
+                                    <input type="number" class="form-control" name="tg_weight" id="createTgWeight" step="0.01" min="0.01" placeholder="0.00">
+                                </div>
+                                <div class="col-md-6">
                                     <label class="form-label">وصف الطرد</label>
                                     <input type="text" class="form-control" name="tg_parcel_desc" id="createTgParcelDesc" placeholder="مثال: 3 كراتين عسل نحل...">
                                 </div>
@@ -5398,6 +5471,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (repId) repId.value = '';
                 if (repDrop) repDrop.classList.add('d-none');
             }
+            if (typeof syncCreateTelegraphRequiredState === 'function') syncCreateTelegraphRequiredState();
         }
 
         document.querySelectorAll('input[name="customer_type_radio_task"]').forEach(function(r) {
@@ -5540,6 +5614,92 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     updateTaskTypeUI();
 
+    function updateCreateTelegraphPiecesCount(forceAutoFill) {
+        var piecesInput = document.getElementById('createTgPiecesCount');
+        var containerEl = document.getElementById('productsContainer');
+        if (!piecesInput || !containerEl) return;
+
+        var totalPieces = 0;
+        containerEl.querySelectorAll('.product-quantity-input').forEach(function(inp) {
+            var val = parseFloat(inp.value || '0');
+            if (!isNaN(val) && val > 0) totalPieces += val;
+        });
+
+        var autoPieces = Math.max(1, Math.ceil(totalPieces));
+        piecesInput.dataset.autoValue = String(autoPieces);
+        var isManualOverride = piecesInput.dataset.manualOverride === 'true';
+
+        if (forceAutoFill || !isManualOverride || !piecesInput.value) {
+            piecesInput.value = autoPieces;
+            if (forceAutoFill) piecesInput.dataset.manualOverride = 'false';
+        }
+    }
+
+    function setCreateTelegraphPiecesValue(value) {
+        var piecesInput = document.getElementById('createTgPiecesCount');
+        if (!piecesInput) return;
+        updateCreateTelegraphPiecesCount(true);
+        if (value !== undefined && value !== null && value !== '') {
+            piecesInput.value = value;
+            var numericValue = parseInt(value, 10);
+            var autoVal = parseInt(piecesInput.dataset.autoValue || '0', 10);
+            piecesInput.dataset.manualOverride = (!isNaN(numericValue) && numericValue > 0 && numericValue !== autoVal) ? 'true' : 'false';
+        } else {
+            piecesInput.dataset.manualOverride = 'false';
+            updateCreateTelegraphPiecesCount(true);
+        }
+    }
+
+    var createTgPiecesInput = document.getElementById('createTgPiecesCount');
+    if (createTgPiecesInput && createTgPiecesInput.dataset.boundAutoCount !== '1') {
+        createTgPiecesInput.addEventListener('input', function() {
+            var raw = (this.value || '').trim();
+            if (raw === '') {
+                this.dataset.manualOverride = 'false';
+                return;
+            }
+            var current = parseInt(raw, 10);
+            var autoVal = parseInt(this.dataset.autoValue || '0', 10);
+            this.dataset.manualOverride = (!isNaN(current) && current > 0 && current !== autoVal) ? 'true' : 'false';
+        });
+        createTgPiecesInput.dataset.boundAutoCount = '1';
+    }
+
+    // جعل حقول التليجراف إجبارية في نموذج الإنشاء
+    function syncCreateTelegraphRequiredState() {
+        var isTg = taskTypeSelect && taskTypeSelect.value === 'telegraph';
+        var activeType = document.querySelector('input[name="customer_type_radio_task"]:checked');
+        var customerMode = activeType ? activeType.value : 'local';
+        var localSearchEl = document.getElementById('local_customer_search_task');
+        var repSearchEl = document.getElementById('rep_customer_search_task');
+        var phoneEl = document.getElementById('submit_customer_phone');
+        var orderTitleEl = document.getElementById('createOrderTitle');
+        var govSearchEl = document.getElementById('createGovSearch');
+        var citySearchEl = document.getElementById('createCitySearch');
+        var weightEl = document.getElementById('createTgWeight');
+        var piecesInput = document.getElementById('createTgPiecesCount');
+        var parcelDescEl = document.getElementById('createTgParcelDesc');
+
+        if (localSearchEl) localSearchEl.required = !!isTg && customerMode === 'local';
+        if (repSearchEl) repSearchEl.required = !!isTg && customerMode === 'rep';
+
+        [phoneEl, orderTitleEl, govSearchEl, citySearchEl, weightEl, piecesInput, parcelDescEl].forEach(function(el) {
+            if (!el) return;
+            el.required = !!isTg;
+            if (!isTg) el.setCustomValidity('');
+        });
+
+        if (weightEl) {
+            weightEl.min = isTg ? '0.01' : '0';
+        }
+        if (piecesInput) {
+            piecesInput.min = isTg ? '1' : '0';
+        }
+        if (isTg) {
+            updateCreateTelegraphPiecesCount();
+        }
+    }
+
     // إظهار/إخفاء حقلي المحافظة والمدينة عند اختيار تليجراف (نموذج الإنشاء)
     function toggleCreateTgFields() {
         var isTg = taskTypeSelect && taskTypeSelect.value === 'telegraph';
@@ -5547,6 +5707,7 @@ document.addEventListener('DOMContentLoaded', function () {
             var el = document.getElementById(id);
             if (el) { el.classList.toggle('d-none', !isTg); }
         });
+        syncCreateTelegraphRequiredState();
         // إخفاء خانة الشحن اليدوية وإظهار تكلفة التوصيل عند اختيار تليجراف
         var shippingWrap = document.getElementById('createShippingFeesWrap');
         var shippingCol  = document.getElementById('createTaskShippingCol');
@@ -5851,15 +6012,20 @@ document.addEventListener('DOMContentLoaded', function () {
             // → linkIdField يضبط cityId ويستدعي fetchCreateDeliveryCost/fetchEditDeliveryCost
         };
 
-        function validateGovOnSubmit(formEl, hiddenInputId, searchInputId) {
+        function validateAutocompleteOnSubmit(formEl, hiddenInputId, searchInputId, fieldLabel) {
             var hiddenEl = document.getElementById(hiddenInputId);
             var searchEl = document.getElementById(searchInputId);
-            var govWrap = searchEl ? searchEl.closest('[id$="GovWrap"]') : null;
-            if (!govWrap || govWrap.classList.contains('d-none')) return true;
+            var fieldWrap = searchEl ? (searchEl.closest('[id$="GovWrap"]') || searchEl.closest('[id$="CityWrap"]')) : null;
+            if (!fieldWrap || fieldWrap.classList.contains('d-none')) return true;
             if (!hiddenEl || !hiddenEl.value.trim()) {
-                if (searchEl) { searchEl.classList.add('is-invalid'); searchEl.focus(); }
+                if (searchEl) {
+                    searchEl.classList.add('is-invalid');
+                    searchEl.focus();
+                }
+                if (fieldLabel) alert('يرجى اختيار ' + fieldLabel + ' من القائمة.');
                 return false;
             }
+            if (searchEl) searchEl.classList.remove('is-invalid');
             return true;
         }
 
@@ -5877,7 +6043,23 @@ document.addEventListener('DOMContentLoaded', function () {
         var createForm = document.querySelector('#createTaskFormCollapse form');
         if (createForm) {
             createForm.addEventListener('submit', function(e) {
-                if (!validateGovOnSubmit(this, 'createGov', 'createGovSearch')) e.preventDefault();
+                var isTelegraphCreate = taskTypeSelect && taskTypeSelect.value === 'telegraph';
+                if (isTelegraphCreate) {
+                    if (typeof syncCreateTelegraphRequiredState === 'function') syncCreateTelegraphRequiredState();
+                    if (typeof this.checkValidity === 'function' && !this.checkValidity()) {
+                        e.preventDefault();
+                        if (typeof this.reportValidity === 'function') this.reportValidity();
+                        return;
+                    }
+                    if (!validateAutocompleteOnSubmit(this, 'createGov', 'createGovSearch', 'المحافظة')) {
+                        e.preventDefault();
+                        return;
+                    }
+                    if (!validateAutocompleteOnSubmit(this, 'createCity', 'createCitySearch', 'المدينة')) {
+                        e.preventDefault();
+                        return;
+                    }
+                }
             });
         }
 
@@ -5885,7 +6067,23 @@ document.addEventListener('DOMContentLoaded', function () {
         var editForm = document.querySelector('#editTaskFormCollapse form');
         if (editForm) {
             editForm.addEventListener('submit', function(e) {
-                if (!validateGovOnSubmit(this, 'editGov', 'editGovSearch')) e.preventDefault();
+                var editTypeEl = document.getElementById('editTaskType');
+                var isTelegraphEdit = editTypeEl && editTypeEl.value === 'telegraph';
+                if (isTelegraphEdit) {
+                    if (typeof this.checkValidity === 'function' && !this.checkValidity()) {
+                        e.preventDefault();
+                        if (typeof this.reportValidity === 'function') this.reportValidity();
+                        return;
+                    }
+                    if (!validateAutocompleteOnSubmit(this, 'editGov', 'editGovSearch', 'المحافظة')) {
+                        e.preventDefault();
+                        return;
+                    }
+                    if (!validateAutocompleteOnSubmit(this, 'editCity', 'editCitySearch', 'المدينة')) {
+                        e.preventDefault();
+                        return;
+                    }
+                }
             });
         }
     })();
@@ -6313,8 +6511,10 @@ document.addEventListener('DOMContentLoaded', function () {
             newRow.remove();
             updateRemoveButtons();
             if (typeof updateCreateTaskSummary === 'function') updateCreateTaskSummary();
+            if (typeof updateCreateTelegraphPiecesCount === 'function') updateCreateTelegraphPiecesCount();
         });
         if (typeof updateCreateTaskSummary === 'function') updateCreateTaskSummary();
+        if (typeof updateCreateTelegraphPiecesCount === 'function') updateCreateTelegraphPiecesCount();
     }
     
     // إضافة منتج جديد
@@ -6327,6 +6527,8 @@ document.addEventListener('DOMContentLoaded', function () {
         btn.addEventListener('click', function() {
             this.closest('.product-row').remove();
             updateRemoveButtons();
+            if (typeof updateCreateTaskSummary === 'function') updateCreateTaskSummary();
+            if (typeof updateCreateTelegraphPiecesCount === 'function') updateCreateTelegraphPiecesCount();
         });
     });
     
@@ -6418,6 +6620,9 @@ document.addEventListener('DOMContentLoaded', function () {
             syncPriceFromLineTotal(row);
         }
         updateCreateTaskSummary();
+        if (e.target.classList.contains('product-quantity-input') && typeof updateCreateTelegraphPiecesCount === 'function') {
+            updateCreateTelegraphPiecesCount();
+        }
     });
     
     // تحديث الإجمالي للصفوف الموجودة عند التحميل
@@ -6489,6 +6694,7 @@ document.addEventListener('DOMContentLoaded', function () {
         document.getElementById('createTaskAdvancePayment').addEventListener('change', updateCreateTaskSummary);
     }
     updateCreateTaskSummary();
+    if (typeof updateCreateTelegraphPiecesCount === 'function') updateCreateTelegraphPiecesCount(true);
 
     // === حساب تكلفة التوصيل TelegraphEx ===
     var _tgCalcTimer = null;
@@ -7888,9 +8094,12 @@ window.duplicateOrderById = function() {
                 }
             }
 
-            // تحديث الإجمالي
+            // تحديث الإجمالي وعدد القطع
             if (typeof window._updateCreateTaskSummary === 'function') {
                 window._updateCreateTaskSummary();
+            }
+            if (typeof setCreateTelegraphPiecesValue === 'function') {
+                setCreateTelegraphPiecesValue(t.tg_pieces_count || '');
             }
 
             // إغلاق بطاقة التكرار وفتح نموذج الإنشاء
@@ -8075,6 +8284,9 @@ document.addEventListener('click', function (e) {
                 if (cityIdEl) cityIdEl.value = d.tg_city_id || '';
                 var weightEl2 = document.getElementById('createTgWeight');
                 if (weightEl2) weightEl2.value = d.tg_weight || '';
+                if (typeof setCreateTelegraphPiecesValue === 'function') {
+                    setCreateTelegraphPiecesValue(d.tg_pieces_count || '');
+                }
                 var parcelEl = document.getElementById('createTgParcelDesc');
                 if (parcelEl) parcelEl.value = d.tg_parcel_desc || '';
             }, 200);
