@@ -3926,22 +3926,28 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
         <div class="card-body p-0">
             <ul class="list-group list-group-flush" id="draftsList">
                 <?php foreach ($taskDrafts as $draft): ?>
-                <li class="list-group-item d-flex justify-content-between align-items-center" id="draft-item-<?php echo (int)$draft['id']; ?>">
-                    <div>
-                        <i class="bi bi-file-earmark-text text-warning me-2"></i>
-                        <strong><?php echo htmlspecialchars($draft['draft_name'] ?? 'مسودة', ENT_QUOTES, 'UTF-8'); ?></strong>
-                        <span class="text-muted small ms-2"><?php
-                            $draftDate = $draft['updated_at'] ?? $draft['created_at'];
-                            echo $draftDate ? date('d/m/Y H:i', strtotime($draftDate)) : '';
-                        ?></span>
-                    </div>
-                    <div class="d-flex gap-2">
-                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="loadDraft(<?php echo (int)$draft['id']; ?>)">
-                            <i class="bi bi-pencil-square me-1"></i>استكمال
-                        </button>
-                        <button type="button" class="btn btn-outline-danger btn-sm" onclick="deleteDraft(<?php echo (int)$draft['id']; ?>)">
-                            <i class="bi bi-trash me-1"></i>حذف
-                        </button>
+                <li class="list-group-item task-draft-item" id="draft-item-<?php echo (int)$draft['id']; ?>">
+                    <div class="task-draft-row">
+                        <div class="task-draft-info">
+                            <div class="task-draft-title">
+                                <i class="bi bi-file-earmark-text text-warning me-2"></i>
+                                <strong><?php echo htmlspecialchars($draft['draft_name'] ?? 'مسودة', ENT_QUOTES, 'UTF-8'); ?></strong>
+                            </div>
+                            <div class="task-draft-meta text-muted small">
+                                <?php
+                                    $draftDate = $draft['updated_at'] ?? $draft['created_at'];
+                                    echo $draftDate ? 'آخر تحديث: ' . date('d/m/Y H:i', strtotime($draftDate)) : '';
+                                ?>
+                            </div>
+                        </div>
+                        <div class="task-draft-actions">
+                            <button type="button" class="btn btn-outline-primary btn-sm" onclick="loadDraft(<?php echo (int)$draft['id']; ?>)">
+                                <i class="bi bi-pencil-square me-1"></i>استكمال
+                            </button>
+                            <button type="button" class="btn btn-outline-danger btn-sm" onclick="deleteDraft(<?php echo (int)$draft['id']; ?>)">
+                                <i class="bi bi-trash me-1"></i>حذف
+                            </button>
+                        </div>
                     </div>
                 </li>
                 <?php endforeach; ?>
@@ -4726,6 +4732,67 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
 .product-template-dropdown .product-template-item { padding: 0.5rem 0.75rem; cursor: pointer; border-bottom: 1px solid #f0f0f0; }
 .product-template-dropdown .product-template-item:hover { background: #f8f9fa; }
 .product-template-dropdown .product-template-item:last-child { border-bottom: none; }
+.task-draft-item {
+    padding: 0.75rem 0.9rem;
+}
+.task-draft-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+.task-draft-info {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+.task-draft-title {
+    display: flex;
+    align-items: center;
+    gap: 0.15rem;
+    font-size: 0.95rem;
+    line-height: 1.4;
+    word-break: break-word;
+}
+.task-draft-meta {
+    margin-top: 0.2rem;
+    font-size: 0.76rem;
+}
+.task-draft-actions {
+    display: flex;
+    gap: 0.45rem;
+    flex-shrink: 0;
+}
+.task-draft-actions .btn {
+    white-space: nowrap;
+}
+@media (max-width: 768px) {
+    #taskDraftsCard .card-header h5 {
+        font-size: 0.95rem;
+    }
+    .task-draft-item {
+        padding: 0.65rem 0.75rem;
+    }
+    .task-draft-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.6rem;
+    }
+    .task-draft-title {
+        font-size: 0.88rem;
+    }
+    .task-draft-meta {
+        font-size: 0.72rem;
+    }
+    .task-draft-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        width: 100%;
+    }
+    .task-draft-actions .btn {
+        font-size: 0.78rem;
+        padding: 0.35rem 0.45rem;
+    }
+}
 /* إخفاء خانة العميل اليدوي إن وُجدت (كاش قديم) */
 #customer_manual_block_task { display: none !important; }
 input[name="customer_type_radio_task"][value="manual"] { display: none !important; }
@@ -8108,15 +8175,22 @@ document.addEventListener('click', function (e) {
         var existing = document.getElementById('draft-item-' + draftId);
         var now = new Date();
         var dateStr = ('0' + now.getDate()).slice(-2) + '/' + ('0' + (now.getMonth()+1)).slice(-2) + '/' + now.getFullYear() + ' ' + ('0' + now.getHours()).slice(-2) + ':' + ('0' + now.getMinutes()).slice(-2);
-        var html = '<div><i class="bi bi-file-earmark-text text-warning me-2"></i><strong>' + escHtml(draftName) + '</strong><span class="text-muted small ms-2">' + dateStr + '</span></div>'
-                 + '<div class="d-flex gap-2"><button type="button" class="btn btn-outline-primary btn-sm" onclick="loadDraft(' + draftId + ')"><i class="bi bi-pencil-square me-1"></i>استكمال</button>'
-                 + '<button type="button" class="btn btn-outline-danger btn-sm" onclick="deleteDraft(' + draftId + ')"><i class="bi bi-trash me-1"></i>حذف</button></div>';
+        var html = '<div class="task-draft-row">'
+                 + '<div class="task-draft-info">'
+                 + '<div class="task-draft-title"><i class="bi bi-file-earmark-text text-warning me-2"></i><strong>' + escHtml(draftName) + '</strong></div>'
+                 + '<div class="task-draft-meta text-muted small">آخر تحديث: ' + dateStr + '</div>'
+                 + '</div>'
+                 + '<div class="task-draft-actions">'
+                 + '<button type="button" class="btn btn-outline-primary btn-sm" onclick="loadDraft(' + draftId + ')"><i class="bi bi-pencil-square me-1"></i>استكمال</button>'
+                 + '<button type="button" class="btn btn-outline-danger btn-sm" onclick="deleteDraft(' + draftId + ')"><i class="bi bi-trash me-1"></i>حذف</button>'
+                 + '</div>'
+                 + '</div>';
 
         if (existing) {
             existing.innerHTML = html;
         } else {
             var li = document.createElement('li');
-            li.className = 'list-group-item d-flex justify-content-between align-items-center';
+            li.className = 'list-group-item task-draft-item';
             li.id = 'draft-item-' + draftId;
             li.innerHTML = html;
             list.insertBefore(li, list.firstChild);
