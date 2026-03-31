@@ -45,11 +45,11 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
 <div class="card shadow-sm mb-4">
     <div class="card-header"><h5 class="mb-0">نموذج تسجيل الواردات</h5></div>
     <div class="card-body">
-        <form id="inboundSuppliesForm" data-no-loading>
+        <form id="inboundSuppliesForm" data-no-loading="true">
             <div id="inboundRows"></div>
             <div class="d-flex gap-2">
                 <button type="button" class="btn btn-outline-primary" id="addInboundRowBtn"><i class="bi bi-plus-circle me-1"></i>إضافة صف</button>
-                <button type="submit" class="btn btn-success" id="submitInboundBtn"><i class="bi bi-check2-circle me-1"></i>حفظ الواردات</button>
+                <button type="submit" class="btn btn-success" id="submitInboundBtn" data-no-loading="true"><i class="bi bi-check2-circle me-1"></i>حفظ الواردات</button>
             </div>
         </form>
         <div id="inboundAlert" class="alert mt-3 d-none"></div>
@@ -114,7 +114,23 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
     let listPage = 1;
     let totalPages = 1;
 
+    function suppressGlobalLoadingOverlay() {
+        if (typeof window.resetPageLoading === 'function') window.resetPageLoading();
+        if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
+
+        const overlay = document.getElementById('global-loading-overlay');
+        if (overlay) {
+            overlay.classList.remove('is-active');
+            overlay.setAttribute('aria-hidden', 'true');
+        }
+    }
+
+    if (inboundForm) inboundForm.setAttribute('data-no-loading', 'true');
+    if (submitInboundBtn) submitInboundBtn.setAttribute('data-no-loading', 'true');
+    suppressGlobalLoadingOverlay();
+
     function showAlert(type, message) {
+        suppressGlobalLoadingOverlay();
         inboundAlert.className = 'alert mt-3 alert-' + type;
         inboundAlert.textContent = message;
         inboundAlert.classList.remove('d-none');
@@ -129,6 +145,85 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         o.value = value;
         o.textContent = label;
         return o;
+    }
+
+    function normalizeSearchValue(value) {
+        return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    }
+
+    function updateUnitSelect(unitSelect, itemUnit) {
+        if (!unitSelect) return;
+
+        const normalizedUnit = String(itemUnit || '').trim();
+        const existing = unitSelect.querySelector('option.custom-unit');
+        if (existing) existing.remove();
+
+        if (!normalizedUnit) return;
+
+        let matched = false;
+        for (let i = 0; i < unitSelect.options.length; i++) {
+            if (unitSelect.options[i].value === normalizedUnit) {
+                unitSelect.value = normalizedUnit;
+                matched = true;
+                break;
+            }
+        }
+
+        if (!matched) {
+            const customOpt = createOption(normalizedUnit, normalizedUnit);
+            customOpt.className = 'custom-unit';
+            unitSelect.appendChild(customOpt);
+            unitSelect.value = normalizedUnit;
+        }
+    }
+
+    function syncTypedItemSelection(input, select, onSelect) {
+        if (!input || !select) return null;
+
+        const typedValue = normalizeSearchValue(input.value);
+        if (!typedValue) {
+            select.value = '';
+            return null;
+        }
+
+        const options = Array.from(select.options || []).filter(option => option.value);
+        if (!options.length) {
+            select.value = '';
+            return null;
+        }
+
+        let matchedOption = options.find(option =>
+            normalizeSearchValue(option.dataset.name || option.textContent || '') === typedValue
+        );
+
+        if (!matchedOption) {
+            const partialMatches = options.filter(option => {
+                const searchableText = normalizeSearchValue(
+                    (option.dataset.name || '') + ' ' + (option.textContent || '')
+                );
+                return searchableText.includes(typedValue);
+            });
+            if (partialMatches.length === 1) {
+                matchedOption = partialMatches[0];
+            }
+        }
+
+        if (!matchedOption) {
+            select.value = '';
+            return null;
+        }
+
+        select.value = matchedOption.value;
+        input.value = matchedOption.dataset.name || input.value;
+
+        const selectedItem = {
+            id: matchedOption.value,
+            name: matchedOption.dataset.name || input.value,
+            unit: matchedOption.dataset.unit || ''
+        };
+
+        if (onSelect) onSelect(selectedItem);
+        return selectedItem;
     }
 
     async function getItems(department) {
@@ -173,7 +268,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         const itemInput = document.createElement('input');
         itemInput.type = 'text';
         itemInput.className = 'form-control';
-        itemInput.placeholder = 'اكتب اسم العنصر أو اختر من القائمة';
+        itemInput.placeholder = 'اكتب للبحث ثم اختر من القائمة';
         itemInput.disabled = true;
         
         // Create hidden select to store options
@@ -254,7 +349,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             }
             
             itemInput.disabled = false;
-            itemInput.placeholder = 'اكتب اسم العنصر أو اختر من القائمة';
+            itemInput.placeholder = 'اكتب للبحث ثم اختر من القائمة';
             item.appendChild(createOption('', 'اختر العنصر'));
             
             try {
@@ -273,24 +368,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
                 
                 // Setup autocomplete functionality
                 setupAutocomplete(itemInput, dropdown, item, items, function(selectedItem) {
-                    const itemUnit = (selectedItem.unit || '').trim();
-                    let matched = false;
-                    for (let i = 0; i < unitSelect.options.length; i++) {
-                        if (unitSelect.options[i].value === itemUnit) {
-                            unitSelect.value = itemUnit;
-                            matched = true;
-                            break;
-                        }
-                    }
-                    if (!matched && itemUnit) {
-                        // Remove any previously added custom option
-                        const existing = unitSelect.querySelector('option.custom-unit');
-                        if (existing) existing.remove();
-                        const customOpt = createOption(itemUnit, itemUnit);
-                        customOpt.className = 'custom-unit';
-                        unitSelect.appendChild(customOpt);
-                        unitSelect.value = itemUnit;
-                    }
+                    updateUnitSelect(unitSelect, selectedItem.unit);
                 });
                 
             } catch (e) {
@@ -436,19 +514,37 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         let selectedIndex = -1;
         let filteredItems = [];
 
+        function applySelection(item) {
+            if (!item) return false;
+            input.value = item.name || '';
+            select.value = String(item.id || '');
+            dropdown.style.display = 'none';
+            selectedIndex = -1;
+            if (onSelect) onSelect(item);
+            return true;
+        }
+
+        function trySelectExactMatch() {
+            const matchedOption = syncTypedItemSelection(input, select, onSelect);
+            if (!matchedOption && filteredItems.length === 1) {
+                return applySelection(filteredItems[0]);
+            }
+            return !!matchedOption;
+        }
+
         input.addEventListener('input', function() {
-            const value = this.value.toLowerCase().trim();
+            const value = normalizeSearchValue(this.value);
             clearNode(dropdown);
             selectedIndex = -1;
+            select.value = '';
 
             if (value.length === 0) {
                 dropdown.style.display = 'none';
-                select.value = '';
                 return;
             }
             
             filteredItems = items.filter(item => 
-                item.name.toLowerCase().includes(value)
+                normalizeSearchValue(item.name).includes(value)
             );
             
             if (filteredItems.length === 0) {
@@ -462,11 +558,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
                 div.textContent = item.name + ' (' + (item.current_quantity || 0) + ' ' + (item.unit || '') + ')';
                 
                 div.addEventListener('click', function() {
-                    input.value = item.name;
-                    select.value = item.id;
-                    dropdown.style.display = 'none';
-                    selectedIndex = -1;
-                    if (onSelect) onSelect(item);
+                    applySelection(item);
                 });
                 
                 div.addEventListener('mouseenter', function() {
@@ -486,39 +578,37 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         input.addEventListener('keydown', function(e) {
             if (dropdown.style.display === 'none') return;
             
-            const items = dropdown.children;
-            if (items.length === 0) return;
+            const dropdownItems = dropdown.children;
+            if (dropdownItems.length === 0) return;
             
             switch(e.key) {
                 case 'ArrowDown':
                     e.preventDefault();
-                    if (selectedIndex < items.length - 1) {
-                        if (selectedIndex >= 0) items[selectedIndex].classList.remove('highlighted');
+                    if (selectedIndex < dropdownItems.length - 1) {
+                        if (selectedIndex >= 0) dropdownItems[selectedIndex].classList.remove('highlighted');
                         selectedIndex++;
-                        items[selectedIndex].classList.add('highlighted');
-                        items[selectedIndex].scrollIntoView({ block: 'nearest' });
+                        dropdownItems[selectedIndex].classList.add('highlighted');
+                        dropdownItems[selectedIndex].scrollIntoView({ block: 'nearest' });
                     }
                     break;
                     
                 case 'ArrowUp':
                     e.preventDefault();
                     if (selectedIndex > 0) {
-                        items[selectedIndex].classList.remove('highlighted');
+                        dropdownItems[selectedIndex].classList.remove('highlighted');
                         selectedIndex--;
-                        items[selectedIndex].classList.add('highlighted');
-                        items[selectedIndex].scrollIntoView({ block: 'nearest' });
+                        dropdownItems[selectedIndex].classList.add('highlighted');
+                        dropdownItems[selectedIndex].scrollIntoView({ block: 'nearest' });
                     }
                     break;
                     
                 case 'Enter':
                     e.preventDefault();
                     if (selectedIndex >= 0 && selectedIndex < filteredItems.length) {
-                        const selectedItem = filteredItems[selectedIndex];
-                        input.value = selectedItem.name;
-                        select.value = selectedItem.id;
+                        applySelection(filteredItems[selectedIndex]);
+                    } else {
+                        trySelectExactMatch();
                         dropdown.style.display = 'none';
-                        selectedIndex = -1;
-                        if (onSelect) onSelect(selectedItem);
                     }
                     break;
                     
@@ -527,6 +617,14 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
                     selectedIndex = -1;
                     break;
             }
+        });
+
+        input.addEventListener('blur', function() {
+            setTimeout(function () {
+                trySelectExactMatch();
+                dropdown.style.display = 'none';
+                selectedIndex = -1;
+            }, 150);
         });
         
         // Close dropdown when clicking outside
@@ -546,20 +644,22 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             const q = r.querySelector('input[type="number"]');
             const itemInput = r.querySelector('input[type="text"]');
             const dep = depSel ? depSel.value : '';
-            const itemOpt = itemSel ? itemSel.options[itemSel.selectedIndex] : null;
 
-            // Check if user typed a custom item name or selected from dropdown
-            const isCustomItem = itemInput.value && !(itemSel && itemSel.value);
+            syncTypedItemSelection(itemInput, itemSel, function(selectedItem) {
+                updateUnitSelect(unitSel, selectedItem.unit);
+            });
+
+            const itemOpt = itemSel && itemSel.selectedIndex >= 0 ? itemSel.options[itemSel.selectedIndex] : null;
+            const itemName = itemOpt ? (itemOpt.dataset.name || itemInput.value || '') : (itemInput ? itemInput.value.trim() : '');
 
             return {
                 department: dep,
-                item_id: isCustomItem ? null : parseInt((itemSel && itemSel.value) || '0', 10),
-                table: isCustomItem ? '' : (itemOpt ? (itemOpt.dataset.table || '') : ''),
-                quantity_field: isCustomItem ? '' : (itemOpt ? (itemOpt.dataset.field || '') : ''),
-                item_name: isCustomItem ? itemInput.value : (itemOpt ? (itemOpt.dataset.name || '') : ''),
+                item_id: parseInt((itemSel && itemSel.value) || '0', 10) || null,
+                table: itemOpt ? (itemOpt.dataset.table || '') : '',
+                quantity_field: itemOpt ? (itemOpt.dataset.field || '') : '',
+                item_name: itemName,
                 unit: unitSel ? unitSel.value : (itemOpt ? (itemOpt.dataset.unit || '') : ''),
-                quantity: parseFloat(q.value || '0'),
-                is_custom_item: isCustomItem
+                quantity: parseFloat((q && q.value) || '0')
             };
         });
     }
@@ -569,7 +669,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         for (const r of rows) {
             if (!r.department) return 'يرجى اختيار القسم';
             if (!r.item_name || r.item_name.trim() === '') return 'يرجى إدخال اسم العنصر';
-            if (!r.is_custom_item && (!r.item_id || !r.table || !r.quantity_field)) return 'يرجى اختيار عنصر من القائمة';
+            if (!r.item_id || !r.table || !r.quantity_field) return 'يرجى اختيار العنصر من القائمة بعد البحث عنه';
             if (!(r.quantity > 0)) return 'الكمية يجب أن تكون أكبر من صفر';
         }
         return '';
@@ -1200,15 +1300,18 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
 
     inboundForm.addEventListener('submit', async function (e) {
         e.preventDefault();
+        suppressGlobalLoadingOverlay();
         const rows = collectRows();
         const err = validateRows(rows);
         if (err) {
             showAlert('danger', err);
+            suppressGlobalLoadingOverlay();
             return;
         }
 
         submitInboundBtn.disabled = true;
         try {
+            suppressGlobalLoadingOverlay();
             const res = await fetch(apiUrl + '?action=submit_supply', {
                 method: 'POST',
                 credentials: 'same-origin',
@@ -1226,6 +1329,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
             showAlert('danger', x.message || 'حدث خطأ أثناء الحفظ');
         } finally {
             submitInboundBtn.disabled = false;
+            suppressGlobalLoadingOverlay();
         }
     });
 

@@ -33,10 +33,21 @@ if (!isLoggedIn()) {
 }
 
 $currentUser = getCurrentUser();
+if (!is_array($currentUser)) {
+    $currentUser = [
+        'id' => (int)($_SESSION['user_id'] ?? 0),
+        'username' => (string)($_SESSION['username'] ?? ''),
+        'full_name' => (string)($_SESSION['full_name'] ?? ($_SESSION['username'] ?? '')),
+        'role' => (string)($_SESSION['role'] ?? '')
+    ];
+}
+
+$currentRole = strtolower(trim((string)($currentUser['role'] ?? '')));
 $allowedRoles = ['manager', 'accountant', 'production', 'developer'];
-if (!in_array($currentUser['role'], $allowedRoles)) {
+if ($currentRole === '' || !in_array($currentRole, $allowedRoles, true)) {
     returnJson(['success' => false, 'message' => 'ليس لديك صلاحية للوصول'], 403);
 }
+$currentUser['role'] = $currentRole;
 
 $db = db();
 $action = $_GET['action'] ?? $_POST['action'] ?? null;
