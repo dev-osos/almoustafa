@@ -1491,11 +1491,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $tgSubtotal = 0;
                         if (!empty($products)) {
                             foreach ($products as $p) {
-                                $tgSubtotal += (float)($p['line_total'] ?? 0);
+                                $lt = $p['line_total'] ?? null;
+                                if ($lt !== null && is_numeric($lt)) {
+                                    $tgSubtotal += (float)$lt;
+                                } elseif (isset($p['quantity']) && (float)$p['quantity'] > 0 && isset($p['price']) && is_numeric($p['price'])) {
+                                    $tgSubtotal += round((float)$p['quantity'] * (float)$p['price'], 2);
+                                }
                             }
                         }
                         $tgFinalTotal = max(0, $tgSubtotal + $shippingFees - $discount);
-                        $tgWeightVal  = ($tgWeight !== '') ? (float)$tgWeight : 0;
+                        $tgWeightVal  = ($tgWeight !== '') ? (float)str_replace(',', '.', $tgWeight) : 0;
 
                         $tgPayload = json_encode([
                             'operationName' => 'SaveShipment',
@@ -1506,7 +1511,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     'priceTypeCode'      => 'INCLD',
                                     'recipientZoneId'    => $tgGovId,
                                     'recipientSubzoneId' => $tgCityId,
-                                    'recipientPhone'     => null,
+                                    'recipientPhone'     => '',
                                     'recipientMobile'    => $customerPhone ?: '',
                                     'recipientAddress'   => $orderTitle ?: '',
                                     'senderName'         => 'شركة البركة لتجارة المواد الغذائية',
@@ -1562,6 +1567,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             } else {
                                 $tgErrors = $tgResponse['errors'] ?? [];
                                 $tgErrMsg = !empty($tgErrors) ? ($tgErrors[0]['message'] ?? 'خطأ غير معروف') : 'استجابة غير متوقعة';
+                                // محاولة استخراج تفاصيل حقل التحقق من extensions
+                                $tgExtensions = $tgErrors[0]['extensions'] ?? [];
+                                $tgViolations = $tgExtensions['constraintViolations']
+                                    ?? $tgExtensions['validationErrors']
+                                    ?? [];
+                                if (!empty($tgViolations) && is_array($tgViolations)) {
+                                    $tgViolationMsgs = array_map(fn($v) => ($v['field'] ?? '') . ': ' . ($v['message'] ?? ''), $tgViolations);
+                                    $tgErrMsg .= ' [' . implode(' | ', $tgViolationMsgs) . ']';
+                                }
                                 error_log('TelegraphEx shipment error: ' . $tgResult);
                                 $tgShipmentMsg = ' ⚠ فشل تسجيل الشحنة في TelegraphEx: ' . $tgErrMsg;
                             }
