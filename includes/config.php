@@ -150,11 +150,11 @@ if (!$isLoginPage) {
 }
 
 define('DB_PORT', '3306');
-define('DB_NAME', 'albarakah_db_v2');
-define('DB_PASS', '1vv^48C3k');
+define('DB_NAME', 'u486977009_almostafa_v2');
+define('DB_PASS', '*LqBn1Sv');
 define('DB_CHARSET', 'utf8mb4');
-define('DB_HOST', 'localhost:3306');
-define('DB_USER', 'osama744444');
+define('DB_HOST', 'localhost');
+define('DB_USER', 'u486977009_almostafax');
 
 // إعدادات المنطقة الزمنية - مصر/القاهرة   
 date_default_timezone_set('Africa/Cairo');
