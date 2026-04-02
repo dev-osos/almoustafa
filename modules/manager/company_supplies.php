@@ -316,9 +316,10 @@ if ($sessionError) {
     <table>
         <thead>
             <tr>
+                <th>رقم الإيصال</th>
                 <th>التاريخ</th>
                 <th>الحالة</th>
-                <th>عدد العناصر</th>
+                <th>المستلزمات</th>
                 <th>الإجراءات</th>
             </tr>
         </thead>
@@ -332,13 +333,32 @@ if ($sessionError) {
                     $createdAt = date('Y-m-d H:i', strtotime($supply['created_at']));
                 ?>
                 <tr>
+                    <td><?php echo sprintf('%05d', $supply['id']); ?></td>
                     <td><?php echo htmlspecialchars($createdAt); ?></td>
                     <td>
                         <span class="status-badge <?php echo $statusClass; ?>">
                             <?php echo htmlspecialchars($statusLabel); ?>
                         </span>
                     </td>
-                    <td><?php echo $itemCount; ?></td>
+                    <td>
+                        <?php if (is_array($items) && !empty($items)): ?>
+                            <div class="items-list">
+                                <ul>
+                                    <?php foreach ($items as $item): ?>
+                                        <li>
+                                            <strong><?php echo htmlspecialchars($item['name']); ?></strong> - 
+                                            الكمية: <?php echo htmlspecialchars($item['quantity']); ?>
+                                            <?php if (!empty($item['price'])): ?>
+                                                 - السعر: <?php echo htmlspecialchars($item['price']); ?>
+                                            <?php endif; ?>
+                                        </li>
+                                    <?php endforeach; ?>
+                                </ul>
+                            </div>
+                        <?php else: ?>
+                            <span class="text-muted">لا توجد بيانات</span>
+                        <?php endif; ?>
+                    </td>
                     <td>
                         <div class="action-buttons">
                             <button type="button" class="btn-print" onclick="printSupply(<?php echo $supply['id']; ?>, '<?php echo htmlspecialchars($statusLabel); ?>')">

@@ -274,6 +274,7 @@ try {
         <table>
             <thead>
                 <tr>
+                    <th>رقم الإيصال</th>
                     <th>التاريخ</th>
                     <th>الحالة</th>
                     <th>المستلزمات</th>
@@ -289,6 +290,7 @@ try {
                         $createdAt = date('Y-m-d H:i', strtotime($supply['created_at']));
                     ?>
                     <tr>
+                        <td><?php echo sprintf('%05d', $supply['id']); ?></td>
                         <td><?php echo htmlspecialchars($createdAt); ?></td>
                         <td>
                             <span class="status-badge <?php echo $statusClass; ?>">
