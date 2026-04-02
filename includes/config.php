@@ -691,13 +691,6 @@ function preventDuplicateSubmission($successMessage = null, $redirectParams = []
         $redirectParams['error'] = urlencode($errorMessage);
         error_log("preventDuplicateSubmission: Added error message to redirect params: " . $errorMessage);
     }
-
-    // لا نريد إعادة توجيه بالنسبة لصفحات معينة لتعطيل سلوك PRG
-    $noRedirectPages = ['company_supplies', 'packaging_warehouse'];
-    if (isset($_GET['page']) && in_array($_GET['page'], $noRedirectPages, true)) {
-        error_log("preventDuplicateSubmission: skip redirect for page " . $_GET['page']);
-        return;
-    }
     
     // بناء URL إعادة التوجيه
     if ($redirectUrl === null) {
