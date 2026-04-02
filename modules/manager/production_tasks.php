@@ -3,6 +3,7 @@
  * صفحة إرسال المهام لقسم الإنتاج
  */
 
+
 $isGetTaskForEdit = ($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && isset($_GET['action']) && $_GET['action'] === 'get_task_for_edit' && isset($_GET['task_id']);
 $isGetTaskReceipt = ($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && isset($_GET['action']) && $_GET['action'] === 'get_task_receipt' && isset($_GET['task_id']);
 $isDraftAjaxAction = ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && in_array($_POST['action'] ?? '', ['save_task_draft', 'load_task_draft', 'delete_task_draft'], true);
