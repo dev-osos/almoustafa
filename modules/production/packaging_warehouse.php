@@ -1097,10 +1097,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
                     }
 
-                    $success = sprintf('تم إضافة أداة التعبئة "%s" بنجاح.', $name);
-                    // تعريض الرسالة داخل نفس الصفحة بدون إجراء إعادة توجيه
-                    // URL يبقى كما هو لتجنّب إعادة التوجيه غير المرغوب
-                    // (يمكن المحافظة على المعاملات إذا كانت موجودة عبر GET مباشرة)
+                    $successMessage = sprintf('تم إضافة أداة التعبئة "%s" بنجاح.', $name);
+                    $redirectParams = ['page' => 'packaging_warehouse'];
+                    foreach (['search', 'material_id', 'date_from', 'date_to'] as $param) {
+                        if (!empty($_GET[$param])) {
+                            $redirectParams[$param] = $_GET[$param];
+                        }
+                    }
+
+                    preventDuplicateSubmission($successMessage, $redirectParams, null, $currentUser['role']);
                 } catch (Exception $e) {
                     if ($db->inTransaction()) {
                         $db->rollBack();
@@ -1422,8 +1427,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             if (empty($error)) {
-                $success = $successMessage;
-                // لا إعادة توجيه: عرض الرسالة في نفس الصفحة بعد العملية
+                preventDuplicateSubmission($successMessage, $redirectParams, null, $currentUser['role']);
             }
         }
     } elseif ($action === 'record_packaging_damage') {
@@ -1586,8 +1590,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             if (empty($error)) {
-                $success = $successMessage;
-                // لا إعادة توجيه، فقط عرض الرسالة
+                preventDuplicateSubmission($successMessage, $redirectParams, null, $currentUser['role']);
             }
         }
     } elseif ($action === 'update_packaging_material') {
@@ -1730,8 +1733,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     $db->commit();
 
-                    $success = 'تم تحديث بيانات أداة التعبئة بنجاح.';
-                    // لا إعادة توجيه بعد التحديث. الرمز يبقي في نفس الصفحة و يعرض رسالة النجاح مباشرة.
+                    $successMessage = 'تم تحديث بيانات أداة التعبئة بنجاح.';
+                    $redirectParams = ['page' => 'packaging_warehouse'];
+                    foreach (['search', 'material_id', 'date_from', 'date_to'] as $param) {
+                        if (!empty($_GET[$param])) {
+                            $redirectParams[$param] = $_GET[$param];
+                        }
+                    }
+
+                    preventDuplicateSubmission($successMessage, $redirectParams, null, $currentUser['role']);
                 } catch (Throwable $updateError) {
                     if ($db->inTransaction()) {
                         $db->rollBack();
@@ -1767,8 +1777,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $row,
                             ['status' => 'inactive']
                         );
-                        $success = 'تم حذف أداة التعبئة بنجاح.';
-                        // لا إعادة توجيه بعد الحذف
+                        $successMessage = 'تم حذف أداة التعبئة بنجاح.';
+                        $redirectParams = ['page' => 'packaging_warehouse'];
+                        preventDuplicateSubmission($successMessage, $redirectParams, null, $currentUser['role']);
                     }
                 } catch (Exception $e) {
                     $error = 'حدث خطأ أثناء حذف الأداة: ' . $e->getMessage();
