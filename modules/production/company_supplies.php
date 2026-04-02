@@ -92,9 +92,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
                 $success = 'تم تسجيل المستلزمات بنجاح.';
 
-                // إعادة تحميل لتفريغ النموذج وقراءة البيانات الجديدة
-                header('Location: ' . getRelativeUrl('dashboard/production.php?page=company_supplies'));
-                exit;
+                // بدون إعادة توجيه للحفاظ على الصفحة وظهور رسالة النجاح مباشرة
+                // فقط يتم عرض الرسالة وتحديث الجدول ضمن نفس الطلب
             }
         }
     } catch (Exception $e) {

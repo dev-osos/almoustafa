@@ -384,6 +384,9 @@ if ($sessionError) {
                             <button type="button" class="btn-status" onclick="updateStatus(<?php echo $supply['id']; ?>)">
                                 <i class="bi bi-check-lg"></i> تحديث
                             </button>
+                            <button type="button" class="btn-status" onclick="deleteSupply(<?php echo $supply['id']; ?>)">
+                                <i class="bi bi-trash"></i> حذف
+                            </button>
                             <?php endif; ?>
                         </div>
                     </td>
@@ -503,6 +506,35 @@ function updateStatus(id) {
             alert('حدث خطأ في الاتصال بالخادم.');
         });
     }
+}
+
+function deleteSupply(id) {
+    if (!confirm('هل أنت متأكد من حذف الإيصال؟')) return;
+
+    fetch('<?php echo getRelativeUrl('api/company_supplies_api.php'); ?>', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: JSON.stringify({
+            action: 'delete_supply',
+            id: id
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('تم حذف الإيصال بنجاح.');
+            location.reload();
+        } else {
+            alert(data.message || 'حدث خطأ أثناء الحذف.');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('حدث خطأ في الاتصال بالخادم.');
+    });
 }
 
 // تهيئة الصفحة

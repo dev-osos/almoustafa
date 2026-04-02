@@ -76,6 +76,40 @@ try {
         
         echo json_encode(['success' => true, 'message' => 'تم تحديث الحالة بنجاح'], JSON_UNESCAPED_UNICODE);
         exit;
+    } elseif ($action === 'delete_supply') {
+        if (!in_array($userRole, ['manager', 'accountant', 'developer'], true)) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'message' => 'لا تملك صلاحية الحذف'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        $id = isset($_POST['id']) ? intval($_POST['id']) : 0;
+        if ($id <= 0) {
+            echo json_encode(['success' => false, 'message' => 'بيانات غير صحيحة'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        // التحقق من وجود السجل
+        $supply = $db->queryOne("SELECT id FROM company_supplies WHERE id = ?", [$id]);
+        if (!$supply) {
+            echo json_encode(['success' => false, 'message' => 'السجل غير موجود'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        // حذف السجل
+        $db->execute("DELETE FROM company_supplies WHERE id = ?", [$id]);
+
+        addAuditLog(
+            $currentUser['id'],
+            'company_supplies_delete',
+            'company_supplies',
+            'delete',
+            'تم حذف الإيصال',
+            json_encode(['supply_id' => $id])
+        );
+
+        echo json_encode(['success' => true, 'message' => 'تم حذف الإيصال بنجاح'], JSON_UNESCAPED_UNICODE);
+        exit;
     } else {
         echo json_encode(['success' => false, 'message' => 'الإجراء غير معروف'], JSON_UNESCAPED_UNICODE);
         exit;
