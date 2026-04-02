@@ -212,6 +212,13 @@ switch ($role) {
                 'badge' => null
             ],
             [
+                'title' => 'مستلزمات الشركة',
+                'icon' => 'bi-box-seam',
+                'url' => $baseUrl . 'manager.php?page=company_supplies',
+                'active' => ($currentPage === 'manager.php' && $currentPageParam === 'company_supplies'),
+                'badge' => null
+            ],
+            [
                 'title' => 'مخزن توالف المصنع',
                 'icon' => 'bi-trash',
                 'url' => $baseUrl . 'manager.php?page=factory_waste_warehouse',
@@ -484,6 +491,13 @@ switch ($role) {
                 'icon' => 'bi-box-seam',
                 'url' => $baseUrl . 'accountant.php?page=packaging_warehouse',
                 'active' => ($currentPage === 'accountant.php' && $currentPageParam === 'packaging_warehouse'),
+                'badge' => null
+            ],
+            [
+                'title' => 'مستلزمات الشركة',
+                'icon' => 'bi-box-seam',
+                'url' => $baseUrl . 'accountant.php?page=company_supplies',
+                'active' => ($currentPage === 'accountant.php' && $currentPageParam === 'company_supplies'),
                 'badge' => null
             ],
             [
@@ -847,6 +861,13 @@ switch ($role) {
                 'badge' => null
             ],
             ['divider' => true, 'title' => 'المخازن'],
+            [
+                'title' => 'مستلزمات الشركة',
+                'icon' => 'bi-box-seam',
+                'url' => $baseUrl . 'production.php?page=company_supplies',
+                'active' => ($currentPage === 'production.php' && $currentPageParam === 'company_supplies'),
+                'badge' => null
+            ],
             [
                 'title' => 'مخزن الخامات',
                 'icon' => 'bi-droplet-half',
