@@ -135,6 +135,12 @@ $isToolsOpen = false;
                 <div class="collapse <?php echo $isWarehousesOpen ? 'show' : ''; ?>" id="productionSidebarWarehouses" data-sidebar-group="warehouses">
                     <ul class="nav flex-column sidebar-submenu">
                         <li class="nav-item">
+                            <a class="nav-link <?php echo $currentDashboardPage === 'company_supplies' ? 'active' : ''; ?>" href="<?php echo $baseUrl; ?>production.php?page=company_supplies">
+                                <i class="bi bi-box-seam"></i>
+                                <span>مستلزمات الشركة</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
                             <a class="nav-link <?php echo $currentDashboardPage === 'raw_materials_warehouse' ? 'active' : ''; ?>" href="<?php echo $baseUrl; ?>production.php?page=raw_materials_warehouse">
                                 <i class="bi bi-droplet-half"></i>
                                 <span>مخزن الخامات</span>

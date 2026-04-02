@@ -158,6 +158,18 @@ $baseUrl = getDashboardUrl();
             </li>
             
             <li class="nav-item sidebar-section-divider">
+                <div class="sidebar-section-title">إدارة المخازن</div>
+            </li>
+            
+            <li class="nav-item">
+                <a class="nav-link <?php echo (isset($_GET['page']) && $_GET['page'] === 'company_supplies') ? 'active' : ''; ?>" 
+                   href="<?php echo $baseUrl; ?>manager.php?page=company_supplies">
+                    <i class="bi bi-box-seam"></i>
+                    <span>مستلزمات الشركة</span>
+                </a>
+            </li>
+            
+            <li class="nav-item sidebar-section-divider">
                 <div class="sidebar-section-title">Management</div>
             </li>
                 

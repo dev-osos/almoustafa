@@ -1168,6 +1168,17 @@ if ($isAjaxNavigation) {
                 }
                 ?>
 
+            <?php elseif ($page === 'company_supplies'): ?>
+                <!-- صفحة مستلزمات الشركة -->
+                <?php
+                $modulePath = __DIR__ . '/../modules/production/company_supplies.php';
+                if (file_exists($modulePath)) {
+                    include $modulePath;
+                } else {
+                    echo '<div class="alert alert-warning">صفحة مستلزمات الشركة غير متاحة حالياً</div>';
+                }
+                ?>
+                
             <?php elseif ($page === 'inbound_supplies'): ?>
                 <!-- صفحة تسجيل الواردات -->
                 <?php
