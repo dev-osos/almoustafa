@@ -861,9 +861,31 @@ try {
     error_log('Error fetching external products: ' . $e->getMessage());
 }
 
+// الحصول على قوالب المنتجات
+$productTemplates = [];
+try {
+    $productTemplates = $db->query("
+        SELECT 
+            id,
+            product_name,
+            category,
+            unit,
+            unit_price,
+            description,
+            status,
+            created_at
+        FROM product_templates
+        WHERE status = 'active'
+        ORDER BY product_name ASC
+    ");
+} catch (Exception $e) {
+    error_log('Error fetching product templates: ' . $e->getMessage());
+}
+
 // إحصائيات
 $totalFactoryProducts = count($factoryProducts);
 $totalExternalProducts = count($externalProducts);
+$totalProductTemplates = count($productTemplates);
 $totalExternalValue = 0;
 foreach ($externalProducts as $ext) {
     $totalExternalValue += floatval($ext['total_value'] ?? 0);
@@ -1487,83 +1509,6 @@ foreach ($factoryProducts as $product) {
                 <i class="bi bi-building"></i>
                 منتجات المصنع
             </h5>
-            <span class="badge" id="factoryProductsCount"><?php echo $totalFactoryProducts; ?> منتج</span>
-            <button type="button" class="btn btn-primary btn-sm" id="toggleAddFactoryProductCard" style="margin-right: 10px;">
-                <i class="bi bi-plus-circle me-1"></i>إضافة منتج مصنع جديد
-            </button>
-        </div>
-        <div class="card-body">
-            <!-- بطاقة إضافة منتج مصنع جديد -->
-            <div class="card mb-4" id="addFactoryProductCard" style="display: none; border: 2px solid #0d6efd;">
-                <div class="card-header bg-primary text-white">
-                    <h5 class="mb-0"><i class="bi bi-plus-circle me-2"></i>إضافة منتج مصنع جديد</h5>
-                </div>
-                <div class="card-body">
-                    <form method="POST" id="addFactoryProductForm">
-                        <input type="hidden" name="action" value="create_factory_product">
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">اسم المنتج <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control" name="product_name" id="add_factory_product_name" required placeholder="أدخل اسم المنتج">
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">الصنف <span class="text-danger">*</span></label>
-                                <select class="form-control" name="category_id" id="add_factory_category_id" required>
-                                    <option value="">اختر الصنف</option>
-                                    <?php if (!empty($productCategories)): ?>
-                                        <?php foreach ($productCategories as $cat): ?>
-                                            <option value="<?php echo intval($cat['id']); ?>"><?php echo htmlspecialchars($cat['name']); ?></option>
-                                        <?php endforeach; ?>
-                                    <?php else: ?>
-                                        <option value="1">عسل</option>
-                                        <option value="2">زيت زيتون</option>
-                                        <option value="3">كريمات</option>
-                                        <option value="4">زيوت</option>
-                                        <option value="6">تمور</option>
-                                        <option value="5">اخري</option>
-                                    <?php endif; ?>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="mb-3" id="add_factory_custom_category_div" style="display: none;">
-                            <label class="form-label">أدخل الصنف يدوياً <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" name="custom_category" id="add_factory_custom_category" placeholder="أدخل اسم الصنف">
-                        </div>
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">تاريخ الإنتاج <span class="text-danger">*</span></label>
-                                <input type="date" class="form-control" name="production_date" id="add_factory_production_date" required value="<?php echo date('Y-m-d'); ?>">
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">تاريخ انتهاء الصلاحية</label>
-                                <input type="date" class="form-control" name="expiry_date" id="add_factory_expiry_date">
-                            </div>
-                        </div>
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">الكمية المنتجة <span class="text-danger">*</span></label>
-                                <input type="number" class="form-control" name="quantity_produced" id="add_factory_quantity" required min="0.01" step="0.01" placeholder="أدخل الكمية">
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">سعر الوحدة</label>
-                                <input type="number" class="form-control" name="unit_price" id="add_factory_unit_price" min="0" step="0.01" placeholder="أدخل سعر الوحدة">
-                            </div>
-                        </div>
-                        <div class="alert alert-info mb-3">
-                            <i class="bi bi-info-circle me-2"></i>
-                            سيتم توليد رقم باركود تلقائياً بصيغة: تاريخ اليوم - رقم عشوائي من 6 أرقام
-                        </div>
-                        <div class="d-flex gap-2">
-                            <button type="submit" class="btn btn-primary">
-                                <i class="bi bi-check-circle me-1"></i>إضافة المنتج
-                            </button>
-                            <button type="button" class="btn btn-secondary" id="cancelAddFactoryProduct">
-                                <i class="bi bi-x-circle me-1"></i>إلغاء
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
             
             <!-- شريط البحث والفلترة لمنتجات المصنع -->
             <div class="mb-3 p-3 bg-light rounded" style="border: 1px solid #dee2e6;">
@@ -1945,6 +1890,92 @@ foreach ($factoryProducts as $product) {
                 })();
                 </script>
             <?php endif; ?>
+        </div>
+    </div>
+
+    <!-- قسم قوالب المنتجات -->
+    <div class="card company-card mb-4" id="productTemplatesSection">
+        <div class="section-header">
+            <h5>
+                <i class="bi bi-diagram-3"></i>
+                قوالب المنتجات
+            </h5>
+            <span class="badge" id="templateProductsCount"><?php echo $totalProductTemplates; ?> قالب</span>
+        </div>
+        <div class="card-body">
+            <!-- شريط البحث والفلترة لقوالب المنتجات -->
+            <div class="mb-3 p-3 bg-light rounded" style="border: 1px solid #dee2e6;">
+                <div class="row g-3">
+                    <div class="col-6 col-md-6">
+                        <label class="form-label small mb-1"><i class="bi bi-search me-1"></i>البحث</label>
+                        <input type="text" 
+                               class="form-control form-control-sm" 
+                               id="templateSearchInput" 
+                               placeholder="اسم القالب..." 
+                               autocomplete="off">
+                    </div>
+                    <div class="col-6 col-md-6">
+                        <label class="form-label small mb-1"><i class="bi bi-folder me-1"></i>الصنف</label>
+                        <select class="form-control form-control-sm" id="templateCategoryFilter">
+                            <option value="">جميع الأصناف</option>
+                            <?php if (!empty($productCategories)): ?>
+                                <?php foreach ($productCategories as $cat): ?>
+                                    <option value="<?php echo htmlspecialchars($cat['name']); ?>"><?php echo htmlspecialchars($cat['name']); ?></option>
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <option value="عسل">عسل</option>
+                                <option value="زيت زيتون">زيت زيتون</option>
+                                <option value="كريمات">كريمات</option>
+                                <option value="زيوت">زيوت</option>
+                                <option value="تمور">تمور</option>
+                                <option value="اخري">اخري</option>
+                            <?php endif; ?>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div id="templateProductsContainer">
+            <?php if (empty($productTemplates)): ?>
+                <div style="padding: 25px;">
+                    <div class="alert alert-info mb-0">
+                        <i class="bi bi-info-circle me-2"></i>
+                        لا توجد قوالب منتجات حالياً
+                    </div>
+                </div>
+            <?php else: ?>
+                <div class="products-grid" id="templateProductsGrid">
+                    <?php foreach ($productTemplates as $template): ?>
+                        <?php
+                            $templateName = htmlspecialchars($template['product_name'] ?? 'غير محدد');
+                            $templateCategory = htmlspecialchars($template['category'] ?? '—');
+                            $templateUnit = htmlspecialchars($template['unit'] ?? 'قطعة');
+                            $templatePrice = floatval($template['unit_price'] ?? 0);
+                            $templateDescription = htmlspecialchars($template['description'] ?? '');
+                            $templateId = $template['id'] ?? 0;
+                        ?>
+                        <div class="product-card">
+                            <div class="product-status">
+                                <i class="bi bi-diagram-3 me-1"></i>قالب
+                            </div>
+
+                            <div class="product-name"><?php echo $templateName; ?></div>
+                            <div style="color: #94a3b8; font-size: 13px; margin-bottom: 10px;">الكود: <?php echo $templateId; ?></div>
+
+                            <?php if (!empty($templateDescription)): ?>
+                                <div style="color: #64748b; font-size: 12px; margin-bottom: 10px; line-height: 1.4;">
+                                    <?php echo nl2br($templateDescription); ?>
+                                </div>
+                            <?php endif; ?>
+
+                            <div class="product-detail-row"><span>الصنف:</span> <span><?php echo $templateCategory; ?></span></div>
+                            <div class="product-detail-row"><span>الوحدة:</span> <span><strong><?php echo $templateUnit; ?></strong></span></div>
+                            <div class="product-detail-row"><span>السعر:</span> <span><strong class="text-success"><?php echo formatCurrency($templatePrice); ?></strong></span></div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+            </div>
         </div>
     </div>
 
@@ -4059,6 +4090,62 @@ function initEditExternalButtons() {
     
     if (externalMaxQuantity) {
         externalMaxQuantity.addEventListener('input', performExternalSearch);
+    }
+})();
+
+// ===== البحث والفلترة لقوالب المنتجات =====
+(function() {
+    const templateSearchInput = document.getElementById('templateSearchInput');
+    const templateCategoryFilter = document.getElementById('templateCategoryFilter');
+    const templateProductsContainer = document.getElementById('templateProductsContainer');
+    
+    function filterTemplates() {
+        const searchText = (templateSearchInput?.value || '').toLowerCase();
+        const selectedCategory = templateCategoryFilter?.value || '';
+        
+        const grid = document.getElementById('templateProductsGrid');
+        if (!grid) return;
+        
+        const cards = grid.querySelectorAll('.product-card');
+        let visibleCount = 0;
+        
+        cards.forEach(card => {
+            const productName = card.querySelector('.product-name')?.textContent.toLowerCase() || '';
+            const categoryRow = Array.from(card.querySelectorAll('.product-detail-row')).find(row => 
+                row.textContent.includes('الصنف:')
+            );
+            const category = categoryRow?.textContent.replace('الصنف:', '').trim() || '';
+            
+            const matchesSearch = productName.includes(searchText);
+            const matchesCategory = !selectedCategory || category === selectedCategory;
+            
+            if (matchesSearch && matchesCategory) {
+                card.style.display = '';
+                visibleCount++;
+            } else {
+                card.style.display = 'none';
+            }
+        });
+        
+        // إظهار رسالة عند عدم وجود نتائج
+        if (visibleCount === 0 && grid) {
+            grid.innerHTML = `
+                <div style="grid-column: 1/-1; padding: 25px;">
+                    <div class="alert alert-info mb-0">
+                        <i class="bi bi-info-circle me-2"></i>
+                        لا توجد قوالب منتجات تطابق معايير البحث
+                    </div>
+                </div>
+            `;
+        }
+    }
+    
+    if (templateSearchInput) {
+        templateSearchInput.addEventListener('input', filterTemplates);
+    }
+    
+    if (templateCategoryFilter) {
+        templateCategoryFilter.addEventListener('change', filterTemplates);
     }
 })();
 
