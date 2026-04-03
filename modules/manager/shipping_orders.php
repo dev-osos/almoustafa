@@ -3894,9 +3894,8 @@ try {
     $query = "SELECT
         COUNT(*) AS orders_count,
         COALESCE(SUM(total_amount), 0) AS total_amount
-    FROM shipping_company_orders
-    WHERE DATE(created_at) BETWEEN ? AND ?
-      AND status != 'cancelled'";
+    FROM shipping_company_paper_invoices
+    WHERE DATE(created_at) BETWEEN ? AND ?";
     $params = [$selectedMonthStart, $selectedMonthEnd];
 
     if ($companyFilterId > 0) {
@@ -4067,13 +4066,13 @@ $tgError = '';
             </div>
             <div class="col-12 col-md-4">
                 <div class="p-2 rounded border h-100 bg-white">
-                    <div class="text-muted small">عدد الطلبات</div>
+                    <div class="text-muted small">عدد الفواتير الورقية</div>
                     <div class="fw-bold fs-5"><?php echo number_format($monthlyShippingDebtStats['orders_count'] ?? 0); ?></div>
                 </div>
             </div>
             <div class="col-12 col-md-4">
                 <div class="p-2 rounded border h-100 bg-white">
-                    <div class="text-muted small">إجمالي الدين المضاف</div>
+                    <div class="text-muted small">إجمالي المبيعات خلال الشهر</div>
                     <div class="fw-bold fs-5 text-danger"><?php echo formatCurrency($monthlyShippingDebtStats['total_amount'] ?? 0); ?></div>
                 </div>
             </div>
