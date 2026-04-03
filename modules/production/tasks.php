@@ -1710,9 +1710,14 @@ function tasksHtml(string $value): string
                             <label class="form-label small mb-0">بحث سريع</label>
                             <input type="text" class="form-control form-control-sm tasks-dynamic-filter" name="search_text" id="tasksSearchText" value="<?php echo tasksHtml($filterSearchText !== '' ? $filterSearchText : $search); ?>" placeholder="نص في العنوان، الملاحظات، العميل...">
                         </div>
-                        <div class="col-6 col-md-4 col-lg-2">
+                        <div class="col-5 col-md-3 col-lg-2">
                             <label class="form-label small mb-0">رقم الاوردر</label>
-                            <input type="text" name="task_id" class="form-control form-control-sm tasks-dynamic-filter" id="tasksFilterTaskId" placeholder="#" value="<?php echo tasksHtml($filterTaskId); ?>">
+                            <input type="text" name="task_id" class="form-control form-control-sm" id="tasksFilterTaskId" placeholder="#" value="<?php echo tasksHtml($filterTaskId); ?>">
+                        </div>
+                        <div class="col-1 col-md-1 col-lg-1 align-self-end">
+                            <button type="submit" class="btn btn-primary btn-sm w-100" id="tasksSearchBtn" title="بحث">
+                                <i class="bi bi-search"></i>
+                            </button>
                         </div>
                         <div class="col-6 col-md-4 col-lg-2">
                             <label class="form-label small mb-0">اسم العميل / هاتف</label>
@@ -3786,5 +3791,34 @@ function showAddTaskModal() {
             });
     }
     window.viewTask = viewTaskMobile;
+})();
+
+// ===== سكريبت الطباعة التلقائية عند البحث =====
+(function() {
+    'use strict';
+    
+    // إضافة event listener لزر البحث
+    const searchBtn = document.getElementById('tasksSearchBtn');
+    if (searchBtn) {
+        searchBtn.addEventListener('click', function(e) {
+            // الانتظار قليلاً لتحديث الجدول بعد البحث
+            setTimeout(function() {
+                const tbody = document.getElementById('tasksTableBody');
+                if (tbody) {
+                    // التحقق من وجود صفوف مرئية (غير مخفية)
+                    const visibleRows = tbody.querySelectorAll('tr.tasks-filter-row:not([style*="display: none"])');
+                    
+                    if (visibleRows.length > 0) {
+                        // إذا كان هناك نتائج، طباعة تلقائية
+                        const taskId = visibleRows[0].getAttribute('data-task-id');
+                        if (taskId) {
+                            const printUrl = 'print_task_receipt.php?id=' + taskId;
+                            window.open(printUrl, '_blank', 'noopener,noreferrer');
+                        }
+                    }
+                }
+            }, 500); // انتظار 500ms لتحديث الجدول
+        });
+    }
 })();
 </script>
