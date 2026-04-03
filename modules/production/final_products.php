@@ -5221,7 +5221,7 @@ if (!window.transferFormInitialized) {
                 const batchIdInput = row.querySelector('.selected-batch-id');
                 const batchNumberInput = row.querySelector('.selected-batch-number');
                 const availableHint = row.querySelector('.available-hint');
-                const quantityInput = row.querySelector('.quantity-input');
+                const rowQuantityInput = row.querySelector('.quantity-input');
                 
                 if (productIdInput) {
                     productIdInput.value = selectedOption ? parseInt(selectedOption.dataset.productId || '0', 10) : '';
@@ -5251,14 +5251,14 @@ if (!window.transferFormInitialized) {
                     }
                 }
                 
-                if (quantityInput) {
+                if (rowQuantityInput) {
                     if (available > 0) {
-                        quantityInput.setAttribute('max', available);
-                        if (parseFloat(quantityInput.value || '0') > available) {
-                            quantityInput.value = available;
+                        rowQuantityInput.setAttribute('max', available);
+                        if (parseFloat(rowQuantityInput.value || '0') > available) {
+                            rowQuantityInput.value = available;
                         }
                     } else {
-                        quantityInput.removeAttribute('max');
+                        rowQuantityInput.removeAttribute('max');
                     }
                 }
             }
@@ -5351,9 +5351,9 @@ if (!window.transferFormInitialized) {
                 const selectedOption = select.options[select.selectedIndex];
                 if (selectedOption && selectedOption.value) {
                     const available = parseFloat(selectedOption.dataset.available || '0');
-                    const quantityInput = row.querySelector('.quantity-input');
-                    if (quantityInput && available > 0) {
-                        quantityInput.setAttribute('max', available);
+                    const rowQuantityInput = row.querySelector('.quantity-input');
+                    if (rowQuantityInput && available > 0) {
+                        rowQuantityInput.setAttribute('max', available);
                     }
                 }
             }
@@ -5524,9 +5524,9 @@ if (!window.transferFormInitialized) {
 
             for (const row of rows) {
                 const select = row.querySelector('.product-select');
-                const quantityInput = row.querySelector('.quantity-input');
+                const rowQuantityInput = row.querySelector('.quantity-input');
 
-                if (!select || !quantityInput) {
+                if (!select || !rowQuantityInput) {
                     isSubmitting = false;
                     if (submitButton) {
                         submitButton.disabled = false;
@@ -5546,9 +5546,9 @@ if (!window.transferFormInitialized) {
                     return;
                 }
 
-                const max = parseFloat(quantityInput.getAttribute('max') || '0');
-                const min = parseFloat(quantityInput.getAttribute('min') || '0');
-                const value = parseFloat(quantityInput.value || '0');
+                const max = parseFloat(rowQuantityInput.getAttribute('max') || '0');
+                const min = parseFloat(rowQuantityInput.getAttribute('min') || '0');
+                const value = parseFloat(rowQuantityInput.value || '0');
 
                 if (value < min) {
                     isSubmitting = false;
@@ -7136,10 +7136,10 @@ document.addEventListener('DOMContentLoaded', function() {
         // إضافة معالجات الأحداث
         document.querySelectorAll('.product-checkbox-receive').forEach(cb => {
             cb.addEventListener('change', function() {
-                const quantityInput = this.closest('tr').querySelector('.quantity-input-receive');
-                quantityInput.disabled = !this.checked;
+                const receiveQuantityInput = this.closest('tr').querySelector('.quantity-input-receive');
+                receiveQuantityInput.disabled = !this.checked;
                 if (!this.checked) {
-                    quantityInput.value = '';
+                    receiveQuantityInput.value = '';
                 }
                 updateReceiveSubmitButton();
             });
@@ -7163,8 +7163,8 @@ document.addEventListener('DOMContentLoaded', function() {
         let hasValidQuantity = false;
         
         checkedBoxes.forEach(cb => {
-            const quantityInput = cb.closest('tr').querySelector('.quantity-input-receive');
-            const quantity = parseFloat(quantityInput.value) || 0;
+            const receiveQuantityInput = cb.closest('tr').querySelector('.quantity-input-receive');
+            const quantity = parseFloat(receiveQuantityInput.value) || 0;
             if (quantity > 0) {
                 hasValidQuantity = true;
             }
@@ -7185,8 +7185,8 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
             checkedBoxes.forEach((cb, index) => {
-                const quantityInput = cb.closest('tr').querySelector('.quantity-input-receive');
-                const quantity = parseFloat(quantityInput.value) || 0;
+                const receiveQuantityInput = cb.closest('tr').querySelector('.quantity-input-receive');
+                const quantity = parseFloat(receiveQuantityInput.value) || 0;
                 
                 if (quantity <= 0) {
                     e.preventDefault();
@@ -7221,11 +7221,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     this.appendChild(batchNumberInput);
                 }
                 
-                const quantityInput = document.createElement('input');
-                quantityInput.type = 'hidden';
-                quantityInput.name = `${itemPrefix}[quantity]`;
-                quantityInput.value = quantity;
-                this.appendChild(quantityInput);
+                const hiddenQuantityInput = document.createElement('input');
+                hiddenQuantityInput.type = 'hidden';
+                hiddenQuantityInput.name = `${itemPrefix}[quantity]`;
+                hiddenQuantityInput.value = quantity;
+                this.appendChild(hiddenQuantityInput);
             });
         });
         
