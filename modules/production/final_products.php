@@ -2428,6 +2428,29 @@ if ($isProductionRole) {
         $externalProductsForProduction = [];
     }
 }
+
+// الحصول على قوالب المنتجات
+$productTemplates = [];
+try {
+    $productTemplates = $db->query("
+        SELECT 
+            id,
+            product_name,
+            category,
+            unit,
+            unit_price,
+            description,
+            status,
+            created_at
+        FROM product_templates
+        WHERE status = 'active'
+        ORDER BY product_name ASC
+    ");
+} catch (Exception $e) {
+    error_log('Error fetching product templates: ' . $e->getMessage());
+}
+
+$totalProductTemplates = count($productTemplates);
 ?>
 
 <div class="header">
@@ -2536,6 +2559,144 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
 <?php endif; ?>
+
+<!-- قسم قوالب المنتجات -->
+<div style="margin: 25px;">
+    <div style="background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%); color: white; padding: 1.5rem 1.75rem; border-radius: 16px 16px 0 0; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 12px rgba(29, 78, 216, 0.15); margin-bottom: 0;">
+        <h5 style="margin: 0; font-weight: 600; display: flex; align-items: center; gap: 0.75rem; font-size: 1.15rem;">
+            <i class="bi bi-diagram-3"></i>
+            قوالب المنتجات
+        </h5>
+        <span style="background: rgba(255, 255, 255, 0.25); color: white; padding: 0.45rem 0.9rem; border-radius: 25px; font-size: 0.875rem; font-weight: 600;"><?php echo $totalProductTemplates; ?> قالب</span>
+    </div>
+    
+    <div style="background: white; border-radius: 0 0 16px 16px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08); overflow: hidden; padding: 2rem;">
+        <!-- شريط البحث والفلترة -->
+        <div style="margin-bottom: 1.5rem; padding: 1rem; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 12px;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
+                <div>
+                    <label style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem; color: #666;">
+                        <i class="bi bi-search me-1"></i>البحث
+                    </label>
+                    <input type="text" class="form-control form-control-sm" id="templateSearchInput" placeholder="اسم القالب..." autocomplete="off" style="border-radius: 8px;">
+                </div>
+                <div>
+                    <label style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem; color: #666;">
+                        <i class="bi bi-folder me-1"></i>الصنف
+                    </label>
+                    <select class="form-control form-control-sm" id="templateCategoryFilter" style="border-radius: 8px;">
+                        <option value="">جميع الأصناف</option>
+                        <option value="عسل">عسل</option>
+                        <option value="زيت زيتون">زيت زيتون</option>
+                        <option value="كريمات">كريمات</option>
+                        <option value="زيوت">زيوت</option>
+                        <option value="تمور">تمور</option>
+                        <option value="اخري">اخري</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- عرض القوالب -->
+        <div id="templateProductsContainer">
+            <?php if (empty($productTemplates)): ?>
+                <div style="padding: 25px; text-align: center; color: #94a3b8;">
+                    <i class="bi bi-info-circle me-2"></i>
+                    لا توجد قوالب منتجات حالياً
+                </div>
+            <?php else: ?>
+                <div id="templateProductsGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px;">
+                    <?php foreach ($productTemplates as $template): ?>
+                        <?php
+                            $templateName = htmlspecialchars($template['product_name'] ?? 'غير محدد');
+                            $templateCategory = htmlspecialchars($template['category'] ?? '—');
+                            $templateUnit = htmlspecialchars($template['unit'] ?? 'قطعة');
+                            $templatePrice = floatval($template['unit_price'] ?? 0);
+                            $templateDescription = htmlspecialchars($template['description'] ?? '');
+                            $templateId = $template['id'] ?? 0;
+                        ?>
+                        <div class="product-card" style="background: white; padding: 20px; border: 1px solid #e2e6f3; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); transition: all 0.3s ease;">
+                            <div style="position: absolute; top: 15px; left: 15px; background: #2e89ff; padding: 6px 14px; border-radius: 20px; color: white; font-size: 12px; font-weight: bold;">
+                                <i class="bi bi-diagram-3 me-1"></i>قالب
+                            </div>
+                            
+                            <div style="font-size: 16px; font-weight: bold; color: #0d2f66; margin-bottom: 6px; margin-top: 10px;"><?php echo $templateName; ?></div>
+                            <div style="color: #94a3b8; font-size: 13px; margin-bottom: 10px;">الكود: <?php echo $templateId; ?></div>
+                            
+                            <?php if (!empty($templateDescription)): ?>
+                                <div style="color: #64748b; font-size: 12px; margin-bottom: 10px; line-height: 1.4;">
+                                    <?php echo nl2br($templateDescription); ?>
+                                </div>
+                            <?php endif; ?>
+                            
+                            <div style="font-size: 13px; margin-top: 8px; display: flex; justify-content: space-between;">
+                                <span>الصنف:</span>
+                                <span><?php echo $templateCategory; ?></span>
+                            </div>
+                            <div style="font-size: 13px; margin-top: 5px; display: flex; justify-content: space-between;">
+                                <span>الوحدة:</span>
+                                <span><?php echo $templateUnit; ?></span>
+                            </div>
+                            <div style="font-size: 13px; margin-top: 5px; display: flex; justify-content: space-between;">
+                                <span>السعر:</span>
+                                <span style="color: #059669; font-weight: 600;"><?php echo formatCurrency($templatePrice); ?></span>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+        </div>
+    </div>
+</div>
+
+<!-- JavaScript للبحث والفلترة في قوالب المنتجات -->
+<script>
+(function() {
+    const templateSearchInput = document.getElementById('templateSearchInput');
+    const templateCategoryFilter = document.getElementById('templateCategoryFilter');
+    
+    function filterTemplates() {
+        const searchText = (templateSearchInput?.value || '').toLowerCase();
+        const selectedCategory = templateCategoryFilter?.value || '';
+        
+        const grid = document.getElementById('templateProductsGrid');
+        if (!grid) return;
+        
+        const cards = grid.querySelectorAll('.product-card');
+        let visibleCount = 0;
+        
+        cards.forEach(card => {
+            const productName = card.querySelector('div:nth-child(1)')?.textContent.toLowerCase() || '';
+            const detailRows = card.querySelectorAll('div[style*="font-size: 13px"]');
+            const categoryRow = Array.from(detailRows).find(row => row.textContent.includes('الصنف:'));
+            const category = categoryRow?.textContent.replace('الصنف:', '').trim() || '';
+            
+            const matchesSearch = productName.includes(searchText);
+            const matchesCategory = !selectedCategory || category === selectedCategory;
+            
+            if (matchesSearch && matchesCategory) {
+                card.style.display = '';
+                visibleCount++;
+            } else {
+                card.style.display = 'none';
+            }
+        });
+        
+        // إظهار رسالة عند عدم وجود نتائج
+        if (visibleCount === 0 && grid) {
+            grid.innerHTML = '<div style="grid-column: 1/-1; padding: 25px; text-align: center; color: #94a3b8;"><i class="bi bi-info-circle me-2"></i>لا توجد قوالب منتجات تطابق معايير البحث</div>';
+        }
+    }
+    
+    if (templateSearchInput) {
+        templateSearchInput.addEventListener('input', filterTemplates);
+    }
+    
+    if (templateCategoryFilter) {
+        templateCategoryFilter.addEventListener('change', filterTemplates);
+    }
+})();
+</script>
 
 <style>
 /* إصلاح مشكلة عرض القوائم المنسدلة بشكل نصف واضح في النماذج */
