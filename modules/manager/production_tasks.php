@@ -3807,7 +3807,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                     <div class="d-flex justify-content-end mt-4 gap-2">
                         <input type="hidden" id="currentDraftId" name="current_draft_id" value="">
                         <button type="button" class="btn btn-outline-secondary" id="saveDraftBtn"><i class="bi bi-floppy me-1"></i>حفظ كمسودة</button>
-                        <button type="submit" class="btn btn-primary"><i class="bi bi-send-check me-1"></i>إرسال المهمة</button>
+                        <button type="submit" id="createTaskSubmitBtn" class="btn btn-primary" disabled><i class="bi bi-send-check me-1"></i>إرسال المهمة</button>
                     </div>
                 </form>
             </div>
@@ -4099,9 +4099,14 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             <label class="form-label small mb-0">بحث سريع</label>
                             <input type="text" name="search_text" id="recentTasksSearchText" class="form-control form-control-sm recent-tasks-dynamic-filter" placeholder="نص في العنوان، الملاحظات، العميل..." value="<?php echo htmlspecialchars($filterSearchText, ENT_QUOTES, 'UTF-8'); ?>">
                         </div>
-                        <div class="col-6 col-md-4 col-lg-2">
+                        <div class="col-5 col-md-3 col-lg-2">
                             <label class="form-label small mb-0">رقم الاوردر</label>
-                            <input type="text" name="task_id" id="recentTasksFilterTaskId" class="form-control form-control-sm recent-tasks-dynamic-filter" placeholder="#" value="<?php echo htmlspecialchars($filterTaskId, ENT_QUOTES, 'UTF-8'); ?>">
+                            <input type="text" name="task_id" id="recentTasksFilterTaskId" class="form-control form-control-sm" placeholder="#" value="<?php echo htmlspecialchars($filterTaskId, ENT_QUOTES, 'UTF-8'); ?>">
+                        </div>
+                        <div class="col-1 col-md-1 col-lg-1 align-self-end">
+                            <button type="submit" class="btn btn-primary btn-sm w-100" title="بحث">
+                                <i class="bi bi-search"></i>
+                            </button>
                         </div>
                         <div class="col-6 col-md-4 col-lg-2">
                             <label class="form-label small mb-0">اسم العميل / هاتف</label>
@@ -5551,6 +5556,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     submitName.value = this.dataset.name || '';
                     if (this.dataset.phone) submitPhone.value = this.dataset.phone;
                     dropEl.classList.add('d-none');
+                    inputEl.dispatchEvent(new Event('input'));
                     // ملء بيانات التليجراف تلقائياً إذا كان نوع الأوردر تليجراف
                     var typeEl = document.getElementById('taskTypeSelect');
                     if (typeEl && typeEl.value === 'telegraph') {
@@ -5598,6 +5604,20 @@ document.addEventListener('DOMContentLoaded', function () {
 
         initCustomerSearch(localSearch, localId, localDrop, localCustomers, function(c) { return c.id + ' - ' + c.name + (c.phone ? ' — ' + c.phone : ''); }, matchLocalCustomer);
         initCustomerSearch(repSearch, repId, repDrop, repCustomers, function(c) { return c.id + ' - ' + (c.rep_name ? c.name + ' (' + c.rep_name + ')' : c.name); }, matchRepCustomer);
+
+        var submitBtn = document.getElementById('createTaskSubmitBtn');
+        function updateCreateSubmitBtnState() {
+            if (!submitBtn) return;
+            var v = document.querySelector('input[name="customer_type_radio_task"]:checked');
+            var val = v ? v.value : 'local';
+            var activeSearch = (val === 'local') ? localSearch : repSearch;
+            submitBtn.disabled = !activeSearch || !activeSearch.value.trim();
+        }
+        if (localSearch) localSearch.addEventListener('input', updateCreateSubmitBtnState);
+        if (repSearch) repSearch.addEventListener('input', updateCreateSubmitBtnState);
+        document.querySelectorAll('input[name="customer_type_radio_task"]').forEach(function(r) {
+            r.addEventListener('change', updateCreateSubmitBtnState);
+        });
 
         document.addEventListener('click', function(e) {
             if (!e.target.closest('.search-wrap')) {
