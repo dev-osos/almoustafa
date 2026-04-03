@@ -9833,17 +9833,9 @@ function renderTemplateSuppliers(details) {
             card.appendChild(honeyWrapper);
 
             handleSupplierChange();
-        }
-
-        col.appendChild(card);
-        container.appendChild(col);
-
-        if (autoSelectSupplierId !== null) {
-            select.value = String(autoSelectSupplierId);
-            select.dispatchEvent(new Event('change', { bubbles: true }));
             
             // إذا كان نوع العسل محدد في القالب، تأكد من اختياره تلقائياً
-            if (isHoneyType && honeySelect && defaultHoneyVariety) {
+            if (autoSelectSupplierId !== null && defaultHoneyVariety) {
                 // انتظر قليلاً لضمان تحديث الخيارات أولاً
                 setTimeout(() => {
                     const honeyValue = honeySelect.dataset.defaultValue || defaultHoneyVariety;
@@ -9853,6 +9845,14 @@ function renderTemplateSuppliers(details) {
                     }
                 }, 100);
             }
+        }
+
+        col.appendChild(card);
+        container.appendChild(col);
+
+        if (autoSelectSupplierId !== null) {
+            select.value = String(autoSelectSupplierId);
+            select.dispatchEvent(new Event('change', { bubbles: true }));
         }
     });
 
