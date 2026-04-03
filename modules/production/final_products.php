@@ -4181,7 +4181,7 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
     const templateIdInput = document.getElementById('templateProductionTemplateId');
     const templateNameInput = document.getElementById('templateProductionTemplateNameInput');
     const templateNameDisplay = document.getElementById('templateProductionTemplateNameDisplay');
-    const quantityInput = document.getElementById('templateProductionQuantity');
+    const templateProductionQuantityInput = document.getElementById('templateProductionQuantity');
 
     document.querySelectorAll('.js-open-template-production-modal').forEach((button) => {
         button.addEventListener('click', function() {
@@ -4197,10 +4197,10 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
             if (templateNameDisplay) {
                 templateNameDisplay.value = templateName;
             }
-            if (quantityInput) {
-                quantityInput.value = '1';
-                quantityInput.focus();
-                quantityInput.select();
+            if (templateProductionQuantityInput) {
+                templateProductionQuantityInput.value = '1';
+                templateProductionQuantityInput.focus();
+                templateProductionQuantityInput.select();
             }
 
             if (productionModal) {
