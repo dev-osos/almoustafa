@@ -3891,12 +3891,12 @@ if ($companyFilterId > 0) {
 }
 
 try {
-    $query = "SELECT 
+    $query = "SELECT
         COUNT(*) AS orders_count,
         COALESCE(SUM(total_amount), 0) AS total_amount
     FROM shipping_company_orders
-    WHERE DATE(COALESCE(handed_over_at, created_at)) BETWEEN ? AND ?
-      AND status IN ('assigned', 'in_transit', 'delivered')";
+    WHERE DATE(created_at) BETWEEN ? AND ?
+      AND status != 'cancelled'";
     $params = [$selectedMonthStart, $selectedMonthEnd];
 
     if ($companyFilterId > 0) {
