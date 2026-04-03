@@ -7683,6 +7683,10 @@ $lang = isset($translations) ? $translations : [];
                         </h6>
                         <p class="text-muted small mb-3" id="templateSuppliersHint">يرجى اختيار المورد المناسب لكل مادة سيتم استخدامها في هذه التشغيلة.</p>
                         <div class="row g-3" id="templateSuppliersContainer"></div>
+                        <div id="templateMaterialsInfo" class="mt-3"></div>
+                        <div id="templateComponentsSummary" class="mt-3 d-none">
+                            <div class="production-summary-grid" id="templateComponentsSummaryGrid"></div>
+                        </div>
                     </div>
 
                     <!-- عمال الإنتاج الحاضرون -->
@@ -7973,6 +7977,10 @@ $lang = isset($translations) ? $translations : [];
                 </h6>
                 <p class="text-muted small mb-3" id="templateSuppliersHintCard">يرجى اختيار المورد المناسب لكل مادة سيتم استخدامها في هذه التشغيلة.</p>
                 <div class="row g-3" id="templateSuppliersContainerCard"></div>
+                <div id="templateMaterialsInfoCard" class="mt-3"></div>
+                <div id="templateComponentsSummaryCard" class="mt-3 d-none">
+                    <div class="production-summary-grid" id="templateComponentsSummaryGridCard"></div>
+                </div>
             </div>
 
             <div class="mb-3 section-block">
@@ -8341,6 +8349,48 @@ echo json_encode(array_map(function($supplier) {
 }, $tahiniSuppliersForJs), JSON_UNESCAPED_UNICODE);
 ?>;
 window.honeyStockData = <?php echo json_encode($honeyStockDataForJs, JSON_UNESCAPED_UNICODE); ?>;
+
+// دالة مساعدة لتحديد معرفات العناصر حسب النسخة (موبايل أم ديسكتوب)
+function getTemplateElementIds() {
+    const isMobileView = isMobile && isMobile();
+    
+    if (isMobileView) {
+        return {
+            wrapper: 'templateSuppliersWrapperCard',
+            container: 'templateSuppliersContainerCard',
+            mode: 'template_mode_card',
+            hint: 'templateSuppliersHintCard',
+            summary: 'templateComponentsSummaryCard',
+            summaryGrid: 'templateComponentsSummaryGridCard',
+            materialsInfo: 'templateMaterialsInfoCard'
+        };
+    } else {
+        return {
+            wrapper: 'templateSuppliersWrapper',
+            container: 'templateSuppliersContainer',
+            mode: 'template_mode',
+            hint: 'templateSuppliersHint',
+            summary: 'templateComponentsSummary',
+            summaryGrid: 'templateComponentsSummaryGrid',
+            materialsInfo: 'templateMaterialsInfo'
+        };
+    }
+}
+
+// دالة مساعدة لاختيار المحدد الصحيح
+function getTemplateContainerId() {
+    const ids = getTemplateElementIds();
+    // تحقق من وجود الكونتاينر
+    if (document.getElementById(ids.container)) {
+        return ids.container;
+    }
+    // إذا لم يوجد، جرب الآخر
+    const fallbackId = ids.wrapper === 'templateSuppliersWrapperCard' 
+        ? 'templateSuppliersContainer' 
+        : 'templateSuppliersContainerCard';
+    return document.getElementById(fallbackId) ? fallbackId : ids.container;
+}
+
 let currentTemplateMode = 'advanced';
 const TEMPLATE_DETAILS_BASE_URL = '<?php echo addslashes(getRelativeUrl('dashboard/production.php')); ?>';
 const PRINT_BARCODE_URL = '<?php echo addslashes(getRelativeUrl('print_barcode.php')); ?>';
@@ -8955,13 +9005,29 @@ function renderTemplateSuppliers(details) {
         window.templateDetailsCache = window.templateDetailsCache || {};
         window.templateDetailsCache[cacheKey] = details;
     }
-    const wrapper = document.getElementById('templateSuppliersWrapper');
-    const container = document.getElementById('templateSuppliersContainer');
-    const modeInput = document.getElementById('template_mode');
-    const hintText = document.getElementById('templateSuppliersHint');
-    const summaryWrapper = document.getElementById('templateComponentsSummary');
-    const summaryGrid = document.getElementById('templateComponentsSummaryGrid');
-    const materialsInfoBox = document.getElementById('templateMaterialsInfo');
+    
+    // تحديد النسخة: موبايل أم ديسكتوب
+    const isMobileView = isMobile && isMobile();
+    
+    // محاولة الحصول على عناصر الديسكتوب أولاً
+    let wrapper = document.getElementById('templateSuppliersWrapper');
+    let container = document.getElementById('templateSuppliersContainer');
+    let modeInput = document.getElementById('template_mode');
+    let hintText = document.getElementById('templateSuppliersHint');
+    let summaryWrapper = document.getElementById('templateComponentsSummary');
+    let summaryGrid = document.getElementById('templateComponentsSummaryGrid');
+    let materialsInfoBox = document.getElementById('templateMaterialsInfo');
+    
+    // إذا لم توجد عناصر الديسكتوب، جرب عناصر الموبايل
+    if (!wrapper || !container) {
+        wrapper = document.getElementById('templateSuppliersWrapperCard');
+        container = document.getElementById('templateSuppliersContainerCard');
+        modeInput = document.getElementById('template_mode_card');
+        hintText = document.getElementById('templateSuppliersHintCard');
+        summaryWrapper = document.getElementById('templateComponentsSummaryCard') || summaryWrapper;
+        summaryGrid = document.getElementById('templateComponentsSummaryGridCard') || summaryGrid;
+        materialsInfoBox = document.getElementById('templateMaterialsInfoCard') || materialsInfoBox;
+    }
 
     if (!container || !wrapper || !modeInput) {
         return;
@@ -9888,22 +9954,39 @@ function openCreateFromTemplateModal(element) {
     document.getElementById('template_product_name').value = templateName;
     document.getElementById('template_type').value = templateType;
     
+    // تحديث معرفات الموبايل أيضاً إن وجدت
+    const templateIdCard = document.getElementById('template_id_card');
+    if (templateIdCard) {
+        templateIdCard.value = templateId;
+    }
+    const templateProductNameCard = document.getElementById('template_product_name_card');
+    if (templateProductNameCard) {
+        templateProductNameCard.value = templateName;
+    }
+    const templateTypeCard = document.getElementById('template_type_card');
+    if (templateTypeCard) {
+        templateTypeCard.value = templateType;
+    }
+    
     const extraSuppliersSelect = document.getElementById('extraSuppliersSelect');
     if (extraSuppliersSelect) {
         Array.from(extraSuppliersSelect.options).forEach(option => {
             option.selected = false;
         });
     }
-    const materialsInfoBox = document.getElementById('templateMaterialsInfo');
+    
+    // الحصول على معرفات العناصر المناسبة
+    const elementIds = getTemplateElementIds();
+    const materialsInfoBox = document.getElementById(elementIds.materialsInfo);
     if (materialsInfoBox) {
         materialsInfoBox.innerHTML = '<div class="text-muted small">سيتم عرض المواد والمقادير الخاصة بالقالب بعد اختيار قالب الإنتاج.</div>';
     }
 
-    const wrapper = document.getElementById('templateSuppliersWrapper');
-    const container = document.getElementById('templateSuppliersContainer');
-    const modeInput = document.getElementById('template_mode');
-    const summaryWrapper = document.getElementById('templateComponentsSummary');
-    const summaryGrid = document.getElementById('templateComponentsSummaryGrid');
+    const wrapper = document.getElementById(elementIds.wrapper);
+    const container = document.getElementById(elementIds.container);
+    const modeInput = document.getElementById(elementIds.mode);
+    const summaryWrapper = document.getElementById(elementIds.summary);
+    const summaryGrid = document.getElementById(elementIds.summaryGrid);
 
     if (container) {
         container.innerHTML = `
@@ -9932,16 +10015,26 @@ function openCreateFromTemplateModal(element) {
     const templateCacheKey = templateId + '::' + templateType;
     window.templateDetailsCache = window.templateDetailsCache || {};
 
-    const modalElement = document.getElementById('createFromTemplateModal');
-    if (!modalElement) {
-        console.error('createFromTemplateModal element not found in DOM.');
-        return;
+    // إذا كان موبايل، تأكد من فتح عرض الكارت وليس المودال
+    const isMobileView = isMobile && isMobile();
+    if (isMobileView) {
+        // لا تحاول فتح المودال على الموبايل
+        const card = document.getElementById('createFromTemplateCard');
+        if (card) {
+            card.style.display = 'block';
+        }
+    } else {
+        const modalElement = document.getElementById('createFromTemplateModal');
+        if (!modalElement) {
+            console.error('createFromTemplateModal element not found in DOM.');
+            return;
+        }
+        const modal = new bootstrap.Modal(modalElement);
+        modal.show();
     }
-    const modal = new bootstrap.Modal(modalElement);
-    modal.show();
 
     const showTemplateMessage = (html, wrapperClass = '') => {
-        const materialsInfoBox = document.getElementById('templateMaterialsInfo');
+        const materialsInfoBox = document.getElementById(elementIds.materialsInfo);
         if (materialsInfoBox) {
             materialsInfoBox.innerHTML = html;
         }
@@ -10004,10 +10097,12 @@ document.getElementById('createFromTemplateForm')?.addEventListener('submit', fu
     console.log('Quantity:', quantity);
 
     // التحقق من أن قسم الموردين مرئي قبل التحقق من وجود selects
-    const suppliersWrapper = document.getElementById('templateSuppliersWrapper');
+    const elementIds = getTemplateElementIds();
+    const suppliersWrapper = document.getElementById(elementIds.wrapper);
     const isSuppliersSectionVisible = suppliersWrapper && !suppliersWrapper.classList.contains('d-none');
     
-    const supplierSelects = document.querySelectorAll('#templateSuppliersContainer select[data-role="component-supplier"]');
+    const containerId = getTemplateContainerId();
+    const supplierSelects = document.querySelectorAll(`#${containerId} select[data-role="component-supplier"]`);
     console.log('Supplier selects found:', supplierSelects.length);
     console.log('Suppliers section visible:', isSuppliersSectionVisible);
     
@@ -10047,7 +10142,7 @@ document.getElementById('createFromTemplateForm')?.addEventListener('submit', fu
 
     // التحقق من نوع العسل فقط إذا كان قسم الموردين مرئي
     if (isSuppliersSectionVisible) {
-        const honeyVarietyFields = document.querySelectorAll('#templateSuppliersContainer [data-role="honey-variety"]');
+        const honeyVarietyFields = document.querySelectorAll(`#${containerId} [data-role="honey-variety"]`);
         for (let field of honeyVarietyFields) {
             // إذا كان الحقل معطلاً، تحقق من أن له قيمة (محدد من القالب)
             if (field.disabled) {
@@ -10111,6 +10206,50 @@ document.getElementById('createFromTemplateForm')?.addEventListener('submit', fu
     console.log('Form data to be submitted:', formDataObj);
     console.log('Material suppliers in form data:', formDataObj['material_suppliers']);
     console.log('=== FORM SUBMIT END - PROCEEDING ===');
+});
+
+// إضافة نفس المعالجة لنموذج الموبايل
+document.getElementById('createFromTemplateFormCard')?.addEventListener('submit', function(e) {
+    console.log('=== FORM SUBMIT START (MOBILE) ===');
+    const quantityCard = this.querySelector('input[name="quantity"]')?.value;
+    const templateIdCard = document.getElementById('template_id_card')?.value;
+    
+    console.log('Template ID (Mobile):', templateIdCard);
+    console.log('Quantity (Mobile):', quantityCard);
+
+    // التحقق من أن قسم الموردين مرئي قبل التحقق من وجود selects
+    const elementIds = getTemplateElementIds();
+    const suppliersWrapper = document.getElementById(elementIds.wrapper);
+    const isSuppliersSectionVisible = suppliersWrapper && !suppliersWrapper.classList.contains('d-none');
+    
+    const containerId = getTemplateContainerId();
+    const supplierSelects = document.querySelectorAll(`#${containerId} select[data-role="component-supplier"]`);
+    console.log('Supplier selects found (Mobile):', supplierSelects.length);
+    console.log('Suppliers section visible (Mobile):', isSuppliersSectionVisible);
+    
+    // التحقق من وجود selects فقط إذا كان قسم الموردين مرئي
+    if (isSuppliersSectionVisible && supplierSelects.length === 0) {
+        console.error('ERROR: Suppliers section is visible but no supplier selects found!');
+        e.preventDefault();
+        alert('لا توجد مواد مرتبطة بالقالب، يرجى مراجعة القالب قبل إنشاء التشغيلة.');
+        return false;
+    }
+
+    // التحقق من الموردين فقط إذا كان قسم الموردين مرئي
+    if (isSuppliersSectionVisible) {
+        for (let select of supplierSelects) {
+            if (!select.value || select.value.trim() === '') {
+                console.error('ERROR: Empty supplier value found:', select.name);
+                e.preventDefault();
+                alert('يرجى اختيار المورد المناسب لهذه المادة للمتابعة');
+                select.focus();
+                return false;
+            }
+        }
+        console.log('All suppliers validated successfully (Mobile)');
+    }
+    
+    console.log('=== FORM SUBMIT END (MOBILE) - PROCEEDING ===');
 });
 
 document.getElementById('createFromTemplateModal')?.addEventListener('shown.bs.modal', function() {
@@ -11331,7 +11470,20 @@ body.modal-open .modal-backdrop {
     padding-right: 0.25rem;
 }
 
+#createFromTemplateCard #templateSuppliersContainerCard .col-12,
+#createFromTemplateCard #templateSuppliersContainerCard .col-md-6,
+#createFromTemplateCard #templateSuppliersContainerCard .col-md-4,
+#createFromTemplateCard #templateSuppliersContainerCard .col-md-12 {
+    padding-left: 0.25rem;
+    padding-right: 0.25rem;
+}
+
 #createFromTemplateModal #templateSuppliersHint {
+    font-size: 0.7rem !important;
+    margin-bottom: 0.5rem !important;
+}
+
+#createFromTemplateCard #templateSuppliersHintCard {
     font-size: 0.7rem !important;
     margin-bottom: 0.5rem !important;
 }
