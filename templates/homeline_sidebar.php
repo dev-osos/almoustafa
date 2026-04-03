@@ -740,18 +740,19 @@ switch ($role) {
                 'active' => ($currentPage === 'sales.php' && $currentPageParam === 'my_records'),
                 'badge' => null
             ],
+            ['divider' => true, 'title' => 'الحضور و الرواتب'],
             [
-                'title' => isset($lang['my_salary']) ? $lang['my_salary'] : 'مرتبي',
-                'icon' => 'bi-wallet2',
-                'url' => $baseUrl . 'sales.php?page=my_salary',
-                'active' => ($currentPage === 'sales.php' && $currentPageParam === 'my_salary'),
+                'title' => 'الحضور',
+                'icon' => 'bi-clock-history',
+                'url' => $baseUrl . 'sales.php?page=attendance',
+                'active' => ($currentPage === 'sales.php' && $currentPageParam === 'attendance'),
                 'badge' => null
             ],
             [
-                'title' => isset($lang['menu_attendance']) ? $lang['menu_attendance'] : 'الحضور',
-                'icon' => 'bi-calendar-check',
-                'url' => getRelativeUrl('attendance.php'),
-                'active' => ($currentPage === 'attendance.php'),
+                'title' => 'مرتبي',
+                'icon' => 'bi-cash',
+                'url' => $baseUrl . 'sales.php?page=my_salary',
+                'active' => ($currentPage === 'sales.php' && $currentPageParam === 'my_salary'),
                 'badge' => null
             ],
             ['divider' => true, 'title' => 'أدوات'],
