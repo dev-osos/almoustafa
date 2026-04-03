@@ -14,12 +14,14 @@ require_once __DIR__ . '/../../includes/path_helper.php';
 require_once __DIR__ . '/../../includes/table_styles.php';
 require_once __DIR__ . '/../../includes/vehicle_inventory.php';
 require_once __DIR__ . '/../../includes/audit_log.php';
+require_once __DIR__ . '/../../includes/batch_creation.php';
 
 requireRole(['production', 'accountant', 'manager', 'developer']);
 
 $currentUser = getCurrentUser();
 $db = db();
 $isManager = isset($currentUser['role']) && in_array($currentUser['role'], ['manager', 'developer'], true);
+$canProduceFromTemplates = isset($currentUser['role']) && in_array($currentUser['role'], ['production', 'manager', 'developer'], true);
 $managerInventoryUrl = getRelativeUrl('manager.php?page=final_products');
 $productionInventoryUrl = getRelativeUrl('production.php?page=inventory');
 $finalProductsUrl = getRelativeUrl('production.php?page=final_products');
@@ -40,6 +42,9 @@ $sessionSuccessKey = 'production_inventory_success';
 // إنشاء token لمنع duplicate submission
 if (!isset($_SESSION['transfer_submission_token'])) {
     $_SESSION['transfer_submission_token'] = bin2hex(random_bytes(32));
+}
+if (!isset($_SESSION['template_production_token'])) {
+    $_SESSION['template_production_token'] = bin2hex(random_bytes(32));
 }
 
 if (!empty($_SESSION[$sessionErrorKey])) {
@@ -1354,6 +1359,78 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION[$sessionTokenKey] = bin2hex(random_bytes(32));
             }
         }
+    } elseif ($canProduceFromTemplates && $postAction === 'produce_from_template') {
+        $submissionToken = $_POST['template_production_token'] ?? '';
+        $sessionTokenKey = 'template_production_token';
+        $storedToken = $_SESSION[$sessionTokenKey] ?? null;
+
+        if ($submissionToken === '' || $submissionToken !== $storedToken) {
+            $_SESSION[$sessionErrorKey] = 'تم إرسال طلب الإنتاج هذا مسبقاً. يرجى تحديث الصفحة قبل إعادة المحاولة.';
+            productionSafeRedirect($productionInventoryUrl, $productionRedirectParams, $productionRedirectRole);
+            exit;
+        }
+
+        unset($_SESSION[$sessionTokenKey]);
+
+        $templateId = intval($_POST['template_id'] ?? 0);
+        $productionQuantity = intval($_POST['production_quantity'] ?? 0);
+        $templateName = trim((string)($_POST['template_name'] ?? ''));
+
+        if ($templateId <= 0) {
+            $_SESSION[$sessionErrorKey] = 'يرجى اختيار قالب صالح للإنتاج.';
+            $_SESSION[$sessionTokenKey] = bin2hex(random_bytes(32));
+            productionSafeRedirect($productionInventoryUrl, $productionRedirectParams, $productionRedirectRole);
+            exit;
+        }
+
+        if ($productionQuantity <= 0) {
+            $_SESSION[$sessionErrorKey] = 'يرجى إدخال كمية إنتاج صحيحة أكبر من صفر.';
+            $_SESSION[$sessionTokenKey] = bin2hex(random_bytes(32));
+            productionSafeRedirect($productionInventoryUrl, $productionRedirectParams, $productionRedirectRole);
+            exit;
+        }
+
+        try {
+            $result = batchCreationCreate($templateId, $productionQuantity);
+
+            if (!empty($result['success'])) {
+                if (!empty($currentUser['id'])) {
+                    try {
+                        logAudit(
+                            $currentUser['id'],
+                            'produce_from_template',
+                            'product_templates',
+                            $templateId,
+                            null,
+                            [
+                                'template_name' => $templateName !== '' ? $templateName : ($result['product_name'] ?? null),
+                                'quantity' => $productionQuantity,
+                                'batch_id' => $result['batch_id'] ?? null,
+                                'batch_number' => $result['batch_number'] ?? null,
+                            ]
+                        );
+                    } catch (Throwable $auditException) {
+                        error_log('produce_from_template audit log error: ' . $auditException->getMessage());
+                    }
+                }
+
+                $_SESSION[$sessionSuccessKey] = sprintf(
+                    'تم إنتاج %s وحدة من القالب %s بنجاح. رقم التشغيلة: %s',
+                    number_format($productionQuantity),
+                    $templateName !== '' ? $templateName : ($result['product_name'] ?? 'غير محدد'),
+                    $result['batch_number'] ?? '—'
+                );
+            } else {
+                $_SESSION[$sessionErrorKey] = $result['message'] ?? 'تعذر تنفيذ الإنتاج من القالب.';
+            }
+        } catch (Throwable $e) {
+            error_log('produce_from_template error: ' . $e->getMessage());
+            $_SESSION[$sessionErrorKey] = 'حدث خطأ أثناء تنفيذ الإنتاج من القالب: ' . $e->getMessage();
+        }
+
+        $_SESSION[$sessionTokenKey] = bin2hex(random_bytes(32));
+        productionSafeRedirect($productionInventoryUrl, $productionRedirectParams, $productionRedirectRole);
+        exit;
     } elseif ($isProductionRole && $postAction === 'transfer_external_product') {
         // معالج نقل المنتجات الخارجية لعمال الإنتاج فقط
         $submissionToken = $_POST['transfer_token'] ?? '';
@@ -2782,18 +2859,31 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
                             </div>
 
                             <div style="margin-top: 14px; padding-top: 14px; border-top: 1px dashed #d7deee;">
-                                <button
-                                    type="button"
-                                    class="btn btn-sm btn-outline-primary w-100 d-flex justify-content-between align-items-center template-components-toggle"
-                                    data-bs-toggle="collapse"
-                                    data-bs-target="#<?php echo htmlspecialchars($templateDetailsCollapseId, ENT_QUOTES, 'UTF-8'); ?>"
-                                    aria-expanded="false"
-                                    aria-controls="<?php echo htmlspecialchars($templateDetailsCollapseId, ENT_QUOTES, 'UTF-8'); ?>"
-                                    style="border-radius: 10px;"
-                                >
-                                    <span><i class="bi bi-list-stars me-1"></i>عرض الخامات وأدوات التعبئة</span>
-                                    <i class="bi bi-chevron-down template-components-toggle-icon"></i>
-                                </button>
+                                <div style="display: flex; gap: 8px; align-items: stretch;">
+                                    <button
+                                        type="button"
+                                        class="btn btn-sm btn-outline-primary d-flex justify-content-between align-items-center template-components-toggle"
+                                        data-bs-toggle="collapse"
+                                        data-bs-target="#<?php echo htmlspecialchars($templateDetailsCollapseId, ENT_QUOTES, 'UTF-8'); ?>"
+                                        aria-expanded="false"
+                                        aria-controls="<?php echo htmlspecialchars($templateDetailsCollapseId, ENT_QUOTES, 'UTF-8'); ?>"
+                                        style="border-radius: 10px; flex: 1 1 auto;"
+                                    >
+                                        <span><i class="bi bi-list-stars me-1"></i>عرض المكونات</span>
+                                        <i class="bi bi-chevron-down template-components-toggle-icon"></i>
+                                    </button>
+                                    <?php if ($canProduceFromTemplates): ?>
+                                        <button
+                                            type="button"
+                                            class="btn btn-sm btn-success js-open-template-production-modal"
+                                            data-template-id="<?php echo intval($templateId); ?>"
+                                            data-template-name="<?php echo htmlspecialchars($template['product_name'] ?? 'غير محدد', ENT_QUOTES, 'UTF-8'); ?>"
+                                            style="border-radius: 10px; white-space: nowrap;"
+                                        >
+                                            <i class="bi bi-gear-wide-connected me-1"></i>إنتاج
+                                        </button>
+                                    <?php endif; ?>
+                                </div>
 
                                 <div class="collapse mt-3" id="<?php echo htmlspecialchars($templateDetailsCollapseId, ENT_QUOTES, 'UTF-8'); ?>">
                                     <?php if (empty($templateRawMaterials) && empty($templatePackagingItems)): ?>
@@ -2842,6 +2932,52 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
         </div>
     </div>
 </div>
+
+<?php if ($canProduceFromTemplates): ?>
+<div class="modal fade" id="templateProductionModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <form class="modal-content" method="POST">
+            <input type="hidden" name="action" value="produce_from_template">
+            <input type="hidden" name="template_production_token" value="<?php echo htmlspecialchars($_SESSION['template_production_token'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+            <input type="hidden" name="template_id" id="templateProductionTemplateId" value="">
+            <input type="hidden" name="template_name" id="templateProductionTemplateNameInput" value="">
+
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="bi bi-gear-wide-connected me-2"></i>إنتاج من القالب</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="إغلاق"></button>
+            </div>
+
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">اسم القالب</label>
+                    <input type="text" class="form-control" id="templateProductionTemplateNameDisplay" readonly>
+                </div>
+                <div class="mb-0">
+                    <label class="form-label" for="templateProductionQuantity">كمية الإنتاج</label>
+                    <input
+                        type="number"
+                        class="form-control"
+                        id="templateProductionQuantity"
+                        name="production_quantity"
+                        min="1"
+                        step="1"
+                        value="1"
+                        required
+                    >
+                    <div class="form-text">سيتم إنشاء تشغيلة جديدة وخصم الخامات وأدوات التعبئة المسجلة على القالب تلقائياً.</div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                <button type="submit" class="btn btn-success">
+                    <i class="bi bi-check-circle me-1"></i>تنفيذ الإنتاج
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+<?php endif; ?>
 
 <!-- JavaScript للبحث والفلترة في قوالب المنتجات -->
 <script>
@@ -4038,6 +4174,41 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
 
 <script>
 (function() {
+    const productionModalElement = document.getElementById('templateProductionModal');
+    const productionModal = productionModalElement && typeof bootstrap !== 'undefined'
+        ? new bootstrap.Modal(productionModalElement)
+        : null;
+    const templateIdInput = document.getElementById('templateProductionTemplateId');
+    const templateNameInput = document.getElementById('templateProductionTemplateNameInput');
+    const templateNameDisplay = document.getElementById('templateProductionTemplateNameDisplay');
+    const quantityInput = document.getElementById('templateProductionQuantity');
+
+    document.querySelectorAll('.js-open-template-production-modal').forEach((button) => {
+        button.addEventListener('click', function() {
+            const templateId = this.dataset.templateId || '';
+            const templateName = this.dataset.templateName || 'غير محدد';
+
+            if (templateIdInput) {
+                templateIdInput.value = templateId;
+            }
+            if (templateNameInput) {
+                templateNameInput.value = templateName;
+            }
+            if (templateNameDisplay) {
+                templateNameDisplay.value = templateName;
+            }
+            if (quantityInput) {
+                quantityInput.value = '1';
+                quantityInput.focus();
+                quantityInput.select();
+            }
+
+            if (productionModal) {
+                productionModal.show();
+            }
+        });
+    });
+
     const collapseElements = document.querySelectorAll('[id^="templateComponentsCollapse"]');
     if (!collapseElements.length) {
         return;
