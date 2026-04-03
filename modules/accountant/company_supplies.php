@@ -228,6 +228,75 @@ if ($sessionError) {
     color: white;
 }
 
+/* Dropdown Actions Styles */
+.dropdown-actions {
+    position: relative;
+    display: inline-block;
+}
+
+.btn-dropdown {
+    background-color: #6c757d;
+    color: white;
+    padding: 6px 12px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.btn-dropdown:hover {
+    background-color: #545b62;
+}
+
+.dropdown-menu {
+    display: none;
+    position: absolute;
+    background-color: white;
+    min-width: 160px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    border-radius: 4px;
+    z-index: 1000;
+    right: 0;
+    top: 100%;
+    margin-top: 5px;
+    border: 1px solid #ddd;
+}
+
+.dropdown-menu.show {
+    display: block;
+}
+
+.dropdown-menu a {
+    color: #333;
+    padding: 10px 15px;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    border-bottom: 1px solid #f0f0f0;
+    transition: background-color 0.2s;
+}
+
+.dropdown-menu a:last-child {
+    border-bottom: none;
+}
+
+.dropdown-menu a:hover {
+    background-color: #f8f9fa;
+}
+
+.dropdown-menu a.text-danger {
+    color: #dc3545;
+}
+
+.dropdown-menu a.text-danger:hover {
+    background-color: #f8d7da;
+}
+
 .action-buttons {
     display: flex;
     gap: 5px;
@@ -510,18 +579,23 @@ if ($sessionError) {
                         <?php endif; ?>
                     </td>
                     <td>
-                        <div class="action-buttons">
-                            <button type="button" class="btn-print" onclick="printSupply(<?php echo $supply['id']; ?>, '<?php echo htmlspecialchars($statusLabel); ?>')">
-                                <i class="bi bi-printer"></i> طباعة
+                        <div class="dropdown-actions">
+                            <button type="button" class="btn-dropdown" onclick="toggleDropdown(<?php echo $supply['id']; ?>)">
+                                <i class="bi bi-three-dots-vertical"></i> إجراءات
                             </button>
-                            <?php if ($supply['status'] === 'pending'): ?>
-                            <button type="button" class="btn-status" onclick="updateStatus(<?php echo $supply['id']; ?>)">
-                                <i class="bi bi-check-lg"></i> تحديث
-                            </button>
-                            <button type="button" class="btn-status" onclick="deleteSupply(<?php echo $supply['id']; ?>)">
-                                <i class="bi bi-trash"></i> حذف
-                            </button>
-                            <?php endif; ?>
+                            <div class="dropdown-menu" id="dropdown-<?php echo $supply['id']; ?>">
+                                <a href="#" onclick="printSupply(<?php echo $supply['id']; ?>, '<?php echo htmlspecialchars($statusLabel); ?>'); return false;">
+                                    <i class="bi bi-printer"></i> طباعة
+                                </a>
+                                <?php if ($supply['status'] === 'pending'): ?>
+                                <a href="#" onclick="updateStatus(<?php echo $supply['id']; ?>); return false;">
+                                    <i class="bi bi-check-lg"></i> تحديث الحالة
+                                </a>
+                                <a href="#" class="text-danger" onclick="deleteSupply(<?php echo $supply['id']; ?>); return false;">
+                                    <i class="bi bi-trash"></i> حذف
+                                </a>
+                                <?php endif; ?>
+                            </div>
                         </div>
                     </td>
                 </tr>
@@ -532,6 +606,31 @@ if ($sessionError) {
 <?php endif; ?>
 
 <script>
+// Toggle dropdown menu
+function toggleDropdown(id) {
+    const dropdown = document.getElementById('dropdown-' + id);
+    if (!dropdown) return;
+    
+    // Close all other open dropdowns
+    document.querySelectorAll('.dropdown-menu.show').forEach(function(menu) {
+        if (menu.id !== 'dropdown-' + id) {
+            menu.classList.remove('show');
+        }
+    });
+    
+    // Toggle current dropdown
+    dropdown.classList.toggle('show');
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.dropdown-actions')) {
+        document.querySelectorAll('.dropdown-menu.show').forEach(function(menu) {
+            menu.classList.remove('show');
+        });
+    }
+});
+
 function initializeItems() {
     const container = document.getElementById('itemsContainer');
     const addBtn = document.getElementById('addItemBtn');
