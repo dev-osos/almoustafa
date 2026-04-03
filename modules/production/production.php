@@ -7943,7 +7943,7 @@ $lang = isset($translations) ? $translations : [];
 <!-- ===== Cards للموبايل ===== -->
 
 <!-- Card إنشاء إنتاج من قالب للموبايل -->
-<div class="card shadow-sm mb-4 d-md-none" id="createFromTemplateCard" style="display: none;">
+<div class="card shadow-sm mb-4 d-md-none" id="createFromTemplateCard">
     <div class="card-header bg-success text-white">
         <h5 class="mb-0">
             <i class="bi bi-file-earmark-text me-2"></i>إنشاء تشغيلة إنتاج
@@ -8999,6 +8999,7 @@ function bootstrapBatchPrintContext(batchNumber, fallbackQuantity, productName) 
 function renderTemplateSuppliers(details) {
     const cacheKey = details?.cache_key;
     if (!details || !details.success) {
+        console.warn('renderTemplateSuppliers: Invalid details or success is false', details);
         return;
     }
     if (cacheKey) {
@@ -9008,6 +9009,7 @@ function renderTemplateSuppliers(details) {
     
     // تحديد النسخة: موبايل أم ديسكتوب
     const isMobileView = isMobile && isMobile();
+    console.log('renderTemplateSuppliers: isMobileView =', isMobileView);
     
     // محاولة الحصول على عناصر الديسكتوب أولاً
     let wrapper = document.getElementById('templateSuppliersWrapper');
@@ -9018,8 +9020,11 @@ function renderTemplateSuppliers(details) {
     let summaryGrid = document.getElementById('templateComponentsSummaryGrid');
     let materialsInfoBox = document.getElementById('templateMaterialsInfo');
     
+    console.log('renderTemplateSuppliers: Desktop elements - wrapper:', !!wrapper, ', container:', !!container);
+    
     // إذا لم توجد عناصر الديسكتوب، جرب عناصر الموبايل
     if (!wrapper || !container) {
+        console.log('renderTemplateSuppliers: Switching to mobile elements');
         wrapper = document.getElementById('templateSuppliersWrapperCard');
         container = document.getElementById('templateSuppliersContainerCard');
         modeInput = document.getElementById('template_mode_card');
@@ -9027,6 +9032,7 @@ function renderTemplateSuppliers(details) {
         summaryWrapper = document.getElementById('templateComponentsSummaryCard') || summaryWrapper;
         summaryGrid = document.getElementById('templateComponentsSummaryGridCard') || summaryGrid;
         materialsInfoBox = document.getElementById('templateMaterialsInfoCard') || materialsInfoBox;
+        console.log('renderTemplateSuppliers: Mobile elements - wrapper:', !!wrapper, ', container:', !!container);
     }
 
     if (!container || !wrapper || !modeInput) {
@@ -9856,7 +9862,9 @@ function renderTemplateSuppliers(details) {
         }
     });
 
+    console.log('renderTemplateSuppliers: Removing d-none from wrapper');
     wrapper.classList.remove('d-none');
+    console.log('renderTemplateSuppliers: wrapper classes after remove:', wrapper.className);
 
     if (hintText) {
         hintText.textContent = details.hint || 'يرجى اختيار المورد المحاسب للمادة وتحديد نوع العسل عند الحاجة.';
@@ -10021,7 +10029,11 @@ function openCreateFromTemplateModal(element) {
         // لا تحاول فتح المودال على الموبايل
         const card = document.getElementById('createFromTemplateCard');
         if (card) {
+            console.log('openCreateFromTemplateModal: Showing card on mobile. Card display before:', card.style.display);
             card.style.display = 'block';
+            console.log('openCreateFromTemplateModal: Card display after:', card.style.display);
+        } else {
+            console.error('openCreateFromTemplateModal: Card element not found!');
         }
     } else {
         const modalElement = document.getElementById('createFromTemplateModal');
@@ -11256,6 +11268,17 @@ body.modal-open .dashboard-wrapper,
 body.modal-open .dashboard-main {
     overflow-y: visible !important;
     padding-right: 0 !important;
+}
+
+/* القاعدة الأساسية للـ card على الموبايل */
+#createFromTemplateCard {
+    display: none !important;
+}
+
+@media (max-width: 767.98px) {
+    #createFromTemplateCard {
+        display: block !important;
+    }
 }
 
 /* جعل النموذج نفسه قابل للتمرير - تصغير الطول */
