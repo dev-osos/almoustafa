@@ -3889,6 +3889,46 @@ try {
     error_log('shipping_orders: failed fetching stats -> ' . $statsError->getMessage());
 }
 
+// إحصائية الشهر الحالي / المحدد
+$selectedMonth = isset($_GET['stats_month']) ? trim($_GET['stats_month']) : date('Y-m');
+if (!preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $selectedMonth)) {
+    $selectedMonth = date('Y-m');
+}
+$selectedYear = (int)substr($selectedMonth, 0, 4);
+$selectedMonthNum = substr($selectedMonth, 5, 2);
+$selectedMonthStart = sprintf('%s-01', $selectedMonth);
+$selectedMonthEnd = date('Y-m-t', strtotime($selectedMonthStart));
+
+$arabicMonths = [
+    '01' => 'يناير', '02' => 'فبراير', '03' => 'مارس', '04' => 'أبريل',
+    '05' => 'مايو', '06' => 'يونيو', '07' => 'يوليو', '08' => 'أغسطس',
+    '09' => 'سبتمبر', '10' => 'أكتوبر', '11' => 'نوفمبر', '12' => 'ديسمبر'
+];
+$selectedMonthLabel = ($arabicMonths[$selectedMonthNum] ?? date('F', strtotime($selectedMonthStart))) . ' ' . $selectedYear;
+
+$monthlyShippingDebtStats = [
+    'orders_count' => 0,
+    'total_amount' => 0.0
+];
+try {
+    $monthlyRow = $db->queryOne(
+        "SELECT
+            COUNT(*) AS orders_count,
+            COALESCE(SUM(total_amount), 0) AS total_amount
+         FROM shipping_company_orders
+         WHERE DATE(created_at) BETWEEN ? AND ?
+           AND status IN ('assigned','in_transit','delivered')",
+        [$selectedMonthStart, $selectedMonthEnd]
+    );
+
+    if ($monthlyRow) {
+        $monthlyShippingDebtStats['orders_count'] = (int)($monthlyRow['orders_count'] ?? 0);
+        $monthlyShippingDebtStats['total_amount'] = (float)($monthlyRow['total_amount'] ?? 0);
+    }
+} catch (Throwable $monthlyError) {
+    error_log('shipping_orders: failed fetching monthly shipping debt stats -> ' . $monthlyError->getMessage());
+}
+
 $statusLabels = [
     'assigned' => ['label' => 'تم التسليم لشركة الشحن', 'class' => 'bg-primary'],
     'in_transit' => ['label' => 'جاري الشحن', 'class' => 'bg-warning text-dark'],
@@ -3979,6 +4019,43 @@ $tgError = '';
     })();
     </script>
 <?php endif; ?>
+
+<div class="card shadow-sm mb-4" id="shippingMonthlyDebtCard">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <h5 class="mb-0">إحصائية الديون الشهرية لشركات الشحن</h5>
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <form method="get" class="d-flex align-items-center gap-2 mb-0" role="search">
+                <input type="hidden" name="page" value="shipping_orders" />
+                <input type="month" name="stats_month" class="form-control form-control-sm" value="<?php echo htmlspecialchars($selectedMonth, ENT_QUOTES, 'UTF-8'); ?>" />
+                <button type="submit" class="btn btn-sm btn-primary">عرض</button>
+            </form>
+            <a href="?page=shipping_orders&stats_month=<?php echo urlencode(date('Y-m', strtotime($selectedMonthStart . ' -1 month'))); ?>" class="btn btn-sm btn-outline-secondary" title="الشهر السابق">◀</a>
+            <a href="?page=shipping_orders&stats_month=<?php echo urlencode(date('Y-m', strtotime($selectedMonthStart . ' +1 month'))); ?>" class="btn btn-sm btn-outline-secondary" title="الشهر التالي">▶</a>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="row g-2">
+            <div class="col-12 col-md-4">
+                <div class="p-2 rounded border h-100 bg-light">
+                    <div class="text-muted small">الشهر</div>
+                    <div class="fw-bold fs-6"><?php echo htmlspecialchars($selectedMonthLabel, ENT_QUOTES, 'UTF-8'); ?></div>
+                </div>
+            </div>
+            <div class="col-12 col-md-4">
+                <div class="p-2 rounded border h-100 bg-white">
+                    <div class="text-muted small">عدد الطلبات</div>
+                    <div class="fw-bold fs-5"><?php echo number_format($monthlyShippingDebtStats['orders_count']); ?></div>
+                </div>
+            </div>
+            <div class="col-12 col-md-4">
+                <div class="p-2 rounded border h-100 bg-white">
+                    <div class="text-muted small">إجمالي الدين المضاف</div>
+                    <div class="fw-bold fs-5 text-danger"><?php echo formatCurrency($monthlyShippingDebtStats['total_amount']); ?></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
 <div class="card shadow-sm mb-4" id="shippingCompaniesCard">
     <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
