@@ -257,6 +257,87 @@ if ($sessionError) {
 .btn-status:hover {
     background-color: #545b62;
 }
+
+/* Responsive styles for mobile */
+@media (max-width: 768px) {
+    .supply-item-row {
+        grid-template-columns: 1fr;
+        gap: 12px;
+        margin-bottom: 20px;
+        padding: 15px;
+        background: #f8f9fa;
+        border-radius: 8px;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    .supply-item-row input,
+    .supply-item-row button {
+        width: 100%;
+        padding: 15px;
+        font-size: 16px; /* Prevent zoom on iOS */
+        box-sizing: border-box;
+    }
+
+    .supplies-table {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    .supplies-table table {
+        min-width: 100%;
+        width: 100%;
+        table-layout: auto;
+    }
+
+    .supplies-table th,
+    .supplies-table td {
+        padding: 8px 6px;
+        font-size: 13px;
+        white-space: nowrap;
+    }
+
+    .action-buttons {
+        flex-wrap: wrap;
+        gap: 8px;
+        flex-direction: column;
+    }
+
+    .action-buttons button {
+        width: 100%;
+        min-width: auto;
+        padding: 10px;
+        margin-bottom: 5px;
+    }
+
+    .status-badge {
+        font-size: 11px;
+        padding: 4px 6px;
+        white-space: nowrap;
+    }
+
+    .card {
+        margin: 10px;
+        width: calc(100% - 20px);
+        box-sizing: border-box;
+    }
+
+    .card-body {
+        padding: 15px;
+    }
+}
+
+@media (max-width: 480px) {
+    .page-header h2 {
+        font-size: 1.3rem;
+    }
+
+    .card-header h5 {
+        font-size: 1rem;
+    }
+}
 </style>
 
 <div class="page-header">
@@ -385,12 +466,23 @@ if ($sessionError) {
 function initializeItems() {
     const container = document.getElementById('itemsContainer');
     const addBtn = document.getElementById('addItemBtn');
-    
+
+    if (!container || !addBtn) return;
+
+    // منع إضافة أحداث مكررة عند التهيئة المتعددة (AJAX navigation)
+    addBtn.removeEventListener('click', addItem);
     addBtn.addEventListener('click', addItem);
-    
+
     // إضافة عنصر واحد افتراضياً
     if (container.children.length === 0) {
         addItem();
+    }
+
+    // ربط حدث تقديم النموذج
+    const form = document.getElementById('suppliesForm');
+    if (form && !form.dataset.suppliesListenerAttached) {
+        form.dataset.suppliesListenerAttached = 'true';
+        form.addEventListener('submit', handleSuppliesSubmit);
     }
 }
 
@@ -441,19 +533,45 @@ function collectItems() {
     return items;
 }
 
-document.getElementById('suppliesForm').addEventListener('submit', function(e) {
+function handleSuppliesSubmit(e) {
     e.preventDefault();
-    
+
     const items = collectItems();
-    
     if (items.length === 0) {
         alert('يرجى إضافة عنصر واحد على الأقل.');
         return;
     }
-    
+
     document.getElementById('itemsInput').value = JSON.stringify(items);
-    this.submit();
-});
+
+    const form = document.getElementById('suppliesForm');
+    const submitBtn = form.querySelector('[type="submit"]');
+    if (submitBtn) submitBtn.disabled = true;
+
+    const formData = new FormData(form);
+
+    fetch(window.location.href, {
+        method: 'POST',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'text/html'
+        },
+        body: formData
+    })
+    .then(r => r.text())
+    .then(html => {
+        const main = document.querySelector('main');
+        if (main) {
+            main.innerHTML = html;
+            initializeItems();
+        }
+    })
+    .catch(() => alert('حدث خطأ في الاتصال بالخادم.'))
+    .finally(() => {
+        const btn = document.querySelector('#suppliesForm [type="submit"]');
+        if (btn) btn.disabled = false;
+    });
+}
 
 function printSupply(id, status) {
     // فتح نافذة جديدة للطباعة
@@ -521,6 +639,11 @@ function deleteSupply(id) {
     });
 }
 
-// تهيئة الصفحة
-document.addEventListener('DOMContentLoaded', initializeItems);
+// تهيئة الصفحة - تعمل في سياق التحميل الكامل وفي سياق AJAX navigation
+if (document.readyState !== 'loading') {
+    initializeItems();
+} else {
+    document.addEventListener('DOMContentLoaded', initializeItems);
+}
+window.addEventListener('ajaxNavigationComplete', initializeItems);
 </script>
