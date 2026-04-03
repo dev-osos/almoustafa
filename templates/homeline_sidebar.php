@@ -258,6 +258,13 @@ switch ($role) {
                 'badge' => null
             ],
             [
+                'title' => 'مستندات الموظفين',
+                'icon' => 'bi-file-earmark-text',
+                'url' => $baseUrl . 'manager.php?page=employee_documents',
+                'active' => ($currentPage === 'manager.php' && $currentPageParam === 'employee_documents'),
+                'badge' => null
+            ],
+            [
                 'title' => 'متابعة الحضور والانصراف',
                 'icon' => 'bi-calendar-check',
                 'url' => $baseUrl . 'manager.php?page=attendance_management',
@@ -546,6 +553,13 @@ switch ($role) {
                 'icon' => 'bi-currency-dollar',
                 'url' => $baseUrl . 'accountant.php?page=salaries',
                 'active' => ($currentPage === 'accountant.php' && ($currentPageParam === 'salaries' || $currentPageParam === 'salary_details')),
+                'badge' => null
+            ],
+            [
+                'title' => 'مستندات الموظفين',
+                'icon' => 'bi-file-earmark-text',
+                'url' => $baseUrl . 'accountant.php?page=employee_documents',
+                'active' => ($currentPage === 'accountant.php' && $currentPageParam === 'employee_documents'),
                 'badge' => null
             ],
             [

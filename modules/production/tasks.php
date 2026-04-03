@@ -2043,6 +2043,15 @@ function tasksHtml(string $value): string
     </div>
 </div>
 
+<?php
+// طباعة تلقائية عند البحث برقم أوردر محدد
+if ($filterTaskId !== '' && !empty($tasks) && count($tasks) === 1) {
+    $firstTask = $tasks[0];
+    $printUrl = getRelativeUrl('print_task_receipt.php?id=' . (int)$firstTask['id']);
+    echo '<script>window.addEventListener("load", function() { window.open("' . addslashes($printUrl) . '", "_blank", "noopener,noreferrer"); });</script>';
+}
+?>
+
 <?php if ($isManager): ?>
 <div class="modal fade d-none d-md-block" id="addTaskModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
