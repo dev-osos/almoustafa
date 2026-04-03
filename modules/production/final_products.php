@@ -2436,16 +2436,15 @@ try {
         SELECT 
             id,
             product_name,
-            category,
-            unit,
             unit_price,
-            description,
             status,
             created_at
         FROM product_templates
         WHERE status = 'active'
         ORDER BY product_name ASC
     ");
+    // Debug: Log the count
+    error_log('Product templates count: ' . count($productTemplates));
 } catch (Exception $e) {
     error_log('Error fetching product templates: ' . $e->getMessage());
 }
@@ -2580,20 +2579,6 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
                     </label>
                     <input type="text" class="form-control form-control-sm" id="templateSearchInput" placeholder="اسم القالب..." autocomplete="off" style="border-radius: 8px;">
                 </div>
-                <div>
-                    <label style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem; color: #666;">
-                        <i class="bi bi-folder me-1"></i>الصنف
-                    </label>
-                    <select class="form-control form-control-sm" id="templateCategoryFilter" style="border-radius: 8px;">
-                        <option value="">جميع الأصناف</option>
-                        <option value="عسل">عسل</option>
-                        <option value="زيت زيتون">زيت زيتون</option>
-                        <option value="كريمات">كريمات</option>
-                        <option value="زيوت">زيوت</option>
-                        <option value="تمور">تمور</option>
-                        <option value="اخري">اخري</option>
-                    </select>
-                </div>
             </div>
         </div>
 
@@ -2609,10 +2594,7 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
                     <?php foreach ($productTemplates as $template): ?>
                         <?php
                             $templateName = htmlspecialchars($template['product_name'] ?? 'غير محدد');
-                            $templateCategory = htmlspecialchars($template['category'] ?? '—');
-                            $templateUnit = htmlspecialchars($template['unit'] ?? 'قطعة');
                             $templatePrice = floatval($template['unit_price'] ?? 0);
-                            $templateDescription = htmlspecialchars($template['description'] ?? '');
                             $templateId = $template['id'] ?? 0;
                         ?>
                         <div class="product-card" style="background: white; padding: 20px; border: 1px solid #e2e6f3; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); transition: all 0.3s ease;">
@@ -2623,21 +2605,7 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
                             <div style="font-size: 16px; font-weight: bold; color: #0d2f66; margin-bottom: 6px; margin-top: 10px;"><?php echo $templateName; ?></div>
                             <div style="color: #94a3b8; font-size: 13px; margin-bottom: 10px;">الكود: <?php echo $templateId; ?></div>
                             
-                            <?php if (!empty($templateDescription)): ?>
-                                <div style="color: #64748b; font-size: 12px; margin-bottom: 10px; line-height: 1.4;">
-                                    <?php echo nl2br($templateDescription); ?>
-                                </div>
-                            <?php endif; ?>
-                            
                             <div style="font-size: 13px; margin-top: 8px; display: flex; justify-content: space-between;">
-                                <span>الصنف:</span>
-                                <span><?php echo $templateCategory; ?></span>
-                            </div>
-                            <div style="font-size: 13px; margin-top: 5px; display: flex; justify-content: space-between;">
-                                <span>الوحدة:</span>
-                                <span><?php echo $templateUnit; ?></span>
-                            </div>
-                            <div style="font-size: 13px; margin-top: 5px; display: flex; justify-content: space-between;">
                                 <span>السعر:</span>
                                 <span style="color: #059669; font-weight: 600;"><?php echo formatCurrency($templatePrice); ?></span>
                             </div>
@@ -2653,11 +2621,9 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
 <script>
 (function() {
     const templateSearchInput = document.getElementById('templateSearchInput');
-    const templateCategoryFilter = document.getElementById('templateCategoryFilter');
     
     function filterTemplates() {
         const searchText = (templateSearchInput?.value || '').toLowerCase();
-        const selectedCategory = templateCategoryFilter?.value || '';
         
         const grid = document.getElementById('templateProductsGrid');
         if (!grid) return;
@@ -2667,14 +2633,10 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
         
         cards.forEach(card => {
             const productName = card.querySelector('div:nth-child(1)')?.textContent.toLowerCase() || '';
-            const detailRows = card.querySelectorAll('div[style*="font-size: 13px"]');
-            const categoryRow = Array.from(detailRows).find(row => row.textContent.includes('الصنف:'));
-            const category = categoryRow?.textContent.replace('الصنف:', '').trim() || '';
             
             const matchesSearch = productName.includes(searchText);
-            const matchesCategory = !selectedCategory || category === selectedCategory;
             
-            if (matchesSearch && matchesCategory) {
+            if (matchesSearch) {
                 card.style.display = '';
                 visibleCount++;
             } else {
@@ -2690,10 +2652,6 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
     
     if (templateSearchInput) {
         templateSearchInput.addEventListener('input', filterTemplates);
-    }
-    
-    if (templateCategoryFilter) {
-        templateCategoryFilter.addEventListener('change', filterTemplates);
     }
 })();
 </script>

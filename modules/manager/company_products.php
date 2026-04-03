@@ -868,10 +868,7 @@ try {
         SELECT 
             id,
             product_name,
-            category,
-            unit,
             unit_price,
-            description,
             status,
             created_at
         FROM product_templates
@@ -1898,7 +1895,7 @@ foreach ($factoryProducts as $product) {
         <div class="section-header">
             <h5>
                 <i class="bi bi-diagram-3"></i>
-                 المنتجات
+                 قوالب المنتجات
             </h5>
             <span class="badge" id="templateProductsCount"><?php echo $totalProductTemplates; ?> قالب</span>
         </div>
@@ -1906,31 +1903,13 @@ foreach ($factoryProducts as $product) {
             <!-- شريط البحث والفلترة لقوالب المنتجات -->
             <div class="mb-3 p-3 bg-light rounded" style="border: 1px solid #dee2e6;">
                 <div class="row g-3">
-                    <div class="col-6 col-md-6">
+                    <div class="col-12 col-md-6">
                         <label class="form-label small mb-1"><i class="bi bi-search me-1"></i>البحث</label>
                         <input type="text" 
                                class="form-control form-control-sm" 
                                id="templateSearchInput" 
                                placeholder="اسم القالب..." 
                                autocomplete="off">
-                    </div>
-                    <div class="col-6 col-md-6">
-                        <label class="form-label small mb-1"><i class="bi bi-folder me-1"></i>الصنف</label>
-                        <select class="form-control form-control-sm" id="templateCategoryFilter">
-                            <option value="">جميع الأصناف</option>
-                            <?php if (!empty($productCategories)): ?>
-                                <?php foreach ($productCategories as $cat): ?>
-                                    <option value="<?php echo htmlspecialchars($cat['name']); ?>"><?php echo htmlspecialchars($cat['name']); ?></option>
-                                <?php endforeach; ?>
-                            <?php else: ?>
-                                <option value="عسل">عسل</option>
-                                <option value="زيت زيتون">زيت زيتون</option>
-                                <option value="كريمات">كريمات</option>
-                                <option value="زيوت">زيوت</option>
-                                <option value="تمور">تمور</option>
-                                <option value="اخري">اخري</option>
-                            <?php endif; ?>
-                        </select>
                     </div>
                 </div>
             </div>
@@ -1948,10 +1927,7 @@ foreach ($factoryProducts as $product) {
                     <?php foreach ($productTemplates as $template): ?>
                         <?php
                             $templateName = htmlspecialchars($template['product_name'] ?? 'غير محدد');
-                            $templateCategory = htmlspecialchars($template['category'] ?? '—');
-                            $templateUnit = htmlspecialchars($template['unit'] ?? 'قطعة');
                             $templatePrice = floatval($template['unit_price'] ?? 0);
-                            $templateDescription = htmlspecialchars($template['description'] ?? '');
                             $templateId = $template['id'] ?? 0;
                         ?>
                         <div class="product-card">
@@ -1962,14 +1938,6 @@ foreach ($factoryProducts as $product) {
                             <div class="product-name"><?php echo $templateName; ?></div>
                             <div style="color: #94a3b8; font-size: 13px; margin-bottom: 10px;">الكود: <?php echo $templateId; ?></div>
 
-                            <?php if (!empty($templateDescription)): ?>
-                                <div style="color: #64748b; font-size: 12px; margin-bottom: 10px; line-height: 1.4;">
-                                    <?php echo nl2br($templateDescription); ?>
-                                </div>
-                            <?php endif; ?>
-
-                            <div class="product-detail-row"><span>الصنف:</span> <span><?php echo $templateCategory; ?></span></div>
-                            <div class="product-detail-row"><span>الوحدة:</span> <span><strong><?php echo $templateUnit; ?></strong></span></div>
                             <div class="product-detail-row"><span>السعر:</span> <span><strong class="text-success"><?php echo formatCurrency($templatePrice); ?></strong></span></div>
                         </div>
                     <?php endforeach; ?>
@@ -4096,12 +4064,10 @@ function initEditExternalButtons() {
 // ===== البحث والفلترة لقوالب المنتجات =====
 (function() {
     const templateSearchInput = document.getElementById('templateSearchInput');
-    const templateCategoryFilter = document.getElementById('templateCategoryFilter');
     const templateProductsContainer = document.getElementById('templateProductsContainer');
     
     function filterTemplates() {
         const searchText = (templateSearchInput?.value || '').toLowerCase();
-        const selectedCategory = templateCategoryFilter?.value || '';
         
         const grid = document.getElementById('templateProductsGrid');
         if (!grid) return;
@@ -4111,15 +4077,10 @@ function initEditExternalButtons() {
         
         cards.forEach(card => {
             const productName = card.querySelector('.product-name')?.textContent.toLowerCase() || '';
-            const categoryRow = Array.from(card.querySelectorAll('.product-detail-row')).find(row => 
-                row.textContent.includes('الصنف:')
-            );
-            const category = categoryRow?.textContent.replace('الصنف:', '').trim() || '';
             
             const matchesSearch = productName.includes(searchText);
-            const matchesCategory = !selectedCategory || category === selectedCategory;
             
-            if (matchesSearch && matchesCategory) {
+            if (matchesSearch) {
                 card.style.display = '';
                 visibleCount++;
             } else {
@@ -4142,10 +4103,6 @@ function initEditExternalButtons() {
     
     if (templateSearchInput) {
         templateSearchInput.addEventListener('input', filterTemplates);
-    }
-    
-    if (templateCategoryFilter) {
-        templateCategoryFilter.addEventListener('change', filterTemplates);
     }
 })();
 
