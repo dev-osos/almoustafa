@@ -4385,7 +4385,7 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
     const productIdInput = document.getElementById('transferExternalProductId');
     const productNameInput = document.getElementById('transferExternalProductName');
     const availableQtyInput = document.getElementById('transferExternalAvailableQty');
-    const quantityInput = document.getElementById('transferExternalQuantity');
+    const transferExternalQuantityInput = document.getElementById('transferExternalQuantity');
     const maxQtySpan = document.getElementById('transferExternalMaxQty');
     
     if (!transferModal || !transferForm) return;
@@ -4436,9 +4436,9 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
                 if (productNameInput) productNameInput.value = productName;
                 if (availableQtyInput) availableQtyInput.value = availableQty.toFixed(2) + ' ' + unit;
                 if (maxQtySpan) maxQtySpan.textContent = availableQty.toFixed(2) + ' ' + unit;
-                if (quantityInput) {
-                    quantityInput.value = '';
-                    quantityInput.max = availableQty.toFixed(2);
+                if (transferExternalQuantityInput) {
+                    transferExternalQuantityInput.value = '';
+                    transferExternalQuantityInput.max = availableQty.toFixed(2);
                 }
                 
                 const bsModal = new bootstrap.Modal(transferModal);
@@ -4447,8 +4447,8 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
         });
     });
     
-    if (quantityInput) {
-        quantityInput.addEventListener('input', function() {
+    if (transferExternalQuantityInput) {
+        transferExternalQuantityInput.addEventListener('input', function() {
             const maxQty = parseFloat(this.max || '0');
             const currentQty = parseFloat(this.value || '0');
             if (currentQty > maxQty) {
@@ -6868,9 +6868,9 @@ function showBarcodePrintModal(batchNumber, productName, defaultQuantity) {
             productNameInput.value = productName || '';
         }
         
-        const quantityInput = document.getElementById('barcodeCardPrintQuantity');
-        if (quantityInput) {
-            quantityInput.value = quantity;
+        const barcodeCardQuantityInput = document.getElementById('barcodeCardPrintQuantity');
+        if (barcodeCardQuantityInput) {
+            barcodeCardQuantityInput.value = quantity;
         }
         
         const batchListContainer = document.getElementById('batchNumbersListCard');
@@ -6911,9 +6911,9 @@ function showBarcodePrintModal(batchNumber, productName, defaultQuantity) {
             quantityText.textContent = quantity;
         }
         
-        const quantityInput = document.getElementById('barcode_print_quantity');
-        if (quantityInput) {
-            quantityInput.value = quantity;
+        const barcodeModalQuantityInput = document.getElementById('barcode_print_quantity');
+        if (barcodeModalQuantityInput) {
+            barcodeModalQuantityInput.value = quantity;
         }
         
         const batchListContainer = document.getElementById('batch_numbers_list');
@@ -6944,8 +6944,8 @@ function printBarcodes() {
         return;
     }
 
-    const quantityInput = document.getElementById('barcode_print_quantity');
-    const printQuantity = quantityInput ? parseInt(quantityInput.value, 10) : 1;
+    const barcodePrintQuantityInput = document.getElementById('barcode_print_quantity');
+    const printQuantity = barcodePrintQuantityInput ? parseInt(barcodePrintQuantityInput.value, 10) : 1;
     
     if (!printQuantity || printQuantity < 1) {
         alert('يرجى إدخال عدد صحيح للطباعة');
@@ -6964,8 +6964,8 @@ function printBarcodesFromCard() {
         return;
     }
 
-    const quantityInput = document.getElementById('barcodeCardPrintQuantity');
-    const printQuantity = quantityInput ? parseInt(quantityInput.value, 10) : 1;
+    const barcodeCardPrintQuantityInput = document.getElementById('barcodeCardPrintQuantity');
+    const printQuantity = barcodeCardPrintQuantityInput ? parseInt(barcodeCardPrintQuantityInput.value, 10) : 1;
     
     if (!printQuantity || printQuantity < 1) {
         alert('يرجى إدخال عدد صحيح للطباعة');
