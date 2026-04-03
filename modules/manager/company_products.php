@@ -1898,7 +1898,7 @@ foreach ($factoryProducts as $product) {
         <div class="section-header">
             <h5>
                 <i class="bi bi-diagram-3"></i>
-                قوالب المنتجات
+                 المنتجات
             </h5>
             <span class="badge" id="templateProductsCount"><?php echo $totalProductTemplates; ?> قالب</span>
         </div>
