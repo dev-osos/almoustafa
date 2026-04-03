@@ -3651,6 +3651,48 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
         <span class="badge bg-light text-dark"><?php echo number_format(count($externalProductsForProduction)); ?> منتج</span>
     </div>
     <div class="card-body">
+        <div class="row g-3 align-items-end mb-3">
+            <div class="col-md-6">
+                <label for="externalProductsSearchInput" class="form-label">بحث باسم المنتج</label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input
+                        type="text"
+                        class="form-control"
+                        id="externalProductsSearchInput"
+                        placeholder="اكتب اسم المنتج للبحث"
+                    >
+                </div>
+            </div>
+            <div class="col-md-3">
+                <label for="externalProductsMinQty" class="form-label">الكمية من</label>
+                <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    class="form-control"
+                    id="externalProductsMinQty"
+                    placeholder="0.00"
+                >
+            </div>
+            <div class="col-md-3">
+                <label for="externalProductsMaxQty" class="form-label">الكمية إلى</label>
+                <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    class="form-control"
+                    id="externalProductsMaxQty"
+                    placeholder="بدون حد أقصى"
+                >
+            </div>
+        </div>
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+            <small class="text-muted">يمكنك تصفية المنتجات حسب الاسم أو نطاق الكمية المتاحة.</small>
+            <span class="badge bg-info-subtle text-info-emphasis" id="externalProductsVisibleCount">
+                <?php echo number_format(count($externalProductsForProduction)); ?> / <?php echo number_format(count($externalProductsForProduction)); ?> منتج
+            </span>
+        </div>
         <div class="table-responsive dashboard-table-wrapper">
             <table class="table dashboard-table align-middle mb-0">
                 <thead class="table-light">
@@ -3659,32 +3701,34 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
                         <th>كمية المنتج</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="externalProductsTableBody">
                     <?php foreach ($externalProductsForProduction as $externalProduct): ?>
-                    <tr>
+                    <?php
+                    $productId = (int)($externalProduct['id'] ?? 0);
+                    $availableQty = (float)($externalProduct['quantity'] ?? 0);
+                    
+                    // حساب الكمية المحجوزة في طلبات النقل المعلقة
+                    if ($primaryWarehouse && $productId > 0) {
+                        $pendingTransfers = $db->queryOne(
+                            "SELECT COALESCE(SUM(wti.quantity), 0) AS pending_quantity
+                             FROM warehouse_transfer_items wti
+                             INNER JOIN warehouse_transfers wt ON wt.id = wti.transfer_id
+                             WHERE wti.product_id = ? AND wt.from_warehouse_id = ? AND wt.status = 'pending'",
+                            [$productId, $primaryWarehouse['id']]
+                        );
+                        $availableQty -= (float)($pendingTransfers['pending_quantity'] ?? 0);
+                        $availableQty = max(0, $availableQty);
+                    }
+                    ?>
+                    <tr
+                        data-product-name="<?php echo htmlspecialchars(mb_strtolower($externalProduct['name'] ?? '', 'UTF-8'), ENT_QUOTES, 'UTF-8'); ?>"
+                        data-quantity="<?php echo htmlspecialchars((string)$availableQty, ENT_QUOTES, 'UTF-8'); ?>"
+                    >
                         <td>
                             <strong><?php echo htmlspecialchars($externalProduct['name'] ?? ''); ?></strong>
                         </td>
                         <td>
-                            <?php 
-                            $productId = (int)($externalProduct['id'] ?? 0);
-                            $availableQty = (float)($externalProduct['quantity'] ?? 0);
-                            
-                            // حساب الكمية المحجوزة في طلبات النقل المعلقة
-                            if ($primaryWarehouse && $productId > 0) {
-                                $pendingTransfers = $db->queryOne(
-                                    "SELECT COALESCE(SUM(wti.quantity), 0) AS pending_quantity
-                                     FROM warehouse_transfer_items wti
-                                     INNER JOIN warehouse_transfers wt ON wt.id = wti.transfer_id
-                                     WHERE wti.product_id = ? AND wt.from_warehouse_id = ? AND wt.status = 'pending'",
-                                    [$productId, $primaryWarehouse['id']]
-                                );
-                                $availableQty -= (float)($pendingTransfers['pending_quantity'] ?? 0);
-                                $availableQty = max(0, $availableQty);
-                            }
-                            
-                            echo number_format($availableQty, 2); 
-                            ?>
+                            <?php echo number_format($availableQty, 2); ?>
                         </td>
                     </tr>
                     <?php endforeach; ?>
@@ -3693,6 +3737,57 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
         </div>
     </div>
 </div>
+
+<script>
+(function() {
+    const searchInput = document.getElementById('externalProductsSearchInput');
+    const minQtyInput = document.getElementById('externalProductsMinQty');
+    const maxQtyInput = document.getElementById('externalProductsMaxQty');
+    const tableBody = document.getElementById('externalProductsTableBody');
+    const visibleCountBadge = document.getElementById('externalProductsVisibleCount');
+
+    if (!searchInput || !minQtyInput || !maxQtyInput || !tableBody || !visibleCountBadge) {
+        return;
+    }
+
+    const rows = Array.from(tableBody.querySelectorAll('tr'));
+    const totalCount = rows.length;
+
+    function updateVisibleCount(visibleCount) {
+        visibleCountBadge.textContent = `${visibleCount.toLocaleString('en-US')} / ${totalCount.toLocaleString('en-US')} منتج`;
+    }
+
+    function filterExternalProducts() {
+        const searchText = (searchInput.value || '').trim().toLocaleLowerCase('ar');
+        const minQty = minQtyInput.value === '' ? null : parseFloat(minQtyInput.value);
+        const maxQty = maxQtyInput.value === '' ? null : parseFloat(maxQtyInput.value);
+        let visibleCount = 0;
+
+        rows.forEach((row) => {
+            const productName = row.dataset.productName || '';
+            const quantity = parseFloat(row.dataset.quantity || '0');
+
+            const matchesSearch = searchText === '' || productName.includes(searchText);
+            const matchesMinQty = minQty === null || quantity >= minQty;
+            const matchesMaxQty = maxQty === null || quantity <= maxQty;
+            const isVisible = matchesSearch && matchesMinQty && matchesMaxQty;
+
+            row.style.display = isVisible ? '' : 'none';
+            if (isVisible) {
+                visibleCount += 1;
+            }
+        });
+
+        updateVisibleCount(visibleCount);
+    }
+
+    [searchInput, minQtyInput, maxQtyInput].forEach((input) => {
+        input.addEventListener('input', filterExternalProducts);
+    });
+
+    filterExternalProducts();
+})();
+</script>
 
 <!-- Modal نقل منتج خارجي - للكمبيوتر فقط -->
 <div class="modal fade d-none d-md-block" id="transferExternalProductModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
@@ -6927,6 +7022,5 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 })();
 </script>
-
 
 
