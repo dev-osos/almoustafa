@@ -1,0 +1,293 @@
+/**
+ * PWA Styles
+ * تصميم PWA
+ */
+
+/* PWA Install Banner */
+.install-banner {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 0;
+    border-radius: 20px;
+    box-shadow: 0 12px 48px rgba(102, 126, 234, 0.35), 0 4px 16px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+    z-index: 1000;
+    display: none;
+    max-width: 480px;
+    width: 90%;
+    animation: slideUp 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: hidden;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+}
+
+.install-banner::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%);
+    pointer-events: none;
+}
+
+.install-banner.show {
+    display: block;
+}
+
+.install-banner.auto-hide {
+    opacity: 0;
+    transform: translateX(-50%) translateY(20px);
+}
+
+.install-banner-content {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 20px 24px;
+    position: relative;
+    z-index: 1;
+}
+
+.install-banner-icon {
+    flex-shrink: 0;
+    width: 52px;
+    height: 52px;
+    background: rgba(255, 255, 255, 0.25);
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(255, 255, 255, 0.2) inset;
+    transition: all 0.3s ease;
+}
+
+.install-banner-icon i {
+    font-size: 24px;
+    color: white;
+}
+
+.install-banner-text {
+    flex: 1;
+    min-width: 0;
+}
+
+.install-banner-title {
+    margin: 0 0 6px 0;
+    font-size: 17px;
+    font-weight: 700;
+    color: white;
+    line-height: 1.4;
+    letter-spacing: 0.2px;
+}
+
+.install-banner-description {
+    margin: 0;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.95);
+    line-height: 1.6;
+    letter-spacing: 0.1px;
+}
+
+.install-banner-button {
+    flex-shrink: 0;
+    background: white;
+    color: #667eea;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 12px;
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15), 0 2px 4px rgba(0, 0, 0, 0.1);
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
+    letter-spacing: 0.3px;
+}
+
+.install-banner-button:hover {
+    background: #f8f9fa;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.install-banner-button:active {
+    transform: translateY(0);
+}
+
+.install-banner-button i {
+    font-size: 16px;
+}
+
+.install-banner-close {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 36px;
+    height: 36px;
+    background: rgba(255, 255, 255, 0.25);
+    border: none;
+    border-radius: 50%;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    padding: 0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.install-banner-close:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: scale(1.1);
+}
+
+.install-banner-close:active {
+    transform: scale(0.95);
+}
+
+.install-banner-close i {
+    font-size: 14px;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(40px) scale(0.92);
+        filter: blur(4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0) scale(1);
+        filter: blur(0);
+    }
+}
+
+/* تحسينات للهواتف المحمولة */
+@media (max-width: 768px) {
+    .install-banner {
+        bottom: 10px;
+        left: 10px;
+        right: 10px;
+        width: auto;
+        max-width: 100%;
+        transform: none;
+        border-radius: 18px;
+    }
+    
+    .install-banner.show {
+        animation: slideUpMobile 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    
+    .install-banner.auto-hide {
+        transform: translateY(20px);
+    }
+    
+    @keyframes slideUpMobile {
+        from {
+            opacity: 0;
+            transform: translateY(40px) scale(0.92);
+            filter: blur(4px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+            filter: blur(0);
+        }
+    }
+    
+    .install-banner-content {
+        flex-direction: row;
+        gap: 14px;
+        padding: 16px 18px;
+    }
+    
+    .install-banner-icon {
+        width: 44px;
+        height: 44px;
+    }
+    
+    .install-banner-icon i {
+        font-size: 20px;
+    }
+    
+    .install-banner-title {
+        font-size: 15px;
+    }
+    
+    .install-banner-description {
+        font-size: 12px;
+    }
+    
+    .install-banner-button {
+        padding: 8px 16px;
+        font-size: 13px;
+    }
+    
+    .install-banner-close {
+        width: 28px;
+        height: 28px;
+        top: 6px;
+        right: 6px;
+    }
+    
+    .install-banner-close i {
+        font-size: 12px;
+    }
+}
+
+/* Safe area support for iPhone with notch */
+@supports (padding: max(0px)) {
+    .install-banner {
+        bottom: max(20px, env(safe-area-inset-bottom));
+    }
+    
+    @media (max-width: 768px) {
+        .install-banner {
+            bottom: max(10px, env(safe-area-inset-bottom));
+        }
+    }
+}
+
+/* Offline Indicator */
+#offlineIndicator {
+    position: fixed;
+    top: var(--topbar-height);
+    left: 0;
+    right: 0;
+    background: var(--accent-orange);
+    color: white;
+    padding: var(--spacing-sm);
+    text-align: center;
+    z-index: 999;
+    display: none;
+}
+
+#offlineIndicator.show {
+    display: block;
+}
+
+/* Loading States */
+.loading {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+/* Service Worker Ready */
+.service-worker-ready {
+    /* Styles for when service worker is ready */
+}
+

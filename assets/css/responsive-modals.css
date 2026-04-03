@@ -1,0 +1,594 @@
+/**
+ * Responsive Modals CSS
+ * تصميم متجاوب للـ Modals على الأجهزة المحمولة
+ * 
+ * هذا الملف يحتوي على قواعد CSS تجعل الـ Modals تعمل بشكل أفضل على الأجهزة المحمولة
+ * 
+ * المميزات:
+ * - تحسين عرض الـ Modals على الشاشات الصغيرة (حتى 768px)
+ * - تحسين خاص للهواتف الصغيرة جداً (حتى 480px)
+ * - إزالة المسافات الزائدة وتحسين التمرير
+ * 
+ * الاستخدام:
+ * 
+ * 1. في ملف HTML/PHP:
+ *    <link rel="stylesheet" href="assets/css/responsive-modals.css">
+ * 
+ * 2. في ملف PHP مع استخدام path_helper:
+ *    <link rel="stylesheet" href="<?php echo getRelativeUrl('assets/css/responsive-modals.css'); ?>">
+ * 
+ * 3. في قسم <head>:
+ *    <link rel="stylesheet" href="<?php echo getRelativeUrl('assets/css/responsive-modals.css'); ?>">
+ * 
+ * ملاحظة: هذا الملف يعمل مع جميع الـ Modals التي تستخدم Bootstrap classes:
+ * - .modal
+ * - .modal-dialog
+ * - .modal-content
+ * - .modal-body
+ * - .modal-header
+ * - .modal-footer
+ */
+
+/* ===== Responsive Modals for Mobile ===== */
+@media (max-width: 768px) {
+    .modal {
+        padding: 0 !important;
+    }
+
+    .modal-dialog {
+        margin: 0.5rem auto !important;
+        max-width: 95% !important;
+        width: 95% !important;
+        max-height: calc(100vh - 1rem) !important;
+        height: auto !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        flex: 0 1 auto !important; /* لا يتمدد - ينكمش - حجم تلقائي */
+    }
+    
+    /* تجاوز قواعد modal-mobile-fix.css - منع المساحة البيضاء */
+    .modal.show .modal-dialog,
+    .modal.showing .modal-dialog {
+        height: auto !important; /* تجاوز height: calc(100vh - 1rem) من modal-mobile-fix.css */
+        max-height: calc(100vh - 1rem) !important;
+    }
+    
+    /* دعم خاص لـ modal-xl على الموبايل */
+    .modal-dialog.modal-xl {
+        max-width: calc(100% - 1rem) !important;
+        width: calc(100% - 1rem) !important;
+        margin: 0.5rem !important;
+        max-height: calc(100vh - 1rem) !important;
+        height: auto !important;
+    }
+
+    .modal-content {
+        max-height: 90vh !important;
+        border-radius: 12px !important;
+        overflow: hidden !important;
+        display: flex !important;
+        flex-direction: column !important;
+        flex: 0 1 auto !important; /* يأخذ فقط المساحة التي يحتاجها */
+        min-height: 0 !important;
+        align-items: stretch !important;
+        justify-content: flex-start !important; /* محاذاة المحتوى من الأعلى */
+        height: auto !important; /* إضافة هذا لتجاوز height: 100% من modal-mobile-fix.css */
+    }
+    
+    /* تجاوز قواعد modal-mobile-fix.css للـ modal-content */
+    .modal.show .modal-content,
+    .modal.showing .modal-content {
+        height: auto !important; /* تجاوز height: 100% من modal-mobile-fix.css */
+        max-height: 90vh !important;
+    }
+    
+    /* تحسين modal-xl content */
+    .modal-dialog.modal-xl .modal-content {
+        max-height: calc(100vh - 1rem) !important;
+        flex: 0 1 auto !important;
+    }
+
+    .modal-header {
+        padding: 0.75rem 1rem !important;
+        flex: 0 0 auto !important;
+        flex-shrink: 0 !important;
+    }
+
+    .modal-body {
+        flex: 0 1 auto !important; /* يأخذ فقط المساحة التي يحتاجها المحتوى */
+        min-height: 0 !important;
+        max-height: calc(90vh - 120px) !important; /* header + footer */
+        overflow-y: auto !important;
+        padding: 1rem !important;
+        -webkit-overflow-scrolling: touch !important;
+        align-self: stretch !important;
+        width: 100% !important;
+        height: auto !important; /* إضافة هذا لتجاوز أي height محدد */
+    }
+    
+    /* تجاوز قواعد modal-mobile-fix.css للـ modal-body */
+    .modal.show .modal-body,
+    .modal.showing .modal-body {
+        height: auto !important; /* تجاوز أي height محدد من modal-mobile-fix.css */
+        flex: 0 1 auto !important;
+    }
+    
+    /* دعم خاص لـ modal-dialog-scrollable */
+    .modal-dialog-scrollable .modal-body {
+        overflow-y: auto !important;
+        max-height: calc(90vh - 120px) !important;
+        -webkit-overflow-scrolling: touch !important;
+    }
+    
+    /* تجاوز خاص لـ modal-dialog-scrollable من modal-mobile-fix.css */
+    .modal.show .modal-dialog-scrollable .modal-content,
+    .modal.showing .modal-dialog-scrollable .modal-content {
+        height: auto !important; /* تجاوز height: 100% من modal-mobile-fix.css */
+        max-height: 90vh !important;
+    }
+
+    .modal.show .modal-dialog-scrollable .modal-body,
+    .modal.showing .modal-dialog-scrollable .modal-body {
+        height: auto !important; /* تجاوز أي height محدد من modal-mobile-fix.css */
+        flex: 0 1 auto !important;
+        max-height: calc(90vh - 120px) !important;
+    }
+    
+    /* تحسين modal-xl body */
+    .modal-dialog.modal-xl .modal-body {
+        flex: 0 1 auto !important;
+        min-height: 0 !important;
+        max-height: calc(100vh - 200px) !important; /* header + footer + margins */
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+        align-self: stretch !important;
+        width: 100% !important;
+    }
+
+    .modal-footer {
+        padding: 0.75rem 1rem !important;
+        flex: 0 0 auto !important;
+        flex-shrink: 0 !important;
+        border-top: 1px solid #dee2e6 !important;
+    }
+    
+    /* تحسين modal-xl header و footer */
+    .modal-dialog.modal-xl .modal-header,
+    .modal-dialog.modal-xl .modal-footer {
+        flex: 0 0 auto !important;
+        flex-shrink: 0 !important;
+    }
+}
+
+/* ===== Extra Small Phones ===== */
+@media (max-width: 480px) {
+    .modal-dialog {
+        max-width: 100% !important;
+        width: 100% !important;
+        margin: 0 !important;
+        max-height: 100vh !important;
+        height: auto !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        flex: 0 1 auto !important; /* لا يتمدد - ينكمش - حجم تلقائي */
+    }
+    
+    /* تجاوز قواعد modal-mobile-fix.css - منع المساحة البيضاء */
+    .modal.show .modal-dialog,
+    .modal.showing .modal-dialog {
+        height: auto !important; /* تجاوز height: calc(100vh - 1rem) من modal-mobile-fix.css */
+        max-height: 100vh !important;
+    }
+    
+    /* دعم خاص لـ modal-xl على الهواتف الصغيرة */
+    .modal-dialog.modal-xl {
+        max-width: 100% !important;
+        width: 100% !important;
+        margin: 0 !important;
+        max-height: 100vh !important;
+        height: auto !important;
+    }
+
+    .modal-content {
+        max-height: 100vh !important;
+        border-radius: 0 !important;
+        display: flex !important;
+        flex-direction: column !important;
+        flex: 0 1 auto !important; /* يأخذ فقط المساحة التي يحتاجها */
+        min-height: 0 !important;
+        align-items: stretch !important;
+        justify-content: flex-start !important; /* محاذاة المحتوى من الأعلى */
+        height: auto !important; /* إضافة هذا لتجاوز height: 100% من modal-mobile-fix.css */
+    }
+    
+    /* تجاوز قواعد modal-mobile-fix.css للـ modal-content */
+    .modal.show .modal-content,
+    .modal.showing .modal-content {
+        height: auto !important; /* تجاوز height: 100% من modal-mobile-fix.css */
+        max-height: 100vh !important;
+    }
+    
+    /* تحسين modal-xl content على الهواتف الصغيرة */
+    .modal-dialog.modal-xl .modal-content {
+        max-height: 100vh !important;
+        border-radius: 0 !important;
+        flex: 0 1 auto !important;
+    }
+
+    .modal-header {
+        padding: 0.75rem 1rem !important;
+        flex: 0 0 auto !important;
+        flex-shrink: 0 !important;
+    }
+
+    .modal-body {
+        flex: 0 1 auto !important; /* يأخذ فقط المساحة التي يحتاجها المحتوى */
+        min-height: 0 !important;
+        max-height: calc(100vh - 110px) !important; /* header + footer */
+        overflow-y: auto !important;
+        padding: 0.75rem !important;
+        -webkit-overflow-scrolling: touch !important;
+        align-self: stretch !important;
+        width: 100% !important;
+        height: auto !important; /* إضافة هذا لتجاوز أي height محدد */
+    }
+    
+    /* تجاوز قواعد modal-mobile-fix.css للـ modal-body */
+    .modal.show .modal-body,
+    .modal.showing .modal-body {
+        height: auto !important; /* تجاوز أي height محدد من modal-mobile-fix.css */
+        flex: 0 1 auto !important;
+    }
+    
+    /* دعم خاص لـ modal-dialog-scrollable على الهواتف الصغيرة */
+    .modal-dialog-scrollable .modal-body {
+        overflow-y: auto !important;
+        max-height: calc(100vh - 110px) !important;
+        -webkit-overflow-scrolling: touch !important;
+    }
+    
+    /* تجاوز خاص لـ modal-dialog-scrollable من modal-mobile-fix.css */
+    .modal.show .modal-dialog-scrollable .modal-content,
+    .modal.showing .modal-dialog-scrollable .modal-content {
+        height: auto !important; /* تجاوز height: 100% من modal-mobile-fix.css */
+        max-height: 100vh !important;
+    }
+
+    .modal.show .modal-dialog-scrollable .modal-body,
+    .modal.showing .modal-dialog-scrollable .modal-body {
+        height: auto !important; /* تجاوز أي height محدد من modal-mobile-fix.css */
+        flex: 0 1 auto !important;
+        max-height: calc(100vh - 110px) !important;
+    }
+    
+    /* تحسين modal-xl body على الهواتف الصغيرة */
+    .modal-dialog.modal-xl .modal-body {
+        flex: 0 1 auto !important;
+        min-height: 0 !important;
+        max-height: calc(100vh - 180px) !important; /* header + footer + margins */
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+        align-self: stretch !important;
+        width: 100% !important;
+    }
+
+    .modal-footer {
+        padding: 0.75rem 1rem !important;
+        flex: 0 0 auto !important;
+        flex-shrink: 0 !important;
+        border-top: 1px solid #dee2e6 !important;
+    }
+    
+    /* تحسين modal-xl header و footer */
+    .modal-dialog.modal-xl .modal-header,
+    .modal-dialog.modal-xl .modal-footer {
+        flex: 0 0 auto !important;
+        flex-shrink: 0 !important;
+    }
+}
+
+/* ===== Tablet Support ===== */
+@media (min-width: 769px) and (max-width: 1024px) {
+    .modal-dialog.modal-xl {
+        max-width: 90% !important;
+        width: 90% !important;
+    }
+    
+    .modal-dialog.modal-xl .modal-content {
+        max-height: calc(100vh - 2rem) !important;
+    }
+    
+    .modal-dialog.modal-xl .modal-body {
+        max-height: calc(100vh - 250px) !important;
+    }
+}
+
+/* ===== إصلاح المساحات البيضاء حول الصور في الـ Modals ===== */
+@media (max-width: 768px) {
+    /* إزالة padding الأفقي من modal-body للصور والـ containers */
+    .modal-body img,
+    .modal-body #capturedImage,
+    .modal-body #video,
+    .modal-body #capturedImageContainer,
+    .modal-body #cameraContainer {
+        margin-left: calc(-1 * 1rem) !important;
+        margin-right: calc(-1 * 1rem) !important;
+        width: calc(100% + 2 * 1rem) !important;
+        max-width: calc(100% + 2 * 1rem) !important;
+    }
+    
+    /* إزالة padding من containers الصور */
+    #capturedImageContainer,
+    #cameraContainer {
+        padding: 0 !important;
+        margin: 0 !important;
+        display: block !important;
+        width: 100% !important;
+        min-height: 0 !important;
+        height: auto !important;
+    }
+    
+    /* إزالة text-align: center الذي قد يسبب مشاكل */
+    #capturedImageContainer {
+        text-align: left !important;
+    }
+    
+    /* الصور تأخذ العرض الكامل بدون margins أو padding إضافية */
+    .modal-body img,
+    .modal-body #capturedImage,
+    .modal-body #video {
+        display: block !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        height: auto !important;
+        object-fit: cover !important;
+    }
+    
+    /* إصلاح aspect-ratio للصور الملتقطة */
+    #capturedImage {
+        aspect-ratio: 1 / 1 !important;
+        object-fit: cover !important;
+        object-position: center !important;
+    }
+    
+    /* إزالة margin-top و margin-bottom للصور الأولى والأخيرة */
+    .modal-body > img:first-child,
+    .modal-body > #capturedImage:first-child,
+    .modal-body > #video:first-child,
+    .modal-body > #capturedImageContainer:first-child,
+    .modal-body > #cameraContainer:first-child {
+        margin-top: calc(-1 * 1rem) !important;
+    }
+    
+    .modal-body > img:last-child,
+    .modal-body > #capturedImage:last-child,
+    .modal-body > #video:last-child,
+    .modal-body > #capturedImageContainer:last-child,
+    .modal-body > #cameraContainer:last-child {
+        margin-bottom: calc(-1 * 1rem) !important;
+    }
+    
+    /* إزالة أي مساحة بيضاء من divs التي تحتوي على صور */
+    .modal-body > div:has(> img),
+    .modal-body > div:has(> #capturedImage),
+    .modal-body > div:has(> #video) {
+        margin-left: calc(-1 * 1rem) !important;
+        margin-right: calc(-1 * 1rem) !important;
+        width: calc(100% + 2 * 1rem) !important;
+        max-width: calc(100% + 2 * 1rem) !important;
+        padding: 0 !important;
+    }
+    
+    /* ===== إصلاحات محددة للمودالات من الصور ===== */
+    
+    /* 1. مودال تصدير العملاء المحددين إلى Excel */
+    #customerExportModal .modal-body {
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+    
+    #customerExportModal .modal-body > *:not(.table-responsive):not(.btn-group):not(.alert) {
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+    }
+    
+    #customerExportModal .table-responsive {
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        width: 100% !important;
+        padding: 0 !important;
+    }
+    
+    /* 2. مودال طباعة تقرير التوريدات */
+    #printSupplierReportModal .modal-body {
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+    
+    #printSupplierReportModal .modal-body > *:not(.alert) {
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+    }
+    
+    /* 3. مودال تعديل الموردين */
+    #editSupplierModal .modal-body {
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+    
+    #editSupplierModal .modal-body > * {
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+    }
+    
+    /* 4. مودال تحصيل ديون العميل المحلي */
+    #collectPaymentModal .modal-body {
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+    
+    #collectPaymentModal .modal-body > * {
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+    }
+    
+    /* 5. مودال إضافة رصيد للمورد */
+    #addSupplierBalanceModal .modal-body {
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+    
+    #addSupplierBalanceModal .modal-body > * {
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+    }
+    
+    /* 6. مودال استيراد العملاء المحليين من ملف */
+    #importLocalCustomersModal .modal-body {
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+    
+    #importLocalCustomersModal .modal-body > *:not(.alert) {
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+    }
+    
+    #importLocalCustomersModal .alert {
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        width: 100% !important;
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+    }
+}
+
+/* ===== إصلاح خاص للهواتف الصغيرة جداً ===== */
+@media (max-width: 480px) {
+    /* نفس القواعد مع padding أقل */
+    .modal-body img,
+    .modal-body #capturedImage,
+    .modal-body #video,
+    .modal-body #capturedImageContainer,
+    .modal-body #cameraContainer {
+        margin-left: calc(-1 * 0.75rem) !important;
+        margin-right: calc(-1 * 0.75rem) !important;
+        width: calc(100% + 2 * 0.75rem) !important;
+        max-width: calc(100% + 2 * 0.75rem) !important;
+    }
+    
+    .modal-body > img:first-child,
+    .modal-body > #capturedImage:first-child,
+    .modal-body > #video:first-child,
+    .modal-body > #capturedImageContainer:first-child,
+    .modal-body > #cameraContainer:first-child {
+        margin-top: calc(-1 * 0.75rem) !important;
+    }
+    
+    .modal-body > img:last-child,
+    .modal-body > #capturedImage:last-child,
+    .modal-body > #video:last-child,
+    .modal-body > #capturedImageContainer:last-child,
+    .modal-body > #cameraContainer:last-child {
+        margin-bottom: calc(-1 * 0.75rem) !important;
+    }
+    
+    /* إزالة أي مساحة بيضاء من divs التي تحتوي على صور */
+    .modal-body > div:has(> img),
+    .modal-body > div:has(> #capturedImage),
+    .modal-body > div:has(> #video) {
+        margin-left: calc(-1 * 0.75rem) !important;
+        margin-right: calc(-1 * 0.75rem) !important;
+        width: calc(100% + 2 * 0.75rem) !important;
+        max-width: calc(100% + 2 * 0.75rem) !important;
+        padding: 0 !important;
+    }
+    
+    /* ===== إصلاحات محددة للمودالات من الصور - الهواتف الصغيرة ===== */
+    
+    /* 1. مودال تصدير العملاء المحددين إلى Excel */
+    #customerExportModal .modal-body {
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+    
+    #customerExportModal .modal-body > *:not(.table-responsive):not(.btn-group):not(.alert) {
+        padding-left: 0.75rem !important;
+        padding-right: 0.75rem !important;
+    }
+    
+    #customerExportModal .table-responsive {
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        width: 100% !important;
+        padding: 0 !important;
+    }
+    
+    /* 2. مودال طباعة تقرير التوريدات */
+    #printSupplierReportModal .modal-body {
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+    
+    #printSupplierReportModal .modal-body > *:not(.alert) {
+        padding-left: 0.75rem !important;
+        padding-right: 0.75rem !important;
+    }
+    
+    /* 3. مودال تعديل الموردين */
+    #editSupplierModal .modal-body {
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+    
+    #editSupplierModal .modal-body > * {
+        padding-left: 0.75rem !important;
+        padding-right: 0.75rem !important;
+    }
+    
+    /* 4. مودال تحصيل ديون العميل المحلي */
+    #collectPaymentModal .modal-body {
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+    
+    #collectPaymentModal .modal-body > * {
+        padding-left: 0.75rem !important;
+        padding-right: 0.75rem !important;
+    }
+    
+    /* 5. مودال إضافة رصيد للمورد */
+    #addSupplierBalanceModal .modal-body {
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+    
+    #addSupplierBalanceModal .modal-body > * {
+        padding-left: 0.75rem !important;
+        padding-right: 0.75rem !important;
+    }
+    
+    /* 6. مودال استيراد العملاء المحليين من ملف */
+    #importLocalCustomersModal .modal-body {
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+    
+    #importLocalCustomersModal .modal-body > *:not(.alert) {
+        padding-left: 0.75rem !important;
+        padding-right: 0.75rem !important;
+    }
+    
+    #importLocalCustomersModal .alert {
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        width: 100% !important;
+        padding-left: 0.75rem !important;
+        padding-right: 0.75rem !important;
+    }
+}
+

@@ -1,0 +1,162 @@
+/* Global modal for intercepting external navigation within the PWA */
+#pwa-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    padding: 1rem;
+    overscroll-behavior: contain;
+    animation: fadeInBackdrop 0.3s ease-out;
+}
+
+#pwa-modal-backdrop.is-active {
+    display: flex;
+}
+
+#pwa-modal {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: min(960px, 100%);
+    height: min(90vh, 680px);
+    background-color: #ffffff;
+    border-radius: 20px;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+    overflow: hidden;
+    animation: slideUpModal 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    transform-origin: center;
+}
+
+#pwa-modal iframe {
+    border: 0;
+    flex: 1 1 auto;
+    width: 100%;
+    height: 100%;
+    background-color: #f5f7fa;
+}
+
+#pwa-modal button[data-modal-close],
+#pwa-modal .pwa-modal-close {
+    position: absolute;
+    top: 1.25rem;
+    right: 1.25rem;
+    border: 0;
+    border-radius: 50%;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    color: #495057;
+    background-color: #ffffff;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15), 0 2px 4px rgba(0, 0, 0, 0.1);
+    z-index: 10;
+}
+
+#pwa-modal button[data-modal-close]:hover,
+#pwa-modal .pwa-modal-close:hover,
+#pwa-modal button[data-modal-close]:focus-visible,
+#pwa-modal .pwa-modal-close:focus-visible {
+    transform: scale(1.08) rotate(90deg);
+    background-color: #f8f9fa;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2), 0 4px 8px rgba(0, 0, 0, 0.15);
+    outline: none;
+    color: #212529;
+}
+
+#pwa-modal button[data-modal-close]:active,
+#pwa-modal .pwa-modal-close:active {
+    transform: scale(0.95);
+}
+
+#pwa-modal button[data-modal-close]:focus-visible,
+#pwa-modal .pwa-modal-close:focus-visible {
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.3), 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+#pwa-modal .pwa-modal-close i {
+    font-size: 1.1rem;
+    color: #333;
+}
+
+@keyframes fadeInBackdrop {
+    from {
+        opacity: 0;
+        backdrop-filter: blur(0);
+        -webkit-backdrop-filter: blur(0);
+    }
+    to {
+        opacity: 1;
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+    }
+}
+
+@keyframes slideUpModal {
+    from {
+        opacity: 0;
+        transform: translateY(40px) scale(0.95);
+        filter: blur(4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        filter: blur(0);
+    }
+}
+
+@media (max-width: 768px) {
+    #pwa-modal {
+        border-radius: 16px 16px 0 0;
+        height: 85vh;
+        max-height: 90vh;
+        width: 100%;
+        margin-top: auto;
+        animation: slideUpModalMobile 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    
+    @keyframes slideUpModalMobile {
+        from {
+            opacity: 0;
+            transform: translateY(100%);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    #pwa-modal button[data-modal-close],
+    #pwa-modal .pwa-modal-close {
+        width: 40px;
+        height: 40px;
+        top: 1rem;
+        right: 1rem;
+    }
+    
+    #pwa-modal .pwa-modal-close i {
+        font-size: 1.05rem;
+    }
+    
+    #pwa-modal-backdrop {
+        padding: 0;
+        align-items: flex-end;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #pwa-modal-backdrop,
+    #pwa-modal button[data-modal-close] {
+        transition: none;
+    }
+}
+

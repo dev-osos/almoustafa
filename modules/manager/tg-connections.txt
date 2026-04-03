@@ -1,0 +1,41 @@
+أســامــه, [Mar 17, 2026 at 12:57 PM]
+POST /graphql HTTP/1.1
+Accept-Encoding: gzip, deflate, br, zstd
+Accept-Language: en-US,en;q=0.9,ar;q=0.8
+Connection: keep-alive
+Content-Length: 1233
+Host: system.telegraphex.com:8443
+Origin: https://system.telegraphex.com
+Referer: https://system.telegraphex.com/
+Sec-Fetch-Dest: empty
+Sec-Fetch-Mode: cors
+Sec-Fetch-Site: same-site
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36
+accept: */*
+authorization: Bearer 244917|ZzSXzdfFKcLnxRwsTbEhRlSsv9OjRRIDvknDEKVc86ec3127
+content-type: application/json
+sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"
+sec-ch-ua-mobile: ?0
+sec-ch-ua-platform: "Windows"
+x-app-version: 5.2.2
+x-client-name: Windows-Chrome
+x-client-type: WEB
+
+
+-----
+payload : 
+{
+    "operationName": "ListShipments",
+    "variables": {
+        "first": 20,
+        "page": 1,
+        "input": {}
+    },
+    "query": "query ListShipments($first: Int, $page: Int, $input: ListShipmentsFilterInput) {\n  listShipments(first: $first, page: $page, input: $input) {\n    data {\n      code\n      status {\n        name\n        code\n      }\n      date\n      recipientName\n      recipientZone {\n        id\n        name\n      }\n      recipientSubzone {\n        name\n      }\n      price\n      amount\n      refNumber\n      recipientMobile\n      id\n      cancelled\n      deletable\n      hasProducts\n      inWarehouse\n      status {\n        name\n        code\n      }\n      branch {\n        id\n        name\n      }\n      type {\n        name\n        code\n      }\n      collected\n      totalAmount\n      allDueFees\n      deliveryFees\n      returnFees\n      shipmentProducts {\n        price\n        quantity\n        product {\n          id\n          name\n        }\n      }\n      paymentType {\n        code\n      }\n      deliveryType {\n        name\n      }\n    }\n    paginatorInfo {\n      total\n      count\n      currentPage\n      firstItem\n      hasMorePages\n      lastItem\n      lastPage\n      perPage\n    }\n  }\n}"
+}
+
+
+-----
+
+api :
+https://system.telegraphex.com:8443/graphql

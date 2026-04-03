@@ -1,0 +1,2008 @@
+<?php
+/**
+ * نظام الموافقات
+ */
+
+// منع الوصول المباشر
+if (!defined('ACCESS_ALLOWED')) {
+    die('Direct access not allowed');
+}
+
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/notifications.php';
+require_once __DIR__ . '/audit_log.php';
+
+if (!function_exists('getApprovalsEntityColumn')) {
+    /**
+     * تحديد اسم عمود هوية الكيان في جدول الموافقات (لدعم قواعد بيانات أقدم).
+     */
+    function getApprovalsEntityColumn(): string
+    {
+        static $column = null;
+
+        if ($column !== null) {
+            return $column;
+        }
+
+        try {
+            $db = db();
+        } catch (Throwable $e) {
+            $column = 'entity_id';
+            return $column;
+        }
+
+        $candidates = ['entity_id', 'reference_id', 'record_id', 'request_id', 'approval_entity', 'entity_ref'];
+
+        foreach ($candidates as $candidate) {
+            try {
+                // SHOW COLUMNS ... LIKE لا يدعم prepared statements
+                // استخدام rawQuery مع escape آمن للقيم
+                $connection = $db->getConnection();
+                $escapedCandidate = $connection->real_escape_string($candidate);
+                $sql = "SHOW COLUMNS FROM approvals LIKE '{$escapedCandidate}'";
+                $rawResult = $db->rawQuery($sql);
+                
+                if ($rawResult instanceof mysqli_result) {
+                    $result = $rawResult->fetch_assoc();
+                    $rawResult->free();
+                } else {
+                    $result = null;
+                }
+            } catch (Throwable $columnError) {
+                $result = null;
+            }
+
+            if (!empty($result)) {
+                $column = $candidate;
+                return $column;
+            }
+        }
+
+        // البحث عن أي عمود ينتهي بـ _id باستثناء الأعمدة المعروفة
+        try {
+            $columns = $db->query("SHOW COLUMNS FROM approvals") ?? [];
+        } catch (Throwable $columnsError) {
+            $columns = [];
+        }
+
+        $exclude = [
+            'id',
+            'requested_by',
+            'approved_by',
+            'created_by',
+            'user_id',
+            'manager_id',
+            'accountant_id',
+        ];
+
+        foreach ($columns as $columnInfo) {
+            $name = $columnInfo['Field'] ?? '';
+            $lower = strtolower($name);
+            if (in_array($lower, $exclude, true)) {
+                continue;
+            }
+            if (substr($lower, -3) === '_id') {
+                $column = $name;
+                return $column;
+            }
+        }
+
+        $column = 'entity_id';
+        return $column;
+    }
+}
+
+/**
+ * طلب موافقة
+ */
+function requestApproval($type, $entityId, $requestedBy, $notes = null) {
+    try {
+        $db = db();
+        $entityColumn = getApprovalsEntityColumn();
+        
+        // التحقق من وجود موافقة معلقة
+        $existing = $db->queryOne(
+            "SELECT id FROM approvals 
+             WHERE type = ? AND {$entityColumn} = ? AND status = 'pending'",
+            [$type, $entityId]
+        );
+        
+        if ($existing) {
+            return ['success' => false, 'message' => 'يوجد موافقة معلقة بالفعل'];
+        }
+        
+        // إنشاء موافقة جديدة
+        // التحقق من اسم عمود الملاحظات
+        $notesColumn = 'notes';
+        $columns = $db->query("SHOW COLUMNS FROM approvals") ?? [];
+        $hasNotesColumn = false;
+        $hasApprovalNotesColumn = false;
+        
+        foreach ($columns as $column) {
+            $fieldName = $column['Field'] ?? '';
+            if ($fieldName === 'notes') {
+                $hasNotesColumn = true;
+            } elseif ($fieldName === 'approval_notes') {
+                $hasApprovalNotesColumn = true;
+                $notesColumn = 'approval_notes';
+            }
+        }
+        
+        // بناء استعلام الإدراج بناءً على الأعمدة المتاحة
+        if ($hasNotesColumn || $hasApprovalNotesColumn) {
+            $sql = "INSERT INTO approvals (type, {$entityColumn}, requested_by, status, {$notesColumn}) 
+                    VALUES (?, ?, ?, 'pending', ?)";
+            
+            $result = $db->execute($sql, [
+                $type,
+                $entityId,
+                $requestedBy,
+                $notes
+            ]);
+        } else {
+            // إذا لم يكن هناك عمود ملاحظات، إدراج بدون ملاحظات
+            $sql = "INSERT INTO approvals (type, {$entityColumn}, requested_by, status) 
+                    VALUES (?, ?, ?, 'pending')";
+            
+            $result = $db->execute($sql, [
+                $type,
+                $entityId,
+                $requestedBy
+            ]);
+        }
+        
+        // إرسال إشعار للمديرين
+        $entityName = getEntityName($type, $entityId);
+        
+        // تحسين رسالة الإشعار لطلبات تعديل الرواتب
+        if ($type === 'salary_modification') {
+            $salaryDetails = '';
+            try {
+                // استخراج البيانات من notes
+                $dataStart = strpos($notes, '[DATA]:');
+                if ($dataStart !== false) {
+                    $jsonData = substr($notes, $dataStart + 7);
+                    $modificationData = json_decode($jsonData, true);
+                    
+                    if ($modificationData) {
+                        $bonus = floatval($modificationData['bonus'] ?? 0);
+                        $deductions = floatval($modificationData['deductions'] ?? 0);
+                        $originalBonus = floatval($modificationData['original_bonus'] ?? 0);
+                        $originalDeductions = floatval($modificationData['original_deductions'] ?? 0);
+                        $notesText = $modificationData['notes'] ?? '';
+                        
+                        // الحصول على بيانات الراتب والموظف
+                        $salary = $db->queryOne(
+                            "SELECT s.*, u.full_name, u.username, u.role, u.hourly_rate as current_hourly_rate 
+                             FROM salaries s 
+                             LEFT JOIN users u ON s.user_id = u.id 
+                             WHERE s.id = ?",
+                            [$entityId]
+                        );
+                        
+                        if ($salary) {
+                            require_once __DIR__ . '/salary_calculator.php';
+                            require_once __DIR__ . '/attendance.php';
+                            
+                            $employeeName = $salary['full_name'] ?? $salary['username'] ?? 'غير محدد';
+                            $userRole = $salary['role'] ?? 'production';
+                            $userId = intval($salary['user_id'] ?? 0);
+                            
+                            // استخراج الشهر والسنة مع التحقق من صحتهما
+                            $monthRaw = $salary['month'] ?? null;
+                            $yearRaw = $salary['year'] ?? null;
+                            
+                            // إذا كان month من نوع DATE وكانت القيمة '0000-00-00' أو NULL
+                            if (empty($monthRaw) || $monthRaw === '0000-00-00' || $monthRaw === '0000-00-00 00:00:00') {
+                                $month = (int)date('n');
+                            } else {
+                                // محاولة استخراج الشهر من التاريخ إذا كان DATE
+                                if (is_string($monthRaw) && preg_match('/^\d{4}-\d{2}/', $monthRaw)) {
+                                    $month = (int)date('n', strtotime($monthRaw));
+                                    if ($month < 1 || $month > 12) {
+                                        $month = (int)date('n');
+                                    }
+                                } else {
+                                    $month = intval($monthRaw);
+                                    if ($month < 1 || $month > 12) {
+                                        $month = (int)date('n');
+                                    }
+                                }
+                            }
+                            
+                            // استخراج السنة
+                            if (empty($yearRaw) || $yearRaw === 0 || $yearRaw === '0') {
+                                $year = (int)date('Y');
+                            } else {
+                                $year = intval($yearRaw);
+                                if ($year < 2000 || $year > 2100) {
+                                    $year = (int)date('Y');
+                                }
+                            }
+                            
+                            // التحقق من وجود عمود bonus أو bonuses
+                            $bonusColumnCheck = $db->queryOne("SHOW COLUMNS FROM salaries WHERE Field IN ('bonus', 'bonuses')");
+                            $bonusColumnName = $bonusColumnCheck ? $bonusColumnCheck['Field'] : 'bonus';
+                            
+                            // حساب الراتب الإجمالي الحالي (نفس طريقة بطاقة الموظف)
+                            $currentTotal = cleanFinancialValue($salary['total_amount'] ?? 0);
+                            
+                            // إذا كان total_amount صفر أو غير موجود، نحاول حساب الراتب من المكونات
+                            if ($currentTotal <= 0) {
+                                $hourlyRate = cleanFinancialValue($salary['hourly_rate'] ?? $salary['current_hourly_rate'] ?? 0);
+                                $currentBonus = cleanFinancialValue($salary[$bonusColumnName] ?? $salary['bonus'] ?? $salary['bonuses'] ?? 0);
+                                $currentDeductions = cleanFinancialValue($salary['deductions'] ?? 0);
+                                $collectionsBonus = cleanFinancialValue($salary['collections_bonus'] ?? 0);
+                                
+                                // حساب الراتب الأساسي بناءً على الساعات المكتملة فقط
+                                $completedHours = calculateCompletedMonthlyHours($userId, $month, $year);
+                                $baseAmount = round($completedHours * $hourlyRate, 2);
+                                
+                                // إذا كان مندوب مبيعات، أعد حساب نسبة التحصيلات
+                                if ($userRole === 'sales') {
+                                    $recalculatedCollectionsAmount = calculateSalesCollections($userId, $month, $year);
+                                    $recalculatedCollectionsBonus = round($recalculatedCollectionsAmount * 0.02, 2);
+                                    
+                                    // استخدم القيمة المحسوبة حديثاً إذا كانت أكبر من القيمة المحفوظة
+                                    if ($recalculatedCollectionsBonus > $collectionsBonus || $collectionsBonus == 0) {
+                                        $collectionsBonus = $recalculatedCollectionsBonus;
+                                    }
+                                }
+                                
+                                // حساب الراتب الإجمالي من المكونات
+                                $currentTotal = $baseAmount + $currentBonus + $collectionsBonus - $currentDeductions;
+                                $currentTotal = max(0, $currentTotal);
+                            } else {
+                                // إذا كان total_amount موجوداً، استخدمه مباشرة
+                                // لكن نحتاج لحساب المكونات للراتب الجديد
+                                $baseAmount = cleanFinancialValue($salary['base_amount'] ?? 0);
+                                $currentBonus = cleanFinancialValue($salary[$bonusColumnName] ?? $salary['bonus'] ?? $salary['bonuses'] ?? 0);
+                                $currentDeductions = cleanFinancialValue($salary['deductions'] ?? 0);
+                                $collectionsBonus = cleanFinancialValue($salary['collections_bonus'] ?? 0);
+                            }
+                            
+                            // حساب المبلغ التراكمي الحالي (نفس طريقة بطاقة الموظف)
+                            require_once __DIR__ . '/salary_calculator.php';
+                            $accumulatedData = calculateSalaryAccumulatedAmount(
+                                $userId,
+                                intval($salary['id'] ?? 0),
+                                $currentTotal,
+                                $month,
+                                $year,
+                                $db
+                            );
+                            $currentAccumulated = $accumulatedData['accumulated'];
+                            $currentPaid = cleanFinancialValue($salary['paid_amount'] ?? 0);
+                            
+                            // حساب المتبقي الحالي (نفس طريقة بطاقة الموظف)
+                            $currentRemaining = max(0, $currentAccumulated - $currentPaid);
+                            
+                            // حساب الراتب الجديد مع التعديلات (نفس طريقة الحساب في modify_salary)
+                            // المكافآت النهائية = المكافآت الحالية + المكافآت الجديدة المضافة
+                            $finalBonus = $currentBonus + $bonus;
+                            // الخصومات النهائية = الخصومات الحالية + الخصومات الجديدة المضافة
+                            $finalDeductions = $currentDeductions + $deductions;
+                            
+                            // حساب الراتب الجديد: الراتب الأساسي + المكافآت (الحالية + الجديدة) + نسبة التحصيلات - الخصومات (الحالية + الجديدة)
+                            $newTotal = $baseAmount + $finalBonus + $collectionsBonus - $finalDeductions;
+                            $newTotal = max(0, $newTotal);
+                            
+                            // حساب المبلغ التراكمي الجديد بعد التعديل
+                            $newAccumulatedData = calculateSalaryAccumulatedAmount(
+                                $userId,
+                                intval($salary['id'] ?? 0),
+                                $newTotal,
+                                $month,
+                                $year,
+                                $db
+                            );
+                            $newAccumulated = $newAccumulatedData['accumulated'];
+                            
+                            // حساب المتبقي الجديد (نفس طريقة بطاقة الموظف)
+                            // المتبقي الجديد = المبلغ التراكمي الجديد - المبلغ المدفوع الحالي
+                            $newRemaining = max(0, $newAccumulated - $currentPaid);
+                            
+                            // إشعار مختصر - عرض المتبقي بدلاً من الراتب الإجمالي (مثل بطاقة الموظف)
+                            $salaryDetails = sprintf(
+                                "\n\n👤 الموظف: %s\n💰 المتبقي الحالي: %s\n✨ المتبقي الجديد: %s\n📝 الملاحظات: %s",
+                                $employeeName,
+                                formatCurrency($currentRemaining),
+                                formatCurrency($newRemaining),
+                                $notesText ?: 'لا توجد ملاحظات'
+                            );
+                        }
+                    }
+                }
+            } catch (Exception $e) {
+                error_log('Error getting salary modification details for notification: ' . $e->getMessage());
+            }
+            
+            $notificationTitle = 'طلب تعديل راتب يحتاج موافقتك';
+            $notificationMessage = "تم استلام طلب تعديل راتب جديد يحتاج مراجعتك وموافقتك.{$salaryDetails}";
+        } elseif ($type === 'warehouse_transfer') {
+            $transferNumber = '';
+            $transferDetails = '';
+            try {
+                $transfer = $db->queryOne("SELECT transfer_number, from_warehouse_id, to_warehouse_id, transfer_date FROM warehouse_transfers WHERE id = ?", [$entityId]);
+                if ($transfer) {
+                    if (!empty($transfer['transfer_number'])) {
+                        $transferNumber = ' رقم ' . $transfer['transfer_number'];
+                    }
+                    
+                    // الحصول على أسماء المخازن
+                    $fromWarehouse = $db->queryOne("SELECT name FROM warehouses WHERE id = ?", [$transfer['from_warehouse_id']]);
+                    $toWarehouse = $db->queryOne("SELECT name FROM warehouses WHERE id = ?", [$transfer['to_warehouse_id']]);
+                    
+                    $fromName = $fromWarehouse['name'] ?? ('#' . $transfer['from_warehouse_id']);
+                    $toName = $toWarehouse['name'] ?? ('#' . $transfer['to_warehouse_id']);
+                    
+                    // الحصول على عدد العناصر والكمية الإجمالية
+                    $itemsInfo = $db->queryOne(
+                        "SELECT COUNT(*) as count, COALESCE(SUM(quantity), 0) as total_quantity 
+                         FROM warehouse_transfer_items WHERE transfer_id = ?",
+                        [$entityId]
+                    );
+                    $itemsCountValue = $itemsInfo['count'] ?? 0;
+                    $totalQuantity = $itemsInfo['total_quantity'] ?? 0;
+                    
+                    $transferDetails = sprintf(
+                        "\n\nالتفاصيل:\nمن: %s\nإلى: %s\nالتاريخ: %s\nعدد العناصر: %d\nالكمية الإجمالية: %.2f",
+                        $fromName,
+                        $toName,
+                        $transfer['transfer_date'] ?? date('Y-m-d'),
+                        $itemsCountValue,
+                        $totalQuantity
+                    );
+                }
+            } catch (Exception $e) {
+                error_log('Error getting transfer details for notification: ' . $e->getMessage());
+            }
+            
+            $notificationTitle = 'طلب موافقة نقل منتجات بين المخازن';
+            $notificationMessage = "تم استلام طلب موافقة جديد لنقل منتجات بين المخازن{$transferNumber}.{$transferDetails}\n\nيرجى مراجعة الطلب والموافقة عليه.";
+        } else {
+            $notificationTitle = 'طلب موافقة جديد';
+            $notificationMessage = "تم طلب موافقة على {$entityName} من نوع {$type}";
+        }
+        
+        // بناء رابط الإشعار بناءً على نوع الموافقة
+        // للمرتجعات (return_request و invoice_return_company)، استخدم رابط صفحة المرتجعات
+        if ($type === 'return_request' || $type === 'invoice_return_company') {
+            require_once __DIR__ . '/path_helper.php';
+            $notificationLink = getRelativeUrl('dashboard/manager.php?page=returns&id=' . $entityId);
+        } elseif ($type === 'warehouse_transfer') {
+            // لطلبات نقل المخازن، استخدم رابط صفحة الموافقات مع قسم warehouse_transfers
+            require_once __DIR__ . '/path_helper.php';
+            $notificationLink = getRelativeUrl('dashboard/manager.php?page=approvals&section=warehouse_transfers&id=' . $result['insert_id']);
+        } else {
+            // للموافقات الأخرى، استخدم رابط صفحة الموافقات مع معرف الموافقة
+            require_once __DIR__ . '/path_helper.php';
+            $notificationLink = getRelativeUrl('dashboard/manager.php?page=approvals&id=' . $result['insert_id']);
+        }
+        
+        notifyManagers(
+            $notificationTitle,
+            $notificationMessage,
+            'approval',
+            $notificationLink
+        );
+        
+        // تسجيل سجل التدقيق
+        logAudit($requestedBy, 'request_approval', $type, $entityId, null, ['approval_id' => $result['insert_id']]);
+        
+        return ['success' => true, 'approval_id' => $result['insert_id']];
+        
+    } catch (Exception $e) {
+        error_log("Approval Error: " . $e->getMessage());
+        return ['success' => false, 'message' => 'حدث خطأ في طلب الموافقة'];
+    }
+}
+
+/**
+ * الموافقة على طلب
+ */
+function approveRequest($approvalId, $approvedBy, $notes = null) {
+    try {
+        $db = db();
+        
+        // الحصول على بيانات الموافقة
+        $approval = $db->queryOne(
+            "SELECT * FROM approvals WHERE id = ? AND status = 'pending'",
+            [$approvalId]
+        );
+        $entityColumn = getApprovalsEntityColumn();
+        
+        if (!$approval) {
+            return ['success' => false, 'message' => 'الموافقة غير موجودة أو تمت الموافقة عليها مسبقاً'];
+        }
+
+        $entityIdentifier = $approval[$entityColumn] ?? null;
+        if ($entityIdentifier === null) {
+            return ['success' => false, 'message' => 'تعذر تحديد الكيان المرتبط بطلب الموافقة.'];
+        }
+        
+        // تحديث حالة الموافقة
+        // التحقق من اسم عمود الملاحظات
+        $notesColumn = 'notes';
+        $columns = $db->query("SHOW COLUMNS FROM approvals") ?? [];
+        $hasNotesColumn = false;
+        $hasApprovalNotesColumn = false;
+        
+        foreach ($columns as $column) {
+            $fieldName = $column['Field'] ?? '';
+            if ($fieldName === 'notes') {
+                $hasNotesColumn = true;
+            } elseif ($fieldName === 'approval_notes') {
+                $hasApprovalNotesColumn = true;
+                $notesColumn = 'approval_notes';
+            }
+        }
+        
+        // الحفاظ على البيانات الأصلية في notes (خاصة [DATA]: لطلبات تعديل الرواتب)
+        $currentNotes = $approval['notes'] ?? $approval['approval_notes'] ?? '';
+        $finalNotes = $currentNotes;
+        
+        // إذا كانت هناك ملاحظات جديدة من المدير، أضفها دون استبدال البيانات الأصلية
+        if ($notes && trim($notes) !== '') {
+            // إذا كانت الملاحظات الحالية تحتوي على [DATA]:، احتفظ بها وأضف الملاحظات الجديدة
+            if (strpos($currentNotes, '[DATA]:') !== false) {
+                $finalNotes = $currentNotes . "\n\n[ملاحظات الموافقة]: " . $notes;
+            } else {
+                // إذا لم تكن هناك بيانات، استخدم الملاحظات الجديدة
+                $finalNotes = $notes;
+            }
+        }
+        
+        // بناء استعلام التحديث بناءً على الأعمدة المتاحة
+        // التأكد من تسجيل البيانات في قاعدة البيانات مباشرة دون الحاجة لمسح الكاش
+        if ($hasNotesColumn || $hasApprovalNotesColumn) {
+            $db->execute(
+                "UPDATE approvals SET status = 'approved', approved_by = ?, approved_at = NOW(), {$notesColumn} = ? 
+                 WHERE id = ?",
+                [$approvedBy, $finalNotes, $approvalId]
+            );
+        } else {
+            // إذا لم يكن هناك عمود ملاحظات، تحديث بدون ملاحظات
+            $db->execute(
+                "UPDATE approvals SET status = 'approved', approved_by = ?, approved_at = NOW() 
+                 WHERE id = ?",
+                [$approvedBy, $approvalId]
+            );
+        }
+        
+        // التأكد من حفظ التغييرات في قاعدة البيانات
+        if (method_exists($db->getConnection(), 'commit')) {
+            $db->getConnection()->commit();
+        }
+        
+        // تحديث حالة الكيان
+        try {
+            updateEntityStatus($approval['type'], $entityIdentifier, 'approved', $approvedBy);
+        } catch (Exception $updateException) {
+            error_log("Error updating entity status in approveRequest (type: {$approval['type']}, id: {$entityIdentifier}): " . $updateException->getMessage());
+            // في حالة warehouse_transfer، التحقق من أن الطلب تم تحديثه بالفعل
+            if ($approval['type'] === 'warehouse_transfer') {
+                $transferCheck = $db->queryOne("SELECT status FROM warehouse_transfers WHERE id = ?", [$entityIdentifier]);
+                if ($transferCheck && in_array($transferCheck['status'], ['approved', 'completed'])) {
+                    // تم تحديث الحالة بالفعل - نجاح (تم التنفيذ بالفعل)
+                    error_log("Transfer status already updated to: " . $transferCheck['status'] . ", ignoring error");
+                    // لا نرمي استثناء - العملية نجحت بالفعل
+                } else {
+                    // لم يتم تحديث الحالة - خطأ فعلي
+                    error_log("Transfer was NOT updated. Current status: " . ($transferCheck['status'] ?? 'null'));
+                    throw new Exception('لم يتم تحديث طلب النقل: ' . $updateException->getMessage());
+                }
+            } else {
+                throw $updateException;
+            }
+        }
+        
+        // بناء رسالة الإشعار مع تفاصيل المنتجات المنقولة
+        $notificationMessage = "تمت الموافقة على طلبك من نوع {$approval['type']}";
+        
+        // إذا كان الطلب نقل منتجات، أضف تفاصيل المنتجات المنقولة
+        if ($approval['type'] === 'warehouse_transfer' && !empty($_SESSION['warehouse_transfer_products'])) {
+            $products = $_SESSION['warehouse_transfer_products'];
+            unset($_SESSION['warehouse_transfer_products']); // حذف بعد الاستخدام
+            
+            if (!empty($products)) {
+                $notificationMessage .= "\n\nالمنتجات المنقولة:\n";
+                foreach ($products as $product) {
+                    $batchInfo = !empty($product['batch_number']) ? " - تشغيلة {$product['batch_number']}" : '';
+                    $notificationMessage .= "• {$product['name']}{$batchInfo}: " . number_format($product['quantity'], 2) . "\n";
+                }
+            }
+        }
+        
+        // إرسال إشعار للمستخدم الذي طلب الموافقة
+        require_once __DIR__ . '/notifications.php';
+        createNotification(
+            $approval['requested_by'],
+            'تمت الموافقة',
+            $notificationMessage,
+            'success',
+            getEntityLink($approval['type'], $entityIdentifier)
+        );
+        
+        // تسجيل سجل التدقيق
+        logAudit($approvedBy, 'approve', 'approval', $approvalId, 'pending', 'approved');
+        
+        return ['success' => true];
+        
+    } catch (Exception $e) {
+        error_log("Approval Error: " . $e->getMessage());
+        error_log("Approval Error - Stack trace: " . $e->getTraceAsString());
+        return ['success' => false, 'message' => 'حدث خطأ في الموافقة: ' . $e->getMessage()];
+    } catch (Throwable $e) {
+        error_log("Approval Fatal Error: " . $e->getMessage());
+        error_log("Approval Fatal Error - Stack trace: " . $e->getTraceAsString());
+        return ['success' => false, 'message' => 'حدث خطأ فادح في الموافقة'];
+    }
+}
+
+/**
+ * رفض طلب
+ */
+function rejectRequest($approvalId, $approvedBy, $rejectionReason) {
+    try {
+        $db = db();
+        
+        // الحصول على بيانات الموافقة
+        $approval = $db->queryOne(
+            "SELECT * FROM approvals WHERE id = ? AND status = 'pending'",
+            [$approvalId]
+        );
+        $entityColumn = getApprovalsEntityColumn();
+        
+        if (!$approval) {
+            return ['success' => false, 'message' => 'الموافقة غير موجودة أو تمت الموافقة عليها مسبقاً'];
+        }
+
+        $entityIdentifier = $approval[$entityColumn] ?? null;
+        if ($entityIdentifier === null) {
+            return ['success' => false, 'message' => 'تعذر تحديد الكيان المرتبط بطلب الموافقة.'];
+        }
+        
+        // التحقق من وجود عمود rejection_reason أو استخدام notes/approval_notes
+        $columns = $db->query("SHOW COLUMNS FROM approvals") ?? [];
+        $hasRejectionReason = false;
+        $hasNotesColumn = false;
+        $hasApprovalNotesColumn = false;
+        $hasRejectedAt = false;
+        $rejectionColumn = 'rejection_reason';
+        $notesColumn = 'notes';
+        
+        foreach ($columns as $column) {
+            $fieldName = $column['Field'] ?? '';
+            if ($fieldName === 'rejection_reason') {
+                $hasRejectionReason = true;
+            } elseif ($fieldName === 'notes') {
+                $hasNotesColumn = true;
+            } elseif ($fieldName === 'approval_notes') {
+                $hasApprovalNotesColumn = true;
+                $notesColumn = 'approval_notes';
+            } elseif ($fieldName === 'rejected_at') {
+                $hasRejectedAt = true;
+            }
+        }
+        
+        // بناء جزء rejected_at بناءً على وجود العمود
+        $rejectedAtClause = $hasRejectedAt ? ', rejected_at = NOW()' : '';
+        
+        // تحديث حالة الموافقة - التأكد من حفظ البيانات مباشرة في قاعدة البيانات
+        if ($hasRejectionReason) {
+            // استخدام عمود rejection_reason إذا كان موجوداً
+            $db->execute(
+                "UPDATE approvals SET status = 'rejected', approved_by = ?{$rejectedAtClause}, rejection_reason = ? 
+                 WHERE id = ?",
+                [$approvedBy, $rejectionReason, $approvalId]
+            );
+        } elseif ($hasNotesColumn || $hasApprovalNotesColumn) {
+            // استخدام عمود notes أو approval_notes إذا كان rejection_reason غير موجود
+            $db->execute(
+                "UPDATE approvals SET status = 'rejected', approved_by = ?{$rejectedAtClause}, {$notesColumn} = ? 
+                 WHERE id = ?",
+                [$approvedBy, $rejectionReason, $approvalId]
+            );
+        } else {
+            // إذا لم يكن هناك أي عمود للملاحظات، تحديث بدون سبب الرفض
+            $db->execute(
+                "UPDATE approvals SET status = 'rejected', approved_by = ?{$rejectedAtClause} 
+                 WHERE id = ?",
+                [$approvedBy, $approvalId]
+            );
+        }
+        
+        // التأكد من حفظ التغييرات في قاعدة البيانات
+        if (method_exists($db->getConnection(), 'commit')) {
+            $db->getConnection()->commit();
+        }
+        
+        // تحديث حالة الكيان
+        try {
+            updateEntityStatus($approval['type'], $entityIdentifier, 'rejected', $approvedBy);
+        } catch (Exception $e) {
+            // إرجاع حالة الرفض إلى pending عند الفشل
+            if ($hasRejectionReason) {
+                $db->execute(
+                    "UPDATE approvals SET status = 'pending', approved_by = NULL, rejection_reason = NULL WHERE id = ?",
+                    [$approvalId]
+                );
+            } elseif ($hasNotesColumn || $hasApprovalNotesColumn) {
+                $db->execute(
+                    "UPDATE approvals SET status = 'pending', approved_by = NULL, {$notesColumn} = NULL WHERE id = ?",
+                    [$approvalId]
+                );
+            } else {
+                $db->execute(
+                    "UPDATE approvals SET status = 'pending', approved_by = NULL WHERE id = ?",
+                    [$approvalId]
+                );
+            }
+            error_log("Failed to update entity status during rejection: " . $e->getMessage());
+            
+            // التحقق من قاعدة البيانات للتأكد من أن الكيان لم يتم رفضه بالفعل
+            if ($approval['type'] === 'warehouse_transfer') {
+                $verifyTransfer = $db->queryOne(
+                    "SELECT status FROM warehouse_transfers WHERE id = ?",
+                    [$entityIdentifier]
+                );
+                if ($verifyTransfer && $verifyTransfer['status'] === 'rejected') {
+                    // الطلب تم رفضه بالفعل - نجاح
+                    error_log("Warning: Transfer was rejected (ID: $entityIdentifier) but updateEntityStatus failed. Details: " . $e->getMessage());
+                } else {
+                    return ['success' => false, 'message' => 'حدث خطأ أثناء رفض الطلب: ' . $e->getMessage()];
+                }
+            } else {
+                return ['success' => false, 'message' => 'حدث خطأ أثناء رفض الطلب: ' . $e->getMessage()];
+            }
+        }
+        
+        // إرسال إشعار للمستخدم الذي طلب الموافقة
+        try {
+            require_once __DIR__ . '/notifications.php';
+            createNotification(
+                $approval['requested_by'],
+                'تم رفض الطلب',
+                "تم رفض طلبك من نوع {$approval['type']}. السبب: {$rejectionReason}",
+                'error',
+                getEntityLink($approval['type'], $entityIdentifier)
+            );
+        } catch (Exception $notifException) {
+            // لا نسمح لفشل الإشعار بإلغاء نجاح الرفض
+            error_log('Notification creation exception during rejection: ' . $notifException->getMessage());
+        }
+        
+        // تسجيل سجل التدقيق
+        try {
+            logAudit($approvedBy, 'reject', 'approval', $approvalId, 'pending', 'rejected');
+        } catch (Exception $auditException) {
+            // لا نسمح لفشل التدقيق بإلغاء نجاح الرفض
+            error_log('Audit log exception during rejection: ' . $auditException->getMessage());
+        }
+        
+        return ['success' => true];
+        
+    } catch (Exception $e) {
+        error_log("Approval Rejection Error: " . $e->getMessage());
+        error_log("Approval Rejection Error - Stack trace: " . $e->getTraceAsString());
+        return ['success' => false, 'message' => 'حدث خطأ في الرفض: ' . $e->getMessage()];
+    } catch (Throwable $e) {
+        error_log("Approval Rejection Fatal Error: " . $e->getMessage());
+        error_log("Approval Rejection Fatal Error - Stack trace: " . $e->getTraceAsString());
+        return ['success' => false, 'message' => 'حدث خطأ فادح في الرفض'];
+    }
+}
+
+/**
+ * تحديث حالة الكيان
+ */
+function updateEntityStatus($type, $entityId, $status, $approvedBy) {
+    $db = db();
+    
+    switch ($type) {
+        case 'financial':
+            $db->execute(
+                "UPDATE financial_transactions SET status = ?, approved_by = ?, approved_at = NOW() WHERE id = ?",
+                [$status, $approvedBy, $entityId]
+            );
+            break;
+            
+        case 'sales':
+            $db->execute(
+                "UPDATE sales SET status = ?, approved_by = ?, approved_at = NOW() WHERE id = ?",
+                [$status, $approvedBy, $entityId]
+            );
+            break;
+            
+        case 'production':
+            $db->execute(
+                "UPDATE production SET status = ?, approved_by = ?, approved_at = NOW() WHERE id = ?",
+                [$status, $approvedBy, $entityId]
+            );
+            break;
+            
+        case 'collection':
+            $db->execute(
+                "UPDATE collections SET status = ?, approved_by = ?, approved_at = NOW() WHERE id = ?",
+                [$status, $approvedBy, $entityId]
+            );
+            break;
+            
+        case 'salary':
+            $db->execute(
+                "UPDATE salaries SET status = ?, approved_by = ?, approved_at = NOW() WHERE id = ?",
+                [$status, $approvedBy, $entityId]
+            );
+            break;
+            
+        case 'salary_modification':
+            // عند الموافقة على تعديل الراتب
+            if ($status === 'approved') {
+                // entityId هنا هو salary_id (من عمود الكيان في جدول الموافقات)
+                $entityColumnName = getApprovalsEntityColumn();
+                $salaryId = $entityId;
+                
+                // البحث عن الموافقة باستخدام salary_id (بدون شرط status لأن الموافقة تم تحديثها بالفعل)
+                $approval = $db->queryOne("SELECT * FROM approvals WHERE {$entityColumnName} = ? AND type = 'salary_modification' ORDER BY id DESC LIMIT 1", [$salaryId]);
+                if (!$approval) {
+                    throw new Exception('طلب الموافقة غير موجود');
+                }
+                
+                // استخراج بيانات التعديل من notes أو approval_notes
+                $modificationData = null;
+                $approvalNotes = $approval['notes'] ?? $approval['approval_notes'] ?? null;
+                
+                if ($approvalNotes) {
+                    // محاولة استخراج JSON من notes بعد [DATA]:
+                    if (preg_match('/\[DATA\]:(.+?)(?=\n\n\[ملاحظات الموافقة\]:|$)/s', $approvalNotes, $matches)) {
+                        $jsonData = trim($matches[1]);
+                        $modificationData = json_decode($jsonData, true);
+                        if (json_last_error() !== JSON_ERROR_NONE) {
+                            error_log("Failed to decode JSON from approval notes: " . json_last_error_msg() . " | JSON: " . substr($jsonData, 0, 200));
+                        }
+                    } else {
+                        // محاولة بديلة: استخراج من notes في جدول salaries
+                        $salaryNote = $db->queryOne("SELECT notes FROM salaries WHERE id = ?", [$salaryId]);
+                        if ($salaryNote && !empty($salaryNote['notes']) && preg_match('/\[تعديل معلق\]:\s*(.+)/s', $salaryNote['notes'], $matches)) {
+                            $jsonData = trim($matches[1]);
+                            $modificationData = json_decode($jsonData, true);
+                            if (json_last_error() !== JSON_ERROR_NONE) {
+                                error_log("Failed to decode JSON from salary notes: " . json_last_error_msg());
+                            }
+                        }
+                    }
+                }
+                
+                if (!$modificationData) {
+                    error_log("Failed to extract modification data. Approval notes: " . substr($approvalNotes ?? '', 0, 500));
+                    throw new Exception('تعذر استخراج بيانات التعديل من طلب الموافقة. يرجى التحقق من أن البيانات موجودة في طلب الموافقة.');
+                }
+                
+                $bonus = floatval($modificationData['bonus'] ?? 0);
+                $deductions = floatval($modificationData['deductions'] ?? 0);
+                $notes = trim($modificationData['notes'] ?? '');
+                
+                // الحصول على الراتب الحالي
+                $salary = $db->queryOne("SELECT s.*, u.role, u.hourly_rate as current_hourly_rate FROM salaries s LEFT JOIN users u ON s.user_id = u.id WHERE s.id = ?", [$salaryId]);
+                if (!$salary) {
+                    throw new Exception('الراتب غير موجود');
+                }
+                
+                require_once __DIR__ . '/salary_calculator.php';
+                require_once __DIR__ . '/attendance.php';
+                
+                $userId = intval($salary['user_id'] ?? 0);
+                $userRole = $salary['role'] ?? 'production';
+                $month = intval($salary['month'] ?? date('n'));
+                $year = intval($salary['year'] ?? date('Y'));
+                $hourlyRate = cleanFinancialValue($salary['hourly_rate'] ?? $salary['current_hourly_rate'] ?? 0);
+                
+                // التحقق من وجود عمود bonus أو bonuses
+                $bonusColumnCheck = $db->queryOne("SHOW COLUMNS FROM salaries WHERE Field IN ('bonus', 'bonuses')");
+                $hasBonusColumn = !empty($bonusColumnCheck);
+                $bonusColumnName = $hasBonusColumn ? $bonusColumnCheck['Field'] : null;
+                
+                // الحصول على المكافآت والخصومات الحالية من الراتب (نفس منطق صفحة المحاسب)
+                $currentBonus = 0;
+                if ($hasBonusColumn && $bonusColumnName) {
+                    $currentBonus = cleanFinancialValue($salary[$bonusColumnName] ?? 0);
+                }
+                $currentDeductions = cleanFinancialValue($salary['deductions'] ?? 0);
+                
+                // حساب المكافآت والخصومات النهائية (نفس منطق صفحة المحاسب)
+                // المكافآت النهائية = المكافآت الحالية + المكافآت الجديدة المضافة
+                $finalBonus = $currentBonus + $bonus;
+                // الخصومات النهائية = الخصومات الحالية + الخصومات الجديدة المضافة
+                $finalDeductions = $currentDeductions + $deductions;
+                
+                // حساب نسبة التحصيلات الحالية (للمندوبين)
+                $currentSalaryCalc = calculateTotalSalaryWithCollections($salary, $userId, $month, $year, $userRole);
+                $collectionsBonus = $currentSalaryCalc['collections_bonus'];
+                
+                // حساب الراتب الأساسي بنفس طريقة الحساب في بطاقة الموظف (إعادة الحساب من الساعات)
+                // لجميع الأدوار: الراتب الأساسي = الساعات المكتملة فقط × سعر الساعة
+                // لا يوجد راتب أساسي حتى يتم تسجيل الانصراف
+                require_once __DIR__ . '/salary_calculator.php';
+                $completedHours = calculateCompletedMonthlyHours($userId, $month, $year);
+                $baseAmount = round($completedHours * $hourlyRate, 2);
+                $actualHours = $completedHours;
+                
+                // حساب الراتب الجديد: الراتب الأساسي + المكافآت (الحالية + الجديدة) + نسبة التحصيلات - الخصومات (الحالية + الجديدة)
+                // نفس منطق صفحة المحاسب
+                $newTotal = round($baseAmount + $finalBonus + $collectionsBonus - $finalDeductions, 2);
+                $newTotal = max(0, $newTotal);
+                
+                // تحديث الراتب مع إزالة التعديل المعلق من notes
+                $currentNotes = $salary['notes'] ?? '';
+                $cleanedNotes = preg_replace('/\[تعديل معلق\]:\s*[^\n]+/s', '', $currentNotes);
+                $cleanedNotes = trim($cleanedNotes);
+                
+                // بناء ملاحظة التعديل
+                $modificationNote = '[تم التعديل]: ' . date('Y-m-d H:i:s');
+                if ($notes) {
+                    $modificationNote .= ' - ' . $notes;
+                }
+                
+                // التحقق من وجود عمود updated_at
+                $columns = $db->query("SHOW COLUMNS FROM salaries") ?? [];
+                $hasUpdatedAtColumn = false;
+                $hasTotalHoursColumn = false;
+                foreach ($columns as $column) {
+                    $fieldName = $column['Field'] ?? '';
+                    if ($fieldName === 'updated_at' || $fieldName === 'modified_at' || $fieldName === 'last_updated') {
+                        $hasUpdatedAtColumn = true;
+                    }
+                    if ($fieldName === 'total_hours') {
+                        $hasTotalHoursColumn = true;
+                    }
+                }
+                
+                // تحديث الراتب مع تحديث base_amount و total_hours لضمان التطابق مع الساعات الفعلية
+                if ($hasBonusColumn && $bonusColumnName) {
+                    $updateFields = [
+                        'base_amount = ?',
+                        "{$bonusColumnName} = ?",
+                        'deductions = ?',
+                        'total_amount = ?',
+                        'notes = ?'
+                    ];
+                    $updateParams = [$baseAmount, $finalBonus, $finalDeductions, $newTotal, ($cleanedNotes ? $cleanedNotes . "\n" : '') . $modificationNote];
+                    
+                    if ($hasTotalHoursColumn) {
+                        array_splice($updateFields, 1, 0, 'total_hours = ?');
+                        array_splice($updateParams, 1, 0, $actualHours);
+                    }
+                    
+                    if ($hasUpdatedAtColumn) {
+                        $updateFields[] = 'updated_at = NOW()';
+                    }
+                    
+                    $updateParams[] = $salaryId;
+                    $sql = "UPDATE salaries SET " . implode(', ', $updateFields) . " WHERE id = ?";
+                    $db->execute($sql, $updateParams);
+                } else {
+                    $updateFields = [
+                        'base_amount = ?',
+                        'deductions = ?',
+                        'total_amount = ?',
+                        'notes = ?'
+                    ];
+                    $updateParams = [$baseAmount, $finalDeductions, $newTotal, ($cleanedNotes ? $cleanedNotes . "\n" : '') . $modificationNote];
+                    
+                    if ($hasTotalHoursColumn) {
+                        array_splice($updateFields, 1, 0, 'total_hours = ?');
+                        array_splice($updateParams, 1, 0, $actualHours);
+                    }
+                    
+                    if ($hasUpdatedAtColumn) {
+                        $updateFields[] = 'updated_at = NOW()';
+                    }
+                    
+                    $updateParams[] = $salaryId;
+                    $sql = "UPDATE salaries SET " . implode(', ', $updateFields) . " WHERE id = ?";
+                    $db->execute($sql, $updateParams);
+                }
+
+                // إرسال إشعار للمستخدم
+                try {
+                    require_once __DIR__ . '/notifications.php';
+                    createNotification(
+                        $salary['user_id'],
+                        'تم تعديل راتبك',
+                        "تم الموافقة على تعديل راتبك. مكافأة: " . number_format($bonus, 2) . " جنيه, خصومات: " . number_format($deductions, 2) . " جنيه",
+                        'info',
+                        null,
+                        false
+                    );
+                } catch (Exception $notifException) {
+                    // لا نسمح لفشل الإشعار بإلغاء نجاح التعديل
+                    error_log('Notification creation exception during salary modification: ' . $notifException->getMessage());
+                }
+            }
+            break;
+
+        case 'warehouse_transfer':
+            require_once __DIR__ . '/vehicle_inventory.php';
+            if ($status === 'approved') {
+                try {
+                    $result = approveWarehouseTransfer($entityId, $approvedBy);
+                    if (!($result['success'] ?? false)) {
+                        $errorMessage = $result['message'] ?? 'تعذر الموافقة على طلب النقل.';
+                        error_log("approveWarehouseTransfer failed: " . $errorMessage);
+                        throw new Exception('لم يتم تحديث طلب النقل: ' . $errorMessage);
+                    }
+                    // حفظ معلومات المنتجات المنقولة للاستخدام في الإشعار
+                    $_SESSION['warehouse_transfer_products'] = $result['transferred_products'] ?? [];
+                } catch (Exception $e) {
+                    error_log("Exception in updateEntityStatus for warehouse_transfer approval: " . $e->getMessage());
+                    // التحقق من أن الطلب تم تحديثه بالفعل
+                    $transferCheck = $db->queryOne("SELECT status FROM warehouse_transfers WHERE id = ?", [$entityId]);
+                    if ($transferCheck && in_array($transferCheck['status'], ['approved', 'completed'])) {
+                        // تم تحديث الحالة بالفعل - نجاح صامت
+                        error_log("Transfer status already updated to: " . $transferCheck['status'] . ", ignoring error");
+                        return; // لا نرمي استثناء إذا تم التحديث بالفعل
+                    }
+                    throw new Exception('لم يتم تحديث طلب النقل: ' . $e->getMessage());
+                }
+            } elseif ($status === 'rejected') {
+                try {
+                    $entityColumnName = getApprovalsEntityColumn();
+                    
+                    // التحقق من وجود عمود rejection_reason أو استخدام notes/approval_notes
+                    $columns = $db->query("SHOW COLUMNS FROM approvals") ?? [];
+                    $hasRejectionReason = false;
+                    $hasNotesColumn = false;
+                    $hasApprovalNotesColumn = false;
+                    $hasUpdatedAt = false;
+                    $rejectionColumn = 'rejection_reason';
+                    $notesColumn = 'notes';
+                    
+                    foreach ($columns as $column) {
+                        $fieldName = $column['Field'] ?? '';
+                        if ($fieldName === 'rejection_reason') {
+                            $hasRejectionReason = true;
+                        } elseif ($fieldName === 'notes') {
+                            $hasNotesColumn = true;
+                        } elseif ($fieldName === 'approval_notes') {
+                            $hasApprovalNotesColumn = true;
+                            $notesColumn = 'approval_notes';
+                        } elseif ($fieldName === 'updated_at') {
+                            $hasUpdatedAt = true;
+                        }
+                    }
+                    
+                    // تحديد عمود الترتيب بناءً على الأعمدة المتاحة
+                    $orderByColumn = $hasUpdatedAt ? 'updated_at' : 'created_at';
+                    
+                    // بناء استعلام SELECT بناءً على الأعمدة المتاحة
+                    if ($hasRejectionReason) {
+                        $approvalRow = $db->queryOne(
+                            "SELECT rejection_reason FROM approvals WHERE type = 'warehouse_transfer' AND `{$entityColumnName}` = ? ORDER BY {$orderByColumn} DESC LIMIT 1",
+                            [$entityId]
+                        );
+                        $reason = $approvalRow['rejection_reason'] ?? 'تم رفض طلب النقل.';
+                    } elseif ($hasNotesColumn || $hasApprovalNotesColumn) {
+                        $approvalRow = $db->queryOne(
+                            "SELECT {$notesColumn} FROM approvals WHERE type = 'warehouse_transfer' AND `{$entityColumnName}` = ? ORDER BY {$orderByColumn} DESC LIMIT 1",
+                            [$entityId]
+                        );
+                        $reason = $approvalRow[$notesColumn] ?? 'تم رفض طلب النقل.';
+                    } else {
+                        // إذا لم يكن هناك أي عمود للملاحظات، استخدام رسالة افتراضية
+                        $reason = 'تم رفض طلب النقل.';
+                    }
+                    
+                    $result = rejectWarehouseTransfer($entityId, $reason, $approvedBy);
+                    if (!($result['success'] ?? false)) {
+                        $errorMessage = $result['message'] ?? 'تعذر رفض طلب النقل.';
+                        error_log("rejectWarehouseTransfer failed: " . $errorMessage);
+                        throw new Exception('لم يتم تحديث طلب النقل: ' . $errorMessage);
+                    }
+                } catch (Exception $e) {
+                    error_log("Exception in updateEntityStatus for warehouse_transfer rejection: " . $e->getMessage());
+                    // التحقق من أن الطلب تم تحديثه بالفعل
+                    $transferCheck = $db->queryOne("SELECT status FROM warehouse_transfers WHERE id = ?", [$entityId]);
+                    if ($transferCheck && $transferCheck['status'] === 'rejected') {
+                        // تم تحديث الحالة بالفعل - نجاح صامت
+                        error_log("Transfer status already updated to rejected, ignoring error");
+                        return; // لا نرمي استثناء إذا تم التحديث بالفعل
+                    }
+                    throw new Exception('لم يتم تحديث طلب النقل: ' . $e->getMessage());
+                }
+            }
+            break;
+
+        case 'invoice_return_company':
+            // الحصول على بيانات المرتجع
+            $return = $db->queryOne(
+                "SELECT * FROM returns WHERE id = ?",
+                [$entityId]
+            );
+            
+            if (!$return) {
+                throw new Exception('المرتجع غير موجود');
+            }
+            
+            // التحقق من دور المستخدم لتحديد نوع المخزن
+            $approverUser = $db->queryOne(
+                "SELECT id, role FROM users WHERE id = ?",
+                [$approvedBy]
+            );
+            $userRole = strtolower($approverUser['role'] ?? '');
+            $isManager = ($userRole === 'manager');
+            
+            // تحديث حالة المرتجع
+            $db->execute(
+                "UPDATE returns SET status = ?, approved_by = ?, approved_at = NOW() WHERE id = ?",
+                [$status, $approvedBy, $entityId]
+            );
+            
+            // إذا تمت الموافقة، إرجاع المنتجات إلى مخزن سيارة المندوب
+            if ($status === 'approved' && !empty($return['sales_rep_id'])) {
+                require_once __DIR__ . '/returns_system.php';
+                
+                error_log("Approval system: Attempting to return products to vehicle inventory for return ID: {$entityId}, sales_rep_id: {$return['sales_rep_id']}, status: {$status}");
+                
+                try {
+                    // إرجاع المنتجات إلى مخزن سيارة المندوب
+                    $inventoryResult = returnProductsToVehicleInventory($entityId, $approvedBy);
+                    
+                    error_log("Approval system: returnProductsToVehicleInventory result - success: " . ($inventoryResult['success'] ? 'true' : 'false') . ", message: " . ($inventoryResult['message'] ?? 'N/A'));
+                    
+                    if (!$inventoryResult['success']) {
+                        error_log("Approval system: Failed to return products to vehicle inventory: " . ($inventoryResult['message'] ?? 'خطأ غير معروف'));
+                        // لا نرمي استثناء هنا - نستمر في العملية لكن نسجل الخطأ
+                        // throw new Exception('فشل إرجاع المنتجات لمخزن السيارة: ' . ($inventoryResult['message'] ?? 'خطأ غير معروف'));
+                    } else {
+                        error_log("Approval system: Successfully returned products to vehicle inventory for return ID: {$entityId}, items_count: " . ($inventoryResult['items_count'] ?? 0));
+                    }
+                } catch (Throwable $inventoryException) {
+                    error_log("Approval system: Exception while returning products to vehicle inventory: " . $inventoryException->getMessage());
+                    error_log("Approval system: Exception trace: " . $inventoryException->getTraceAsString());
+                    // لا نرمي استثناء هنا - نستمر في العملية لكن نسجل الخطأ
+                    // throw new Exception('فشل إرجاع المنتجات لمخزن السيارة: ' . $inventoryException->getMessage());
+                }
+            } else {
+                error_log("Approval system: Skipping return to vehicle inventory - status: {$status}, sales_rep_id: " . ($return['sales_rep_id'] ?? 'empty'));
+            }
+            
+            // إذا تمت الموافقة وكانت طريقة الإرجاع نقداً، خصم المبلغ من خزنة المندوب
+            if ($status === 'approved' && $return['refund_method'] === 'cash' && !empty($return['sales_rep_id']) && !empty($return['refund_amount'])) {
+                $salesRepId = (int)$return['sales_rep_id'];
+                $refundAmount = (float)$return['refund_amount'];
+                $customerId = (int)$return['customer_id'];
+                $returnNumber = $return['return_number'] ?? 'RET-' . $entityId;
+                
+                // التحقق من رصيد خزنة المندوب
+                $cashBalance = calculateSalesRepCashBalance($salesRepId);
+                if ($cashBalance + 0.0001 < $refundAmount) {
+                    throw new Exception('رصيد خزنة المندوب لا يغطي قيمة المرتجع المطلوبة. الرصيد الحالي: ' . number_format($cashBalance, 2));
+                }
+                
+                // خصم المبلغ من خزنة المندوب
+                insertNegativeCollection($customerId, $salesRepId, $refundAmount, $returnNumber, $approvedBy);
+            }
+            
+            // إرسال إشعار للمندوب عند الموافقة على المرتجع
+            if ($status === 'approved' && !empty($return['sales_rep_id'])) {
+                try {
+                    require_once __DIR__ . '/notifications.php';
+                    require_once __DIR__ . '/path_helper.php';
+                    
+                    $salesRepId = (int)$return['sales_rep_id'];
+                    $returnNumber = $return['return_number'] ?? 'RET-' . $entityId;
+                    $refundAmount = (float)($return['refund_amount'] ?? 0);
+                    
+                    // جلب اسم العميل
+                    $customer = $db->queryOne(
+                        "SELECT name FROM customers WHERE id = ?",
+                        [$return['customer_id'] ?? 0]
+                    );
+                    $customerName = $customer['name'] ?? 'غير معروف';
+                    
+                    $notificationTitle = 'تمت الموافقة على طلب المرتجع';
+                    $notificationMessage = sprintf(
+                        "تمت الموافقة على طلب المرتجع رقم %s\n\nالعميل: %s\nالمبلغ: %s ج.م",
+                        $returnNumber,
+                        $customerName,
+                        number_format($refundAmount, 2)
+                    );
+                    
+                    require_once __DIR__ . '/path_helper.php';
+                    $notificationLink = getRelativeUrl('dashboard/sales.php?page=returns&id=' . $entityId);
+                    
+                    createNotification(
+                        $salesRepId,
+                        $notificationTitle,
+                        $notificationMessage,
+                        'success',
+                        $notificationLink,
+                        false
+                    );
+                } catch (Exception $notifException) {
+                    // لا نسمح لفشل الإشعار بإلغاء نجاح الموافقة
+                    error_log('Notification creation exception during invoice_return_company approval: ' . $notifException->getMessage());
+                }
+            }
+            
+            // إذا تمت الموافقة، خصم 2% من إجمالي مبلغ المرتجع من راتب المندوب
+            if ($status === 'approved' && !empty($return['sales_rep_id']) && !empty($return['refund_amount'])) {
+                require_once __DIR__ . '/salary_calculator.php';
+                
+                $salesRepId = (int)$return['sales_rep_id'];
+                $refundAmount = (float)$return['refund_amount'];
+                $returnNumber = $return['return_number'] ?? 'RET-' . $entityId;
+                
+                // التحقق من عدم تطبيق الخصم مسبقاً (منع الخصم المكرر)
+                $existingDeduction = $db->queryOne(
+                    "SELECT id FROM audit_logs 
+                     WHERE action = 'return_deduction' 
+                     AND entity_type = 'salary' 
+                     AND new_value LIKE ?",
+                    ['%"return_id":' . $entityId . '%']
+                );
+                
+                if (!empty($existingDeduction)) {
+                    // الخصم تم تطبيقه مسبقاً، نتخطى
+                    error_log("Return deduction already applied for return ID: {$entityId}");
+                } else {
+                    // حساب 2% من إجمالي مبلغ المرتجع
+                    $deductionAmount = round($refundAmount * 0.02, 2);
+                    
+                    error_log("Approval system: Processing return deduction - Return ID: {$entityId}, Sales Rep ID: {$salesRepId}, Refund Amount: {$refundAmount}, Deduction Amount: {$deductionAmount}");
+                    
+                    if ($deductionAmount > 0) {
+                        // تحديد الشهر والسنة من تاريخ المرتجع
+                        $returnDate = $return['return_date'] ?? date('Y-m-d');
+                        $timestamp = strtotime($returnDate) ?: time();
+                        $month = (int)date('n', $timestamp);
+                        $year = (int)date('Y', $timestamp);
+                        
+                        // التحقق النهائي من صحة القيم - حماية إضافية
+                        if ($month < 1 || $month > 12 || $year < 2000 || $year > 2100) {
+                            $month = (int)date('n');
+                            $year = (int)date('Y');
+                            error_log("Invalid date extracted from return_date ({$returnDate}), using current date: month={$month}, year={$year}");
+                        }
+                        
+                        // البحث عن الراتب الموجود مباشرة بدون إنشاء جديد
+                        $yearColumnCheck = $db->queryOne("SHOW COLUMNS FROM salaries LIKE 'year'");
+                        $hasYearColumn = !empty($yearColumnCheck);
+                        
+                        $monthColumnCheck = $db->queryOne("SHOW COLUMNS FROM salaries WHERE Field = 'month'");
+                        $monthType = $monthColumnCheck['Type'] ?? '';
+                        $isMonthDate = stripos($monthType, 'date') !== false;
+                        
+                        $salary = null;
+                        if ($isMonthDate) {
+                            $targetYearMonth = sprintf('%04d-%02d', $year, $month);
+                            $whereClause = "user_id = ? AND DATE_FORMAT(month, '%Y-%m') = ? AND month != '0000-00-00' AND month IS NOT NULL";
+                            $params = [$salesRepId, $targetYearMonth];
+                            if ($hasYearColumn) {
+                                $whereClause .= " AND year = ? AND year > 0";
+                                $params[] = $year;
+                            }
+                            $salary = $db->queryOne(
+                                "SELECT * FROM salaries WHERE {$whereClause} LIMIT 1",
+                                $params
+                            );
+                        } elseif ($hasYearColumn) {
+                            $salary = $db->queryOne(
+                                "SELECT * FROM salaries WHERE user_id = ? AND month = ? AND year = ? AND month > 0 AND year > 0 LIMIT 1",
+                                [$salesRepId, $month, $year]
+                            );
+                        } else {
+                            $salary = $db->queryOne(
+                                "SELECT * FROM salaries WHERE user_id = ? AND month = ? AND month > 0 LIMIT 1",
+                                [$salesRepId, $month]
+                            );
+                        }
+                        
+                        // إذا لم يكن الراتب موجوداً، نستخدم getSalarySummary ثم createOrUpdateSalary
+                        if (!$salary) {
+                            error_log("Approval system: Salary not found, attempting to create/get using getSalarySummary - Sales Rep ID: {$salesRepId}, Month: {$month}, Year: {$year}");
+                            $summary = getSalarySummary($salesRepId, $month, $year);
+                            if (!$summary['exists']) {
+                                error_log("Approval system: Salary doesn't exist, creating new salary record");
+                                $creation = createOrUpdateSalary($salesRepId, $month, $year);
+                                if (!($creation['success'] ?? false)) {
+                                    error_log('Failed to create salary for return deduction: ' . ($creation['message'] ?? 'unknown error'));
+                                    throw new Exception('تعذر إنشاء سجل الراتب لخصم المرتجع');
+                                }
+                                $summary = getSalarySummary($salesRepId, $month, $year);
+                                if (!($summary['exists'] ?? false)) {
+                                    throw new Exception('لم يتم العثور على سجل الراتب بعد إنشائه');
+                                }
+                            }
+                            $salary = $summary['salary'];
+                        } else {
+                            error_log("Approval system: Found existing salary record ID: {$salary['id']} for Sales Rep ID: {$salesRepId}, Month: {$month}, Year: {$year}");
+                        }
+                        
+                        $salaryId = (int)($salary['id'] ?? 0);
+                        
+                        if ($salaryId <= 0) {
+                            throw new Exception('تعذر تحديد سجل الراتب لخصم المرتجع');
+                        }
+                        
+                        error_log("Approval system: Applying deduction to salary ID: {$salaryId}, Deduction Amount: {$deductionAmount}");
+                        
+                        // الحصول على أسماء الأعمدة في جدول الرواتب
+                        $columns = $db->query("SHOW COLUMNS FROM salaries");
+                        $columnMap = [
+                            'deductions' => null,
+                            'total_amount' => null,
+                            'updated_at' => null
+                        ];
+                        
+                        foreach ($columns as $column) {
+                            $field = $column['Field'] ?? '';
+                            if ($field === 'deductions' || $field === 'total_deductions') {
+                                $columnMap['deductions'] = $field;
+                            } elseif ($field === 'total_amount' || $field === 'amount' || $field === 'net_total') {
+                                $columnMap['total_amount'] = $field;
+                            } elseif ($field === 'updated_at' || $field === 'modified_at' || $field === 'last_updated') {
+                                $columnMap['updated_at'] = $field;
+                            }
+                        }
+                        
+                        // بناء استعلام التحديث
+                        $updates = [];
+                        $params = [];
+                        
+                        if ($columnMap['deductions'] !== null) {
+                            $updates[] = "{$columnMap['deductions']} = COALESCE({$columnMap['deductions']}, 0) + ?";
+                            $params[] = $deductionAmount;
+                        }
+                        
+                        if ($columnMap['total_amount'] !== null) {
+                            $updates[] = "{$columnMap['total_amount']} = GREATEST(COALESCE({$columnMap['total_amount']}, 0) - ?, 0)";
+                            $params[] = $deductionAmount;
+                        }
+                        
+                        if ($columnMap['updated_at'] !== null) {
+                            $updates[] = "{$columnMap['updated_at']} = NOW()";
+                        }
+                        
+                        if (!empty($updates)) {
+                            $params[] = $salaryId;
+                            $db->execute(
+                                "UPDATE salaries SET " . implode(', ', $updates) . " WHERE id = ?",
+                                $params
+                            );
+                            
+                            // تحديث ملاحظات الراتب لتوثيق الخصم
+                            $currentNotes = $salary['notes'] ?? '';
+                            $deductionNote = "\n[خصم مرتجع]: تم خصم " . number_format($deductionAmount, 2) . " ج.م (2% من مرتجع {$returnNumber} بقيمة " . number_format($refundAmount, 2) . " ج.م)";
+                            $newNotes = $currentNotes . $deductionNote;
+                            
+                            $db->execute(
+                                "UPDATE salaries SET notes = ? WHERE id = ?",
+                                [$newNotes, $salaryId]
+                            );
+                            
+                            // تسجيل سجل التدقيق
+                            logAudit($approvedBy, 'return_deduction', 'salary', $salaryId, null, [
+                                'return_id' => $entityId,
+                                'return_number' => $returnNumber,
+                                'refund_amount' => $refundAmount,
+                                'deduction_amount' => $deductionAmount,
+                                'sales_rep_id' => $salesRepId
+                            ]);
+                        }
+                    }
+                }
+            }
+            break;
+            
+        case 'return_request':
+            // الحصول على بيانات المرتجع
+            $return = $db->queryOne(
+                "SELECT r.*, c.balance as customer_balance, c.name as customer_name
+                 FROM returns r
+                 LEFT JOIN customers c ON r.customer_id = c.id
+                 WHERE r.id = ?",
+                [$entityId]
+            );
+            
+            if (!$return) {
+                throw new Exception('المرتجع غير موجود');
+            }
+            
+            // تحديث حالة المرتجع
+            $db->execute(
+                "UPDATE returns SET status = ?, approved_by = ?, approved_at = NOW() WHERE id = ?",
+                [$status, $approvedBy, $entityId]
+            );
+            
+            // إذا تمت الموافقة، معالجة المرتجع بالكامل
+            if ($status === 'approved') {
+                // استخدام دالة approveReturn من returns_system.php
+                require_once __DIR__ . '/returns_system.php';
+                
+                $approvalNotes = $notes ?? 'تمت الموافقة على طلب المرتجع';
+                $result = approveReturn($entityId, $approvedBy, $approvalNotes);
+                
+                if (!$result['success']) {
+                    throw new Exception($result['message'] ?? 'فشل معالجة المرتجع');
+                }
+                
+                // إرسال إشعار للمندوب عند الموافقة على المرتجع
+                $salesRepId = (int)($return['sales_rep_id'] ?? 0);
+                if ($salesRepId > 0) {
+                    try {
+                        require_once __DIR__ . '/notifications.php';
+                        require_once __DIR__ . '/path_helper.php';
+                        
+                        $returnNumber = $return['return_number'] ?? 'RET-' . $entityId;
+                        $customerName = $return['customer_name'] ?? 'غير معروف';
+                        $refundAmount = (float)($return['refund_amount'] ?? 0);
+                        
+                        $notificationTitle = 'تمت الموافقة على طلب المرتجع';
+                        $notificationMessage = sprintf(
+                            "تمت الموافقة على طلب المرتجع رقم %s\n\nالعميل: %s\nالمبلغ: %s ج.م",
+                            $returnNumber,
+                            $customerName,
+                            number_format($refundAmount, 2)
+                        );
+                        
+                        require_once __DIR__ . '/path_helper.php';
+                        $notificationLink = getRelativeUrl('dashboard/sales.php?page=returns&id=' . $entityId);
+                        
+                        createNotification(
+                            $salesRepId,
+                            $notificationTitle,
+                            $notificationMessage,
+                            'success',
+                            $notificationLink,
+                            false
+                        );
+                    } catch (Exception $notifException) {
+                        // لا نسمح لفشل الإشعار بإلغاء نجاح الموافقة
+                        error_log('Notification creation exception during return approval: ' . $notifException->getMessage());
+                    }
+                }
+                
+                // تسجيل سجل التدقيق
+                logAudit($approvedBy, 'approve_return_request', 'returns', $entityId, null, [
+                    'return_number' => $return['return_number'] ?? '',
+                    'return_amount' => (float)($return['refund_amount'] ?? 0),
+                    'result' => $result
+                ]);
+            }
+            break;
+    }
+}
+
+/**
+ * الحصول على اسم الكيان
+ */
+function getEntityName($type, $entityId) {
+    $db = db();
+    
+    switch ($type) {
+        case 'financial':
+            $entity = $db->queryOne("SELECT description FROM financial_transactions WHERE id = ?", [$entityId]);
+            return $entity['description'] ?? "معاملة مالية #{$entityId}";
+            
+        case 'sales':
+            $entity = $db->queryOne("SELECT s.*, c.name as customer_name FROM sales s LEFT JOIN customers c ON s.customer_id = c.id WHERE s.id = ?", [$entityId]);
+            return $entity ? "مبيعة #{$entityId} - {$entity['customer_name']}" : "مبيعة #{$entityId}";
+            
+        case 'production':
+            $entity = $db->queryOne("SELECT p.*, pr.name as product_name FROM production p LEFT JOIN products pr ON p.product_id = pr.id WHERE p.id = ?", [$entityId]);
+            return $entity ? "إنتاج #{$entityId} - {$entity['product_name']}" : "إنتاج #{$entityId}";
+            
+        case 'collection':
+            $entity = $db->queryOne("SELECT c.*, cu.name as customer_name FROM collections c LEFT JOIN customers cu ON c.customer_id = cu.id WHERE c.id = ?", [$entityId]);
+            return $entity ? "تحصيل #{$entityId} - {$entity['customer_name']}" : "تحصيل #{$entityId}";
+            
+        case 'salary':
+            $entity = $db->queryOne("SELECT s.*, u.full_name FROM salaries s LEFT JOIN users u ON s.user_id = u.id WHERE s.id = ?", [$entityId]);
+            return $entity ? "راتب #{$entityId} - {$entity['full_name']}" : "راتب #{$entityId}";
+
+        case 'warehouse_transfer':
+            $entity = $db->queryOne("SELECT transfer_number FROM warehouse_transfers WHERE id = ?", [$entityId]);
+            return $entity ? "طلب نقل مخزني {$entity['transfer_number']}" : "طلب نقل مخزني #{$entityId}";
+
+        case 'return_request':
+            $entity = $db->queryOne(
+                "SELECT r.return_number, i.invoice_number, c.name as customer_name
+                 FROM returns r
+                 LEFT JOIN invoices i ON r.invoice_id = i.id
+                 LEFT JOIN customers c ON r.customer_id = c.id
+                 WHERE r.id = ?",
+                [$entityId]
+            );
+            if ($entity) {
+                $parts = [];
+                if (!empty($entity['return_number'])) {
+                    $parts[] = "مرتجع {$entity['return_number']}";
+                }
+                if (!empty($entity['invoice_number'])) {
+                    $parts[] = "فاتورة {$entity['invoice_number']}";
+                }
+                if (!empty($entity['customer_name'])) {
+                    $parts[] = $entity['customer_name'];
+                }
+                return implode(' - ', $parts);
+            }
+            return "مرتجع #{$entityId}";
+            
+        case 'exchange_request':
+            $entity = $db->queryOne(
+                "SELECT e.exchange_number, c.name as customer_name
+                 FROM exchanges e
+                 LEFT JOIN customers c ON e.customer_id = c.id
+                 WHERE e.id = ?",
+                [$entityId]
+            );
+            if ($entity) {
+                $parts = [];
+                if (!empty($entity['exchange_number'])) {
+                    $parts[] = "استبدال {$entity['exchange_number']}";
+                }
+                if (!empty($entity['customer_name'])) {
+                    $parts[] = $entity['customer_name'];
+                }
+                return implode(' - ', $parts);
+            }
+            return "استبدال #{$entityId}";
+            
+        case 'invoice_return_company':
+            $entity = $db->queryOne(
+                "SELECT r.return_number, i.invoice_number, c.name as customer_name
+                 FROM returns r
+                 LEFT JOIN invoices i ON r.invoice_id = i.id
+                 LEFT JOIN customers c ON r.customer_id = c.id
+                 WHERE r.id = ?",
+                [$entityId]
+            );
+            if ($entity) {
+                $parts = [];
+                if (!empty($entity['return_number'])) {
+                    $parts[] = "مرتجع {$entity['return_number']}";
+                }
+                if (!empty($entity['invoice_number'])) {
+                    $parts[] = "فاتورة {$entity['invoice_number']}";
+                }
+                if (!empty($entity['customer_name'])) {
+                    $parts[] = $entity['customer_name'];
+                }
+                return implode(' - ', $parts);
+            }
+            return "مرتجع فاتورة #{$entityId}";
+            
+        default:
+            return "كيان #{$entityId}";
+    }
+}
+
+/**
+ * الحصول على رابط الكيان
+ */
+function getEntityLink($type, $entityId) {
+    require_once __DIR__ . '/path_helper.php';
+    
+    switch ($type) {
+        case 'financial':
+            return getRelativeUrl('dashboard/accountant.php?page=accountant_cash&id=' . $entityId);
+            
+        case 'sales':
+            return getRelativeUrl('dashboard/sales.php?page=sales_collections&id=' . $entityId);
+            
+        case 'production':
+            return getRelativeUrl('dashboard/production.php?page=production&id=' . $entityId);
+            
+        case 'collection':
+            return getRelativeUrl('dashboard/accountant.php?page=collections&id=' . $entityId);
+            
+        case 'salary':
+            return getRelativeUrl('dashboard/accountant.php?page=salaries&id=' . $entityId);
+
+        case 'warehouse_transfer':
+            return getRelativeUrl('dashboard/manager.php?page=warehouse_transfers&id=' . $entityId);
+
+        case 'invoice_return_company':
+        case 'return_request':
+            return getRelativeUrl('dashboard/manager.php?page=returns&id=' . $entityId);
+            
+        default:
+            return getRelativeUrl('dashboard/manager.php?page=approvals&id=' . $entityId);
+    }
+}
+
+/**
+ * الحصول على الموافقات المعلقة
+ * يستثني return_request التي تظهر في قسم returns
+ */
+function getPendingApprovals($limit = 50, $offset = 0) {
+    $db = db();
+    
+    return $db->query(
+        "SELECT a.*, u1.username as requested_by_name, u2.username as approved_by_name,
+                u1.full_name as requested_by_full_name
+         FROM approvals a
+         LEFT JOIN users u1 ON a.requested_by = u1.id
+         LEFT JOIN users u2 ON a.approved_by = u2.id
+         WHERE a.status = 'pending' AND a.type != 'return_request'
+         ORDER BY a.created_at DESC
+         LIMIT ? OFFSET ?",
+        [$limit, $offset]
+    );
+}
+
+/**
+ * الحصول على عدد الموافقات المعلقة
+ * يستثني return_request التي تظهر في قسم returns
+ */
+function getPendingApprovalsCount() {
+    $db = db();
+    
+    $result = $db->queryOne("SELECT COUNT(*) as count FROM approvals WHERE status = 'pending' AND type != 'return_request'");
+    return $result['count'] ?? 0;
+}
+
+/**
+ * الحصول على موافقة واحدة
+ */
+function getApproval($approvalId) {
+    $db = db();
+    
+    return $db->queryOne(
+        "SELECT a.*, u1.username as requested_by_name, u1.full_name as requested_by_full_name,
+                u2.username as approved_by_name, u2.full_name as approved_by_full_name
+         FROM approvals a
+         LEFT JOIN users u1 ON a.requested_by = u1.id
+         LEFT JOIN users u2 ON a.approved_by = u2.id
+         WHERE a.id = ?",
+        [$approvalId]
+    );
+}
+
+/**
+ * حساب رصيد خزنة المندوب
+ */
+function calculateSalesRepCashBalance($salesRepId) {
+    try {
+        $db = db();
+        $cashBalance = 0.0;
+
+    $invoicesExists = $db->queryOne("SHOW TABLES LIKE 'invoices'");
+    $collectionsExists = $db->queryOne("SHOW TABLES LIKE 'collections'");
+    $accountantTransactionsExists = $db->queryOne("SHOW TABLES LIKE 'accountant_transactions'");
+
+    $totalCollections = 0.0;
+    if (!empty($collectionsExists)) {
+        // التحقق من وجود عمود status
+        $statusColumnCheck = $db->queryOne("SHOW COLUMNS FROM collections LIKE 'status'");
+        $hasStatusColumn = !empty($statusColumnCheck);
+        
+        if ($hasStatusColumn) {
+            // حساب جميع التحصيلات (pending و approved) لأن المندوب قام بتحصيلها بالفعل
+            $collectionsResult = $db->queryOne(
+                "SELECT COALESCE(SUM(amount), 0) as total_collections
+                 FROM collections
+                 WHERE collected_by = ? AND status IN ('pending', 'approved')",
+                [$salesRepId]
+            );
+        } else {
+            $collectionsResult = $db->queryOne(
+                "SELECT COALESCE(SUM(amount), 0) as total_collections
+                 FROM collections
+                 WHERE collected_by = ?",
+                [$salesRepId]
+            );
+        }
+        $totalCollections = (float)($collectionsResult['total_collections'] ?? 0);
+    }
+
+    $fullyPaidSales = 0.0;
+    if (!empty($invoicesExists)) {
+        // التحقق من وجود الأعمدة المطلوبة
+        $hasAmountAddedToSalesColumn = !empty($db->queryOne("SHOW COLUMNS FROM invoices LIKE 'amount_added_to_sales'"));
+        $hasPaidFromCreditColumn = !empty($db->queryOne("SHOW COLUMNS FROM invoices LIKE 'paid_from_credit'"));
+        $hasCreditUsedColumn = !empty($db->queryOne("SHOW COLUMNS FROM invoices LIKE 'credit_used'"));
+        $hasInvoiceIdColumn = !empty($collectionsExists) && !empty($db->queryOne("SHOW COLUMNS FROM collections LIKE 'invoice_id'"));
+        
+        // استخدام amount_added_to_sales إذا كان محدداً، وإلا استخدام total_amount
+        // هذا يضمن أن المبالغ المدفوعة من الرصيد الدائن لا تُضاف إلى خزنة المندوب
+        // استبعاد الفواتير التي تم تسجيلها في collections (من خلال invoice_id أو notes)
+        // عند استخدام الرصيد الدائن (paid_from_credit = 1): لا يُضاف المبلغ المستخدم من الرصيد الدائن إلى خزنة المندوب
+        if (!empty($collectionsExists)) {
+            if ($hasAmountAddedToSalesColumn) {
+                if ($hasInvoiceIdColumn) {
+                    // إذا كان هناك عمود invoice_id، نستخدمه للربط
+                    if ($hasPaidFromCreditColumn && $hasCreditUsedColumn) {
+                        // عند استخدام الرصيد الدائن: استخدام amount_added_to_sales - credit_used (لا يشمل المبلغ المستخدم من الرصيد الدائن)
+                        // لأن creditUsed يُضاف إلى amount_added_to_sales لإجمالي المبيعات (صافي) لكن لا يُضاف إلى رصيد الخزنة الإجمالي
+                        $fullyPaidSql = "SELECT COALESCE(SUM(
+                            CASE 
+                                WHEN paid_from_credit = 1 AND credit_used > 0
+                                THEN GREATEST(0, COALESCE(amount_added_to_sales, 0) - credit_used)
+                                WHEN amount_added_to_sales IS NOT NULL AND amount_added_to_sales > 0 
+                                THEN amount_added_to_sales 
+                                ELSE total_amount 
+                            END
+                        ), 0) as fully_paid
+                         FROM invoices i
+                         WHERE i.sales_rep_id = ? 
+                         AND i.status = 'paid' 
+                         AND i.paid_amount >= i.total_amount
+                         AND i.status != 'cancelled'
+                         AND NOT EXISTS (
+                             SELECT 1 FROM collections c 
+                             WHERE c.invoice_id = i.id 
+                             AND c.collected_by = ?
+                         )
+                         AND NOT EXISTS (
+                             SELECT 1 FROM collections c
+                             WHERE c.customer_id = i.customer_id
+                             AND c.collected_by = ?
+                             AND c.date >= i.date
+                             " . ($hasInvoiceIdColumn ? "AND (c.invoice_id IS NULL OR c.invoice_id != i.id) " : "") . "
+                             AND (c.notes IS NULL OR c.notes NOT LIKE CONCAT('%فاتورة ', i.invoice_number, '%'))
+                         )";
+                    } elseif ($hasPaidFromCreditColumn) {
+                        // عند استخدام الرصيد الدائن: استخدام amount_added_to_sales - COALESCE(credit_used, 0)
+                        // لأن creditUsed يُضاف إلى amount_added_to_sales لإجمالي المبيعات (صافي) لكن لا يُضاف إلى رصيد الخزنة الإجمالي
+                        $fullyPaidSql = "SELECT COALESCE(SUM(
+                            CASE 
+                                WHEN paid_from_credit = 1
+                                THEN GREATEST(0, COALESCE(amount_added_to_sales, 0) - COALESCE(credit_used, 0))
+                                WHEN amount_added_to_sales IS NOT NULL AND amount_added_to_sales > 0 
+                                THEN amount_added_to_sales 
+                                ELSE total_amount 
+                            END
+                        ), 0) as fully_paid
+                         FROM invoices i
+                         WHERE i.sales_rep_id = ? 
+                         AND i.status = 'paid' 
+                         AND i.paid_amount >= i.total_amount
+                         AND i.status != 'cancelled'
+                         AND NOT EXISTS (
+                             SELECT 1 FROM collections c 
+                             WHERE c.invoice_id = i.id 
+                             AND c.collected_by = ?
+                         )
+                         AND NOT EXISTS (
+                             SELECT 1 FROM collections c
+                             WHERE c.customer_id = i.customer_id
+                             AND c.collected_by = ?
+                             AND c.date >= i.date" . 
+                             ($hasInvoiceIdColumn ? " AND (c.invoice_id IS NULL OR c.invoice_id != i.id)" : "") . "
+                             AND (c.notes IS NULL OR c.notes NOT LIKE CONCAT('%فاتورة ', i.invoice_number, '%'))
+                         )";
+                    } else {
+                        // إذا لم يكن عمود paid_from_credit موجوداً، نستخدم amount_added_to_sales أو total_amount
+                        $fullyPaidSql = "SELECT COALESCE(SUM(
+                            CASE 
+                                WHEN amount_added_to_sales IS NOT NULL AND amount_added_to_sales > 0 
+                                THEN amount_added_to_sales 
+                                ELSE total_amount 
+                            END
+                        ), 0) as fully_paid
+                         FROM invoices i
+                         WHERE i.sales_rep_id = ? 
+                         AND i.status = 'paid' 
+                         AND i.paid_amount >= i.total_amount
+                         AND i.status != 'cancelled'
+                         AND NOT EXISTS (
+                             SELECT 1 FROM collections c 
+                             WHERE c.invoice_id = i.id 
+                             AND c.collected_by = ?
+                         )
+                         AND NOT EXISTS (
+                             SELECT 1 FROM collections c
+                             WHERE c.customer_id = i.customer_id
+                             AND c.collected_by = ?
+                             AND c.date >= i.date" . 
+                             ($hasInvoiceIdColumn ? " AND (c.invoice_id IS NULL OR c.invoice_id != i.id)" : "") . "
+                             AND (c.notes IS NULL OR c.notes NOT LIKE CONCAT('%فاتورة ', i.invoice_number, '%'))
+                         )";
+                    }
+                    $fullyPaidResult = $db->queryOne($fullyPaidSql, [$salesRepId, $salesRepId, $salesRepId]);
+                } else {
+                    // إذا لم يكن هناك عمود invoice_id، نستخدم notes للبحث عن رقم الفاتورة
+                    if ($hasPaidFromCreditColumn && $hasCreditUsedColumn) {
+                        // عند استخدام الرصيد الدائن: استخدام amount_added_to_sales - credit_used (لا يشمل المبلغ المستخدم من الرصيد الدائن)
+                        // لأن creditUsed يُضاف إلى amount_added_to_sales لإجمالي المبيعات (صافي) لكن لا يُضاف إلى رصيد الخزنة الإجمالي
+                        $fullyPaidSql = "SELECT COALESCE(SUM(
+                            CASE 
+                                WHEN paid_from_credit = 1 AND credit_used > 0
+                                THEN GREATEST(0, COALESCE(amount_added_to_sales, 0) - credit_used)
+                                WHEN amount_added_to_sales IS NOT NULL AND amount_added_to_sales > 0 
+                                THEN amount_added_to_sales 
+                                ELSE total_amount 
+                            END
+                        ), 0) as fully_paid
+                         FROM invoices i
+                         WHERE i.sales_rep_id = ? 
+                         AND i.status = 'paid' 
+                         AND i.paid_amount >= i.total_amount
+                         AND i.status != 'cancelled'
+                         AND NOT EXISTS (
+                             SELECT 1 FROM collections c 
+                             WHERE c.notes LIKE CONCAT('%فاتورة ', i.invoice_number, '%')
+                             AND c.collected_by = ?
+                         )
+                         AND NOT EXISTS (
+                             SELECT 1 FROM collections c
+                             WHERE c.customer_id = i.customer_id
+                             AND c.collected_by = ?
+                             AND c.date >= i.date" . 
+                             ($hasInvoiceIdColumn ? " AND (c.invoice_id IS NULL OR c.invoice_id != i.id)" : "") . "
+                             AND (c.notes IS NULL OR c.notes NOT LIKE CONCAT('%فاتورة ', i.invoice_number, '%'))
+                         )";
+                    } elseif ($hasPaidFromCreditColumn) {
+                        // عند استخدام الرصيد الدائن: استخدام amount_added_to_sales فقط
+                        $fullyPaidSql = "SELECT COALESCE(SUM(
+                            CASE 
+                                WHEN paid_from_credit = 1
+                                THEN COALESCE(amount_added_to_sales, 0)
+                                WHEN amount_added_to_sales IS NOT NULL AND amount_added_to_sales > 0 
+                                THEN amount_added_to_sales 
+                                ELSE total_amount 
+                            END
+                        ), 0) as fully_paid
+                         FROM invoices i
+                         WHERE i.sales_rep_id = ? 
+                         AND i.status = 'paid' 
+                         AND i.paid_amount >= i.total_amount
+                         AND i.status != 'cancelled'
+                         AND NOT EXISTS (
+                             SELECT 1 FROM collections c 
+                             WHERE c.notes LIKE CONCAT('%فاتورة ', i.invoice_number, '%')
+                             AND c.collected_by = ?
+                         )
+                         AND NOT EXISTS (
+                             SELECT 1 FROM collections c
+                             WHERE c.customer_id = i.customer_id
+                             AND c.collected_by = ?
+                             AND c.date >= i.date
+                             AND (c.notes IS NULL OR c.notes NOT LIKE CONCAT('%فاتورة ', i.invoice_number, '%'))
+                             " . ($hasInvoiceIdColumn ? "AND (c.invoice_id IS NULL OR c.invoice_id != i.id) " : "") . "
+                         )";
+                    } else {
+                        // إذا لم يكن عمود paid_from_credit موجوداً، نستخدم amount_added_to_sales أو total_amount
+                        $fullyPaidSql = "SELECT COALESCE(SUM(
+                            CASE 
+                                WHEN amount_added_to_sales IS NOT NULL AND amount_added_to_sales > 0 
+                                THEN amount_added_to_sales 
+                                ELSE total_amount 
+                            END
+                        ), 0) as fully_paid
+                         FROM invoices i
+                         WHERE i.sales_rep_id = ? 
+                         AND i.status = 'paid' 
+                         AND i.paid_amount >= i.total_amount
+                         AND i.status != 'cancelled'
+                         AND NOT EXISTS (
+                             SELECT 1 FROM collections c 
+                             WHERE c.notes LIKE CONCAT('%فاتورة ', i.invoice_number, '%')
+                             AND c.collected_by = ?
+                         )
+                         AND NOT EXISTS (
+                             SELECT 1 FROM collections c
+                             WHERE c.customer_id = i.customer_id
+                             AND c.collected_by = ?
+                             AND c.date >= i.date" . 
+                             ($hasInvoiceIdColumn ? " AND (c.invoice_id IS NULL OR c.invoice_id != i.id)" : "") . "
+                             AND (c.notes IS NULL OR c.notes NOT LIKE CONCAT('%فاتورة ', i.invoice_number, '%'))
+                         )";
+                    }
+                    $fullyPaidResult = $db->queryOne($fullyPaidSql, [$salesRepId, $salesRepId, $salesRepId]);
+                }
+            } else {
+                // إذا لم يكن العمود موجوداً، نستخدم total_amount (للتوافق مع الإصدارات القديمة)
+                if ($hasInvoiceIdColumn) {
+                    $fullyPaidSql = "SELECT COALESCE(SUM(total_amount), 0) as fully_paid
+                     FROM invoices i
+                     WHERE i.sales_rep_id = ? 
+                     AND i.status = 'paid' 
+                     AND i.paid_amount >= i.total_amount
+                     AND i.status != 'cancelled'
+                     AND NOT EXISTS (
+                         SELECT 1 FROM collections c 
+                         WHERE c.invoice_id = i.id 
+                         AND c.collected_by = ?
+                     )
+                     AND NOT EXISTS (
+                         SELECT 1 FROM collections c
+                         WHERE c.customer_id = i.customer_id
+                         AND c.collected_by = ?
+                         AND c.date >= i.date" . 
+                         ($hasInvoiceIdColumn ? " AND (c.invoice_id IS NULL OR c.invoice_id != i.id)" : "") . "
+                         AND (c.notes IS NULL OR c.notes NOT LIKE CONCAT('%فاتورة ', i.invoice_number, '%'))
+                     )";
+                    $fullyPaidResult = $db->queryOne($fullyPaidSql, [$salesRepId, $salesRepId, $salesRepId]);
+                } else {
+                    $fullyPaidSql = "SELECT COALESCE(SUM(total_amount), 0) as fully_paid
+                     FROM invoices i
+                     WHERE i.sales_rep_id = ? 
+                     AND i.status = 'paid' 
+                     AND i.paid_amount >= i.total_amount
+                     AND i.status != 'cancelled'
+                     AND NOT EXISTS (
+                         SELECT 1 FROM collections c 
+                         WHERE c.notes LIKE CONCAT('%فاتورة ', i.invoice_number, '%')
+                         AND c.collected_by = ?
+                     )
+                     AND NOT EXISTS (
+                         SELECT 1 FROM collections c
+                         WHERE c.customer_id = i.customer_id
+                         AND c.collected_by = ?
+                         AND c.date >= i.date" . 
+                         ($hasInvoiceIdColumn ? " AND (c.invoice_id IS NULL OR c.invoice_id != i.id)" : "") . "
+                         AND (c.notes IS NULL OR c.notes NOT LIKE CONCAT('%فاتورة ', i.invoice_number, '%'))
+                     )";
+                    $fullyPaidResult = $db->queryOne($fullyPaidSql, [$salesRepId, $salesRepId, $salesRepId]);
+                }
+            }
+        } else {
+            // إذا لم يكن جدول collections موجوداً، نستخدم الطريقة القديمة
+            if ($hasAmountAddedToSalesColumn) {
+                if ($hasPaidFromCreditColumn && $hasCreditUsedColumn) {
+                    // عند استخدام الرصيد الدائن: استخدام amount_added_to_sales - credit_used (لا يشمل المبلغ المستخدم من الرصيد الدائن)
+                    // لأن creditUsed يُضاف إلى amount_added_to_sales لإجمالي المبيعات (صافي) لكن لا يُضاف إلى رصيد الخزنة الإجمالي
+                    $fullyPaidSql = "SELECT COALESCE(SUM(
+                        CASE 
+                            WHEN paid_from_credit = 1 AND credit_used > 0
+                            THEN GREATEST(0, COALESCE(amount_added_to_sales, 0) - credit_used)
+                            WHEN amount_added_to_sales IS NOT NULL AND amount_added_to_sales > 0 
+                            THEN amount_added_to_sales 
+                            ELSE total_amount 
+                        END
+                    ), 0) as fully_paid
+                     FROM invoices
+                     WHERE sales_rep_id = ? 
+                     AND status = 'paid' 
+                     AND paid_amount >= total_amount
+                     AND status != 'cancelled'";
+                } elseif ($hasPaidFromCreditColumn) {
+                    // عند استخدام الرصيد الدائن: استخدام amount_added_to_sales - COALESCE(credit_used, 0)
+                    // لأن creditUsed يُضاف إلى amount_added_to_sales لإجمالي المبيعات (صافي) لكن لا يُضاف إلى رصيد الخزنة الإجمالي
+                    $fullyPaidSql = "SELECT COALESCE(SUM(
+                        CASE 
+                            WHEN paid_from_credit = 1
+                            THEN GREATEST(0, COALESCE(amount_added_to_sales, 0) - COALESCE(credit_used, 0))
+                            WHEN amount_added_to_sales IS NOT NULL AND amount_added_to_sales > 0 
+                            THEN amount_added_to_sales 
+                            ELSE total_amount 
+                        END
+                    ), 0) as fully_paid
+                     FROM invoices
+                     WHERE sales_rep_id = ? 
+                     AND status = 'paid' 
+                     AND paid_amount >= total_amount
+                     AND status != 'cancelled'";
+                } else {
+                    $fullyPaidSql = "SELECT COALESCE(SUM(
+                        CASE 
+                            WHEN amount_added_to_sales IS NOT NULL AND amount_added_to_sales > 0 
+                            THEN amount_added_to_sales 
+                            ELSE total_amount 
+                        END
+                    ), 0) as fully_paid
+                     FROM invoices
+                     WHERE sales_rep_id = ? 
+                     AND status = 'paid' 
+                     AND paid_amount >= total_amount
+                     AND status != 'cancelled'";
+                }
+            } else {
+                $fullyPaidSql = "SELECT COALESCE(SUM(total_amount), 0) as fully_paid
+                 FROM invoices
+                 WHERE sales_rep_id = ?
+                   AND status = 'paid'
+                   AND paid_amount >= total_amount
+                   AND status != 'cancelled'";
+            }
+            $fullyPaidResult = $db->queryOne($fullyPaidSql, [$salesRepId]);
+        }
+        
+        $fullyPaidSales = (float)($fullyPaidResult['fully_paid'] ?? 0);
+    }
+
+    // خصم المبالغ المحصلة من المندوب (من accountant_transactions)
+    $collectedFromRep = 0.0;
+    if (!empty($accountantTransactionsExists)) {
+        $collectedResult = $db->queryOne(
+            "SELECT COALESCE(SUM(amount), 0) as total_collected
+             FROM accountant_transactions
+             WHERE sales_rep_id = ? 
+             AND transaction_type = 'collection_from_sales_rep'
+             AND status = 'approved'",
+            [$salesRepId]
+        );
+        $collectedFromRep = (float)($collectedResult['total_collected'] ?? 0);
+    }
+
+    // حساب الإضافات المباشرة للرصيد
+    $totalCashAdditions = 0.0;
+    $cashAdditionsTableExists = $db->queryOne("SHOW TABLES LIKE 'cash_register_additions'");
+    if (!empty($cashAdditionsTableExists)) {
+        try {
+            $additionsResult = $db->queryOne(
+                "SELECT COALESCE(SUM(amount), 0) as total_additions
+                 FROM cash_register_additions
+                 WHERE sales_rep_id = ?",
+                [$salesRepId]
+            );
+            $totalCashAdditions = (float)($additionsResult['total_additions'] ?? 0);
+        } catch (Throwable $additionsError) {
+            error_log('Cash additions calculation error: ' . $additionsError->getMessage());
+            $totalCashAdditions = 0.0;
+        }
+    }
+
+    return $totalCollections + $fullyPaidSales + $totalCashAdditions - $collectedFromRep;
+    } catch (Throwable $e) {
+        error_log('Error in calculateSalesRepCashBalance [ID: ' . $salesRepId . ']: ' . $e->getMessage() . ' | File: ' . $e->getFile() . ' | Line: ' . $e->getLine() . ' | Trace: ' . $e->getTraceAsString());
+        // في حالة الخطأ، نعيد 0 بدلاً من رمي استثناء
+        // لكن دعنا نرمي الاستثناء مرة أخرى حتى نرى الخطأ الفعلي
+        throw $e;
+    }
+}
+
+/**
+ * إدراج تحصيل سالب لخصم المبلغ من خزنة المندوب
+ */
+function insertNegativeCollection($customerId, $salesRepId, $amount, $returnNumber, $approvedBy) {
+    $db = db();
+    $columns = $db->query("SHOW COLUMNS FROM collections") ?? [];
+    $columnNames = [];
+    foreach ($columns as $column) {
+        if (!empty($column['Field'])) {
+            $columnNames[] = $column['Field'];
+        }
+    }
+
+    $hasStatus = in_array('status', $columnNames, true);
+    $hasApprovedBy = in_array('approved_by', $columnNames, true);
+    $hasApprovedAt = in_array('approved_at', $columnNames, true);
+
+    $fields = [];
+    $placeholders = [];
+    $values = [];
+
+    $baseData = [
+        'customer_id' => $customerId,
+        'amount' => $amount * -1,
+        'date' => date('Y-m-d'),
+        'payment_method' => 'cash',
+        'reference_number' => 'REFUND-' . $returnNumber,
+        'notes' => 'صرف نقدي - مرتجع فاتورة ' . $returnNumber,
+        'collected_by' => $salesRepId,
+    ];
+
+    foreach ($baseData as $column => $value) {
+        $fields[] = $column;
+        $placeholders[] = '?';
+        $values[] = $value;
+    }
+
+    if ($hasStatus) {
+        $fields[] = 'status';
+        $placeholders[] = '?';
+        $values[] = 'approved';
+    }
+
+    if ($hasApprovedBy) {
+        $fields[] = 'approved_by';
+        $placeholders[] = '?';
+        $values[] = $approvedBy;
+    }
+
+    if ($hasApprovedAt) {
+        $fields[] = 'approved_at';
+        $placeholders[] = 'NOW()';
+    }
+
+    $sql = "INSERT INTO collections (" . implode(',', $fields) . ") VALUES (" . implode(',', $placeholders) . ")";
+
+    $db->execute($sql, $values);
+}
+

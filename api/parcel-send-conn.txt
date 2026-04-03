@@ -1,0 +1,23 @@
+api= https://system.telegraphex.com:8443/graphql
+--------
+headers=
+ Accept: */*
+Accept-Encoding: gzip, deflate, br
+Accept-Language: en-GB,en-US;q=0.9,en;q=0.8
+Authorization: Bearer 245467|m90rxf6dkwYyeku570WIGKSuyhkZr1Kt2ehSUQVLf862e568
+Connection: keep-alive
+Content-Length: 1375
+Content-Type: application/json
+Host: system.telegraphex.com:8443
+Origin: https://system.telegraphex.com
+Referer: https://system.telegraphex.com/
+Sec-Fetch-Dest: empty
+Sec-Fetch-Mode: cors
+Sec-Fetch-Site: same-site
+User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.3 Safari/605.1.15
+x-app-version: 5.2.2
+x-client-name: Mac OS-Safari
+x-client-type: WEB
+--------
+payload=
+{"operationName":"SaveShipment","variables":{"input":{"recipientName":"$customer_name","paymentTypeCode":"COLC","priceTypeCode":"INCLD","recipientZoneId":$government_id,"recipientSubzoneId":$city-id,"recipientPhone":null,"recipientMobile":"$customer_phone","recipientAddress":"$order_title","senderName":"شركة البركة لتجارة المواد الغذائية","senderPhone":"01203630363","senderMobile":"01003533905","senderZoneId":1,"senderSubzoneId":346,"senderAddress":"ش اسوان متفرع من شارع ريدمبكس العجمي ابو يوسف","description":"$tg_parcel_desc","notes":"$details","refNumber":"$رقم الطلب","typeCode":"FDP","openableCode":"Y","serviceId":1,"weight":$tg_weight,"piecesCount":$counted,"price":$createTaskFinalTotalDisplay,"size":{"length":0,"height":0,"width":0}}},"query":"mutation SaveShipment($input: ShipmentInput!) {\n  saveShipment(input: $input) {\n    id\n    date\n    code\n    recipientName\n    description\n    piecesCount\n    recipientAddress\n    amount\n    totalAmount\n    allDueFees\n    inWarehouse\n    recipientZone {\n      id\n      name\n    }\n    customer {\n      id\n      name\n      code\n    }\n    recipientSubzone {\n      id\n      name\n    }\n    shipmentProducts {\n      id\n      price\n      quantity\n      type\n      product {\n        id\n        name\n        weight\n      }\n    }\n  }\n}"}

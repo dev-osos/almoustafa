@@ -1,0 +1,1566 @@
+/**
+ * Top Bar Component - Modern Top Navigation
+ * شريط علوي حديث
+ */
+
+/* ===== Top Bar Container ===== */
+.homeline-topbar {
+    position: fixed;
+    top: 0;
+    left: var(--sidebar-width);
+    right: 0;
+    height: var(--topbar-height);
+    background: var(--bg-topbar);
+    border-bottom: 1px solid var(--border-color);
+    z-index: 999;
+    display: flex;
+    align-items: center;
+    padding: 0 var(--spacing-lg);
+    box-shadow: var(--shadow-sm);
+    transition: left var(--transition-base), right var(--transition-base);
+    width: calc(100% - var(--sidebar-width));
+}
+
+.dashboard-wrapper.sidebar-collapsed .homeline-topbar {
+    left: var(--sidebar-width-collapsed);
+    width: calc(100% - var(--sidebar-width-collapsed));
+}
+
+[dir="rtl"] .homeline-topbar {
+    left: 0;
+    right: var(--sidebar-width);
+    width: calc(100% - var(--sidebar-width));
+}
+
+[dir="rtl"] .dashboard-wrapper.sidebar-collapsed .homeline-topbar {
+    left: 0;
+    right: var(--sidebar-width-collapsed);
+    width: calc(100% - var(--sidebar-width-collapsed));
+}
+
+/* ===== زينة رمضان (Ramadan decoration) ===== */
+.ramadan-topbar-strip {
+    --ramadan-strip-height: 36px;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--ramadan-strip-height);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    background: linear-gradient(135deg, #0d5c2e 0%, #1a7d3e 30%, #2d9d57 50%, #b8860b 85%, #8b6914 100%);
+    color: #fff;
+    font-size: 0.9rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+.ramadan-strip-text {
+    opacity: 1;
+}
+.ramadan-strip-icon {
+    font-size: 1.1rem;
+    opacity: 0.95;
+}
+.homeline-topbar.ramadan-mode {
+    top: var(--ramadan-strip-height, 36px);
+}
+.dashboard-body.ramadan-mode .dashboard-main {
+    padding-top: calc(var(--topbar-height, 64px) + var(--ramadan-strip-height, 36px));
+}
+.dashboard-body.ramadan-mode .developer-quick-access-bar {
+    top: var(--ramadan-strip-height, 36px);
+}
+.ramadan-topbar-badge {
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    margin-inline-end: 0.35rem;
+    line-height: 1;
+}
+
+
+@keyframes ramadan-hang-sway {
+    0%, 100% { transform: rotate(-3deg); }
+    50% { transform: rotate(3deg); }
+}
+
+@media (max-width: 768px) {
+    .ramadan-topbar-strip {
+        --ramadan-strip-height: 32px;
+        font-size: 0.8rem;
+        gap: 0.35rem;
+    }
+    .ramadan-strip-icon {
+        font-size: 1rem;
+    }
+    .homeline-topbar.ramadan-mode {
+        top: var(--ramadan-strip-height, 32px);
+    }
+    .dashboard-body.ramadan-mode .dashboard-main {
+        padding-top: calc(56px + var(--ramadan-strip-height, 32px));
+    }
+    .dashboard-body.ramadan-mode .developer-quick-access-bar {
+        top: var(--ramadan-strip-height, 32px);
+    }
+    .ramadan-topbar-hanging {
+        inset-inline-end: 8px;
+    }
+    .ramadan-hanging-icon {
+        font-size: 1.5rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .homeline-topbar {
+        left: 0 !important;
+        right: 0 !important;
+        width: 100% !important;
+        padding: 0 var(--spacing-sm);
+        height: 56px;
+        justify-content: space-between;
+    }
+    
+    .dashboard-wrapper.sidebar-collapsed .homeline-topbar {
+        left: 0 !important;
+        right: 0 !important;
+        width: 100% !important;
+    }
+    
+    .topbar-left {
+        gap: var(--spacing-xs);
+        flex: 0 0 auto;
+        order: 0; /* زر القائمة أولاً */
+        justify-content: flex-start;
+    }
+    
+    .topbar-center {
+        flex: 1;
+        order: 1;
+        min-width: 0;
+    }
+    
+    .topbar-right {
+        gap: var(--spacing-xs);
+        flex: 0 0 auto;
+        order: 2; /* الأيقونات آخراً */
+        justify-content: flex-end;
+        min-width: 0;
+        overflow: visible !important;
+    }
+    
+    /* إظهار القائمة السريعة على الموبايل */
+    .quick-actions-dropdown,
+    .topbar-dropdown.quick-actions-dropdown {
+        display: block !important;
+        position: relative !important;
+        z-index: 1000 !important;
+    }
+    
+    .quick-actions-toggle,
+    #quickActionsDropdown,
+    a.quick-actions-toggle,
+    a#quickActionsDropdown {
+        display: flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        width: 36px !important;
+        height: 36px !important;
+        position: relative !important;
+        z-index: 1001 !important;
+        pointer-events: auto !important;
+        cursor: pointer !important;
+        flex-shrink: 0 !important;
+        min-width: 36px !important;
+        min-height: 36px !important;
+    }
+    
+    .topbar-action {
+        width: 36px;
+        height: 36px;
+        font-size: var(--font-size-base);
+    }
+    
+    .topbar-user {
+        width: 36px;
+        height: 36px;
+        font-size: var(--font-size-sm);
+    }
+    
+    .mobile-menu-toggle {
+        width: 36px;
+        height: 36px;
+        font-size: var(--font-size-base);
+        margin-right: 0;
+        margin-left: 0;
+    }
+    
+    /* إخفاء الأزرار المكررة على الهواتف - تظهر فقط داخل القائمة السريعة */
+    .mobile-reload-btn {
+        display: none !important;
+    }
+    
+    .mobile-dark-toggle {
+        display: flex !important;
+    }
+    
+    /* إخفاء بعض الأيقونات على الشاشات الصغيرة جداً */
+    @media (max-width: 480px) {
+        /* إخفاء جميع الأزرار الفردية على الهواتف */
+        .version-badge-container:not(.version-badge-container-inline),
+        #fingerprintRegisterBtn,
+        #refreshPageBtn,
+        #darkModeToggle,
+        .mobile-logout-btn,
+        .mobile-reload-btn {
+            display: none !important;
+        }
+
+        /* السماح بزر الوضع الداكن بالظهور */
+        .mobile-dark-toggle {
+            display: flex !important;
+        }
+        
+        /* إظهار القائمة المنسدلة على الهواتف */
+        .quick-actions-dropdown {
+            display: block !important;
+        }
+        
+        /* إظهار زر القائمة السريعة على الشاشات الصغيرة جداً */
+        .quick-actions-toggle,
+        #quickActionsDropdown,
+        a.quick-actions-toggle,
+        a#quickActionsDropdown {
+            display: flex !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            width: 36px !important;
+            height: 36px !important;
+            position: relative !important;
+            z-index: 1001 !important;
+            pointer-events: auto !important;
+            cursor: pointer !important;
+            flex-shrink: 0 !important;
+            min-width: 36px !important;
+            min-height: 36px !important;
+        }
+        
+        .topbar-left {
+            min-width: auto;
+        }
+        
+        .breadcrumb-nav {
+            display: none;
+        }
+        
+        .topbar-center {
+            display: flex !important;
+            flex: 1;
+            min-width: 0;
+            max-width: 130px; /* بحث مضغوط على الهاتف */
+        }
+
+        .topbar-search {
+            display: flex !important;
+            width: 100%;
+        }
+
+        .topbar-search input {
+            font-size: 11px;
+            height: 28px;
+            padding-top: 2px;
+            padding-bottom: 2px;
+        }
+    }
+    
+    /* إخفاء زر تسجيل الخروج على الشاشات الكبيرة */
+    .mobile-logout-btn {
+        display: none;
+    }
+}
+
+/* إخفاء زر تسجيل الخروج الأول على الكمبيوتر (الشاشات الكبيرة) */
+@media (min-width: 769px) {
+    .desktop-logout-btn {
+        display: none !important;
+    }
+}
+
+/* إظهار زر تسجيل الخروج الأول على الهاتف (لكن إخفاؤه على الشاشات الصغيرة جداً حيث يظهر mobile-logout-btn) */
+@media (max-width: 768px) {
+    .desktop-logout-btn {
+        display: flex !important;
+    }
+}
+
+/* إخفاء desktop-logout-btn على الشاشات الصغيرة جداً (حيث يظهر mobile-logout-btn) */
+@media (max-width: 480px) {
+    .desktop-logout-btn {
+        display: none !important;
+    }
+}
+
+/* ===== Top Bar Sections ===== */
+.topbar-left,
+.topbar-center,
+.topbar-right {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+}
+
+.topbar-left {
+    flex: 0 1 auto;
+    min-width: 0;
+}
+
+.topbar-center {
+    flex: 1 1 auto;
+    justify-content: center;
+    min-width: 0;
+    max-width: 600px;
+}
+
+.topbar-right {
+    flex: 0 1 auto;
+    justify-content: flex-end;
+    min-width: 0;
+}
+
+/* ===== Mobile Menu Toggle ===== */
+.mobile-menu-toggle {
+    background: none;
+    border: none;
+    padding: var(--spacing-sm);
+    cursor: pointer;
+    color: var(--gray-700);
+    font-size: var(--font-size-xl);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--border-radius);
+    transition: all var(--transition-base);
+}
+
+.mobile-menu-toggle:hover {
+    background: var(--gray-100);
+    color: var(--gray-900);
+}
+
+/* إخفاء الأزرار المكررة على جميع الشاشات - تظهر فقط داخل القائمة السريعة */
+.mobile-reload-btn,
+.mobile-dark-toggle {
+    display: none !important;
+}
+
+@media (max-width: 768px) {
+    .mobile-menu-toggle {
+        display: flex;
+    }
+    
+    /* التأكد من إخفاء الأزرار المكررة على الهواتف */
+    .mobile-reload-btn,
+    .mobile-dark-toggle {
+        display: none !important;
+    }
+}
+
+/* ===== Breadcrumb Navigation ===== */
+.breadcrumb-nav {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    font-size: var(--font-size-sm);
+    color: var(--gray-600);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.breadcrumb-nav a {
+    color: var(--gray-600);
+    text-decoration: none;
+    transition: color var(--transition-base);
+}
+
+.breadcrumb-nav a:hover {
+    color: var(--accent-blue);
+}
+
+.breadcrumb-nav span.mx-2 {
+    color: var(--gray-400);
+}
+
+/* ===== Search Bar ===== */
+.topbar-search {
+    position: relative;
+    width: 100%;
+    max-width: 500px;
+}
+
+.topbar-search i {
+    position: absolute;
+    left: var(--spacing-md);
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--gray-400);
+    font-size: var(--font-size-base);
+    pointer-events: none;
+}
+
+/* ===== Version Badge ===== */
+.version-badge-container {
+    display: flex;
+    align-items: center;
+    margin: 0 var(--spacing-sm);
+}
+
+.version-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--gray-700);
+    background: var(--gray-100);
+    border: 1.5px solid var(--gray-300);
+    border-radius: 12px;
+    white-space: nowrap;
+    user-select: none;
+    transition: all var(--transition-base);
+    font-family: 'Courier New', monospace;
+    letter-spacing: 0.5px;
+}
+
+.version-badge:hover {
+    background: var(--gray-200);
+    border-color: var(--gray-400);
+    transform: scale(1.05);
+}
+
+/* Dark mode support */
+[data-theme="dark"] .version-badge,
+.dark-mode .version-badge {
+    color: var(--gray-300);
+    background: var(--gray-800);
+    border-color: var(--gray-600);
+}
+
+[data-theme="dark"] .version-badge:hover,
+.dark-mode .version-badge:hover {
+    background: var(--gray-700);
+    border-color: var(--gray-500);
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+    .version-badge {
+        font-size: 10px;
+        padding: 3px 8px;
+        margin: 0 4px;
+    }
+    
+    .version-badge-container {
+        margin: 0 4px;
+    }
+}
+
+.topbar-search input {
+    width: 100%;
+    padding: var(--spacing-sm) var(--spacing-md) var(--spacing-sm) 40px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    background: var(--bg-secondary);
+    font-size: var(--font-size-sm);
+    color: var(--gray-800);
+    transition: all var(--transition-base);
+}
+
+.topbar-search input:focus {
+    outline: none;
+    border-color: var(--accent-blue);
+    background: var(--bg-primary);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.topbar-search .search-shortcut {
+    position: absolute;
+    right: var(--spacing-sm);
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: var(--font-size-xs);
+    color: var(--gray-400);
+    background: var(--gray-100);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: monospace;
+}
+
+/* ===== Top Bar Actions ===== */
+.topbar-action {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--border-radius);
+    color: var(--gray-700);
+    text-decoration: none;
+    font-size: var(--font-size-lg);
+    transition: all var(--transition-base);
+    position: relative;
+    overflow: visible;
+}
+
+.topbar-action:hover {
+    background: var(--gray-100);
+    color: var(--gray-900);
+}
+
+.topbar-action i {
+    font-size: var(--font-size-lg);
+    position: relative;
+    z-index: 1;
+}
+
+.topbar-action .badge {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    background: var(--accent-red);
+    color: white;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 12px;
+    font-weight: 700;
+    min-width: 18px;
+    height: 18px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    line-height: 1;
+    z-index: 10;
+    box-shadow: 0 2px 4px rgba(220, 38, 38, 0.5);
+    border: 2px solid var(--bg-topbar);
+    white-space: nowrap;
+    transform: translate(25%, -25%);
+}
+
+.topbar-action .badge.has-notifications,
+.topbar-action .badge:not([style*="display: none"]) {
+    display: inline-flex !important;
+}
+
+/* ===== User Avatar ===== */
+.topbar-user {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent-blue), var(--primary-color));
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: var(--font-size-base);
+    cursor: pointer;
+    transition: all var(--transition-base);
+    border: 2px solid var(--bg-topbar);
+}
+
+.topbar-user:hover {
+    transform: scale(1.05);
+    box-shadow: var(--shadow-md);
+}
+
+.topbar-user img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
+    display: block;
+}
+
+/* ===== Dropdown Menus ===== */
+.topbar-dropdown {
+    position: relative;
+}
+
+.dropdown-menu {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-lg);
+    box-shadow: var(--shadow-lg);
+    padding: var(--spacing-sm) 0;
+    margin-top: var(--spacing-sm);
+    min-width: 200px;
+}
+
+.dropdown-item {
+    padding: var(--spacing-sm) var(--spacing-md);
+    color: var(--gray-700);
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    font-size: var(--font-size-sm);
+    transition: all var(--transition-base);
+}
+
+.dropdown-item:hover {
+    background: var(--gray-50);
+    color: var(--gray-900);
+}
+
+.dropdown-item i {
+    width: 20px;
+    text-align: center;
+    color: var(--gray-500);
+}
+
+.dropdown-item:hover i {
+    color: var(--accent-blue);
+}
+
+.dropdown-header {
+    padding: var(--spacing-sm) var(--spacing-md);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    color: var(--gray-500);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.dropdown-divider {
+    height: 1px;
+    background: var(--border-color);
+    margin: var(--spacing-sm) 0;
+    border: none;
+}
+
+/* ===== Notifications Dropdown ===== */
+.notifications-dropdown {
+    max-width: 360px;
+    max-height: 400px;
+    overflow-y: auto;
+    overflow-x: visible;
+}
+
+/* على الموبايل: زيادة العرض لضمان ظهور الأزرار */
+@media (max-width: 768px) {
+    .notifications-dropdown {
+        max-width: calc(100vw - 2rem);
+        width: calc(100vw - 2rem);
+        min-width: 300px;
+        max-height: calc(100vh - 150px);
+        overflow-y: auto;
+        overflow-x: visible;
+    }
+    
+    /* ضمان ظهور الأزرار داخل الـ dropdown */
+    .notifications-dropdown * {
+        overflow: visible !important;
+    }
+}
+
+.notifications-dropdown::-webkit-scrollbar {
+    width: 6px;
+}
+
+.notifications-dropdown::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.notifications-dropdown::-webkit-scrollbar-thumb {
+    background: var(--gray-300);
+    border-radius: 3px;
+}
+
+/* إصلاح dropdown-item-text لضمان ظهور الأزرار */
+.notifications-dropdown .dropdown-item-text {
+    padding: 0 !important;
+    white-space: normal !important;
+    overflow: visible !important;
+    position: relative !important;
+    max-width: none !important;
+    width: 100% !important;
+}
+
+/* على الموبايل: تحسين dropdown-item-text */
+@media (max-width: 768px) {
+    .notifications-dropdown .dropdown-item-text {
+        padding: 0.5rem !important;
+        overflow: visible !important;
+        overflow-x: visible !important;
+        overflow-y: visible !important;
+        max-width: 100% !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        box-sizing: border-box !important;
+    }
+    
+    /* إزالة أي overflow hidden من dropdown-item-text وعناصره */
+    .notifications-dropdown .dropdown-item-text * {
+        overflow: visible !important;
+        overflow-x: visible !important;
+        overflow-y: visible !important;
+    }
+    
+    /* إزالة أي قيود على العرض */
+    .notifications-dropdown .dropdown-item-text * {
+        max-width: none !important;
+        overflow: visible !important;
+    }
+}
+
+.notification-item {
+    padding: var(--spacing-md);
+    border-bottom: 1px solid var(--border-color);
+    transition: background var(--transition-base);
+    position: relative;
+    overflow: visible !important;
+    z-index: 1;
+}
+
+.notification-item .notification-actions {
+    display: flex !important;
+    align-items: center;
+    gap: var(--spacing-xs);
+    margin-inline-start: var(--spacing-sm);
+    flex-shrink: 0;
+    visibility: visible !important;
+    opacity: 1 !important;
+    overflow: visible !important;
+    position: relative !important;
+    z-index: 100 !important;
+    pointer-events: auto !important;
+}
+
+.notification-item .notification-actions .btn {
+    padding: 0.25rem 0.5rem;
+    font-size: var(--font-size-xs);
+    line-height: 1.2;
+    white-space: nowrap;
+    min-width: auto;
+    flex-shrink: 0;
+    display: inline-flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+/* إخفاء أزرار الكمبيوتر على الموبايل */
+@media (max-width: 768px) {
+    .notification-item .notification-actions {
+        display: none !important;
+    }
+}
+
+/* أزرار الهواتف - تظهر فقط على الموبايل */
+.notification-actions-mobile {
+    display: none;
+}
+
+@media (max-width: 768px) {
+    .notification-actions-mobile {
+        display: flex !important;
+        flex-direction: row !important;
+        gap: 0.5rem !important;
+        width: 100% !important;
+        justify-content: flex-end !important;
+        align-items: center !important;
+        margin-top: 0.5rem !important;
+        padding-top: 0.5rem !important;
+        border-top: 1px solid var(--border-color);
+    }
+    
+    .notification-actions-mobile .btn {
+        padding: 0.5rem 0.75rem !important;
+        font-size: 0.75rem !important;
+        min-width: 70px !important;
+        flex: 0 0 auto !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        pointer-events: auto !important;
+        position: relative !important;
+        z-index: 100 !important;
+        white-space: nowrap !important;
+        overflow: visible !important;
+        border: 1px solid currentColor !important;
+        touch-action: manipulation !important;
+        -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1) !important;
+        cursor: pointer !important;
+        user-select: none !important;
+        box-sizing: border-box !important;
+        margin: 0 !important;
+    }
+    
+    .notification-actions-mobile .btn i {
+        margin-inline-end: 0.25rem;
+        display: inline-block !important;
+        font-size: 0.85rem !important;
+    }
+}
+
+/* تحسين عرض أزرار الإشعارات على الموبايل */
+@media (max-width: 768px) {
+    .notification-item {
+        padding: var(--spacing-sm);
+        position: relative;
+        overflow: visible !important;
+        max-width: 100% !important;
+    }
+    
+    .notification-item .d-flex {
+        flex-wrap: wrap !important;
+        gap: var(--spacing-xs);
+        position: relative;
+        overflow: visible !important;
+        width: 100% !important;
+        align-items: flex-start !important;
+    }
+    
+    .notification-item .flex-grow-1 {
+        flex: 1 1 100% !important;
+        min-width: 0;
+        margin-bottom: 0;
+        max-width: 100% !important;
+        width: 100% !important;
+    }
+    
+    .notification-item .notification-actions .btn,
+    .notification-item .notification-actions button {
+        padding: 0.5rem 0.75rem !important;
+        font-size: 0.75rem !important;
+        min-width: 70px !important;
+        max-width: none !important;
+        width: auto !important;
+        flex: 0 0 auto !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        pointer-events: auto !important;
+        position: relative !important;
+        z-index: 101 !important;
+        white-space: nowrap !important;
+        overflow: visible !important;
+        border: 1px solid currentColor !important;
+        touch-action: manipulation !important;
+        -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1) !important;
+        cursor: pointer !important;
+        user-select: none !important;
+        box-sizing: border-box !important;
+        margin: 0 !important;
+    }
+    
+    .notification-item .notification-actions .btn span,
+    .notification-item .notification-actions button span,
+    .notification-item .notification-actions .btn .notification-btn-text,
+    .notification-item .notification-actions button .notification-btn-text {
+        display: inline !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        position: relative !important;
+    }
+    
+    .notification-item .notification-actions .btn i,
+    .notification-item .notification-actions button i {
+        margin-inline-end: 0.25rem;
+        display: inline-block !important;
+        font-size: 0.85rem !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+    }
+    
+    /* تحسين الأزرار على الشاشات الصغيرة جداً */
+    @media (max-width: 480px) {
+        .notification-actions-mobile {
+            gap: 0.5rem !important;
+            flex-wrap: nowrap !important;
+        }
+        
+        .notification-actions-mobile .btn {
+            padding: 0.5rem 0.6rem !important;
+            min-width: 65px !important;
+            font-size: 0.7rem !important;
+            max-width: calc(50% - 0.25rem) !important;
+        }
+        
+        .notification-actions-mobile .btn i {
+            margin-inline-end: 0.2rem;
+            font-size: 0.8rem !important;
+        }
+    }
+}
+
+/* إصلاح زر مسح كل الإشعارات */
+#clearAllNotificationsForm {
+    display: inline-block !important;
+    pointer-events: auto !important;
+    position: relative !important;
+    z-index: 1001 !important;
+    margin: 0 !important;
+}
+
+#clearAllNotificationsForm:active,
+#clearAllNotificationsForm:focus {
+    outline: none !important;
+}
+
+#clearAllNotificationsBtn {
+    display: inline-block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    cursor: pointer !important;
+    position: relative !important;
+    z-index: 1001 !important;
+    margin: 0 !important;
+    padding: 0.25rem 0.5rem !important;
+    background: transparent !important;
+    border: none !important;
+    touch-action: manipulation !important;
+}
+
+#clearAllNotificationsBtn:hover,
+#clearAllNotificationsBtn:focus {
+    opacity: 0.8 !important;
+    text-decoration: underline !important;
+    outline: none !important;
+}
+
+#clearAllNotificationsBtn:active {
+    opacity: 0.6 !important;
+}
+
+#clearAllNotificationsBtn span {
+    display: inline !important;
+}
+
+/* على الموبايل: تحسين زر مسح الكل */
+@media (max-width: 768px) {
+    #clearAllNotificationsBtn {
+        font-size: 0.75rem !important;
+        padding: 0.375rem 0.5rem !important;
+        min-width: 70px !important;
+        touch-action: manipulation !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        gap: 0.25rem !important;
+        -webkit-tap-highlight-color: rgba(220, 53, 69, 0.2) !important;
+    }
+    
+    #clearAllNotificationsBtn i {
+        font-size: 0.9rem !important;
+        display: inline-block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+    }
+    
+    #clearAllNotificationsBtn span {
+        display: inline !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+    }
+}
+
+/* ضمان ظهور جميع أزرار الإشعارات */
+.notification-item .notification-actions * {
+    pointer-events: auto !important;
+    touch-action: manipulation !important;
+    -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1) !important;
+}
+
+/* ضمان أن الأزرار قابلة للنقر على جميع الأجهزة */
+.notification-item .notification-actions .btn,
+.notification-item .notification-actions button {
+    cursor: pointer !important;
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    -moz-user-select: none !important;
+    -ms-user-select: none !important;
+    display: inline-flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    position: relative !important;
+    z-index: 10 !important;
+}
+
+/* ضمان ظهور النصوص داخل الأزرار */
+.notification-item .notification-actions .btn span,
+.notification-item .notification-actions button span,
+.notification-item .notification-actions .btn .notification-btn-text,
+.notification-item .notification-actions button .notification-btn-text {
+    display: inline !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    position: relative !important;
+    white-space: nowrap !important;
+}
+
+/* ضمان ظهور النصوص على الموبايل */
+@media (max-width: 768px) {
+    .notification-item .notification-actions .btn .notification-btn-text,
+    .notification-item .notification-actions button .notification-btn-text {
+        display: inline !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+    }
+}
+
+/* إزالة أي overflow hidden قد يخفي الأزرار */
+.notifications-dropdown,
+.notifications-dropdown *,
+.notification-item,
+.notification-item *,
+.notification-item .d-flex,
+.notification-item .d-flex * {
+    overflow-x: visible !important;
+}
+
+/* على الموبايل: إزالة أي قيود على العرض */
+@media (max-width: 768px) {
+    .notifications-dropdown,
+    .notifications-dropdown * {
+        overflow-x: visible !important;
+        max-width: none !important;
+    }
+    
+    .notification-item,
+    .notification-item * {
+        overflow-x: visible !important;
+        max-width: none !important;
+    }
+    
+    .notification-item .d-flex {
+        overflow-x: visible !important;
+        max-width: none !important;
+    }
+    
+    .notification-item .notification-actions {
+        overflow-x: visible !important;
+        max-width: none !important;
+        display: flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+    }
+    
+    /* قاعدة نهائية لضمان ظهور الأزرار */
+    .notification-item .notification-actions .btn,
+    .notification-item .notification-actions button,
+    .notification-item .notification-actions .notification-mark-read,
+    .notification-item .notification-actions .notification-delete {
+        display: inline-flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        position: relative !important;
+        z-index: 1000 !important;
+        pointer-events: auto !important;
+        width: auto !important;
+        min-width: 70px !important;
+        max-width: none !important;
+        overflow: visible !important;
+    }
+    
+    /* ضمان ظهور النصوص والأيقونات */
+    .notification-item .notification-actions .btn *,
+    .notification-item .notification-actions button * {
+        display: inline !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+    }
+}
+
+/* إصلاح خاص للـ dropdown على الموبايل */
+@media (max-width: 768px) {
+    .notifications-dropdown {
+        max-width: calc(100vw - 2rem) !important;
+        min-width: 280px !important;
+        overflow-x: visible !important;
+        overflow-y: auto !important;
+    }
+    
+    .notifications-dropdown .dropdown-item-text {
+        padding: 0.5rem !important;
+        overflow: visible !important;
+        overflow-x: visible !important;
+        overflow-y: visible !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+    }
+    
+    /* إزالة أي overflow hidden من dropdown-item-text وعناصره */
+    .notifications-dropdown .dropdown-item-text * {
+        overflow: visible !important;
+        overflow-x: visible !important;
+        overflow-y: visible !important;
+    }
+    
+    .notifications-dropdown .notification-item {
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+        overflow: visible !important;
+        overflow-x: visible !important;
+        overflow-y: visible !important;
+    }
+    
+    /* ضمان ظهور الأزرار على الموبايل - قواعد أقوى */
+    .notifications-dropdown .notification-actions,
+    .notifications-dropdown .notification-item .notification-actions {
+        display: flex !important;
+        flex-direction: row !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        width: 100% !important;
+        min-width: 100% !important;
+        max-width: 100% !important;
+        overflow: visible !important;
+        overflow-x: visible !important;
+        overflow-y: visible !important;
+        position: relative !important;
+        z-index: 1000 !important;
+        margin-top: 0.5rem !important;
+        gap: 0.5rem !important;
+        justify-content: flex-end !important;
+        flex-wrap: nowrap !important;
+    }
+    
+    .notifications-dropdown .notification-actions .btn,
+    .notifications-dropdown .notification-actions button,
+    .notifications-dropdown .notification-item .notification-actions .btn,
+    .notifications-dropdown .notification-item .notification-actions button,
+    .notifications-dropdown .notification-mark-read,
+    .notifications-dropdown .notification-delete {
+        display: inline-flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        width: auto !important;
+        min-width: 70px !important;
+        max-width: none !important;
+        flex: 0 0 auto !important;
+        overflow: visible !important;
+        position: relative !important;
+        z-index: 1001 !important;
+        padding: 0.5rem 0.75rem !important;
+        font-size: 0.75rem !important;
+        border: 1px solid currentColor !important;
+        touch-action: manipulation !important;
+        -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1) !important;
+    }
+    
+    /* ضمان ظهور النصوص والأيقونات داخل الأزرار */
+    .notifications-dropdown .notification-actions .btn *,
+    .notifications-dropdown .notification-actions button *,
+    .notifications-dropdown .notification-item .notification-actions .btn *,
+    .notifications-dropdown .notification-item .notification-actions button * {
+        display: inline !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        overflow: visible !important;
+    }
+    
+    /* إزالة أي قيود على عرض notification-item */
+    .notifications-dropdown .notification-item {
+        width: 100% !important;
+        min-width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+        overflow: visible !important;
+    }
+    
+    .notifications-dropdown .notification-item .d-flex {
+        width: 100% !important;
+        min-width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+        overflow: visible !important;
+    }
+}
+
+.notification-item:last-child {
+    border-bottom: none;
+}
+
+/* قاعدة نهائية قوية لضمان ظهور الأزرار على جميع الأجهزة */
+.notification-item .notification-actions,
+.notification-item .notification-actions *,
+.notification-item .notification-actions .btn,
+.notification-item .notification-actions button {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+@media (max-width: 768px) {
+    /* قاعدة نهائية قوية للموبايل */
+    .notifications-dropdown .notification-item .notification-actions,
+    .notifications-dropdown .notification-item .notification-actions *,
+    .notifications-dropdown .notification-item .notification-actions .btn,
+    .notifications-dropdown .notification-item .notification-actions button {
+        display: flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        position: relative !important;
+        z-index: 1000 !important;
+    }
+    
+    .notifications-dropdown .notification-item .notification-actions {
+        flex-direction: row !important;
+        width: 100% !important;
+        min-width: 100% !important;
+    }
+}
+
+.notification-item:hover {
+    background: var(--gray-50);
+}
+
+.notification-item.unread {
+    background: rgba(59, 130, 246, 0.05);
+}
+
+.notification-item.unread:hover {
+    background: rgba(59, 130, 246, 0.1);
+}
+
+/* ===== RTL Support ===== */
+[dir="rtl"] .homeline-topbar {
+    left: 0;
+    right: var(--sidebar-width);
+    flex-direction: row-reverse;
+}
+
+[dir="rtl"] .dashboard-wrapper.sidebar-collapsed .homeline-topbar {
+    right: var(--sidebar-width-collapsed);
+    left: auto;
+}
+
+[dir="rtl"] .topbar-left {
+    flex-direction: row-reverse;
+    justify-content: flex-end;
+    order: 2;
+}
+
+[dir="rtl"] .topbar-center {
+    order: 1;
+}
+
+[dir="rtl"] .topbar-right {
+    justify-content: flex-start;
+    order: 0;
+}
+
+[dir="rtl"] .topbar-search i {
+    left: auto;
+    right: var(--spacing-md);
+}
+
+[dir="rtl"] .topbar-search input {
+    padding-left: var(--spacing-md);
+    padding-right: 40px;
+}
+
+[dir="rtl"] .topbar-search .search-shortcut {
+    right: auto;
+    left: var(--spacing-sm);
+}
+
+[dir="rtl"] .topbar-action .badge {
+    right: auto;
+    left: -2px;
+    top: -2px;
+    transform: translate(-25%, -25%);
+}
+
+[dir="rtl"] .dropdown-menu-end {
+    left: 0 !important;
+    right: auto !important;
+}
+
+@media (max-width: 768px) {
+    [dir="rtl"] .homeline-topbar {
+        right: 0;
+        left: 0;
+        flex-direction: row;
+    }
+    
+    [dir="rtl"] .topbar-left {
+        flex-direction: row;
+        order: 0; /* زر القائمة في أقصى اليسار */
+        justify-content: flex-start;
+    }
+    
+    [dir="rtl"] .topbar-center {
+        order: 1;
+        flex: 1;
+    }
+    
+    [dir="rtl"] .topbar-right {
+        order: 2; /* الأيقونات في اليمين */
+        justify-content: flex-end;
+    }
+    
+    [dir="rtl"] .dashboard-wrapper.sidebar-collapsed .homeline-topbar {
+        right: 0 !important;
+        left: 0 !important;
+        width: 100% !important;
+    }
+    
+    /* التأكد من أن زر القائمة في أقصى اليسار */
+    [dir="rtl"] .mobile-menu-toggle {
+        margin-right: 0;
+        margin-left: auto;
+    }
+}
+
+/* ===== Quick Actions Dropdown ===== */
+.quick-actions-dropdown {
+    display: block !important; /* مرئي دائماً على جميع الشاشات */
+    position: relative;
+    z-index: 1000;
+}
+
+.quick-actions-toggle,
+#quickActionsDropdown,
+a.quick-actions-toggle,
+a#quickActionsDropdown {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 40px;
+    height: 40px;
+    position: relative;
+    z-index: 1001;
+    pointer-events: auto !important;
+    cursor: pointer !important;
+}
+
+.quick-actions-menu {
+    min-width: 220px;
+    padding: 0.5rem 0;
+}
+
+.quick-actions-menu .dropdown-item {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    color: var(--gray-700);
+    text-decoration: none;
+    transition: all var(--transition-base);
+}
+
+.quick-actions-menu .dropdown-item:hover {
+    background-color: var(--gray-100);
+    color: var(--gray-900);
+}
+
+.quick-actions-menu .dropdown-item.text-danger {
+    color: var(--accent-red);
+}
+
+.quick-actions-menu .dropdown-item.text-danger:hover {
+    background-color: rgba(220, 53, 69, 0.1);
+    color: #c82333;
+}
+
+.quick-actions-menu .dropdown-item i {
+    font-size: 1.1rem;
+    width: 20px;
+    text-align: center;
+}
+
+.quick-actions-menu .dropdown-item-text {
+    padding: 0.5rem 1rem;
+}
+
+.version-badge-container-inline {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.version-badge-inline {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--gray-700);
+    background: var(--gray-100);
+    border: 1.5px solid var(--gray-300);
+    border-radius: 12px;
+    white-space: nowrap;
+    user-select: none;
+    font-family: 'Courier New', monospace;
+    letter-spacing: 0.5px;
+}
+
+[data-theme="dark"] .version-badge-inline,
+.dark-mode .version-badge-inline {
+    color: var(--gray-300);
+    background: var(--gray-800);
+    border-color: var(--gray-600);
+}
+
+.quick-actions-menu .form-switch {
+    margin: 0;
+}
+
+.quick-actions-menu .form-switch .form-check-input {
+    cursor: pointer;
+    margin-top: 0;
+}
+
+/* Dark mode support for dropdown */
+[data-theme="dark"] .quick-actions-menu,
+.dark-mode .quick-actions-menu {
+    background: var(--gray-800);
+    border-color: var(--gray-700);
+}
+
+[data-theme="dark"] .quick-actions-menu .dropdown-item,
+.dark-mode .quick-actions-menu .dropdown-item {
+    color: var(--gray-300);
+}
+
+[data-theme="dark"] .quick-actions-menu .dropdown-item:hover,
+.dark-mode .quick-actions-menu .dropdown-item:hover {
+    background-color: var(--gray-700);
+    color: var(--gray-100);
+}
+
+/* ===== إظهار القائمة المنسدلة على الهواتف وإخفاء الأزرار الفردية ===== */
+@media (max-width: 768px) {
+    /* إظهار القائمة المنسدلة على الهواتف */
+    .quick-actions-dropdown {
+        display: block !important;
+        position: relative !important;
+        z-index: 1000 !important;
+        flex-shrink: 0 !important;
+    }
+    
+    /* إظهار زر القائمة السريعة على الهواتف */
+    .quick-actions-toggle,
+    #quickActionsDropdown,
+    a.quick-actions-toggle,
+    a#quickActionsDropdown {
+        display: flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        width: 36px !important;
+        height: 36px !important;
+        position: relative !important;
+        z-index: 1001 !important;
+        pointer-events: auto !important;
+        cursor: pointer !important;
+        flex-shrink: 0 !important;
+        min-width: 36px !important;
+        min-height: 36px !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    
+    /* إخفاء tooltip على الهواتف */
+    .quick-actions-toggle[title],
+    #quickActionsDropdown[title],
+    a.quick-actions-toggle[title],
+    a#quickActionsDropdown[title] {
+        pointer-events: auto;
+    }
+    
+    /* منع ظهور tooltip على الهواتف */
+    .quick-actions-toggle[title]:hover::after,
+    #quickActionsDropdown[title]:hover::after,
+    a.quick-actions-toggle[title]:hover::after,
+    a#quickActionsDropdown[title]:hover::after {
+        display: none !important;
+    }
+    
+    /* التأكد من أن الزر مرئي في topbar-right */
+    .topbar-right .quick-actions-dropdown,
+    .topbar-right .quick-actions-toggle,
+    .topbar-right #quickActionsDropdown {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+    }
+    
+    /* إخفاء جميع الأزرار الفردية على الهواتف */
+    .version-badge-container:not(.version-badge-container-inline),
+    #fingerprintRegisterBtn,
+    #refreshPageBtn,
+    #darkModeToggle,
+    .mobile-logout-btn {
+        display: none !important;
+    }
+}
+
+/* ===== قاعدة نهائية لضمان ظهور زر القائمة السريعة على جميع الأجهزة ===== */
+/* التأكد من أن زر القائمة السريعة مرئي دائماً على الهواتف */
+@media (max-width: 768px) {
+    /* قاعدة نهائية قوية - تضمن ظهور الزر */
+    .topbar-right .quick-actions-dropdown,
+    .homeline-topbar .quick-actions-dropdown {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        position: relative !important;
+        z-index: 1000 !important;
+    }
+    
+    .topbar-right .quick-actions-toggle,
+    .topbar-right #quickActionsDropdown,
+    .topbar-right a.quick-actions-toggle,
+    .topbar-right a#quickActionsDropdown,
+    .homeline-topbar .quick-actions-toggle,
+    .homeline-topbar #quickActionsDropdown,
+    .homeline-topbar a.quick-actions-toggle,
+    .homeline-topbar a#quickActionsDropdown {
+        display: flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        position: relative !important;
+        z-index: 1001 !important;
+        pointer-events: auto !important;
+        cursor: pointer !important;
+        width: 36px !important;
+        height: 36px !important;
+        min-width: 36px !important;
+        min-height: 36px !important;
+        flex-shrink: 0 !important;
+    }
+    
+    /* التأكد من إخفاء الأزرار المكررة على الهواتف */
+    .topbar-left .mobile-reload-btn,
+    .topbar-left .mobile-dark-toggle,
+    .topbar-right .mobile-reload-btn,
+    .topbar-right .mobile-dark-toggle,
+    .homeline-topbar .mobile-reload-btn,
+    .homeline-topbar .mobile-dark-toggle {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        width: 0 !important;
+        height: 0 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        overflow: hidden !important;
+    }
+}

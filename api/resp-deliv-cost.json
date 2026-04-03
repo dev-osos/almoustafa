@@ -1,0 +1,14 @@
+{
+    "data": {
+        "calculateShipmentFees": {
+
+            "delivery": 57,
+            "weight": 0,
+            "collection": 0,
+            "total": 0,
+            "tax": 0,
+            "post": 0,
+            "return": 47
+        }
+    }
+}

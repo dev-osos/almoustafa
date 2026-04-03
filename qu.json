@@ -1,0 +1,28 @@
+{
+    "t": [
+        {
+            "index": 1,
+            "type": "صابون",
+            "description": "شرينك",
+            "quantity": 8
+        },
+        {
+            "index": 2,
+            "type": "كريم / جل",
+            "description": "شرينك",
+            "quantity": 6
+        },
+        {
+            "index": 3,
+            "type": "عطاره",
+            "description": "شرينك",
+            "quantity": 6
+        },
+        {
+            "index": 4,
+            "type": "تلبينات",
+            "description": "شرينك",
+            "quantity": 6
+        }
+    ]
+}

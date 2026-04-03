@@ -1,0 +1,897 @@
+<?php
+/**
+ * النسخة الاحتياطية اليومية التلقائية وإرسالها إلى Telegram
+ */
+
+if (!defined('ACCESS_ALLOWED')) {
+    die('Direct access not allowed');
+}
+
+const DAILY_BACKUP_JOB_KEY = 'daily_backup_telegram';
+const DAILY_BACKUP_STATUS_SETTING_KEY = 'daily_backup_status';
+
+if (!function_exists('dailyBackupFileMatchesDate')) {
+    function dailyBackupFileMatchesDate(string $path, string $targetDate): bool
+    {
+        if (!is_file($path)) {
+            return false;
+        }
+
+        return date('Y-m-d', (int)filemtime($path)) === $targetDate;
+    }
+}
+
+if (!function_exists('dailyBackupResolveStoredPath')) {
+    /**
+     * يحوّل المسار المخزن (نسبي أو مطلق) إلى مسار فعلي يمكن التحقق منه.
+     */
+    function dailyBackupResolveStoredPath(string $baseDir, ?string $storedPath): ?string
+    {
+        if ($storedPath === null) {
+            return null;
+        }
+
+        $storedPath = trim($storedPath);
+        if ($storedPath === '') {
+            return null;
+        }
+
+        $normalizedBase = str_replace('\\', '/', rtrim($baseDir, '/\\'));
+        $normalizedStored = str_replace('\\', '/', $storedPath);
+
+        // في حال كان المسار مطلقاً (لينكس أو ويندوز)
+        if (preg_match('#^[a-zA-Z]:/#', $normalizedStored) || substr($normalizedStored, 0, 1) === '/') {
+            $candidate = str_replace('/', DIRECTORY_SEPARATOR, $normalizedStored);
+            if (is_file($candidate)) {
+                return $candidate;
+            }
+            if (is_file($storedPath)) {
+                return $storedPath;
+            }
+        }
+
+        // محاولة تجميع المسار النسبي مع المجلد الأساسي
+        $candidate = $normalizedBase . '/' . ltrim($normalizedStored, '/');
+        $candidate = str_replace('/', DIRECTORY_SEPARATOR, $candidate);
+        if (is_file($candidate)) {
+            return $candidate;
+        }
+
+        return null;
+    }
+}
+
+if (!function_exists('dailyBackupGetRelativePath')) {
+    /**
+     * استخراج مسار نسبي من المسار الكامل إذا كان ضمن المجلد المحدد.
+     */
+    function dailyBackupGetRelativePath(string $baseDir, string $fullPath): string
+    {
+        $normalizedBase = str_replace('\\', '/', rtrim($baseDir, '/\\')) . '/';
+        $normalizedFull = str_replace('\\', '/', $fullPath);
+
+        if (strpos($normalizedFull, $normalizedBase) === 0) {
+            $relative = substr($normalizedFull, strlen($normalizedBase));
+            return ltrim($relative, '/');
+        }
+
+        return $normalizedFull;
+    }
+}
+
+if (!function_exists('dailyBackupEnsureJobTable')) {
+    /**
+     * التأكد من وجود جدول تتبع المهام اليومية.
+     */
+    function dailyBackupEnsureJobTable(): void
+    {
+        static $tableReady = false;
+
+        if ($tableReady) {
+            return;
+        }
+
+        try {
+            require_once __DIR__ . '/db.php';
+            $db = db();
+            $db->execute("\n                CREATE TABLE IF NOT EXISTS `system_daily_jobs` (\n                  `job_key` varchar(120) NOT NULL,\n                  `last_sent_at` datetime DEFAULT NULL,\n                  `last_file_path` varchar(512) DEFAULT NULL,\n                  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n                  PRIMARY KEY (`job_key`)\n                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci\n            ");
+
+            $lastNotifiedColumn = $db->queryOne("SHOW COLUMNS FROM system_daily_jobs LIKE 'last_notified_at'");
+            if (empty($lastNotifiedColumn)) {
+                $db->execute("ALTER TABLE system_daily_jobs ADD COLUMN `last_notified_at` datetime DEFAULT NULL AFTER `last_sent_at`");
+            }
+
+            $lastNotificationHashColumn = $db->queryOne("SHOW COLUMNS FROM system_daily_jobs LIKE 'last_notification_hash'");
+            if (empty($lastNotificationHashColumn)) {
+                $db->execute("ALTER TABLE system_daily_jobs ADD COLUMN `last_notification_hash` varchar(128) DEFAULT NULL AFTER `last_notified_at`");
+            }
+        } catch (Throwable $error) {
+            error_log('Daily Backup: unable to ensure job table - ' . $error->getMessage());
+            return;
+        }
+
+        $tableReady = true;
+    }
+}
+
+if (!function_exists('dailyBackupEnsureSentTable')) {
+    /**
+     * التأكد من وجود جدول تتبع إرسال النسخ الاحتياطية اليومية.
+     */
+    function dailyBackupEnsureSentTable(): void
+    {
+        static $tableReady = false;
+
+        if ($tableReady) {
+            return;
+        }
+
+        try {
+            require_once __DIR__ . '/db.php';
+            $db = db();
+            $db->execute("
+                CREATE TABLE IF NOT EXISTS `daily_backup_sent_log` (
+                  `id` int(11) NOT NULL AUTO_INCREMENT,
+                  `sent_date` date NOT NULL,
+                  `sent_at` datetime NOT NULL,
+                  `backup_file_path` varchar(512) DEFAULT NULL,
+                  `backup_id` int(11) DEFAULT NULL,
+                  `status` enum('sent','failed') DEFAULT 'sent',
+                  `error_message` text DEFAULT NULL,
+                  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                  PRIMARY KEY (`id`),
+                  UNIQUE KEY `unique_sent_date` (`sent_date`),
+                  KEY `sent_at` (`sent_at`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            ");
+        } catch (Throwable $error) {
+            error_log('Daily Backup: unable to ensure sent log table - ' . $error->getMessage());
+            return;
+        }
+
+        $tableReady = true;
+    }
+}
+
+if (!function_exists('dailyBackupResetNotificationState')) {
+    function dailyBackupResetNotificationState(): void
+    {
+        try {
+            dailyBackupEnsureJobTable();
+            require_once __DIR__ . '/db.php';
+            $db = db();
+            $result = $db->execute(
+                "UPDATE system_daily_jobs SET last_notified_at = NULL, last_notification_hash = NULL WHERE job_key = ?",
+                [DAILY_BACKUP_JOB_KEY]
+            );
+            if (($result['affected_rows'] ?? 0) < 1) {
+                $db->execute(
+                    "INSERT IGNORE INTO system_daily_jobs (job_key) VALUES (?)",
+                    [DAILY_BACKUP_JOB_KEY]
+                );
+            }
+        } catch (Throwable $error) {
+            error_log('Daily Backup: failed resetting notification state - ' . $error->getMessage());
+        }
+    }
+}
+
+if (!function_exists('dailyBackupNotifyManagerThrottled')) {
+    function dailyBackupNotifyManagerThrottled(string $message, string $type = 'info', ?array &$jobState = null): void
+    {
+        $hash = sha1($type . '|' . $message);
+        $today = date('Y-m-d');
+
+        try {
+            dailyBackupEnsureJobTable();
+            require_once __DIR__ . '/db.php';
+            $db = db();
+
+            if ($jobState === null || !is_array($jobState)) {
+                $jobState = $db->queryOne(
+                    "SELECT last_notified_at, last_notification_hash FROM system_daily_jobs WHERE job_key = ? LIMIT 1",
+                    [DAILY_BACKUP_JOB_KEY]
+                ) ?: [];
+            }
+
+            $lastNotifiedAt = isset($jobState['last_notified_at']) ? (string) $jobState['last_notified_at'] : '';
+            $lastHash = isset($jobState['last_notification_hash']) ? (string) $jobState['last_notification_hash'] : '';
+
+            if (
+                $lastHash === $hash &&
+                $lastNotifiedAt !== '' &&
+                substr($lastNotifiedAt, 0, 10) === $today
+            ) {
+                return;
+            }
+
+            dailyBackupNotifyManager($message, $type);
+
+            $updateResult = $db->execute(
+                "UPDATE system_daily_jobs SET last_notified_at = NOW(), last_notification_hash = ? WHERE job_key = ?",
+                [$hash, DAILY_BACKUP_JOB_KEY]
+            );
+
+            if (($updateResult['affected_rows'] ?? 0) < 1) {
+                $db->execute(
+                    "INSERT INTO system_daily_jobs (job_key, last_notified_at, last_notification_hash) VALUES (?, NOW(), ?)",
+                    [DAILY_BACKUP_JOB_KEY, $hash]
+                );
+            }
+
+            $jobState['last_notified_at'] = date('Y-m-d H:i:s');
+            $jobState['last_notification_hash'] = $hash;
+        } catch (Throwable $error) {
+            error_log('Daily Backup: failed throttling notification - ' . $error->getMessage());
+        }
+    }
+}
+
+if (!function_exists('dailyBackupSaveStatus')) {
+    /**
+     * حفظ حالة النسخة الاحتياطية اليومية في system_settings.
+     *
+     * @param array<string, mixed> $data
+     */
+    function dailyBackupSaveStatus(array $data): void
+    {
+        try {
+            require_once __DIR__ . '/db.php';
+            $db = db();
+            $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            $db->execute(
+                "INSERT INTO system_settings (`key`, `value`)
+                 VALUES (?, ?)
+                 ON DUPLICATE KEY UPDATE value = VALUES(value)",
+                [DAILY_BACKUP_STATUS_SETTING_KEY, $json]
+            );
+        } catch (Throwable $error) {
+            error_log('Daily Backup: failed saving status - ' . $error->getMessage());
+        }
+    }
+}
+
+if (!function_exists('dailyBackupNotifyManager')) {
+    /**
+     * إرسال إشعار للمدير عند الحاجة.
+     */
+    function dailyBackupNotifyManager(string $message, string $type = 'info'): void
+    {
+        try {
+            if (!function_exists('createNotificationForRole')) {
+                require_once __DIR__ . '/notifications.php';
+            }
+        } catch (Throwable $includeError) {
+            error_log('Daily Backup: unable to include notifications - ' . $includeError->getMessage());
+            return;
+        }
+
+        if (function_exists('createNotificationForRole')) {
+            try {
+                createNotificationForRole(
+                    'manager',
+                    'النسخة الاحتياطية اليومية',
+                    $message,
+                    $type
+                );
+            } catch (Throwable $notifyError) {
+                error_log('Daily Backup: failed sending manager notification - ' . $notifyError->getMessage());
+            }
+        }
+    }
+}
+
+if (!function_exists('dailyBackupRegisterManualDeletion')) {
+    /**
+     * توثيق حذف النسخة الاحتياطية اليومية يدوياً لتجنب إعادة إرسالها خلال اليوم نفسه.
+     *
+     * @param array<string,mixed> $backup
+     * @param int|null $deletedByUserId
+     */
+    function dailyBackupRegisterManualDeletion(array $backup, ?int $deletedByUserId = null): void
+    {
+        $statusData = [
+            'date' => date('Y-m-d'),
+            'status' => 'manual_deleted',
+            'deleted_at' => date('Y-m-d H:i:s'),
+        ];
+
+        if (!empty($backup['id'])) {
+            $statusData['backup_id'] = (int) $backup['id'];
+        }
+
+        if (!empty($backup['filename'])) {
+            $statusData['filename'] = (string) $backup['filename'];
+        }
+
+        if (!empty($backup['file_path'])) {
+            $statusData['file_path'] = (string) $backup['file_path'];
+        }
+
+        if ($deletedByUserId !== null) {
+            $statusData['deleted_by'] = (int) $deletedByUserId;
+        }
+
+        dailyBackupSaveStatus($statusData);
+
+        try {
+            dailyBackupEnsureJobTable();
+            require_once __DIR__ . '/db.php';
+            $db = db();
+            $db->execute(
+                "UPDATE system_daily_jobs SET last_file_path = NULL WHERE job_key = ?",
+                [DAILY_BACKUP_JOB_KEY]
+            );
+        } catch (Throwable $error) {
+            error_log('Daily Backup: failed registering manual deletion - ' . $error->getMessage());
+        }
+
+        $messageParts = ['تم حذف النسخة الاحتياطية اليومية يدوياً من قبل الإدارة.'];
+        if (!empty($backup['filename'])) {
+            $messageParts[] = 'الملف:' . ' ' . (string) $backup['filename'];
+        }
+        if ($deletedByUserId !== null) {
+            $messageParts[] = '(المستخدم #' . (int) $deletedByUserId . ')';
+        }
+
+        dailyBackupNotifyManager(implode(' ', $messageParts), 'warning');
+    }
+}
+
+if (!function_exists('triggerDailyBackupDelivery')) {
+    /**
+     * تنفيذ النسخة الاحتياطية اليومية وإرسالها إلى Telegram مرة واحدة في اليوم.
+     */
+    function triggerDailyBackupDelivery(): void
+    {
+        if (PHP_SAPI === 'cli' || defined('SKIP_DAILY_BACKUP')) {
+            return;
+        }
+
+        static $alreadyTriggered = false;
+        if ($alreadyTriggered) {
+            return;
+        }
+        $alreadyTriggered = true;
+
+        $todayDate = date('Y-m-d');
+        $statusData = [
+            'date' => $todayDate,
+            'status' => 'pending',
+            'checked_at' => date('Y-m-d H:i:s'),
+        ];
+
+        try {
+            require_once __DIR__ . '/db.php';
+        } catch (Throwable $dbIncludeError) {
+            error_log('Daily Backup: failed including db.php - ' . $dbIncludeError->getMessage());
+            return;
+        }
+
+        $db = db();
+        dailyBackupEnsureJobTable();
+        dailyBackupEnsureSentTable();
+
+        // ===== الفحص الأساسي: التحقق من إرسال النسخة الاحتياطية اليوم =====
+        try {
+            $db->beginTransaction();
+            
+            // فحص إذا تم إرسال نسخة احتياطية اليوم باستخدام LOCK FOR UPDATE لمنع race condition
+            $existingLog = $db->queryOne(
+                "SELECT id, sent_date, status FROM daily_backup_sent_log 
+                 WHERE sent_date = ? 
+                 FOR UPDATE",
+                [$todayDate]
+            );
+
+            // إذا وجد سجل لإرسال اليوم وكانت الحالة 'sent'، لا ترسل مرة أخرى
+            if (!empty($existingLog) && ($existingLog['status'] ?? null) === 'sent') {
+                $db->commit();
+                $statusData['status'] = 'already_sent';
+                $statusData['note'] = 'Backup already sent today according to sent log';
+                dailyBackupSaveStatus($statusData);
+                return; // تم الإرسال مسبقاً اليوم، لا حاجة لإعادة الإرسال
+            }
+            
+            $db->commit();
+        } catch (Throwable $checkError) {
+            try {
+                $db->rollback();
+            } catch (Throwable $ignore) {
+            }
+            error_log('Daily Backup: failed checking sent log - ' . $checkError->getMessage());
+            // نتابع التنفيذ في حالة خطأ في الفحص
+        }
+
+        $backupsBaseDir = rtrim(
+            defined('BACKUPS_PATH') ? BACKUPS_PATH : (dirname(__DIR__) . '/backups'),
+            '/\\'
+        );
+
+        $jobState = null;
+        try {
+        $jobState = $db->queryOne(
+            "SELECT last_sent_at, last_file_path, last_notified_at, last_notification_hash FROM system_daily_jobs WHERE job_key = ? LIMIT 1",
+            [DAILY_BACKUP_JOB_KEY]
+        );
+        } catch (Throwable $stateError) {
+            error_log('Daily Backup: failed loading job state - ' . $stateError->getMessage());
+        }
+
+        $jobStoredPath = isset($jobState['last_file_path']) ? (string)$jobState['last_file_path'] : '';
+        $jobFilePath = dailyBackupResolveStoredPath($backupsBaseDir, $jobStoredPath);
+        $jobStoredRelative = $jobFilePath !== null
+            ? dailyBackupGetRelativePath($backupsBaseDir, $jobFilePath)
+            : $jobStoredPath;
+        $jobFileValid = $jobFilePath !== null && dailyBackupFileMatchesDate($jobFilePath, $todayDate);
+
+        if (!empty($jobState['last_sent_at']) && $jobFileValid) {
+            $lastSentDate = substr((string) $jobState['last_sent_at'], 0, 10);
+            if ($lastSentDate === $todayDate) {
+                $statusData['status'] = 'already_sent';
+                $statusData['last_sent_at'] = $jobState['last_sent_at'];
+                $statusData['file_path'] = $jobStoredRelative ?: null;
+                $statusData['note'] = 'Backup already delivered to Telegram today';
+                dailyBackupSaveStatus($statusData);
+                dailyBackupNotifyManagerThrottled('تم إرسال النسخة الاحتياطية للبيانات إلى شات Telegram مسبقاً اليوم.', 'info', $jobState);
+                return;
+            }
+        }
+
+        $inProgress = false;
+        try {
+            $db->beginTransaction();
+            $existing = $db->queryOne(
+                "SELECT value FROM system_settings WHERE `key` = ? FOR UPDATE",
+                [DAILY_BACKUP_STATUS_SETTING_KEY]
+            );
+
+            $existingData = [];
+            if ($existing && isset($existing['value'])) {
+                $decoded = json_decode((string) $existing['value'], true);
+                if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                    $existingData = $decoded;
+                }
+            }
+
+            $existingDataHasFile = false;
+            $existingStoredPath = isset($existingData['file_path']) ? (string)$existingData['file_path'] : '';
+
+            if (
+                !empty($existingData) &&
+                ($existingData['date'] ?? null) === $todayDate &&
+                ($existingData['status'] ?? null) === 'manual_deleted'
+            ) {
+                $db->commit();
+                $statusData['status'] = 'manual_deleted';
+                $statusData['note'] = 'Daily backup delivery skipped due to manual deletion.';
+                $statusData['checked_at'] = date('Y-m-d H:i:s');
+                dailyBackupSaveStatus($statusData);
+                return;
+            }
+
+            if (
+                $existingStoredPath !== '' &&
+                ($existingData['date'] ?? null) === $todayDate
+            ) {
+                $existingResolvedPath = dailyBackupResolveStoredPath($backupsBaseDir, $existingStoredPath);
+                if ($existingResolvedPath !== null && dailyBackupFileMatchesDate($existingResolvedPath, $todayDate)) {
+                    $existingDataHasFile = true;
+                    $existingData['file_path'] = dailyBackupGetRelativePath($backupsBaseDir, $existingResolvedPath);
+                }
+            }
+
+            if (
+                !empty($existingData) &&
+                ($existingData['date'] ?? null) === $todayDate &&
+                in_array($existingData['status'] ?? null, ['completed', 'sent'], true) &&
+                $existingDataHasFile
+            ) {
+                $db->commit();
+                dailyBackupNotifyManagerThrottled('تم إرسال النسخة الاحتياطية للبيانات إلى شات Telegram مسبقاً اليوم.', 'info', $jobState);
+                return;
+            }
+
+            if (
+                !empty($existingData) &&
+                ($existingData['date'] ?? null) === $todayDate &&
+                ($existingData['status'] ?? null) === 'running'
+            ) {
+                $startedAt = isset($existingData['started_at']) ? strtotime((string) $existingData['started_at']) : 0;
+                if ($startedAt && (time() - $startedAt) < 600) {
+                    $db->commit();
+                    return;
+                }
+            }
+
+            $statusData['status'] = 'running';
+            $statusData['started_at'] = date('Y-m-d H:i:s');
+            $statusJson = json_encode($statusData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+            $db->execute(
+                "INSERT INTO system_settings (`key`, `value`)
+                 VALUES (?, ?)
+                 ON DUPLICATE KEY UPDATE value = VALUES(value)",
+                [DAILY_BACKUP_STATUS_SETTING_KEY, $statusJson]
+            );
+
+            $db->commit();
+            $inProgress = true;
+        } catch (Throwable $transactionError) {
+            try {
+                $db->rollback();
+            } catch (Throwable $ignore) {
+            }
+            error_log('Daily Backup: transaction error - ' . $transactionError->getMessage());
+            return;
+        }
+
+        if (!$inProgress) {
+            return;
+        }
+
+        dailyBackupResetNotificationState();
+
+        if (is_array($jobState)) {
+            $jobState['last_notified_at'] = null;
+            $jobState['last_notification_hash'] = null;
+        }
+
+        try {
+            require_once __DIR__ . '/backup.php';
+        } catch (Throwable $backupIncludeError) {
+            error_log('Daily Backup: failed including backup.php - ' . $backupIncludeError->getMessage());
+            dailyBackupSaveStatus(array_merge($statusData, [
+                'status' => 'failed',
+                'error' => 'Unable to load backup module',
+            ]));
+            return;
+        }
+
+        try {
+            require_once __DIR__ . '/simple_telegram.php';
+        } catch (Throwable $telegramIncludeError) {
+            error_log('Daily Backup: failed including simple_telegram.php - ' . $telegramIncludeError->getMessage());
+            dailyBackupSaveStatus(array_merge($statusData, [
+                'status' => 'failed',
+                'error' => 'Unable to load Telegram module',
+            ]));
+            return;
+        }
+
+        // التحقق من إعداد Telegram (اختياري - النسخة الاحتياطية تُنشأ حتى بدون Telegram)
+        // إذا لم يكن Telegram مُعداً، ننشئ النسخة الاحتياطية فقط بدون إرسال
+        $telegramConfigured = false;
+        try {
+            if (function_exists('isTelegramConfigured')) {
+                $telegramConfigured = isTelegramConfigured();
+            }
+        } catch (Throwable $telegramCheckError) {
+            error_log('Daily Backup: Telegram check error - ' . $telegramCheckError->getMessage());
+        }
+
+        $backupRecord = null;
+        $backupFilePath = null;
+        $backupFilename = null;
+        $backupId = null;
+
+        try {
+            $backupRecord = $db->queryOne(
+                "SELECT id, filename, file_path, file_size, created_at
+                 FROM backups
+                 WHERE backup_type = 'daily'
+                   AND status IN ('completed', 'success')
+                   AND DATE(created_at) = ?
+                 ORDER BY created_at DESC
+                 LIMIT 1",
+                [$todayDate]
+            );
+        } catch (Throwable $lookupError) {
+            error_log('Daily Backup: lookup error - ' . $lookupError->getMessage());
+        }
+
+        if ($backupRecord && !empty($backupRecord['file_path']) && file_exists($backupRecord['file_path'])) {
+            $backupFilePath = $backupRecord['file_path'];
+            $backupFilename = $backupRecord['filename'] ?? basename($backupFilePath);
+            $backupId = $backupRecord['id'] ?? null;
+        } else {
+            $creationResult = createDatabaseBackup('daily');
+
+            if (!is_array($creationResult) || empty($creationResult['success'])) {
+                $errorMessage = $creationResult['message'] ?? 'Failed to create backup file';
+                dailyBackupSaveStatus(array_merge($statusData, [
+                    'status' => 'failed',
+                    'error' => $errorMessage,
+                ]));
+                dailyBackupNotifyManagerThrottled('تعذر إنشاء النسخة الاحتياطية اليومية: ' . $errorMessage, 'danger', $jobState);
+                return;
+            }
+
+            $backupFilePath = $creationResult['file_path'] ?? null;
+            $backupFilename = $creationResult['filename'] ?? null;
+            $backupId = $creationResult['backup_id'] ?? null;
+
+            if ($backupFilePath === null || !file_exists($backupFilePath)) {
+                $errorMessage = 'Backup file missing after creation';
+                dailyBackupSaveStatus(array_merge($statusData, [
+                    'status' => 'failed',
+                    'error' => $errorMessage,
+                ]));
+                dailyBackupNotifyManagerThrottled('تعذر العثور على ملف النسخة الاحتياطية بعد إنشائه.', 'danger', $jobState);
+                return;
+            }
+
+            // إذا لم نحصل على backup_id من النتيجة، نحاول البحث عنه
+            if (!$backupId && $backupFilename) {
+                try {
+                    $newBackupRecord = $db->queryOne(
+                        "SELECT id, status FROM backups WHERE filename = ? ORDER BY id DESC LIMIT 1",
+                        [$backupFilename]
+                    );
+                    if ($newBackupRecord && isset($newBackupRecord['id'])) {
+                        $backupId = (int) $newBackupRecord['id'];
+                        // التأكد من أن الحالة هي 'success' بعد إنشاء النسخة الاحتياطية
+                        if (isset($newBackupRecord['status']) && $newBackupRecord['status'] !== 'success') {
+                            try {
+                                $db->execute(
+                                    "UPDATE backups SET status = 'success', error_message = NULL WHERE id = ?",
+                                    [$backupId]
+                                );
+                                error_log('Daily Backup: Fixed backup status to success for backup ID: ' . $backupId);
+                            } catch (Throwable $fixError) {
+                                error_log('Daily Backup: failed fixing backup status - ' . $fixError->getMessage());
+                            }
+                        }
+                    }
+                } catch (Throwable $idLookupError) {
+                    error_log('Daily Backup: failed retrieving backup id - ' . $idLookupError->getMessage());
+                }
+            }
+            
+            // التأكد من أن الحالة هي 'success' مباشرة بعد إنشاء النسخة الاحتياطية
+            if ($backupId) {
+                try {
+                    $db->execute(
+                        "UPDATE backups SET status = 'success', error_message = NULL WHERE id = ?",
+                        [$backupId]
+                    );
+                    error_log('Daily Backup: Ensured backup status is success immediately after creation for backup ID: ' . $backupId);
+                } catch (Throwable $ensureError) {
+                    error_log('Daily Backup: failed ensuring backup status - ' . $ensureError->getMessage());
+                }
+            }
+        }
+
+        $backupRelativePath = $backupFilePath !== null
+            ? dailyBackupGetRelativePath($backupsBaseDir, $backupFilePath)
+            : null;
+
+        $captionLines = [
+            '🗃️ النسخة الاحتياطية اليومية للبيانات',
+            'التاريخ: ' . date('Y-m-d H:i:s'),
+        ];
+        if ($backupFilename) {
+            $captionLines[] = 'الملف: ' . $backupFilename;
+        }
+        if ($backupRecord && isset($backupRecord['file_size'])) {
+            $captionLines[] = 'الحجم: ' . formatFileSize((int) $backupRecord['file_size']);
+        }
+        $caption = implode("\n", $captionLines);
+
+        // تحديث قاعدة البيانات قبل الإرسال لمنع الإرسال المتكرر في الطلبات المتزامنة
+        try {
+            $db->beginTransaction();
+            
+            // التحقق مرة أخرى من عدم الإرسال (باستخدام FOR UPDATE lock)
+            $existingLogCheck = $db->queryOne(
+                "SELECT id, sent_date, status FROM daily_backup_sent_log 
+                 WHERE sent_date = ? 
+                 FOR UPDATE",
+                [$todayDate]
+            );
+            
+            // إذا وجد سجل لإرسال اليوم وكانت الحالة 'sent'، لا ترسل مرة أخرى
+            if (!empty($existingLogCheck) && ($existingLogCheck['status'] ?? null) === 'sent') {
+                $db->commit();
+                $statusData['status'] = 'already_sent';
+                $statusData['note'] = 'Backup already sent today by concurrent request';
+                dailyBackupSaveStatus($statusData);
+                return; // تم الإرسال مسبقاً اليوم، لا حاجة لإعادة الإرسال
+            }
+            
+            // تحديث السجل قبل الإرسال (باستخدام INSERT ... ON DUPLICATE KEY UPDATE)
+            $db->execute(
+                "INSERT INTO daily_backup_sent_log (sent_date, sent_at, backup_file_path, backup_id, status)
+                 VALUES (?, NOW(), ?, ?, 'sent')
+                 ON DUPLICATE KEY UPDATE 
+                     sent_at = NOW(),
+                     backup_file_path = VALUES(backup_file_path),
+                     backup_id = VALUES(backup_id),
+                     status = 'sent',
+                     error_message = NULL",
+                [
+                    $todayDate,
+                    $backupRelativePath ?? $backupFilePath,
+                    $backupId
+                ]
+            );
+            
+            $db->commit();
+        } catch (Throwable $preSendError) {
+            try {
+                $db->rollback();
+            } catch (Throwable $ignore) {
+            }
+            error_log('Daily Backup: failed pre-send logging - ' . $preSendError->getMessage());
+            // نتابع الإرسال حتى لو فشل السجل
+        }
+
+        // إرسال النسخة الاحتياطية عبر Telegram فقط إذا كان Telegram مُعداً
+        $backupStatusUpdated = false;
+        if ($telegramConfigured && function_exists('sendTelegramFile')) {
+            $sendResult = sendTelegramFile($backupFilePath, $caption);
+
+            if ($sendResult === false) {
+                $errorMessage = 'فشل إرسال النسخة الاحتياطية إلى Telegram';
+                dailyBackupSaveStatus(array_merge($statusData, [
+                    'status' => 'completed', // الحالة completed لأن النسخة الاحتياطية تم إنشاؤها بنجاح
+                    'error' => $errorMessage,
+                    'file_path' => $backupRelativePath ?? $backupFilePath,
+                ]));
+                
+                // لا نحدث حالة النسخة الاحتياطية إلى failed لأن النسخة الاحتياطية نفسها تم إنشاؤها بنجاح
+                // فقط نضيف رسالة الخطأ في error_message
+                if ($backupId) {
+                    try {
+                        $db->execute(
+                            "UPDATE backups SET status = 'success', error_message = ? WHERE id = ?",
+                            [$errorMessage, $backupId]
+                        );
+                        $backupStatusUpdated = true;
+                        error_log('Daily Backup: Backup created successfully but Telegram send failed for backup ID: ' . $backupId);
+                    } catch (Throwable $updateError) {
+                        error_log('Daily Backup: failed updating backup status - ' . $updateError->getMessage());
+                    }
+                }
+                
+                // تسجيل الفشل في السجل
+                try {
+                    $db->beginTransaction();
+                    $db->execute(
+                        "INSERT INTO daily_backup_sent_log (sent_date, sent_at, backup_file_path, backup_id, status, error_message)
+                         VALUES (?, NOW(), ?, ?, 'failed', ?)
+                         ON DUPLICATE KEY UPDATE 
+                             sent_at = NOW(),
+                             backup_file_path = VALUES(backup_file_path),
+                             backup_id = VALUES(backup_id),
+                             status = 'failed',
+                             error_message = VALUES(error_message)",
+                        [
+                            $todayDate,
+                            $backupRelativePath ?? $backupFilePath,
+                            $backupId,
+                            $errorMessage
+                        ]
+                    );
+                    $db->commit();
+                } catch (Throwable $logError) {
+                    try {
+                        $db->rollback();
+                    } catch (Throwable $ignore) {
+                    }
+                    error_log('Daily Backup: failed logging failed backup - ' . $logError->getMessage());
+                }
+                
+                dailyBackupNotifyManagerThrottled($errorMessage, 'danger', $jobState);
+                return;
+            } else {
+                // عند نجاح الإرسال، التأكد من أن حالة النسخة الاحتياطية في جدول backups هي success
+                if ($backupId) {
+                    try {
+                        $updateResult = $db->execute(
+                            "UPDATE backups SET status = 'success', error_message = NULL WHERE id = ?",
+                            [$backupId]
+                        );
+                        $backupStatusUpdated = true;
+                        error_log('Daily Backup: Updated backup status to success for backup ID: ' . $backupId . ' (Telegram sent successfully)');
+                    } catch (Throwable $updateError) {
+                        error_log('Daily Backup: failed updating backup status to success - ' . $updateError->getMessage());
+                    }
+                }
+            }
+        } else {
+            // إذا لم يكن Telegram مُعداً، نكتفي بإنشاء النسخة الاحتياطية فقط
+            error_log('Daily Backup: Telegram not configured, backup created but not sent');
+            // التأكد من أن حالة النسخة الاحتياطية في جدول backups هي success حتى لو لم يتم الإرسال
+            if ($backupId) {
+                try {
+                    $updateResult = $db->execute(
+                        "UPDATE backups SET status = 'success', error_message = NULL WHERE id = ?",
+                        [$backupId]
+                    );
+                    $backupStatusUpdated = true;
+                    error_log('Daily Backup: Updated backup status to success for backup ID: ' . $backupId . ' (Telegram not configured)');
+                } catch (Throwable $updateError) {
+                    error_log('Daily Backup: failed updating backup status to success - ' . $updateError->getMessage());
+                }
+            }
+        }
+        
+        // التأكد من تحديث الحالة إلى success في جميع الحالات (بعد نجاح إنشاء النسخة الاحتياطية)
+        // هذا مهم جداً لضمان أن الحالة دائماً 'success' إذا نجح إنشاء النسخة الاحتياطية
+        if ($backupId) {
+            try {
+                // التحقق من الحالة الحالية أولاً
+                $currentStatus = $db->queryOne(
+                    "SELECT status FROM backups WHERE id = ?",
+                    [$backupId]
+                );
+                
+                if ($currentStatus && ($currentStatus['status'] ?? '') !== 'success') {
+                    $db->execute(
+                        "UPDATE backups SET status = 'success', error_message = NULL WHERE id = ?",
+                        [$backupId]
+                    );
+                    error_log('Daily Backup: Final update - Fixed backup status from "' . ($currentStatus['status'] ?? 'unknown') . '" to "success" for backup ID: ' . $backupId);
+                } else if (!$backupStatusUpdated) {
+                    // إذا لم يتم التحديث مسبقاً، تأكد من أن الحالة هي 'success'
+                    $db->execute(
+                        "UPDATE backups SET status = 'success', error_message = NULL WHERE id = ?",
+                        [$backupId]
+                    );
+                    error_log('Daily Backup: Final update - Set backup status to success for backup ID: ' . $backupId);
+                } else {
+                    error_log('Daily Backup: Backup status already updated to success for backup ID: ' . $backupId);
+                }
+            } catch (Throwable $updateError) {
+                error_log('Daily Backup: failed final update of backup status to success - ' . $updateError->getMessage());
+            }
+        }
+
+        // تم نقل تسجيل نجاح الإرسال إلى قبل الإرسال أعلاه لمنع التكرار
+        // ملاحظة: لا نحدث الحالة إلى 'failed' أبداً إذا نجح إنشاء النسخة الاحتياطية
+        // فشل الإرسال إلى Telegram لا يعني فشل النسخة الاحتياطية نفسها
+
+        $fileLogValue = $backupRelativePath ?? $backupFilePath;
+        if (strlen($fileLogValue) > 510) {
+            $fileLogValue = substr($fileLogValue, -510);
+        }
+
+        try {
+            if ($jobState) {
+                $db->execute(
+                    "UPDATE system_daily_jobs
+                     SET last_sent_at = NOW(), last_file_path = ?, updated_at = NOW()
+                     WHERE job_key = ?",
+                    [$fileLogValue, DAILY_BACKUP_JOB_KEY]
+                );
+            } else {
+                $db->execute(
+                    "INSERT INTO system_daily_jobs (job_key, last_sent_at, last_file_path)
+                     VALUES (?, NOW(), ?)",
+                    [DAILY_BACKUP_JOB_KEY, $fileLogValue]
+                );
+            }
+        } catch (Throwable $logError) {
+            error_log('Daily Backup: failed updating job log - ' . $logError->getMessage());
+        }
+
+        $completedData = [
+            'date' => $todayDate,
+            'status' => 'completed',
+            'completed_at' => date('Y-m-d H:i:s'),
+            'file_path' => $backupRelativePath ?? $backupFilePath,
+            'backup_id' => $backupId,
+        ];
+
+        dailyBackupSaveStatus($completedData);
+        
+        if ($telegramConfigured) {
+            dailyBackupNotifyManagerThrottled('تم إنشاء النسخة الاحتياطية اليومية وإرسالها إلى شات Telegram بنجاح.', 'success', $jobState);
+        } else {
+            dailyBackupNotifyManagerThrottled('تم إنشاء النسخة الاحتياطية اليومية بنجاح. (ملاحظة: Telegram غير مُعد، لم يتم إرسال النسخة)', 'info', $jobState);
+        }
+    }
+}
+
+

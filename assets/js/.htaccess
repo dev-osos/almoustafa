@@ -1,0 +1,24 @@
+# Force correct MIME type for JavaScript files
+<IfModule mod_mime.c>
+    AddType application/javascript .js
+    AddType text/javascript .js
+</IfModule>
+
+# Cache JavaScript files - كاش طويل الأمد لتحسين الأداء
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType application/javascript "access plus 6 months"
+    ExpiresByType text/javascript "access plus 6 months"
+</IfModule>
+
+# Enable compression - ضغط ملفات JavaScript
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE application/javascript
+    AddOutputFilterByType DEFLATE text/javascript
+</IfModule>
+
+# Cache-Control Headers - إضافة headers للكاش
+<IfModule mod_headers.c>
+    Header set Cache-Control "public, max-age=15552000"
+    Header set X-Content-Type-Options "nosniff"
+</IfModule>
