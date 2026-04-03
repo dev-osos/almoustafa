@@ -1122,6 +1122,7 @@ if ($overdueFilter) {
 }
 
 // السائق يرى: مكتملة، مع المندوب، تم التوصيل، تم الارجاع + مع السائق (المعينة له فقط)
+// السائق لا يرى أوردرات التليجراف
 if ($isDriver) {
     $driverAllowedStatuses = ['completed', 'with_delegate', 'with_driver', 'delivered', 'returned'];
     if ($statusFilter === 'with_driver') {
@@ -1135,6 +1136,8 @@ if ($isDriver) {
         $whereConditions[] = "(t.status IN ('completed', 'with_delegate', 'delivered', 'returned') OR (t.status = 'with_driver' AND t.id IN (SELECT task_id FROM driver_assignments WHERE driver_id = ? AND status = 'accepted')))";
         $params[] = $currentUser['id'];
     }
+    // إخفاء أوردرات التليجراف عن السائق
+    $whereConditions[] = "(t.task_type != 'telegraph' AND t.related_type != 'manager_telegraph')";
 } elseif ($statusFilter !== '') {
     $whereConditions[] = 't.status = ?';
     $params[] = $statusFilter;
