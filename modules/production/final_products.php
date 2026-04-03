@@ -2481,59 +2481,7 @@ $filterDateFrom = isset($_GET['date_from']) ? trim($_GET['date_from']) : '';
 $filterDateTo = isset($_GET['date_to']) ? trim($_GET['date_to']) : '';
 $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) : '';
 ?>
-<div class="card shadow-sm mb-4" style="margin: 0 25px 25px;">
-    <div class="card-header bg-light">
-        <h6 class="mb-0"><i class="bi bi-funnel me-2"></i>البحث والفلترة</h6>
-    </div>
-    <div class="card-body">
-        <form method="GET" action="" id="filterForm" class="row g-3">
-            <input type="hidden" name="page" value="inventory">
-            <input type="hidden" name="fp" value="1">
-            
-            <div class="col-md-4">
-                <label for="search" class="form-label"><i class="bi bi-search me-1"></i>البحث</label>
-                <input type="text" 
-                       class="form-control" 
-                       id="search" 
-                       name="search" 
-                       value="<?php echo htmlspecialchars($searchQuery); ?>" 
-                       placeholder="ابحث عن اسم المنتج أو رقم التشغيلة...">
-            </div>
-            
-            <div class="col-md-3">
-                <label for="date_from" class="form-label"><i class="bi bi-calendar-event me-1"></i>من تاريخ</label>
-                <input type="date" 
-                       class="form-control" 
-                       id="date_from" 
-                       name="date_from" 
-                       value="<?php echo htmlspecialchars($filterDateFrom); ?>">
-            </div>
-            
-            <div class="col-md-3">
-                <label for="date_to" class="form-label"><i class="bi bi-calendar-event me-1"></i>إلى تاريخ</label>
-                <input type="date" 
-                       class="form-control" 
-                       id="date_to" 
-                       name="date_to" 
-                       value="<?php echo htmlspecialchars($filterDateTo); ?>">
-            </div>
-            
-            <div class="col-md-2">
-                <label class="form-label d-block">&nbsp;</label>
-                <div class="d-flex gap-2">
-                    <button type="submit" class="btn btn-primary flex-fill">
-                        <i class="bi bi-search me-1"></i>بحث
-                    </button>
-                    <?php if ($searchQuery || $filterDateFrom || $filterDateTo): ?>
-                    <a href="?page=inventory" class="btn btn-outline-secondary">
-                        <i class="bi bi-x-circle"></i>
-                    </a>
-                    <?php endif; ?>
-                </div>
-            </div>
-        </form>
-    </div>
-</div>
+
 
 <?php if ($primaryWarehouse): ?>
     
@@ -2606,7 +2554,7 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
                                 <i class="bi bi-diagram-3 me-1"></i>قالب
                             </div>
                             
-                            <div style="font-size: 16px; font-weight: bold; color: #0d2f66; margin-bottom: 6px; margin-top: 10px;"><?php echo $templateName; ?></div>
+                            <div class="product-name" style="font-size: 16px; font-weight: bold; color: #0d2f66; margin-bottom: 6px; margin-top: 10px;"><?php echo $templateName; ?></div>
                             <div style="color: #94a3b8; font-size: 13px; margin-bottom: 10px;">الكود: <?php echo $templateId; ?></div>
                             
                             <div style="font-size: 13px; margin-top: 8px; display: flex; justify-content: space-between;">
@@ -2640,7 +2588,7 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
         let visibleCount = 0;
         
         cards.forEach(card => {
-            const productName = card.querySelector('div:nth-child(1)')?.textContent.toLowerCase() || '';
+            const productName = card.querySelector('.product-name')?.textContent.toLowerCase() || '';
             
             const matchesSearch = productName.includes(searchText);
             
@@ -2653,8 +2601,19 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
         });
         
         // إظهار رسالة عند عدم وجود نتائج
-        if (visibleCount === 0 && grid) {
-            grid.innerHTML = '<div style="grid-column: 1/-1; padding: 25px; text-align: center; color: #94a3b8;"><i class="bi bi-info-circle me-2"></i>لا توجد قوالب منتجات تطابق معايير البحث</div>';
+        const noResultsMessage = grid.querySelector('.no-results-message');
+        if (visibleCount === 0) {
+            if (!noResultsMessage) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'no-results-message';
+                messageDiv.style.cssText = 'grid-column: 1/-1; padding: 25px; text-align: center; color: #94a3b8;';
+                messageDiv.innerHTML = '<i class="bi bi-info-circle me-2"></i>لا توجد قوالب منتجات تطابق معايير البحث';
+                grid.appendChild(messageDiv);
+            }
+        } else {
+            if (noResultsMessage) {
+                noResultsMessage.remove();
+            }
         }
     }
     

@@ -4094,15 +4094,24 @@ function initEditExternalButtons() {
         });
         
         // إظهار رسالة عند عدم وجود نتائج
-        if (visibleCount === 0 && grid) {
-            grid.innerHTML = `
-                <div style="grid-column: 1/-1; padding: 25px;">
+        const noResultsMessage = grid.querySelector('.no-results-message');
+        if (visibleCount === 0) {
+            if (!noResultsMessage) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'no-results-message';
+                messageDiv.style.cssText = 'grid-column: 1/-1; padding: 25px;';
+                messageDiv.innerHTML = `
                     <div class="alert alert-info mb-0">
                         <i class="bi bi-info-circle me-2"></i>
                         لا توجد قوالب منتجات تطابق معايير البحث
                     </div>
-                </div>
-            `;
+                `;
+                grid.appendChild(messageDiv);
+            }
+        } else {
+            if (noResultsMessage) {
+                noResultsMessage.remove();
+            }
         }
     }
     
