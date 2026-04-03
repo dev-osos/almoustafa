@@ -243,23 +243,60 @@ if ($sessionError) {
 
 /* Responsive styles for mobile */
 @media (max-width: 768px) {
+    .supplies-container,
+    .card,
+    .card-body,
+    form {
+        width: 100% !important;
+        max-width: 100vw !important;
+        overflow-x: hidden !important;
+        box-sizing: border-box !important;
+    }
+
+    .row {
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+    }
+
+    .col-md-6,
+    [class*="col-"] {
+        width: 100% !important;
+        max-width: 100% !important;
+        flex: 0 0 100% !important;
+        padding-left: 10px !important;
+        padding-right: 10px !important;
+    }
+
+    .form-select,
+    .form-control,
+    select,
+    input[type="text"],
+    input[type="number"] {
+        width: 100% !important;
+        max-width: 100% !important;
+        font-size: 16px !important;
+        box-sizing: border-box !important;
+    }
+
     .supply-item-row {
-        grid-template-columns: 1fr;
-        gap: 12px;
-        margin-bottom: 20px;
-        padding: 15px;
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 10px !important;
+        width: 100% !important;
+        padding: 10px !important;
         background: #f8f9fa;
         border-radius: 8px;
-        width: 100%;
-        box-sizing: border-box;
+        margin-bottom: 10px;
+        box-sizing: border-box !important;
     }
 
     .supply-item-row input,
     .supply-item-row button {
-        width: 100%;
-        padding: 15px;
-        font-size: 16px; /* Prevent zoom on iOS */
-        box-sizing: border-box;
+        width: 100% !important;
+        max-width: 100% !important;
+        padding: 12px !important;
+        font-size: 16px;
+        box-sizing: border-box !important;
     }
 
     .supplies-table {
