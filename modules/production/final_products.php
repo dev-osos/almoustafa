@@ -21,7 +21,7 @@ requireRole(['production', 'accountant', 'manager', 'developer']);
 $currentUser = getCurrentUser();
 $db = db();
 $isManager = isset($currentUser['role']) && in_array($currentUser['role'], ['manager', 'developer'], true);
-$canProduceFromTemplates = isset($currentUser['role']) && in_array($currentUser['role'], ['production', 'manager', 'developer'], true);
+$canProduceFromTemplates = isset($currentUser['role']) && in_array($currentUser['role'], ['production', 'accountant', 'manager', 'developer'], true);
 $managerInventoryUrl = getRelativeUrl('manager.php?page=final_products');
 $productionInventoryUrl = getRelativeUrl('production.php?page=inventory');
 $finalProductsUrl = getRelativeUrl('production.php?page=final_products');
