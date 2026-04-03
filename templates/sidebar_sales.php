@@ -81,6 +81,26 @@ $baseUrl = getDashboardUrl();
             </div>
 
             <div class="sidebar-section">
+                <div class="sidebar-section-title">الحضور و الرواتب</div>
+                
+                <li class="nav-item">
+                    <a class="nav-link <?php echo (isset($_GET['page']) && $_GET['page'] === 'attendance') ? 'active' : ''; ?>" 
+                       href="<?php echo $baseUrl; ?>sales.php?page=attendance">
+                        <i class="bi bi-clock-history"></i>
+                        <span>الحضور</span>
+                    </a>
+                </li>
+                
+                <li class="nav-item">
+                    <a class="nav-link <?php echo (isset($_GET['page']) && $_GET['page'] === 'my_salary') ? 'active' : ''; ?>" 
+                       href="<?php echo $baseUrl; ?>sales.php?page=my_salary">
+                        <i class="bi bi-cash"></i>
+                        <span>مرتبي</span>
+                    </a>
+                </li>
+            </div>
+
+            <div class="sidebar-section">
                 <div class="sidebar-section-title">Sales</div>
                 
                 <li class="nav-item">
@@ -149,14 +169,6 @@ $baseUrl = getDashboardUrl();
                    href="<?php echo $baseUrl; ?>sales.php?page=reports">
                     <i class="bi bi-file-earmark-text"></i>
                     <span><?php echo $lang['menu_reports']; ?></span>
-                </a>
-            </li>
-            
-            <li class="nav-item">
-                <a class="nav-link <?php echo (isset($_GET['page']) && $_GET['page'] === 'attendance') ? 'active' : ''; ?>" 
-                   href="<?php echo $baseUrl; ?>sales.php?page=attendance">
-                    <i class="bi bi-clock-history"></i>
-                    <span>تسجيل الحضور</span>
                 </a>
             </li>
             
