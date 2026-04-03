@@ -2876,8 +2876,11 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
                                         <button
                                             type="button"
                                             class="btn btn-sm btn-success js-open-template-production-modal"
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#templateProductionModal"
                                             data-template-id="<?php echo intval($templateId); ?>"
                                             data-template-name="<?php echo htmlspecialchars($template['product_name'] ?? 'غير محدد', ENT_QUOTES, 'UTF-8'); ?>"
+                                            onclick="window.openTemplateProductionModal && window.openTemplateProductionModal(this)"
                                             style="border-radius: 10px; white-space: nowrap;"
                                         >
                                             <i class="bi bi-gear-wide-connected me-1"></i>إنتاج
@@ -2977,6 +2980,42 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
         </form>
     </div>
 </div>
+<?php endif; ?>
+
+<?php if ($canProduceFromTemplates): ?>
+<script>
+window.openTemplateProductionModal = function(trigger) {
+    const button = trigger && trigger.nodeType === 1 ? trigger : null;
+    if (!button) {
+        return;
+    }
+
+    const templateIdInput = document.getElementById('templateProductionTemplateId');
+    const templateNameInput = document.getElementById('templateProductionTemplateNameInput');
+    const templateNameDisplay = document.getElementById('templateProductionTemplateNameDisplay');
+    const templateProductionQuantityInput = document.getElementById('templateProductionQuantity');
+
+    const templateId = button.getAttribute('data-template-id') || '';
+    const templateName = button.getAttribute('data-template-name') || 'غير محدد';
+
+    if (templateIdInput) {
+        templateIdInput.value = templateId;
+    }
+    if (templateNameInput) {
+        templateNameInput.value = templateName;
+    }
+    if (templateNameDisplay) {
+        templateNameDisplay.value = templateName;
+    }
+    if (templateProductionQuantityInput) {
+        templateProductionQuantityInput.value = '1';
+        setTimeout(function() {
+            templateProductionQuantityInput.focus();
+            templateProductionQuantityInput.select();
+        }, 150);
+    }
+};
+</script>
 <?php endif; ?>
 
 <!-- JavaScript للبحث والفلترة في قوالب المنتجات -->
@@ -4174,41 +4213,6 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
 
 <script>
 (function() {
-    const productionModalElement = document.getElementById('templateProductionModal');
-    const productionModal = productionModalElement && typeof bootstrap !== 'undefined'
-        ? new bootstrap.Modal(productionModalElement)
-        : null;
-    const templateIdInput = document.getElementById('templateProductionTemplateId');
-    const templateNameInput = document.getElementById('templateProductionTemplateNameInput');
-    const templateNameDisplay = document.getElementById('templateProductionTemplateNameDisplay');
-    const templateProductionQuantityInput = document.getElementById('templateProductionQuantity');
-
-    document.querySelectorAll('.js-open-template-production-modal').forEach((button) => {
-        button.addEventListener('click', function() {
-            const templateId = this.dataset.templateId || '';
-            const templateName = this.dataset.templateName || 'غير محدد';
-
-            if (templateIdInput) {
-                templateIdInput.value = templateId;
-            }
-            if (templateNameInput) {
-                templateNameInput.value = templateName;
-            }
-            if (templateNameDisplay) {
-                templateNameDisplay.value = templateName;
-            }
-            if (templateProductionQuantityInput) {
-                templateProductionQuantityInput.value = '1';
-                templateProductionQuantityInput.focus();
-                templateProductionQuantityInput.select();
-            }
-
-            if (productionModal) {
-                productionModal.show();
-            }
-        });
-    });
-
     const collapseElements = document.querySelectorAll('[id^="templateComponentsCollapse"]');
     if (!collapseElements.length) {
         return;
