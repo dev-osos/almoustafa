@@ -4066,7 +4066,7 @@ $tgError = '';
             </div>
             <div class="col-12 col-md-4">
                 <div class="p-2 rounded border h-100 bg-white">
-                    <div class="text-muted small">عدد الفواتير الورقية</div>
+                    <div class="text-muted small">عدد الطلبات</div>
                     <div class="fw-bold fs-5"><?php echo number_format($monthlyShippingDebtStats['orders_count'] ?? 0); ?></div>
                 </div>
             </div>
@@ -4460,7 +4460,7 @@ function copyShippingCollectionResult(btn) {
 <!-- بطاقة سجل الفواتير الورقية لشركة الشحن (بدل المودال) -->
 <div class="card shadow-sm mb-4 border-info" id="companyPaperInvoicesCard" style="display: none;">
     <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
-        <h5 class="mb-0"><i class="bi bi-receipt-cutoff me-2"></i>سجل الفواتير الورقية - <span id="companyPaperInvoicesCompanyName">-</span></h5>
+        <h5 class="mb-0"><i class="bi bi-receipt-cutoff me-2"></i>سجل الفواتير  - <span id="companyPaperInvoicesCompanyName">-</span></h5>
         <button type="button" class="btn btn-sm btn-light" onclick="closeCompanyPaperInvoicesCard()" aria-label="إغلاق"><i class="bi bi-x-lg"></i></button>
     </div>
     <div class="card-body">
