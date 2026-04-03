@@ -3889,46 +3889,6 @@ try {
     error_log('shipping_orders: failed fetching stats -> ' . $statsError->getMessage());
 }
 
-// إحصائية الشهر الحالي / المحدد
-$selectedMonth = isset($_GET['stats_month']) ? trim($_GET['stats_month']) : date('Y-m');
-if (!preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $selectedMonth)) {
-    $selectedMonth = date('Y-m');
-}
-$selectedYear = (int)substr($selectedMonth, 0, 4);
-$selectedMonthNum = substr($selectedMonth, 5, 2);
-$selectedMonthStart = sprintf('%s-01', $selectedMonth);
-$selectedMonthEnd = date('Y-m-t', strtotime($selectedMonthStart));
-
-$arabicMonths = [
-    '01' => 'يناير', '02' => 'فبراير', '03' => 'مارس', '04' => 'أبريل',
-    '05' => 'مايو', '06' => 'يونيو', '07' => 'يوليو', '08' => 'أغسطس',
-    '09' => 'سبتمبر', '10' => 'أكتوبر', '11' => 'نوفمبر', '12' => 'ديسمبر'
-];
-$selectedMonthLabel = ($arabicMonths[$selectedMonthNum] ?? date('F', strtotime($selectedMonthStart))) . ' ' . $selectedYear;
-
-$monthlyShippingDebtStats = [
-    'orders_count' => 0,
-    'total_amount' => 0.0
-];
-try {
-    $monthlyRow = $db->queryOne(
-        "SELECT
-            COUNT(*) AS orders_count,
-            COALESCE(SUM(total_amount), 0) AS total_amount
-         FROM shipping_company_orders
-         WHERE DATE(created_at) BETWEEN ? AND ?
-           AND status IN ('assigned','in_transit','delivered')",
-        [$selectedMonthStart, $selectedMonthEnd]
-    );
-
-    if ($monthlyRow) {
-        $monthlyShippingDebtStats['orders_count'] = (int)($monthlyRow['orders_count'] ?? 0);
-        $monthlyShippingDebtStats['total_amount'] = (float)($monthlyRow['total_amount'] ?? 0);
-    }
-} catch (Throwable $monthlyError) {
-    error_log('shipping_orders: failed fetching monthly shipping debt stats -> ' . $monthlyError->getMessage());
-}
-
 $statusLabels = [
     'assigned' => ['label' => 'تم التسليم لشركة الشحن', 'class' => 'bg-primary'],
     'in_transit' => ['label' => 'جاري الشحن', 'class' => 'bg-warning text-dark'],
@@ -4020,40 +3980,172 @@ $tgError = '';
     </script>
 <?php endif; ?>
 
-<div class="card shadow-sm mb-4" id="shippingMonthlyDebtCard">
-    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-        <h5 class="mb-0">إحصائية الديون الشهرية لشركات الشحن</h5>
-        <div class="d-flex flex-wrap align-items-center gap-2">
-            <form method="get" class="d-flex align-items-center gap-2 mb-0" role="search">
-                <input type="hidden" name="page" value="shipping_orders" />
-                <input type="month" name="stats_month" class="form-control form-control-sm" value="<?php echo htmlspecialchars($selectedMonth, ENT_QUOTES, 'UTF-8'); ?>" />
-                <button type="submit" class="btn btn-sm btn-primary">عرض</button>
-            </form>
-            <a href="?page=shipping_orders&stats_month=<?php echo urlencode(date('Y-m', strtotime($selectedMonthStart . ' -1 month'))); ?>" class="btn btn-sm btn-outline-secondary" title="الشهر السابق">◀</a>
-            <a href="?page=shipping_orders&stats_month=<?php echo urlencode(date('Y-m', strtotime($selectedMonthStart . ' +1 month'))); ?>" class="btn btn-sm btn-outline-secondary" title="الشهر التالي">▶</a>
+<div class="card shadow-sm mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center" style="cursor:pointer;" onclick="bootstrap.Collapse.getOrCreateInstance(document.getElementById('newShippingOrderCollapse')).toggle()">
+        <div>
+            <h5 class="mb-1">تسجيل طلب شحن جديد</h5>
+            <small class="text-muted">قم بتسليم المنتجات لشركة الشحن وتتبع الدين عليها لحين استلام العميل.</small>
         </div>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#newShippingOrderCollapse" aria-expanded="false" aria-controls="newShippingOrderCollapse" onclick="event.stopPropagation()">
+            <i class="bi bi-chevron-down"></i>
+        </button>
     </div>
+    <div class="collapse" id="newShippingOrderCollapse">
     <div class="card-body">
-        <div class="row g-2">
-            <div class="col-12 col-md-4">
-                <div class="p-2 rounded border h-100 bg-light">
-                    <div class="text-muted small">الشهر</div>
-                    <div class="fw-bold fs-6"><?php echo htmlspecialchars($selectedMonthLabel, ENT_QUOTES, 'UTF-8'); ?></div>
-                </div>
+        <?php if (!$hasShippingCompanies): ?>
+            <div class="alert alert-warning d-flex align-items-center gap-2 mb-0">
+                <i class="bi bi-info-circle-fill fs-5"></i>
+                <div>لم يتم إضافة شركات شحن بعد. يرجى إضافة شركة شحن قبل تسجيل الطلبات.</div>
             </div>
-            <div class="col-12 col-md-4">
-                <div class="p-2 rounded border h-100 bg-white">
-                    <div class="text-muted small">عدد الطلبات</div>
-                    <div class="fw-bold fs-5"><?php echo number_format($monthlyShippingDebtStats['orders_count']); ?></div>
-                </div>
+        <?php elseif (!$hasProducts): ?>
+            <div class="alert alert-warning d-flex align-items-center gap-2 mb-0">
+                <i class="bi bi-box-seam fs-5"></i>
+                <div>لا توجد منتجات متاحة في المخزن الرئيسي حالياً.</div>
             </div>
-            <div class="col-12 col-md-4">
-                <div class="p-2 rounded border h-100 bg-white">
-                    <div class="text-muted small">إجمالي الدين المضاف</div>
-                    <div class="fw-bold fs-5 text-danger"><?php echo formatCurrency($monthlyShippingDebtStats['total_amount']); ?></div>
-                </div>
+        <?php elseif (empty($activeCustomers)): ?>
+            <div class="alert alert-warning d-flex align-items-center gap-2 mb-0">
+                <i class="bi bi-people fs-5"></i>
+                <div>لا يوجد عملاء نشطون في النظام. قم بإضافة عميل أولاً.</div>
             </div>
-        </div>
+        <?php else: ?>
+            <form method="POST" id="shippingOrderForm" class="needs-validation" novalidate>
+                <input type="hidden" name="action" value="create_shipping_order">
+                <div class="row g-3 mb-3">
+                    <div class="col-lg-3 col-md-6">
+                        <label class="form-label">شركة الشحن <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <select class="form-select" name="shipping_company_id" required>
+                                <option value="">اختر شركة الشحن</option>
+                                <?php foreach ($shippingCompanies as $company): ?>
+                                    <option value="<?php echo (int)$company['id']; ?>">
+                                        <?php echo htmlspecialchars($company['name']); ?>
+                                        <?php if (!empty($company['phone'])): ?>
+                                            - <?php echo htmlspecialchars($company['phone']); ?>
+                                        <?php endif; ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <button class="btn btn-outline-secondary" type="button" onclick="showAddShippingCompanyModal()" title="إضافة شركة شحن">
+                                <i class="bi bi-plus"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="col-lg-3 col-md-6">
+                        <label class="form-label">العميل <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <select class="form-select" name="customer_id" id="customerSelect" required>
+                                <option value="">اختر العميل</option>
+                                <?php foreach ($activeCustomers as $customer): ?>
+                                    <option value="<?php echo (int)$customer['id']; ?>">
+                                        <?php echo (int)$customer['id'] . ' - ' . htmlspecialchars($customer['name']); ?>
+                                        <?php if (!empty($customer['phone'])): ?>
+                                            - <?php echo htmlspecialchars($customer['phone']); ?>
+                                        <?php endif; ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <button class="btn btn-outline-secondary" type="button" onclick="showAddLocalCustomerModal()" title="إضافة عميل جديد">
+                                <i class="bi bi-plus"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="col-lg-3">
+                         <label class="form-label">رقم التليجراف (TG)</label>
+                         <input type="text" class="form-control" name="tg_number" placeholder="أدخل رقم TG">
+                    </div>
+                    <div class="col-lg-3">
+                        <label class="form-label">المخزن المصدر</label>
+                        <div class="form-control bg-light">
+                            <i class="bi bi-building me-1"></i>
+                            <?php echo htmlspecialchars($mainWarehouse['name'] ?? 'المخزن الرئيسي'); ?>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="table-responsive mb-3">
+                    <table class="table table-sm align-middle" id="shippingItemsTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="min-width: 220px;">المنتج</th>
+                                <th style="width: 110px;">المتاح</th>
+                                <th style="width: 100px;">الوحدة</th>
+                                <th style="width: 120px;">الكمية <span class="text-danger">*</span></th>
+                                <th style="width: 140px;">سعر الوحدة <span class="text-danger">*</span></th>
+                                <th style="width: 160px;">الإجمالي (قابل للتحكم)</th>
+                                <th style="width: 80px;">حذف</th>
+                            </tr>
+                        </thead>
+                        <tbody id="shippingItemsBody"></tbody>
+                    </table>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="addShippingItemBtn">
+                        <i class="bi bi-plus-circle me-1"></i>إضافة منتج
+                    </button>
+                    <div class="shipping-order-summary card bg-light border-0 px-3 py-2">
+                        <div class="d-flex align-items-center gap-3">
+                            <div>
+                                <div class="small text-muted">إجمالي عدد المنتجات</div>
+                                <div class="fw-semibold" id="shippingItemsCount">0</div>
+                            </div>
+                            <div class="border-start ps-3">
+                                <label for="customTotalAmount" class="small text-muted d-block mb-1">إجمالي الطلب (تحكم يدوي)</label>
+                                <div class="input-group input-group-sm" style="width: 150px;">
+                                    <input type="number" class="form-control fw-bold text-success" id="customTotalAmount" name="custom_total_amount" step="0.01" min="0" placeholder="0.00">
+                                    <span class="input-group-text">ج.م</span>
+                                </div>
+                            </div>
+                            <!-- Hidden visual total as backup or reference -->
+                            <div class="d-none">
+                                <div class="small text-muted">إجمالي محسوب</div>
+                                <div class="fw-bold text-success" id="shippingOrderTotal"><?php echo formatCurrency(0); ?></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <script>
+                document.addEventListener('DOMContentLoaded', function() {
+                    const customTotalInput = document.getElementById('customTotalAmount');
+                    const shippingItemsBody = document.getElementById('shippingItemsBody');
+                    
+                    // تحديث الإجمالي اليدوي تلقائياً عند إضافة منتجات إذا لم يكن المستخدم قد عدله يدوياً
+                    // (يمكن تنفيذ منطق أكثر تعقيداً هنا إذا لزم الأمر، لكن للتبسيط سنتركه للمستخدم)
+                    
+                    // منع إرسال النموذج إذا لم يكن هناك منتجات ولا إجمالي يدوي
+                    document.getElementById('shippingOrderForm').addEventListener('submit', function(e) {
+                         const itemsCount = shippingItemsBody.children.length;
+                         const customTotal = parseFloat(customTotalInput.value || 0);
+                         
+                         if (itemsCount === 0 && customTotal <= 0) {
+                             e.preventDefault();
+                             alert('يرجى إضافة منتجات أو تحديد قيمة إجمالية للطلب.');
+                         }
+                    });
+                });
+                </script>
+
+                <div class="mb-3">
+                    <label class="form-label">ملاحظات إضافية</label>
+                    <textarea class="form-control" name="order_notes" rows="2" placeholder="أي تفاصيل إضافية لشركة الشحن أو فريق المبيعات (اختياري)"></textarea>
+                </div>
+
+                <div class="alert alert-info d-flex align-items-center gap-2">
+                    <i class="bi bi-info-circle-fill fs-5"></i>
+                    <div>
+                        سيتم تسجيل هذا الطلب على شركة الشحن كدين لحين تأكيد التسليم للعميل، ثم يتحول الدين إلى العميل ليتم تحصيله لاحقاً.
+                    </div>
+                </div>
+
+                <div class="text-end">
+                    <button type="submit" class="btn btn-success btn-lg" id="submitShippingOrderBtn">
+                        <i class="bi bi-send-check me-1"></i>تسجيل الطلب وتسليم المنتجات
+                    </button>
+                </div>
+            </form>
+        <?php endif; ?>
+    </div>
     </div>
 </div>
 
@@ -4341,7 +4433,345 @@ function copyShippingCollectionResult(btn) {
             <p class="mb-0">لا توجد فواتير ورقية مسجلة لهذه الشركة بعد.</p>
         </div>
     </div>
-                
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <h5 class="mb-0">طلبات الشحن</h5>
+        <button class="btn btn-sm btn-outline-secondary" type="button" id="orderSearchToggle" title="بحث">
+            <i class="bi bi-search"></i>
+        </button>
+    </div>
+    <div id="orderSearchCollapse" class="px-3 pt-2 pb-1 border-bottom" style="display:none;">
+        <div class="input-group input-group-sm">
+            <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+            <input type="text" class="form-control border-start-0 ps-0" id="orderSearchInput" placeholder="بحث شامل (رقم الطلب، TG، العميل...)">
+            <button class="btn btn-outline-secondary" type="button" id="orderSearchClose" title="إغلاق"><i class="bi bi-x"></i></button>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <!-- Search Results Container -->
+        <div id="searchResultsContainer" style="display:none;">
+            <div class="table-responsive">
+                <table class="table table-hover table-nowrap mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>رقم الطلب</th>
+                            <th>شركة الشحن</th>
+                            <th>العميل</th>
+                            <th>المبلغ</th>
+                            <th>الحالة</th>
+                            <th>الفاتورة</th>
+                            <th style="width: 150px;">الإجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody id="searchResultsBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="ordersTabsContainer">
+        <?php
+        // تقسيم الطلبات حسب الحالة
+        $activeOrders = array_filter($orders, function($order) {
+            return in_array($order['status'], ['in_transit'], true);
+        });
+        $deliveredOrders = array_filter($orders, function($order) {
+            return $order['status'] === 'delivered';
+        });
+        $cancelledOrders = array_filter($orders, function($order) {
+            return $order['status'] === 'cancelled';
+        });
+        ?>
+        
+        <ul class="nav nav-tabs card-header-tabs border-0 mx-0 mt-0" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="active-orders-tab" data-bs-toggle="tab" data-bs-target="#active-orders" type="button" role="tab">
+                    جاري الشحن <span class="badge bg-warning text-dark ms-1"><?php echo count($activeOrders); ?></span>
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="delivered-orders-tab" data-bs-toggle="tab" data-bs-target="#delivered-orders" type="button" role="tab">
+                    تم التسليم <span class="badge bg-success ms-1"><?php echo count($deliveredOrders); ?></span>
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="cancelled-orders-tab" data-bs-toggle="tab" data-bs-target="#cancelled-orders" type="button" role="tab">
+                    ملغاة <span class="badge bg-secondary ms-1"><?php echo count($cancelledOrders); ?></span>
+                </button>
+            </li>
+        </ul>
+        
+        <div class="tab-content">
+            <!-- طلبات جارية -->
+            <div class="tab-pane fade show active" id="active-orders" role="tabpanel">
+                <?php if (empty($activeOrders)): ?>
+                    <div class="p-4 text-center text-muted">لا توجد طلبات جارية حالياً.</div>
+                <?php else: ?>
+                    <div class="table-responsive">
+                        <table class="table table-hover table-nowrap mb-0 align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>رقم الطلب</th>
+                                    <th>شركة الشحن</th>
+                                    <th>العميل</th>
+                                    <th>المبلغ</th>
+                                    <th>الحالة</th>
+                                    <th>تاريخ التسليم للشركة</th>
+                                    <th>الفاتورة</th>
+                                    <th style="width: 250px;">الإجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($activeOrders as $order): ?>
+                                    <?php
+                                        $statusInfo = $statusLabels[$order['status']] ?? ['label' => $order['status'], 'class' => 'bg-secondary'];
+                                        $invoiceLink = '';
+                                        if (!empty($order['invoice_id'])) {
+                                            $invoiceUrl = getRelativeUrl('print_invoice.php?id=' . (int)$order['invoice_id']);
+                                            $invoiceLink = '<a href="' . htmlspecialchars($invoiceUrl) . '" target="_blank" class="btn btn-outline-primary btn-sm"><i class="bi bi-file-earmark-text me-1"></i>عرض الفاتورة</a>';
+                                        }
+                                    ?>
+                                    <tr>
+                                        <td>
+                                            <div class="fw-semibold">#<?php echo htmlspecialchars($order['order_number']); ?></div>
+                                            <div class="text-muted small">سجل في <?php echo formatDateTime($order['created_at']); ?></div>
+                                        </td>
+                                        <td>
+                                            <div class="fw-semibold"><?php echo htmlspecialchars($order['shipping_company_name'] ?? 'غير معروف'); ?></div>
+                                            <div class="text-muted small">دين حالي: <?php echo formatCurrency((float)($order['company_balance'] ?? 0)); ?></div>
+                                        </td>
+                                        <td>
+                                            <div class="fw-semibold"><?php echo htmlspecialchars($order['customer_name'] ?? 'غير محدد'); ?></div>
+                                            <?php if (!empty($order['customer_phone'])): ?>
+                                                <div class="text-muted small"><i class="bi bi-telephone"></i> <?php echo htmlspecialchars($order['customer_phone']); ?></div>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td class="fw-semibold"><?php echo formatCurrency((float)$order['total_amount']); ?></td>
+                                        <td>
+                                            <span class="badge <?php echo $statusInfo['class']; ?>">
+                                                <?php echo htmlspecialchars($statusInfo['label']); ?>
+                                            </span>
+                                            <?php if (!empty($order['handed_over_at'])): ?>
+                                                <div class="text-muted small mt-1">سُلِّم للشركة: <?php echo formatDateTime($order['handed_over_at']); ?></div>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <?php if (!empty($order['handed_over_at'])): ?>
+                                                <span class="text-info fw-semibold"><?php echo formatDateTime($order['handed_over_at']); ?></span>
+                                            <?php else: ?>
+                                                <span class="text-muted">-</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <?php if (!empty($invoiceLink)): ?>
+                                                <?php echo $invoiceLink; ?>
+                                            <?php else: ?>
+                                                <span class="text-muted">لا توجد فاتورة</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <div class="d-flex flex-wrap gap-2">
+                                                <?php if (!empty($order['customer_id'])): ?>
+                                                    <button type="button" class="btn btn-outline-info btn-sm btn-shipping-invoice-log" onclick="showShippingInvoiceLogModal(this)"
+                                                            data-customer-id="<?php echo (int)$order['customer_id']; ?>"
+                                                            data-customer-name="<?php echo htmlspecialchars($order['customer_name'] ?? 'غير محدد'); ?>"
+                                                            data-is-local="<?php echo (int)(isset($order['is_local_customer']) ? $order['is_local_customer'] : 0); ?>"
+                                                            title="سجل الفواتير والفاتورة الورقية">
+                                                        <i class="bi bi-receipt me-1"></i>سجل الفواتير
+                                                    </button>
+                                                <?php endif; ?>
+                                                <form method="POST" class="d-inline cancel-order-form" onsubmit="return handleCancelOrder(event, this);"
+                                                      data-order-number="<?php echo htmlspecialchars($order['order_number'] ?? ''); ?>"
+                                                      data-total-amount="<?php echo (float)($order['total_amount'] ?? 0); ?>">
+                                                    <input type="hidden" name="action" value="cancel_shipping_order">
+                                                    <input type="hidden" name="order_id" value="<?php echo (int)$order['id']; ?>">
+                                                    <button type="submit" class="btn btn-outline-danger btn-sm cancel-order-btn">
+                                                        <i class="bi bi-x-circle me-1"></i>طلب ملغي
+                                                    </button>
+                                                </form>
+                                                <button type="button" 
+                                                        class="btn btn-success btn-sm delivery-btn" 
+                                                        onclick="showDeliveryModal(this)"
+                                                        data-order-id="<?php echo (int)$order['id']; ?>"
+                                                        data-order-number="<?php echo htmlspecialchars($order['order_number'] ?? ''); ?>"
+                                                        data-customer-id="<?php echo (int)($order['customer_id'] ?? 0); ?>"
+                                                        data-customer-name="<?php echo htmlspecialchars($order['customer_name'] ?? 'غير محدد'); ?>"
+                                                        data-customer-balance="<?php echo (float)($order['customer_balance'] ?? 0); ?>"
+                                                        data-total-amount="<?php echo (float)$order['total_amount']; ?>"
+                                                        data-shipping-company-name="<?php echo htmlspecialchars($order['shipping_company_name'] ?? 'غير معروف'); ?>"
+                                                        data-company-balance="<?php echo (float)($order['company_balance'] ?? 0); ?>">
+                                                    <i class="bi bi-check-circle me-1"></i>تم التسليم
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php endif; ?>
+            </div>
+            
+            <!-- طلبات مكتملة -->
+            <div class="tab-pane fade" id="delivered-orders" role="tabpanel">
+                <?php if (empty($deliveredOrders)): ?>
+                    <div class="p-4 text-center text-muted">لا توجد طلبات مكتملة.</div>
+                <?php else: ?>
+                    <div class="table-responsive">
+                        <table class="table table-hover table-nowrap mb-0 align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>رقم الطلب</th>
+                                    <th>شركة الشحن</th>
+                                    <th>العميل</th>
+                                    <th>المبلغ</th>
+                                    <th>تاريخ التسليم للعميل</th>
+                                    <th>الفاتورة</th>
+                                    <th style="width: 250px;">الإجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($deliveredOrders as $order): ?>
+                                    <?php
+                                        $deliveredAt = $order['delivered_at'] ?? null;
+                                        $invoiceLink = '';
+                                        if (!empty($order['invoice_id'])) {
+                                            $invoiceUrl = getRelativeUrl('print_invoice.php?id=' . (int)$order['invoice_id']);
+                                            $invoiceLink = '<a href="' . htmlspecialchars($invoiceUrl) . '" target="_blank" class="btn btn-outline-primary btn-sm"><i class="bi bi-file-earmark-text me-1"></i>عرض الفاتورة</a>';
+                                        }
+                                    ?>
+                                    <tr>
+                                        <td>
+                                            <div class="fw-semibold">#<?php echo htmlspecialchars($order['order_number']); ?></div>
+                                            <div class="text-muted small">سجل في <?php echo formatDateTime($order['created_at']); ?></div>
+                                        </td>
+                                        <td>
+                                            <div class="fw-semibold"><?php echo htmlspecialchars($order['shipping_company_name'] ?? 'غير معروف'); ?></div>
+                                        </td>
+                                        <td>
+                                            <div class="fw-semibold"><?php echo htmlspecialchars($order['customer_name'] ?? 'غير محدد'); ?></div>
+                                            <?php if (!empty($order['customer_phone'])): ?>
+                                                <div class="text-muted small"><i class="bi bi-telephone"></i> <?php echo htmlspecialchars($order['customer_phone']); ?></div>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td class="fw-semibold"><?php echo formatCurrency((float)$order['total_amount']); ?></td>
+                                        <td>
+                                            <?php if ($deliveredAt): ?>
+                                                <span class="text-success fw-semibold"><?php echo formatDateTime($deliveredAt); ?></span>
+                                            <?php else: ?>
+                                                <span class="text-muted">-</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <?php if (!empty($invoiceLink)): ?>
+                                                <?php echo $invoiceLink; ?>
+                                            <?php else: ?>
+                                                <span class="text-muted">لا توجد فاتورة</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <?php if (!empty($order['customer_id'])): ?>
+                                                <button type="button" class="btn btn-outline-info btn-sm btn-shipping-invoice-log" onclick="showShippingInvoiceLogModal(this)"
+                                                        data-customer-id="<?php echo (int)$order['customer_id']; ?>"
+                                                        data-customer-name="<?php echo htmlspecialchars($order['customer_name'] ?? 'غير محدد'); ?>"
+                                                        data-is-local="<?php echo (int)(isset($order['is_local_customer']) ? $order['is_local_customer'] : 0); ?>"
+                                                        title="سجل الفواتير والفاتورة الورقية">
+                                                    <i class="bi bi-receipt me-1"></i>سجل الفواتير
+                                                </button>
+                                            <?php else: ?>
+                                                <span class="text-muted">-</span>
+                                            <?php endif; ?>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php endif; ?>
+            </div>
+            
+            <!-- طلبات ملغاة -->
+            <div class="tab-pane fade" id="cancelled-orders" role="tabpanel">
+                <?php if (empty($cancelledOrders)): ?>
+                    <div class="p-4 text-center text-muted">لا توجد طلبات ملغاة.</div>
+                <?php else: ?>
+                    <div class="table-responsive">
+                        <table class="table table-hover table-nowrap mb-0 align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>رقم الطلب</th>
+                                    <th>شركة الشحن</th>
+                                    <th>العميل</th>
+                                    <th>المبلغ</th>
+                                    <th>تاريخ الإلغاء</th>
+                                    <th>الفاتورة</th>
+                                    <th style="width: 250px;">الإجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($cancelledOrders as $order): ?>
+                                    <?php
+                                        $invoiceLink = '';
+                                        if (!empty($order['invoice_id'])) {
+                                            $invoiceUrl = getRelativeUrl('print_invoice.php?id=' . (int)$order['invoice_id']);
+                                            $invoiceLink = '<a href="' . htmlspecialchars($invoiceUrl) . '" target="_blank" class="btn btn-outline-primary btn-sm"><i class="bi bi-file-earmark-text me-1"></i>عرض الفاتورة</a>';
+                                        }
+                                    ?>
+                                    <tr>
+                                        <td>
+                                            <div class="fw-semibold">#<?php echo htmlspecialchars($order['order_number']); ?></div>
+                                            <div class="text-muted small">سجل في <?php echo formatDateTime($order['created_at']); ?></div>
+                                        </td>
+                                        <td>
+                                            <div class="fw-semibold"><?php echo htmlspecialchars($order['shipping_company_name'] ?? 'غير معروف'); ?></div>
+                                        </td>
+                                        <td>
+                                            <div class="fw-semibold"><?php echo htmlspecialchars($order['customer_name'] ?? 'غير محدد'); ?></div>
+                                            <?php if (!empty($order['customer_phone'])): ?>
+                                                <div class="text-muted small"><i class="bi bi-telephone"></i> <?php echo htmlspecialchars($order['customer_phone']); ?></div>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td class="fw-semibold"><?php echo formatCurrency((float)$order['total_amount']); ?></td>
+                                        <td>
+                                            <?php if (!empty($order['updated_at'])): ?>
+                                                <span class="text-muted"><?php echo formatDateTime($order['updated_at']); ?></span>
+                                            <?php else: ?>
+                                                <span class="text-muted">-</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+ب                                            <?php if (!empty($invoiceLink)): ?>
+                                                <?php echo $invoiceLink; ?>
+                                            <?php else: ?>
+                                                <span class="text-muted">لا توجد فاتورة</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <?php if (!empty($order['customer_id'])): ?>
+                                                <button type="button" class="btn btn-outline-info btn-sm btn-shipping-invoice-log" onclick="showShippingInvoiceLogModal(this)"
+                                                        data-customer-id="<?php echo (int)$order['customer_id']; ?>"
+                                                        data-customer-name="<?php echo htmlspecialchars($order['customer_name'] ?? 'غير محدد'); ?>"
+                                                        data-is-local="<?php echo (int)(isset($order['is_local_customer']) ? $order['is_local_customer'] : 0); ?>"
+                                                        title="سجل الفواتير والفاتورة الورقية">
+                                                    <i class="bi bi-receipt me-1"></i>سجل الفواتير
+                                                </button>
+                                            <?php else: ?>
+                                                <span class="text-muted">-</span>
+                                            <?php endif; ?>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+        </div>
+    </div>
+</div>
+
 <!-- ===== جدول شحنات TelegraphEx ===== -->
 <div class="card shadow-sm mb-4" id="tgShipmentsCard">
     <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
