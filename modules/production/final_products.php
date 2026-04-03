@@ -2434,14 +2434,17 @@ $productTemplates = [];
 try {
     $productTemplates = $db->query("
         SELECT 
-            id,
-            product_name,
-            unit_price,
-            status,
-            created_at
-        FROM product_templates
-        WHERE status = 'active'
-        ORDER BY product_name ASC
+            pt.id,
+            pt.product_name,
+            pt.unit_price,
+            pt.status,
+            pt.created_at,
+            COALESCE(SUM(fp.quantity_produced), 0) as available_quantity
+        FROM product_templates pt
+        LEFT JOIN finished_products fp ON fp.product_name = pt.product_name
+        WHERE pt.status = 'active'
+        GROUP BY pt.id, pt.product_name, pt.unit_price, pt.status, pt.created_at
+        ORDER BY pt.product_name ASC
     ");
     // Debug: Log the count
     error_log('Product templates count: ' . count($productTemplates));
@@ -2596,6 +2599,7 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
                             $templateName = htmlspecialchars($template['product_name'] ?? 'غير محدد');
                             $templatePrice = floatval($template['unit_price'] ?? 0);
                             $templateId = $template['id'] ?? 0;
+                            $availableQuantity = floatval($template['available_quantity'] ?? 0);
                         ?>
                         <div class="product-card" style="background: white; padding: 20px; border: 1px solid #e2e6f3; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); transition: all 0.3s ease;">
                             <div style="position: absolute; top: 15px; left: 15px; background: #2e89ff; padding: 6px 14px; border-radius: 20px; color: white; font-size: 12px; font-weight: bold;">
@@ -2608,6 +2612,10 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
                             <div style="font-size: 13px; margin-top: 8px; display: flex; justify-content: space-between;">
                                 <span>السعر:</span>
                                 <span style="color: #059669; font-weight: 600;"><?php echo formatCurrency($templatePrice); ?></span>
+                            </div>
+                            <div style="font-size: 13px; margin-top: 5px; display: flex; justify-content: space-between;">
+                                <span>الكمية المتاحة:</span>
+                                <span style="color: #2563eb; font-weight: 600;"><?php echo number_format($availableQuantity, 2); ?> قطعة</span>
                             </div>
                         </div>
                     <?php endforeach; ?>

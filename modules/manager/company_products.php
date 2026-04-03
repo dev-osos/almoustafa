@@ -866,14 +866,17 @@ $productTemplates = [];
 try {
     $productTemplates = $db->query("
         SELECT 
-            id,
-            product_name,
-            unit_price,
-            status,
-            created_at
-        FROM product_templates
-        WHERE status = 'active'
-        ORDER BY product_name ASC
+            pt.id,
+            pt.product_name,
+            pt.unit_price,
+            pt.status,
+            pt.created_at,
+            COALESCE(SUM(fp.quantity_produced), 0) as available_quantity
+        FROM product_templates pt
+        LEFT JOIN finished_products fp ON fp.product_name = pt.product_name
+        WHERE pt.status = 'active'
+        GROUP BY pt.id, pt.product_name, pt.unit_price, pt.status, pt.created_at
+        ORDER BY pt.product_name ASC
     ");
 } catch (Exception $e) {
     error_log('Error fetching product templates: ' . $e->getMessage());
@@ -1929,6 +1932,7 @@ foreach ($factoryProducts as $product) {
                             $templateName = htmlspecialchars($template['product_name'] ?? 'غير محدد');
                             $templatePrice = floatval($template['unit_price'] ?? 0);
                             $templateId = $template['id'] ?? 0;
+                            $availableQuantity = floatval($template['available_quantity'] ?? 0);
                         ?>
                         <div class="product-card">
                             <div class="product-status">
@@ -1939,6 +1943,7 @@ foreach ($factoryProducts as $product) {
                             <div style="color: #94a3b8; font-size: 13px; margin-bottom: 10px;">الكود: <?php echo $templateId; ?></div>
 
                             <div class="product-detail-row"><span>السعر:</span> <span><strong class="text-success"><?php echo formatCurrency($templatePrice); ?></strong></span></div>
+                            <div class="product-detail-row"><span>الكمية المتاحة:</span> <span><strong class="text-primary"><?php echo number_format($availableQuantity, 2); ?> قطعة</strong></span></div>
                         </div>
                     <?php endforeach; ?>
                 </div>
