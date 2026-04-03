@@ -2437,19 +2437,207 @@ try {
             pt.id,
             pt.product_name,
             pt.unit_price,
+            pt.template_type,
+            pt.source_template_id,
+            pt.details_json,
             pt.status,
             pt.created_at,
             COALESCE(SUM(fp.quantity_produced), 0) as available_quantity
         FROM product_templates pt
         LEFT JOIN finished_products fp ON fp.product_name = pt.product_name
         WHERE pt.status = 'active'
-        GROUP BY pt.id, pt.product_name, pt.unit_price, pt.status, pt.created_at
+        GROUP BY pt.id, pt.product_name, pt.unit_price, pt.template_type, pt.source_template_id, pt.details_json, pt.status, pt.created_at
         ORDER BY pt.product_name ASC
     ");
     // Debug: Log the count
     error_log('Product templates count: ' . count($productTemplates));
 } catch (Exception $e) {
     error_log('Error fetching product templates: ' . $e->getMessage());
+}
+
+$productTemplateComponents = [];
+if (!empty($productTemplates)) {
+    $templateIds = [];
+    $unifiedSourceMap = [];
+
+    foreach ($productTemplates as $template) {
+        $templateId = (int)($template['id'] ?? 0);
+        if ($templateId <= 0) {
+            continue;
+        }
+
+        $templateIds[] = $templateId;
+        $productTemplateComponents[$templateId] = [
+            'raw_materials' => [],
+            'packaging' => [],
+        ];
+
+        $templateType = (string)($template['template_type'] ?? '');
+        $sourceTemplateId = (int)($template['source_template_id'] ?? 0);
+        if ($templateType === 'unified' && $sourceTemplateId > 0) {
+            $unifiedSourceMap[$sourceTemplateId][] = $templateId;
+        }
+    }
+
+    if (!empty($templateIds)) {
+        $placeholders = implode(',', array_fill(0, count($templateIds), '?'));
+
+        try {
+            $rawRows = $db->query(
+                "SELECT template_id, material_name, quantity_per_unit, unit
+                 FROM product_template_raw_materials
+                 WHERE template_id IN ($placeholders)
+                 ORDER BY template_id ASC, id ASC",
+                $templateIds
+            );
+
+            foreach ($rawRows as $row) {
+                $templateId = (int)($row['template_id'] ?? 0);
+                if (!isset($productTemplateComponents[$templateId])) {
+                    continue;
+                }
+                $productTemplateComponents[$templateId]['raw_materials'][] = [
+                    'name' => trim((string)($row['material_name'] ?? 'مادة خام')),
+                    'quantity' => (float)($row['quantity_per_unit'] ?? 0),
+                    'unit' => (string)($row['unit'] ?? 'وحدة'),
+                ];
+            }
+        } catch (Exception $e) {
+            error_log('Error fetching product template raw materials: ' . $e->getMessage());
+        }
+
+        try {
+            $packagingRows = $db->query(
+                "SELECT template_id, packaging_name, quantity_per_unit
+                 FROM product_template_packaging
+                 WHERE template_id IN ($placeholders)
+                 ORDER BY template_id ASC, id ASC",
+                $templateIds
+            );
+
+            foreach ($packagingRows as $row) {
+                $templateId = (int)($row['template_id'] ?? 0);
+                if (!isset($productTemplateComponents[$templateId])) {
+                    continue;
+                }
+                $productTemplateComponents[$templateId]['packaging'][] = [
+                    'name' => trim((string)($row['packaging_name'] ?? 'أداة تعبئة')),
+                    'quantity' => (float)($row['quantity_per_unit'] ?? 0),
+                    'unit' => 'قطعة',
+                ];
+            }
+        } catch (Exception $e) {
+            error_log('Error fetching product template packaging: ' . $e->getMessage());
+        }
+    }
+
+    if (!empty($unifiedSourceMap)) {
+        $unifiedSourceIds = array_keys($unifiedSourceMap);
+        $unifiedPlaceholders = implode(',', array_fill(0, count($unifiedSourceIds), '?'));
+
+        try {
+            $unifiedRawRows = $db->query(
+                "SELECT template_id, material_name, quantity, unit
+                 FROM template_raw_materials
+                 WHERE template_id IN ($unifiedPlaceholders)
+                 ORDER BY template_id ASC, id ASC",
+                $unifiedSourceIds
+            );
+
+            foreach ($unifiedRawRows as $row) {
+                $sourceTemplateId = (int)($row['template_id'] ?? 0);
+                foreach ($unifiedSourceMap[$sourceTemplateId] ?? [] as $productTemplateId) {
+                    if (!empty($productTemplateComponents[$productTemplateId]['raw_materials'])) {
+                        continue;
+                    }
+                    $productTemplateComponents[$productTemplateId]['raw_materials'][] = [
+                        'name' => trim((string)($row['material_name'] ?? 'مادة خام')),
+                        'quantity' => (float)($row['quantity'] ?? 0),
+                        'unit' => (string)($row['unit'] ?? 'وحدة'),
+                    ];
+                }
+            }
+        } catch (Exception $e) {
+            error_log('Error fetching unified template raw materials: ' . $e->getMessage());
+        }
+
+        try {
+            $unifiedPackagingRows = $db->query(
+                "SELECT tp.template_id,
+                        COALESCE(tp.packaging_name, pm.name, CONCAT('أداة تعبئة #', tp.packaging_material_id)) AS packaging_name,
+                        tp.quantity_per_unit
+                 FROM template_packaging tp
+                 LEFT JOIN packaging_materials pm ON pm.id = tp.packaging_material_id
+                 WHERE tp.template_id IN ($unifiedPlaceholders)
+                 ORDER BY tp.template_id ASC, tp.id ASC",
+                $unifiedSourceIds
+            );
+
+            foreach ($unifiedPackagingRows as $row) {
+                $sourceTemplateId = (int)($row['template_id'] ?? 0);
+                foreach ($unifiedSourceMap[$sourceTemplateId] ?? [] as $productTemplateId) {
+                    if (!empty($productTemplateComponents[$productTemplateId]['packaging'])) {
+                        continue;
+                    }
+                    $productTemplateComponents[$productTemplateId]['packaging'][] = [
+                        'name' => trim((string)($row['packaging_name'] ?? 'أداة تعبئة')),
+                        'quantity' => (float)($row['quantity_per_unit'] ?? 0),
+                        'unit' => 'قطعة',
+                    ];
+                }
+            }
+        } catch (Exception $e) {
+            error_log('Error fetching unified template packaging: ' . $e->getMessage());
+        }
+    }
+
+    foreach ($productTemplates as $template) {
+        $templateId = (int)($template['id'] ?? 0);
+        if ($templateId <= 0 || !isset($productTemplateComponents[$templateId])) {
+            continue;
+        }
+
+        $detailsJson = trim((string)($template['details_json'] ?? ''));
+        if ($detailsJson === '') {
+            continue;
+        }
+
+        $detailsPayload = json_decode($detailsJson, true);
+        if (!is_array($detailsPayload)) {
+            continue;
+        }
+
+        if (empty($productTemplateComponents[$templateId]['raw_materials']) && !empty($detailsPayload['raw_materials']) && is_array($detailsPayload['raw_materials'])) {
+            foreach ($detailsPayload['raw_materials'] as $rawItem) {
+                $name = trim((string)($rawItem['name'] ?? $rawItem['material_name'] ?? ''));
+                $quantity = isset($rawItem['quantity']) ? (float)$rawItem['quantity'] : (isset($rawItem['quantity_per_unit']) ? (float)$rawItem['quantity_per_unit'] : 0);
+                $unit = (string)($rawItem['unit'] ?? 'وحدة');
+                if ($name === '' || $quantity <= 0) {
+                    continue;
+                }
+                $productTemplateComponents[$templateId]['raw_materials'][] = [
+                    'name' => $name,
+                    'quantity' => $quantity,
+                    'unit' => $unit,
+                ];
+            }
+        }
+
+        if (empty($productTemplateComponents[$templateId]['packaging']) && !empty($detailsPayload['packaging']) && is_array($detailsPayload['packaging'])) {
+            foreach ($detailsPayload['packaging'] as $packItem) {
+                $name = trim((string)($packItem['name'] ?? $packItem['packaging_name'] ?? 'أداة تعبئة'));
+                $quantity = isset($packItem['quantity']) ? (float)$packItem['quantity'] : (isset($packItem['quantity_per_unit']) ? (float)$packItem['quantity_per_unit'] : 0);
+                if ($quantity <= 0) {
+                    continue;
+                }
+                $productTemplateComponents[$templateId]['packaging'][] = [
+                    'name' => $name,
+                    'quantity' => $quantity,
+                    'unit' => 'قطعة',
+                ];
+            }
+        }
+    }
 }
 
 $totalProductTemplates = count($productTemplates);
@@ -2571,8 +2759,12 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
                             $templatePrice = floatval($template['unit_price'] ?? 0);
                             $templateId = $template['id'] ?? 0;
                             $availableQuantity = floatval($template['available_quantity'] ?? 0);
+                            $templateComponents = $productTemplateComponents[$templateId] ?? ['raw_materials' => [], 'packaging' => []];
+                            $templateRawMaterials = $templateComponents['raw_materials'] ?? [];
+                            $templatePackagingItems = $templateComponents['packaging'] ?? [];
+                            $templateDetailsCollapseId = 'templateComponentsCollapse' . $templateId;
                         ?>
-                        <div class="product-card" style="background: white; padding: 20px; border: 1px solid #e2e6f3; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); transition: all 0.3s ease;">
+                        <div class="product-card" style="position: relative; background: white; padding: 20px; border: 1px solid #e2e6f3; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); transition: all 0.3s ease;">
                             <div style="position: absolute; top: 15px; left: 15px; background: #2e89ff; padding: 6px 14px; border-radius: 20px; color: white; font-size: 12px; font-weight: bold;">
                                 <i class="bi bi-diagram-3 me-1"></i>قالب
                             </div>
@@ -2587,6 +2779,61 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
                             <div style="font-size: 13px; margin-top: 5px; display: flex; justify-content: space-between;">
                                 <span>الكمية المتاحة:</span>
                                 <span style="color: #2563eb; font-weight: 600;"><?php echo number_format($availableQuantity, 2); ?> قطعة</span>
+                            </div>
+
+                            <div style="margin-top: 14px; padding-top: 14px; border-top: 1px dashed #d7deee;">
+                                <button
+                                    type="button"
+                                    class="btn btn-sm btn-outline-primary w-100 d-flex justify-content-between align-items-center template-components-toggle"
+                                    data-bs-toggle="collapse"
+                                    data-bs-target="#<?php echo htmlspecialchars($templateDetailsCollapseId, ENT_QUOTES, 'UTF-8'); ?>"
+                                    aria-expanded="false"
+                                    aria-controls="<?php echo htmlspecialchars($templateDetailsCollapseId, ENT_QUOTES, 'UTF-8'); ?>"
+                                    style="border-radius: 10px;"
+                                >
+                                    <span><i class="bi bi-list-stars me-1"></i>عرض الخامات وأدوات التعبئة</span>
+                                    <i class="bi bi-chevron-down template-components-toggle-icon"></i>
+                                </button>
+
+                                <div class="collapse mt-3" id="<?php echo htmlspecialchars($templateDetailsCollapseId, ENT_QUOTES, 'UTF-8'); ?>">
+                                    <?php if (empty($templateRawMaterials) && empty($templatePackagingItems)): ?>
+                                        <div style="padding: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; color: #64748b; font-size: 13px;">
+                                            لا توجد بيانات خامات أو أدوات تعبئة مسجلة لهذا القالب.
+                                        </div>
+                                    <?php else: ?>
+                                        <?php if (!empty($templateRawMaterials)): ?>
+                                            <div style="margin-bottom: <?php echo !empty($templatePackagingItems) ? '12px' : '0'; ?>; padding: 12px; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 10px;">
+                                                <div style="font-size: 13px; font-weight: 700; color: #9a3412; margin-bottom: 8px;">
+                                                    <i class="bi bi-droplet-half me-1"></i>الخامات
+                                                </div>
+                                                <ul style="list-style: none; padding: 0; margin: 0;">
+                                                    <?php foreach ($templateRawMaterials as $rawItem): ?>
+                                                        <li style="font-size: 13px; color: #431407; display: flex; justify-content: space-between; gap: 12px; padding: 5px 0;">
+                                                            <span><?php echo htmlspecialchars($rawItem['name'] ?? 'مادة خام'); ?></span>
+                                                            <strong><?php echo number_format((float)($rawItem['quantity'] ?? 0), 3) . ' ' . htmlspecialchars($rawItem['unit'] ?? 'وحدة'); ?></strong>
+                                                        </li>
+                                                    <?php endforeach; ?>
+                                                </ul>
+                                            </div>
+                                        <?php endif; ?>
+
+                                        <?php if (!empty($templatePackagingItems)): ?>
+                                            <div style="padding: 12px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px;">
+                                                <div style="font-size: 13px; font-weight: 700; color: #1d4ed8; margin-bottom: 8px;">
+                                                    <i class="bi bi-box-seam me-1"></i>أدوات التعبئة
+                                                </div>
+                                                <ul style="list-style: none; padding: 0; margin: 0;">
+                                                    <?php foreach ($templatePackagingItems as $packagingItem): ?>
+                                                        <li style="font-size: 13px; color: #1e3a8a; display: flex; justify-content: space-between; gap: 12px; padding: 5px 0;">
+                                                            <span><?php echo htmlspecialchars($packagingItem['name'] ?? 'أداة تعبئة'); ?></span>
+                                                            <strong><?php echo number_format((float)($packagingItem['quantity'] ?? 0), 3) . ' ' . htmlspecialchars($packagingItem['unit'] ?? 'قطعة'); ?></strong>
+                                                        </li>
+                                                    <?php endforeach; ?>
+                                                </ul>
+                                            </div>
+                                        <?php endif; ?>
+                                    <?php endif; ?>
+                                </div>
                             </div>
                         </div>
                     <?php endforeach; ?>
@@ -3786,6 +4033,35 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
     });
 
     filterExternalProducts();
+})();
+</script>
+
+<script>
+(function() {
+    const collapseElements = document.querySelectorAll('[id^="templateComponentsCollapse"]');
+    if (!collapseElements.length) {
+        return;
+    }
+
+    collapseElements.forEach((collapseElement) => {
+        collapseElement.addEventListener('show.bs.collapse', function() {
+            const toggleButton = document.querySelector(`[data-bs-target="#${this.id}"]`);
+            const icon = toggleButton?.querySelector('.template-components-toggle-icon');
+            if (icon) {
+                icon.classList.remove('bi-chevron-down');
+                icon.classList.add('bi-chevron-up');
+            }
+        });
+
+        collapseElement.addEventListener('hide.bs.collapse', function() {
+            const toggleButton = document.querySelector(`[data-bs-target="#${this.id}"]`);
+            const icon = toggleButton?.querySelector('.template-components-toggle-icon');
+            if (icon) {
+                icon.classList.remove('bi-chevron-up');
+                icon.classList.add('bi-chevron-down');
+            }
+        });
+    });
 })();
 </script>
 
@@ -7022,5 +7298,3 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 })();
 </script>
-
-
