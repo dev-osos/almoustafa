@@ -1906,13 +1906,32 @@ foreach ($factoryProducts as $product) {
             <!-- شريط البحث والفلترة لقوالب المنتجات -->
             <div class="mb-3 p-3 bg-light rounded" style="border: 1px solid #dee2e6;">
                 <div class="row g-3">
-                    <div class="col-12 col-md-6">
+                    <div class="col-12 col-md-4">
                         <label class="form-label small mb-1"><i class="bi bi-search me-1"></i>البحث</label>
                         <input type="text" 
                                class="form-control form-control-sm" 
                                id="templateSearchInput" 
                                placeholder="اسم القالب..." 
                                autocomplete="off">
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <label class="form-label small mb-1"><i class="bi bi-funnel me-1"></i>فلترة الكمية</label>
+                        <select class="form-control form-control-sm" id="templateQuantityFilter">
+                            <option value="all">جميع القوالب</option>
+                            <option value="available">متاحة (كمية > 0)</option>
+                            <option value="unavailable">غير متاحة (كمية = 0)</option>
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <label class="form-label small mb-1"><i class="bi bi-sort-numeric-down me-1"></i>الترتيب</label>
+                        <select class="form-control form-control-sm" id="templateSortOrder">
+                            <option value="name_asc">الاسم (أ-ي)</option>
+                            <option value="name_desc">الاسم (ي-أ)</option>
+                            <option value="quantity_desc">الكمية (الأعلى أولاً)</option>
+                            <option value="quantity_asc">الكمية (الأقل أولاً)</option>
+                            <option value="price_desc">السعر (الأعلى أولاً)</option>
+                            <option value="price_asc">السعر (الأقل أولاً)</option>
+                        </select>
                     </div>
                 </div>
             </div>
@@ -4069,28 +4088,76 @@ function initEditExternalButtons() {
 // ===== البحث والفلترة لقوالب المنتجات =====
 (function() {
     const templateSearchInput = document.getElementById('templateSearchInput');
+    const templateQuantityFilter = document.getElementById('templateQuantityFilter');
+    const templateSortOrder = document.getElementById('templateSortOrder');
     const templateProductsContainer = document.getElementById('templateProductsContainer');
     
-    function filterTemplates() {
+    function filterAndSortTemplates() {
         const searchText = (templateSearchInput?.value || '').toLowerCase();
+        const quantityFilter = templateQuantityFilter?.value || 'all';
+        const sortOrder = templateSortOrder?.value || 'name_asc';
         
         const grid = document.getElementById('templateProductsGrid');
         if (!grid) return;
         
-        const cards = grid.querySelectorAll('.product-card');
+        const cards = Array.from(grid.querySelectorAll('.product-card'));
         let visibleCount = 0;
         
-        cards.forEach(card => {
+        // فلترة البطاقات
+        const filteredCards = cards.filter(card => {
             const productName = card.querySelector('.product-name')?.textContent.toLowerCase() || '';
+            const quantityText = card.querySelector('.product-detail-row span:last-child')?.textContent || '';
+            const quantity = parseFloat(quantityText.replace(/[^\d.]/g, '')) || 0;
             
+            // فحص البحث
             const matchesSearch = productName.includes(searchText);
             
-            if (matchesSearch) {
-                card.style.display = '';
-                visibleCount++;
-            } else {
-                card.style.display = 'none';
+            // فحص فلتر الكمية
+            let matchesQuantity = true;
+            if (quantityFilter === 'available') {
+                matchesQuantity = quantity > 0;
+            } else if (quantityFilter === 'unavailable') {
+                matchesQuantity = quantity === 0;
             }
+            
+            return matchesSearch && matchesQuantity;
+        });
+        
+        // ترتيب البطاقات
+        filteredCards.sort((a, b) => {
+            const nameA = a.querySelector('.product-name')?.textContent.toLowerCase() || '';
+            const nameB = b.querySelector('.product-name')?.textContent.toLowerCase() || '';
+            
+            const quantityA = parseFloat(a.querySelector('.product-detail-row span:last-child')?.textContent.replace(/[^\d.]/g, '') || '0');
+            const quantityB = parseFloat(b.querySelector('.product-detail-row span:last-child')?.textContent.replace(/[^\d.]/g, '') || '0');
+            
+            const priceA = parseFloat(a.querySelector('.product-detail-row span:last-child')?.previousElementSibling?.textContent.replace(/[^\d.]/g, '') || '0');
+            const priceB = parseFloat(b.querySelector('.product-detail-row span:last-child')?.previousElementSibling?.textContent.replace(/[^\d.]/g, '') || '0');
+            
+            switch (sortOrder) {
+                case 'name_desc':
+                    return nameB.localeCompare(nameA);
+                case 'quantity_desc':
+                    return quantityB - quantityA;
+                case 'quantity_asc':
+                    return quantityA - quantityB;
+                case 'price_desc':
+                    return priceB - priceA;
+                case 'price_asc':
+                    return priceA - priceB;
+                case 'name_asc':
+                default:
+                    return nameA.localeCompare(nameB);
+            }
+        });
+        
+        // إخفاء جميع البطاقات أولاً
+        cards.forEach(card => card.style.display = 'none');
+        
+        // إظهار البطاقات المفلترة والمرتبة
+        filteredCards.forEach(card => {
+            card.style.display = '';
+            visibleCount++;
         });
         
         // إظهار رسالة عند عدم وجود نتائج
@@ -4103,7 +4170,7 @@ function initEditExternalButtons() {
                 messageDiv.innerHTML = `
                     <div class="alert alert-info mb-0">
                         <i class="bi bi-info-circle me-2"></i>
-                        لا توجد قوالب منتجات تطابق معايير البحث
+                        لا توجد قوالب منتجات تطابق معايير البحث والفلترة
                     </div>
                 `;
                 grid.appendChild(messageDiv);
@@ -4115,9 +4182,21 @@ function initEditExternalButtons() {
         }
     }
     
+    // إضافة event listeners
     if (templateSearchInput) {
-        templateSearchInput.addEventListener('input', filterTemplates);
+        templateSearchInput.addEventListener('input', filterAndSortTemplates);
     }
+    
+    if (templateQuantityFilter) {
+        templateQuantityFilter.addEventListener('change', filterAndSortTemplates);
+    }
+    
+    if (templateSortOrder) {
+        templateSortOrder.addEventListener('change', filterAndSortTemplates);
+    }
+    
+    // تشغيل الفلترة الأولية
+    filterAndSortTemplates();
 })();
 
 // ===== معالجة اختيار الصنف "اخري" =====
