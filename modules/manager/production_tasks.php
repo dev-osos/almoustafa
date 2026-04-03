@@ -1678,7 +1678,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($taskId <= 0) {
             $error = 'معرف المهمة غير صحيح.';
-        } elseif (!in_array($newStatus, ['pending', 'received', 'in_progress', 'completed', 'with_delegate', 'delivered', 'returned', 'cancelled'], true)) {
+        } elseif (!in_array($newStatus, ['pending', 'received', 'in_progress', 'completed', 'with_delegate', 'with_shipping_company', 'delivered', 'returned', 'cancelled'], true)) {
             $error = 'حالة المهمة غير صحيحة.';
         } else {
             try {
@@ -1707,7 +1707,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $updateValues = [$newStatus];
                 
                 // إضافة timestamps حسب الحالة
-                if (in_array($newStatus, ['completed', 'with_delegate', 'delivered', 'returned'], true)) {
+                if (in_array($newStatus, ['completed', 'with_delegate', 'with_shipping_company', 'delivered', 'returned'], true)) {
                     $updateFields[] = 'completed_at = NOW()';
                 } elseif ($newStatus === 'in_progress') {
                     $updateFields[] = 'started_at = NOW()';
@@ -2624,6 +2624,7 @@ $statsTemplate = [
     'completed' => 0,
     'with_delegate' => 0,
     'with_driver' => 0,
+    'with_shipping_company' => 0,
     'delivered' => 0,
     'returned' => 0,
     'cancelled' => 0
@@ -2661,7 +2662,7 @@ try {
     }
     // حساب الإجمالي من مجموع الحالات (أدق من COUNT المنفرد ويتجنب truncation في بعض بيئات MySQL/PHP)
     $stats['total'] = (int)$stats['pending'] + (int)$stats['received'] + (int)$stats['in_progress']
-        + (int)$stats['completed'] + (int)$stats['with_delegate'] + (int)$stats['with_driver'] + (int)$stats['delivered'] + (int)$stats['returned'];
+        + (int)$stats['completed'] + (int)$stats['with_delegate'] + (int)$stats['with_driver'] + (int)$stats['with_shipping_company'] + (int)$stats['delivered'] + (int)$stats['returned'];
 } catch (Exception $e) {
     error_log('Manager task stats error: ' . $e->getMessage());
 }
@@ -2678,6 +2679,7 @@ $statusStyles = [
     'received' => ['class' => 'info', 'label' => 'مستلمة'],
     'completed' => ['class' => 'success', 'label' => 'مكتملة'],
     'with_delegate' => ['class' => 'info', 'label' => 'مع المندوب'],
+    'with_shipping_company' => ['class' => 'warning', 'label' => 'مع شركة الشحن'],
     'delivered' => ['class' => 'success', 'label' => 'تم التوصيل'],
     'returned' => ['class' => 'secondary', 'label' => 'تم الارجاع'],
     'cancelled' => ['class' => 'danger', 'label' => 'ملغاة']
@@ -3465,7 +3467,18 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                 </div>
             </a>
         </div>
-        
+
+        <div class="col-4 col-sm-4 col-md-2">
+            <a href="?page=production_tasks&status=with_shipping_company" class="text-decoration-none status-filter-card" data-status="with_shipping_company">
+                <div class="card <?php echo $statusFilter === 'with_shipping_company' ? 'bg-warning text-dark' : 'border-warning'; ?> h-100">
+                    <div class="card-body text-center py-2 px-2">
+                        <div class="<?php echo $statusFilter === 'with_shipping_company' ? 'text-dark' : 'text-muted'; ?> small mb-1">مع شركة الشحن</div>
+                        <div class="fs-5 <?php echo $statusFilter === 'with_shipping_company' ? 'text-dark' : 'text-warning'; ?> fw-semibold"><?php echo $stats['with_shipping_company']; ?></div>
+                    </div>
+                </div>
+            </a>
+        </div>
+
         <div class="col-4 col-sm-4 col-md-2">
             <a href="?page=production_tasks&status=with_driver" class="text-decoration-none status-filter-card" data-status="with_driver">
                 <div class="card <?php echo $statusFilter === 'with_driver' ? 'bg-info text-white' : 'border-info'; ?> h-100">
@@ -4561,6 +4574,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
         'pending':       { bg: 'bg-warning',   text: 'text-dark',  border: 'border-warning', countClass: 'text-warning', labelActive: 'text-dark-50' },
         'completed':     { bg: 'bg-success',   text: 'text-white', border: 'border-success', countClass: 'text-success', labelActive: 'text-white-50' },
         'with_delegate': { bg: 'bg-info',      text: 'text-white', border: 'border-info',    countClass: 'text-info',    labelActive: 'text-white-50' },
+        'with_shipping_company': { bg: 'bg-warning', text: 'text-dark', border: 'border-warning', countClass: 'text-warning', labelActive: 'text-dark' },
         'delivered':     { bg: 'bg-success',    text: 'text-white', border: 'border-success', countClass: 'text-success', labelActive: 'text-white-50' },
         'returned':      { bg: 'bg-secondary',  text: 'text-white', border: 'border-secondary', countClass: 'text-secondary', labelActive: 'text-white-50' }
     };
@@ -4702,6 +4716,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             <option value="pending">معلقة</option>
                             <option value="completed">مكتملة</option>
                             <option value="with_delegate">مع المندوب</option>
+                            <option value="with_shipping_company">مع شركة الشحن</option>
                             <option value="delivered">تم التوصيل</option>
                             <option value="returned">تم الارجاع</option>
                             <option value="cancelled">ملغاة</option>
@@ -4747,6 +4762,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             <option value="pending">معلقة</option>
                             <option value="completed">مكتملة</option>
                             <option value="with_delegate">مع المندوب</option>
+                            <option value="with_shipping_company">مع شركة الشحن</option>
                             <option value="delivered">تم التوصيل</option>
                             <option value="returned">تم الارجاع</option>
                             <option value="cancelled">ملغاة</option>
@@ -7620,6 +7636,7 @@ window.openChangeStatusModal = function(taskId, currentStatus) {
                                     <option value="pending">معلقة</option>
                                     <option value="completed">مكتملة</option>
                                     <option value="with_delegate">مع المندوب</option>
+                                    <option value="with_shipping_company">مع شركة الشحن</option>
                                     <option value="delivered">تم التوصيل</option>
                                     <option value="returned">تم الارجاع</option>
                                     <option value="cancelled">ملغاة</option>
@@ -7684,6 +7701,7 @@ window.openChangeStatusModal = function(taskId, currentStatus) {
             'received': 'مستلمة',
             'completed': 'مكتملة',
             'with_delegate': 'مع المندوب',
+            'with_shipping_company': 'مع شركة الشحن',
             'delivered': 'تم التوصيل',
             'returned': 'تم الارجاع',
             'cancelled': 'ملغاة'
@@ -7694,6 +7712,7 @@ window.openChangeStatusModal = function(taskId, currentStatus) {
             'received': 'info',
             'completed': 'success',
             'with_delegate': 'info',
+            'with_shipping_company': 'warning',
             'delivered': 'success',
             'returned': 'secondary',
             'cancelled': 'danger'
@@ -7757,6 +7776,7 @@ window.openChangeStatusModal = function(taskId, currentStatus) {
         'received': 'مستلمة',
         'completed': 'مكتملة',
         'with_delegate': 'مع المندوب',
+        'with_shipping_company': 'مع شركة الشحن',
         'delivered': 'تم التوصيل',
         'returned': 'تم الارجاع',
         'cancelled': 'ملغاة'
@@ -7767,6 +7787,7 @@ window.openChangeStatusModal = function(taskId, currentStatus) {
         'received': 'info',
         'completed': 'success',
         'with_delegate': 'info',
+        'with_shipping_company': 'warning',
         'delivered': 'success',
         'returned': 'secondary',
         'cancelled': 'danger'

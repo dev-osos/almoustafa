@@ -651,6 +651,7 @@ function tasksHandleAction(string $action, array $input, array $context): array
             case 'start_task':
             case 'complete_task':
             case 'with_delegate_task':
+            case 'with_shipping_company_task':
             case 'deliver_task':
             case 'return_task':
             case 'assign_to_driver':
@@ -691,9 +692,12 @@ function tasksHandleAction(string $action, array $input, array $context): array
                         throw new RuntimeException('غير مصرح لك بتنفيذ هذا الإجراء');
                     }
                     $currentStatus = $task['status'] ?? '';
-                    $allowedDeliverStatuses = ['completed', 'with_delegate', 'with_driver'];
+                    $allowedDeliverStatuses = ['completed', 'with_delegate', 'with_driver', 'with_shipping_company'];
                     if (!in_array($currentStatus, $allowedDeliverStatuses, true)) {
                         throw new RuntimeException('يمكن تطبيق تم التوصيل أو تم الارجاع على المهام المكتملة أو المعطاة للمندوب أو مع السائق فقط');
+                    }
+                    if ($isProduction && $currentStatus === 'with_shipping_company') {
+                        throw new RuntimeException('غير مصرح لعمال الإنتاج بتنفيذ هذا الإجراء عندما تكون الحالة مع شركة الشحن');
                     }
                 } elseif ($action === 'with_delegate_task') {
                     if (!$isManager && !$isProduction && !$isDriver) {
@@ -705,6 +709,17 @@ function tasksHandleAction(string $action, array $input, array $context): array
                     $backendTaskType = (strpos((string)($task['related_type'] ?? ''), 'manager_') === 0) ? substr((string)$task['related_type'], 8) : ($task['task_type'] ?? 'general');
                     if ($backendTaskType !== 'telegraph') {
                         throw new RuntimeException('مع المندوب متاح فقط لأوردرات التليجراف');
+                    }
+                } elseif ($action === 'with_shipping_company_task') {
+                    if (!$isManager && !$isProduction && !$isDriver) {
+                        throw new RuntimeException('غير مصرح لك بتنفيذ هذا الإجراء');
+                    }
+                    if (($task['status'] ?? '') !== 'completed') {
+                        throw new RuntimeException('يمكن تطبيق مع شركة الشحن على المهام المكتملة فقط');
+                    }
+                    $backendTaskType = (strpos((string)($task['related_type'] ?? ''), 'manager_') === 0) ? substr((string)$task['related_type'], 8) : ($task['task_type'] ?? 'general');
+                    if ($backendTaskType !== 'telegraph') {
+                        throw new RuntimeException('مع شركة الشحن متاح فقط لأوردرات التليجراف');
                     }
                 } elseif ($action === 'assign_to_driver') {
                     if (!$isManager && !$isProduction) {
@@ -754,6 +769,7 @@ function tasksHandleAction(string $action, array $input, array $context): array
                     'start_task' => ['status' => 'in_progress', 'column' => 'started_at'],
                     'complete_task' => ['status' => 'completed', 'column' => 'completed_at'],
                     'with_delegate_task' => ['status' => 'with_delegate', 'column' => 'completed_at'],
+                    'with_shipping_company_task' => ['status' => 'with_shipping_company', 'column' => 'completed_at'],
                     'deliver_task' => ['status' => 'delivered', 'column' => 'completed_at'],
                     'return_task' => ['status' => 'returned', 'column' => 'completed_at'],
                 ];
@@ -1457,9 +1473,10 @@ $stats = [
     'completed' => $buildStatsQuery("status = 'completed'"),
     'with_delegate' => $buildStatsQuery("status = 'with_delegate'"),
     'with_driver' => $buildStatsQuery("status = 'with_driver'"),
+    'with_shipping_company' => $buildStatsQuery("status = 'with_shipping_company'"),
     'delivered' => $buildStatsQuery("status = 'delivered'"),
     'returned' => $buildStatsQuery("status = 'returned'"),
-    'overdue' => $buildStatsQuery("status NOT IN ('completed','with_delegate','with_driver','delivered','returned','cancelled') AND due_date < CURDATE()")
+    'overdue' => $buildStatsQuery("status NOT IN ('completed','with_delegate','with_driver','with_shipping_company','delivered','returned','cancelled') AND due_date < CURDATE()")
 ];
 
 $tasksJson = tasksSafeJsonEncode($tasks);
@@ -1623,6 +1640,16 @@ function tasksHtml(string $value): string
                     <div class="card-body p-2">
                         <h5 class="<?php echo $statusFilter === 'with_delegate' ? 'text-white' : 'text-info'; ?> mb-0"><?php echo $stats['with_delegate']; ?></h5>
                         <small class="<?php echo $statusFilter === 'with_delegate' ? 'text-white-50' : 'text-muted'; ?>">مع المندوب</small>
+                    </div>
+                </div>
+            </button>
+        </div>
+        <div class="col-6 col-md-4 col-lg-2">
+            <button type="button" class="text-decoration-none task-status-filter-card" data-status="with_shipping_company">
+                <div class="card <?php echo $statusFilter === 'with_shipping_company' ? 'bg-warning text-dark' : 'border-warning'; ?> text-center h-100">
+                    <div class="card-body p-2">
+                        <h5 class="<?php echo $statusFilter === 'with_shipping_company' ? 'text-dark' : 'text-warning'; ?> mb-0"><?php echo $stats['with_shipping_company']; ?></h5>
+                        <small class="<?php echo $statusFilter === 'with_shipping_company' ? 'text-dark-50' : 'text-muted'; ?>">مع شركة الشحن</small>
                     </div>
                 </div>
             </button>
@@ -1812,6 +1839,7 @@ function tasksHtml(string $value): string
                                     'in_progress' => 'primary',
                                     'completed' => 'success',
                                     'with_delegate' => 'info',
+                                    'with_shipping_company' => 'warning',
                                     'delivered' => 'success',
                                     'returned' => 'secondary',
                                     'cancelled' => 'secondary',
@@ -1823,6 +1851,7 @@ function tasksHtml(string $value): string
                                     'completed' => 'مكتملة',
                                     'with_delegate' => 'مع المندوب',
                                     'with_driver' => 'مع السائق',
+                                    'with_shipping_company' => 'مع شركة الشحن',
                                     'delivered' => 'تم التوصيل',
                                     'returned' => 'تم الارجاع',
                                     'cancelled' => 'ملغاة'
@@ -1835,7 +1864,7 @@ function tasksHtml(string $value): string
                                     'low' => 'منخفضة'
                                 ][$task['priority']] ?? tasksSafeString($task['priority']);
 
-                                $overdue = !in_array($task['status'], ['completed', 'with_delegate', 'delivered', 'returned', 'cancelled'], true)
+                                $overdue = !in_array($task['status'], ['completed', 'with_delegate', 'with_shipping_company', 'delivered', 'returned', 'cancelled'], true)
                                     && !empty($task['due_date'])
                                     && strtotime((string) $task['due_date']) < time();
                                 $searchParts = array_filter([
@@ -1913,9 +1942,11 @@ function tasksHtml(string $value): string
                                             }
                                         }
                                         $canWithDelegateType = (strpos(isset($task['related_type']) ? (string)$task['related_type'] : '', 'manager_') === 0) ? substr((string)$task['related_type'], 8) : ($task['task_type'] ?? 'general');
-                                        $canWithDelegate = ($isManager || $isProduction || $isDriver) && ($task['status'] ?? '') === 'completed' && $canWithDelegateType === 'telegraph';
+                                        $canWithDelegate = false; // مستبدل بـ "مع شركة الشحن" لأوردرات التليجراف
+                                        $canWithShippingCompany = ($isManager || $isProduction || $isDriver) && ($task['status'] ?? '') === 'completed' && $canWithDelegateType === 'telegraph';
                                         $canAssignDriver = ($isManager || $isProduction) && ($task['status'] ?? '') === 'completed' && $canWithDelegateType !== 'telegraph' && empty($pendingDriverAssignments[(int) $task['id']]);
-                                        $canDeliverReturn = ($isManager || $isProduction || $isDriver) && in_array($task['status'] ?? '', ['completed', 'with_delegate', 'with_driver'], true);
+                                        $canDeliverReturn = (($isManager || $isDriver) && in_array($task['status'] ?? '', ['completed', 'with_delegate', 'with_driver', 'with_shipping_company'], true))
+                                            || ($isProduction && in_array($task['status'] ?? '', ['completed', 'with_delegate', 'with_driver'], true));
                                         $canDeliverReturnDriver = in_array($task['status'] ?? '', ['completed', 'with_delegate'], true);
                                         $canDeliverAsDriver = $isDriver && ($task['status'] ?? '') === 'with_driver';
                                         $taskCustomerPhone = isset($task['customer_phone']) ? trim((string) $task['customer_phone']) : '';
@@ -1934,8 +1965,8 @@ function tasksHtml(string $value): string
                                                 <?php if ($isProduction && in_array($task['status'], ['pending', 'received', 'in_progress'])): ?>
                                                     <li><button type="button" class="dropdown-item" onclick="submitTaskAction('complete_task', <?php echo $taskIdInt; ?>)"><i class="bi bi-check2-circle me-2"></i>إكمال</button></li>
                                                 <?php endif; ?>
-                                                <?php if ($canWithDelegate): ?>
-                                                    <li><button type="button" class="dropdown-item" onclick="submitTaskAction('with_delegate_task', <?php echo $taskIdInt; ?>)"><i class="bi bi-person-badge me-2"></i>مع المندوب</button></li>
+                                                <?php if ($canWithShippingCompany): ?>
+                                                    <li><button type="button" class="dropdown-item" onclick="submitTaskAction('with_shipping_company_task', <?php echo $taskIdInt; ?>)"><i class="bi bi-building me-2"></i>مع شركة الشحن</button></li>
                                                 <?php endif; ?>
                                                 <?php if ($canAssignDriver): ?>
                                                     <li><button type="button" class="dropdown-item" onclick="openDriverAssignModal(<?php echo $taskIdInt; ?>)"><i class="bi bi-truck me-2"></i>مع السائق</button></li>
@@ -2651,6 +2682,7 @@ function tasksHtml(string $value): string
         'completed': 'مكتملة',
         'with_delegate': 'مع المندوب',
         'with_driver': 'مع السائق',
+        'with_shipping_company': 'مع شركة الشحن',
         'delivered': 'تم التوصيل',
         'returned': 'تم الارجاع',
         'cancelled': 'ملغاة'
@@ -2662,6 +2694,7 @@ function tasksHtml(string $value): string
         'completed': 'success',
         'with_delegate': 'info',
         'with_driver': 'primary',
+        'with_shipping_company': 'warning',
         'delivered': 'success',
         'returned': 'secondary',
         'cancelled': 'secondary'
@@ -2683,9 +2716,9 @@ function tasksHtml(string $value): string
             items += '<li><button type="button" class="dropdown-item" onclick="submitTaskAction(\'complete_task\', ' + taskId + ')"><i class="bi bi-check2-circle me-2"></i>إكمال</button></li>';
         }
 
-        // مع المندوب (نوع برقية، مكتملة)
+        // مع شركة الشحن (نوع برقية، مكتملة) - يحل محل "مع المندوب"
         if ((flags.isManager || flags.isProduction || flags.isDriver) && newStatus === 'completed' && taskType === 'telegraph') {
-            items += '<li><button type="button" class="dropdown-item" onclick="submitTaskAction(\'with_delegate_task\', ' + taskId + ')"><i class="bi bi-person-badge me-2"></i>مع المندوب</button></li>';
+            items += '<li><button type="button" class="dropdown-item" onclick="submitTaskAction(\'with_shipping_company_task\', ' + taskId + ')"><i class="bi bi-building me-2"></i>مع شركة الشحن</button></li>';
         }
 
         // مع السائق (غير برقية، مكتملة، مدير أو إنتاج)
@@ -2694,7 +2727,14 @@ function tasksHtml(string $value): string
         }
 
         // تم التوصيل وتم الارجاع
-        if ((flags.isManager || flags.isProduction || flags.isDriver) && ['completed', 'with_delegate', 'with_driver'].indexOf(newStatus) !== -1) {
+        // المدير والسائق: يشمل with_shipping_company / عمال الإنتاج: لا يشمل with_shipping_company
+        var canDeliverReturn = false;
+        if (flags.isManager || flags.isDriver) {
+            canDeliverReturn = ['completed', 'with_delegate', 'with_driver', 'with_shipping_company'].indexOf(newStatus) !== -1;
+        } else if (flags.isProduction) {
+            canDeliverReturn = ['completed', 'with_delegate', 'with_driver'].indexOf(newStatus) !== -1;
+        }
+        if (canDeliverReturn) {
             items += '<li><button type="button" class="dropdown-item" onclick="submitTaskAction(\'deliver_task\', ' + taskId + ')"><i class="bi bi-truck me-2"></i>تم التوصيل</button></li>';
             items += '<li><button type="button" class="dropdown-item" onclick="submitTaskAction(\'return_task\', ' + taskId + ')"><i class="bi bi-arrow-return-left me-2"></i>تم الارجاع</button></li>';
         }
