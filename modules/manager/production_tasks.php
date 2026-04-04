@@ -4348,6 +4348,12 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                             $statusKey = $statusAliases[$statusKey];
                                         }
 
+                                        $isShippingOrder = in_array($displayType, ['telegraph', 'shipping_company'], true);
+                                        $isApprovedForShipping = in_array((int)($task['id'] ?? 0), $approvedTaskIds, true);
+                                        if (($rawStatusKey === '' || !isset($statusStyles[$statusKey])) && $isShippingOrder && $isApprovedForShipping) {
+                                            $statusKey = 'with_shipping_company';
+                                        }
+
                                         $statusMeta = $statusStyles[$statusKey] ?? [
                                             'class' => 'secondary',
                                             'label' => ($rawStatusKey !== '' ? $rawStatusKey : 'غير معروفة')
