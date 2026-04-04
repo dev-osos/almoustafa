@@ -137,6 +137,21 @@ if (!function_exists('enforceTasksRetentionLimit')) {
     }
 }
 
+if (!function_exists('managerEnsureTasksStatusEnum')) {
+    function managerEnsureTasksStatusEnum($db): void
+    {
+        try {
+            $statusCol = $db->queryOne("SHOW COLUMNS FROM tasks LIKE 'status'");
+            $statusType = (string) ($statusCol['Type'] ?? '');
+            if ($statusType !== '' && stripos($statusType, 'with_shipping_company') === false) {
+                $db->execute("ALTER TABLE tasks MODIFY COLUMN status ENUM('pending','received','in_progress','completed','with_delegate','with_driver','with_shipping_company','delivered','returned','cancelled') DEFAULT 'pending'");
+            }
+        } catch (Throwable $e) {
+            error_log('managerEnsureTasksStatusEnum error: ' . $e->getMessage());
+        }
+    }
+}
+
 requireRole(['manager', 'accountant', 'developer']);
 
 $db = db();
@@ -355,6 +370,7 @@ $hasStatusChangedBy = false;
 $columns = array_column($db->query("SHOW COLUMNS FROM tasks") ?: [], 'Field');
 $columnsMap = array_flip($columns);
 $hasStatusChangedBy = isset($columnsMap['status_changed_by']);
+managerEnsureTasksStatusEnum($db);
 
 if (empty($_SESSION['_pt_migrations_done'])) {
     try {
@@ -2677,8 +2693,10 @@ $recentTasks = [];
 $statusStyles = [
     'pending' => ['class' => 'warning', 'label' => 'معلقة'],
     'received' => ['class' => 'info', 'label' => 'مستلمة'],
+    'in_progress' => ['class' => 'primary', 'label' => 'قيد التنفيذ'],
     'completed' => ['class' => 'success', 'label' => 'مكتملة'],
     'with_delegate' => ['class' => 'info', 'label' => 'مع المندوب'],
+    'with_driver' => ['class' => 'primary', 'label' => 'مع السائق'],
     'with_shipping_company' => ['class' => 'warning', 'label' => 'مع شركة الشحن'],
     'delivered' => ['class' => 'success', 'label' => 'تم التوصيل'],
     'returned' => ['class' => 'secondary', 'label' => 'تم الارجاع'],
@@ -8491,4 +8509,3 @@ document.addEventListener('click', function (e) {
     }
 })();
 </script>
-

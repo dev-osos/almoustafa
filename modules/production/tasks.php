@@ -162,6 +162,23 @@ if (!function_exists('tasksSafeString')) {
     }
 }
 
+if (!function_exists('tasksEnsureStatusEnum')) {
+    function tasksEnsureStatusEnum($db): void
+    {
+        try {
+            $statusCol = $db->queryOne("SHOW COLUMNS FROM tasks LIKE 'status'");
+            $statusType = (string) ($statusCol['Type'] ?? '');
+            if ($statusType !== '' && stripos($statusType, 'with_shipping_company') === false) {
+                $db->execute("ALTER TABLE tasks MODIFY COLUMN status ENUM('pending','received','in_progress','completed','with_delegate','with_driver','with_shipping_company','delivered','returned','cancelled') DEFAULT 'pending'");
+            }
+        } catch (Throwable $e) {
+            error_log('tasksEnsureStatusEnum error: ' . $e->getMessage());
+        }
+    }
+}
+
+tasksEnsureStatusEnum($db);
+
 if (!function_exists('tasksSafeJsonEncode')) {
     function tasksSafeJsonEncode($data): string
     {
