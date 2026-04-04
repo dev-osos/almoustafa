@@ -244,8 +244,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     exit;
 }
 
-// جلب الموظفين النشطين
-$employees = $db->query("SELECT id, full_name, role FROM users WHERE status = 'active' ORDER BY role ASC, full_name ASC") ?: [];
+// جلب الموظفين النشطين الذين لديهم سعر ساعة أكبر من صفر فقط
+$employees = $db->query("SELECT id, full_name, role FROM users WHERE status = 'active' AND COALESCE(hourly_rate, 0) > 0 ORDER BY role ASC, full_name ASC") ?: [];
 
 ?>
 
