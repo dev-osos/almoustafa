@@ -3115,7 +3115,7 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
 
 <?php if ($canProduceFromTemplates): ?>
 <div class="modal fade" id="templateProductionModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
         <form class="modal-content" method="POST">
             <input type="hidden" name="action" value="produce_from_template">
             <input type="hidden" name="template_production_token" value="<?php echo htmlspecialchars($_SESSION['template_production_token'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
@@ -3127,7 +3127,7 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="إغلاق"></button>
             </div>
 
-            <div class="modal-body">
+            <div class="modal-body" style="max-height: 78vh; overflow-y: auto;">
                 <div class="mb-3">
                     <label class="form-label">اسم القالب</label>
                     <input type="text" class="form-control" id="templateProductionTemplateNameDisplay" readonly>
@@ -3322,7 +3322,7 @@ window.renderTemplateProductionComponents = function(details) {
         wrapper.className = 'col-12 col-md-6';
 
         const card = document.createElement('div');
-        card.className = 'border rounded-3 p-3 bg-light';
+        card.className = 'border rounded-3 p-3 bg-light h-100';
 
         const title = document.createElement('div');
         title.className = 'fw-semibold mb-1';
