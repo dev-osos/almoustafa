@@ -1621,7 +1621,7 @@ $salesMonthEnd   = date('Y-m-t', mktime(0, 0, 0, $salesMonthMonth, 1, $salesMont
 
 $monthlySalesAmount = 0.0;
 try {
-    // 1. من local_invoices (عمود date)
+    // 1. من local_invoices (فواتير النظام — تضيف دين للعميل)
     $liExists = $db->queryOne("SHOW TABLES LIKE 'local_invoices'");
     if (!empty($liExists)) {
         $liHasDate = !empty($db->queryOne("SHOW COLUMNS FROM local_invoices LIKE 'date'"));
@@ -1630,21 +1630,24 @@ try {
             "SELECT COALESCE(SUM(total_amount), 0) AS ms
              FROM local_invoices
              WHERE $liDateCol >= ? AND $liDateCol <= ?",
-            [$salesMonthStart, $salesMonthEnd . ' 23:59:59']
+            [$salesMonthStart, $salesMonthEnd]
         );
         $monthlySalesAmount += (float)($liRes['ms'] ?? 0);
     }
-    // 2. من local_customer_paper_invoices (عمود created_at)
-    $piExists = $db->queryOne("SHOW TABLES LIKE 'local_customer_paper_invoices'");
-    if (!empty($piExists)) {
-        $piRes = $db->queryOne(
+    // 2. من customer_task_purchases (أوردرات الإنتاج المعتمدة — تضيف دين للعميل)
+    $ctpExists = $db->queryOne("SHOW TABLES LIKE 'customer_task_purchases'");
+    if (!empty($ctpExists)) {
+        $ctpHasDate = !empty($db->queryOne("SHOW COLUMNS FROM customer_task_purchases LIKE 'task_date'"));
+        $ctpDateCol = $ctpHasDate ? 'task_date' : 'created_at';
+        $ctpRes = $db->queryOne(
             "SELECT COALESCE(SUM(total_amount), 0) AS ms
-             FROM local_customer_paper_invoices
-             WHERE created_at >= ? AND created_at <= ?",
-            [$salesMonthStart, $salesMonthEnd . ' 23:59:59']
+             FROM customer_task_purchases
+             WHERE $ctpDateCol >= ? AND $ctpDateCol <= ?",
+            [$salesMonthStart, $salesMonthEnd]
         );
-        $monthlySalesAmount += (float)($piRes['ms'] ?? 0);
+        $monthlySalesAmount += (float)($ctpRes['ms'] ?? 0);
     }
+    // ملاحظة: local_customer_paper_invoices هي رصيد دائن (تخفيض دين) وليست مبيعات — لا تُضاف هنا
 } catch (Throwable $monthlySalesErr) {
     error_log('Monthly sales calc error: ' . $monthlySalesErr->getMessage());
 }
