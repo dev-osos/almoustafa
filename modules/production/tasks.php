@@ -55,7 +55,17 @@ if (empty($_SESSION['_prod_tasks_migrations_done'])) {
         if (isset($columnsMap['status'])) {
             $statusCol = $db->queryOne("SHOW COLUMNS FROM tasks LIKE 'status'");
             if (!empty($statusCol['Type']) && stripos((string)$statusCol['Type'], 'with_shipping_company') === false) {
-                $db->execute("ALTER TABLE tasks MODIFY COLUMN status ENUM('pending','received','in_progress','completed','with_delegate','with_driver','with_shipping_company','delivered','returned','cancelled') DEFAULT 'pending'");
+                try {
+                    $db->execute("ALTER TABLE tasks MODIFY COLUMN status ENUM('pending','received','in_progress','completed','with_delegate','with_driver','with_shipping_company','delivered','returned','cancelled') DEFAULT 'pending'");
+                } catch (Throwable $enumErr) {
+                    // إذا فشل ENUM، نحول لـ VARCHAR لضمان قبول أي قيمة
+                    error_log('tasks status ENUM alter failed, trying VARCHAR: ' . $enumErr->getMessage());
+                    try {
+                        $db->execute("ALTER TABLE tasks MODIFY COLUMN status VARCHAR(50) NOT NULL DEFAULT 'pending'");
+                    } catch (Throwable $varErr) {
+                        error_log('tasks status VARCHAR alter also failed: ' . $varErr->getMessage());
+                    }
+                }
             }
         }
         // إنشاء جدول driver_assignments إذا لم يكن موجوداً
@@ -169,7 +179,16 @@ if (!function_exists('tasksEnsureStatusEnum')) {
             $statusCol = $db->queryOne("SHOW COLUMNS FROM tasks LIKE 'status'");
             $statusType = (string) ($statusCol['Type'] ?? '');
             if ($statusType !== '' && stripos($statusType, 'with_shipping_company') === false) {
-                $db->execute("ALTER TABLE tasks MODIFY COLUMN status ENUM('pending','received','in_progress','completed','with_delegate','with_driver','with_shipping_company','delivered','returned','cancelled') DEFAULT 'pending'");
+                try {
+                    $db->execute("ALTER TABLE tasks MODIFY COLUMN status ENUM('pending','received','in_progress','completed','with_delegate','with_driver','with_shipping_company','delivered','returned','cancelled') DEFAULT 'pending'");
+                } catch (Throwable $enumErr) {
+                    error_log('tasksEnsureStatusEnum ENUM alter failed, trying VARCHAR: ' . $enumErr->getMessage());
+                    try {
+                        $db->execute("ALTER TABLE tasks MODIFY COLUMN status VARCHAR(50) NOT NULL DEFAULT 'pending'");
+                    } catch (Throwable $varErr) {
+                        error_log('tasksEnsureStatusEnum VARCHAR alter also failed: ' . $varErr->getMessage());
+                    }
+                }
             }
         } catch (Throwable $e) {
             error_log('tasksEnsureStatusEnum error: ' . $e->getMessage());
@@ -1870,6 +1889,7 @@ function tasksHtml(string $value): string
                                 $statusLabel = [
                                     'pending' => 'معلقة',
                                     'received' => 'مستلمة',
+                                    'in_progress' => 'قيد التنفيذ',
                                     'completed' => 'مكتملة',
                                     'with_delegate' => 'مع المندوب',
                                     'with_driver' => 'مع السائق',
@@ -2710,6 +2730,8 @@ if ($filterTaskId !== '' && !empty($tasks) && count($tasks) === 1) {
 
     const statusLabelMap = {
         'pending': 'معلقة',
+        'received': 'مستلمة',
+        'in_progress': 'قيد التنفيذ',
         'completed': 'مكتملة',
         'with_delegate': 'مع المندوب',
         'with_driver': 'مع السائق',
