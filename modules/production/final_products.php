@@ -3114,6 +3114,13 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
 </div>
 
 <?php if ($canProduceFromTemplates): ?>
+<style>
+@media (max-width: 767.98px) {
+    #templateProductionComponentsContainer .template-production-component-row > div {
+        grid-template-columns: 1fr !important;
+    }
+}
+</style>
 <div class="modal fade" id="templateProductionModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
         <form class="modal-content" method="POST">
@@ -3152,7 +3159,7 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
                         <small class="text-muted" id="templateProductionComponentsHint">يتم اختيار المورد الافتراضي تلقائياً إذا كان متاحاً.</small>
                     </div>
                     <div id="templateProductionComponentsFeedback" class="mb-2"></div>
-                    <div id="templateProductionComponentsContainer" class="row g-2"></div>
+                    <div id="templateProductionComponentsContainer" class="d-flex flex-column gap-2"></div>
                 </div>
             </div>
 
@@ -3319,24 +3326,35 @@ window.renderTemplateProductionComponents = function(details) {
         const isPackaging = String(component.type || '').toLowerCase() === 'packaging' || componentKey.startsWith('pack_');
         const suppliersList = window.getSuppliersForTemplateProductionComponent(component);
         const wrapper = document.createElement('div');
-        wrapper.className = 'col-12 col-md-6';
+        wrapper.className = 'template-production-component-row';
 
         const card = document.createElement('div');
-        card.className = 'border rounded-3 bg-light h-100';
-        card.style.padding = '0.75rem';
-        card.style.lineHeight = '1.25';
+        card.className = 'border rounded-3 bg-light';
+        card.style.padding = '0.65rem 0.75rem';
+        card.style.lineHeight = '1.2';
+        card.style.display = 'grid';
+        card.style.gridTemplateColumns = 'minmax(0, 1.15fr) minmax(260px, 0.85fr)';
+        card.style.gap = '0.75rem';
+        card.style.alignItems = 'center';
+
+        const infoColumn = document.createElement('div');
+        infoColumn.style.minWidth = '0';
 
         const title = document.createElement('div');
         title.className = 'fw-semibold mb-1';
-        title.style.fontSize = '0.92rem';
+        title.style.fontSize = '0.88rem';
         title.textContent = component.name || component.label || 'مكوّن';
-        card.appendChild(title);
+        infoColumn.appendChild(title);
 
         const description = document.createElement('div');
-        description.className = 'text-muted mb-2';
-        description.style.fontSize = '0.76rem';
+        description.className = 'text-muted';
+        description.style.fontSize = '0.72rem';
         description.textContent = component.description || '';
-        card.appendChild(description);
+        infoColumn.appendChild(description);
+        card.appendChild(infoColumn);
+
+        const controlsColumn = document.createElement('div');
+        controlsColumn.style.minWidth = '0';
 
         const kindInput = document.createElement('input');
         kindInput.type = 'hidden';
@@ -3377,15 +3395,15 @@ window.renderTemplateProductionComponents = function(details) {
 
         const supplierLabel = document.createElement('label');
         supplierLabel.className = 'form-label mb-1';
-        supplierLabel.style.fontSize = '0.78rem';
+        supplierLabel.style.fontSize = '0.72rem';
         supplierLabel.textContent = isPackaging ? 'مورد أداة التعبئة' : 'مورد الخامة';
-        card.appendChild(supplierLabel);
+        controlsColumn.appendChild(supplierLabel);
 
         const supplierSelect = document.createElement('select');
         supplierSelect.className = 'form-select form-select-sm mb-2';
-        supplierSelect.style.fontSize = '0.82rem';
-        supplierSelect.style.paddingTop = '0.35rem';
-        supplierSelect.style.paddingBottom = '0.35rem';
+        supplierSelect.style.fontSize = '0.78rem';
+        supplierSelect.style.paddingTop = '0.28rem';
+        supplierSelect.style.paddingBottom = '0.28rem';
         supplierSelect.name = `component_usage[${componentKey}][supplier_id]`;
         supplierSelect.required = true;
 
@@ -3408,31 +3426,31 @@ window.renderTemplateProductionComponents = function(details) {
             supplierSelect.value = String(suppliersList[0].id || '');
         }
 
-        card.appendChild(supplierSelect);
+        controlsColumn.appendChild(supplierSelect);
 
         if (!suppliersList.length) {
             const noSupplierText = document.createElement('div');
             noSupplierText.className = 'text-danger small';
-            noSupplierText.style.fontSize = '0.72rem';
+            noSupplierText.style.fontSize = '0.68rem';
             noSupplierText.textContent = 'لا يوجد مورد مناسب متاح لهذا المكوّن حالياً.';
-            card.appendChild(noSupplierText);
+            controlsColumn.appendChild(noSupplierText);
         }
 
         if (['honey_raw', 'honey_filtered', 'honey_general', 'honey_main'].includes(String(component.type || '').toLowerCase())) {
             const honeyLabel = document.createElement('label');
             honeyLabel.className = 'form-label mt-2 mb-1';
-            honeyLabel.style.fontSize = '0.78rem';
+            honeyLabel.style.fontSize = '0.72rem';
             honeyLabel.textContent = 'نوع العسل';
-            card.appendChild(honeyLabel);
+            controlsColumn.appendChild(honeyLabel);
 
             const honeySelect = document.createElement('select');
             honeySelect.className = 'form-select form-select-sm';
-            honeySelect.style.fontSize = '0.82rem';
-            honeySelect.style.paddingTop = '0.35rem';
-            honeySelect.style.paddingBottom = '0.35rem';
+            honeySelect.style.fontSize = '0.78rem';
+            honeySelect.style.paddingTop = '0.28rem';
+            honeySelect.style.paddingBottom = '0.28rem';
             honeySelect.name = `component_usage[${componentKey}][honey_variety]`;
             honeySelect.required = true;
-            card.appendChild(honeySelect);
+            controlsColumn.appendChild(honeySelect);
 
             window.populateTemplateProductionHoneyVarieties(honeySelect, supplierSelect.value, component);
             supplierSelect.addEventListener('change', function() {
@@ -3440,6 +3458,7 @@ window.renderTemplateProductionComponents = function(details) {
             });
         }
 
+        card.appendChild(controlsColumn);
         wrapper.appendChild(card);
         container.appendChild(wrapper);
     });
