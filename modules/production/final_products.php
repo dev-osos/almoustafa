@@ -1375,6 +1375,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $templateId = intval($_POST['template_id'] ?? 0);
         $productionQuantity = intval($_POST['production_quantity'] ?? 0);
         $templateName = trim((string)($_POST['template_name'] ?? ''));
+        $componentUsage = $_POST['component_usage'] ?? [];
 
         if ($templateId <= 0) {
             $_SESSION[$sessionErrorKey] = 'يرجى اختيار قالب صالح للإنتاج.';
@@ -1391,7 +1392,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         try {
-            $result = batchCreationCreate($templateId, $productionQuantity);
+            $rawUsage = [];
+            $packagingUsage = [];
+
+            if (is_array($componentUsage)) {
+                foreach ($componentUsage as $componentKey => $componentRow) {
+                    if (!is_array($componentRow)) {
+                        continue;
+                    }
+
+                    $supplierId = isset($componentRow['supplier_id']) ? intval($componentRow['supplier_id']) : 0;
+                    $componentKind = trim((string)($componentRow['component_kind'] ?? 'raw'));
+                    $templateItemId = isset($componentRow['template_item_id']) ? intval($componentRow['template_item_id']) : 0;
+                    $componentName = trim((string)($componentRow['name'] ?? ''));
+                    $materialType = trim((string)($componentRow['material_type'] ?? ''));
+                    $honeyVariety = trim((string)($componentRow['honey_variety'] ?? ''));
+                    $quantityPerUnit = isset($componentRow['quantity_per_unit']) ? floatval($componentRow['quantity_per_unit']) : 0.0;
+                    $unit = trim((string)($componentRow['unit'] ?? ''));
+
+                    if ($supplierId <= 0) {
+                        continue;
+                    }
+
+                    $payload = [
+                        'template_item_id' => $templateItemId > 0 ? $templateItemId : null,
+                        'supplier_id' => $supplierId,
+                        'quantity_per_unit' => $quantityPerUnit,
+                        'unit' => $unit !== '' ? $unit : null,
+                    ];
+
+                    if ($componentKind === 'packaging') {
+                        $payload['name'] = $componentName !== '' ? $componentName : ('مادة تعبئة ' . $componentKey);
+                        $payload['packaging_name'] = $payload['name'];
+                        $packagingUsage[] = $payload;
+                    } else {
+                        $payload['material_name'] = $componentName !== '' ? $componentName : ('مادة خام ' . $componentKey);
+                        $payload['display_name'] = $payload['material_name'];
+                        $payload['material_type'] = $materialType !== '' ? $materialType : 'raw_general';
+                        if ($honeyVariety !== '') {
+                            $payload['honey_variety'] = $honeyVariety;
+                        }
+                        $rawUsage[] = $payload;
+                    }
+                }
+            }
+
+            $result = batchCreationCreate($templateId, $productionQuantity, $rawUsage, $packagingUsage);
 
             if (!empty($result['success'])) {
                 if (!empty($currentUser['id'])) {
@@ -2717,6 +2763,137 @@ if (!empty($productTemplates)) {
     }
 }
 
+// جلب الموردين النشطين لاستخدامهم في مودال الإنتاج من القالب
+$productionSuppliers = [];
+$tahiniSuppliers = [];
+$honeyStockDataForJs = [];
+
+try {
+    $suppliersTableCheck = $db->queryOne("SHOW TABLES LIKE 'suppliers'");
+    if (!empty($suppliersTableCheck)) {
+        $productionSuppliers = $db->query("SELECT id, name, type FROM suppliers WHERE status = 'active' ORDER BY name");
+    }
+
+    $tahiniStockTableCheck = $db->queryOne("SHOW TABLES LIKE 'tahini_stock'");
+    if (!empty($tahiniStockTableCheck) && !empty($suppliersTableCheck)) {
+        $tahiniSuppliers = $db->query(
+            "SELECT DISTINCT s.id, s.name, s.type
+             FROM tahini_stock ts
+             INNER JOIN suppliers s ON ts.supplier_id = s.id
+             WHERE ts.quantity > 0 AND s.status = 'active'
+             ORDER BY s.name"
+        );
+    }
+
+    $honeyVarietyTracker = [];
+    $ensureHoneySupplierBucket = static function (int $supplierId) use (&$honeyStockDataForJs, &$honeyVarietyTracker): void {
+        if (!isset($honeyStockDataForJs[$supplierId])) {
+            $honeyStockDataForJs[$supplierId] = [
+                'all' => [],
+                'honey_raw' => [],
+                'honey_filtered' => [],
+            ];
+        }
+        if (!isset($honeyVarietyTracker[$supplierId])) {
+            $honeyVarietyTracker[$supplierId] = [];
+        }
+    };
+
+    $registerHoneyVariety = static function (int $supplierId, string $variety, float $rawQty = 0.0, float $filteredQty = 0.0) use (&$ensureHoneySupplierBucket, &$honeyVarietyTracker): void {
+        if ($supplierId <= 0) {
+            return;
+        }
+
+        $ensureHoneySupplierBucket($supplierId);
+
+        $normalizedVariety = trim($variety);
+        if ($normalizedVariety === '') {
+            $normalizedVariety = 'غير محدد';
+        }
+
+        $trackerKey = function_exists('mb_strtolower')
+            ? mb_strtolower($normalizedVariety, 'UTF-8')
+            : strtolower($normalizedVariety);
+
+        if (!isset($honeyVarietyTracker[$supplierId][$trackerKey])) {
+            $honeyVarietyTracker[$supplierId][$trackerKey] = [
+                'variety' => $normalizedVariety,
+                'raw_quantity' => 0.0,
+                'filtered_quantity' => 0.0,
+            ];
+        }
+
+        $honeyVarietyTracker[$supplierId][$trackerKey]['raw_quantity'] += $rawQty;
+        $honeyVarietyTracker[$supplierId][$trackerKey]['filtered_quantity'] += $filteredQty;
+    };
+
+    $honeyStockTableCheck = $db->queryOne("SHOW TABLES LIKE 'honey_stock'");
+    if (!empty($honeyStockTableCheck)) {
+        $honeyStockRows = $db->query(
+            "SELECT supplier_id, honey_variety,
+                    COALESCE(raw_honey_quantity, 0) AS raw_quantity,
+                    COALESCE(filtered_honey_quantity, 0) AS filtered_quantity
+             FROM honey_stock"
+        );
+
+        foreach ($honeyStockRows as $row) {
+            $supplierId = (int)($row['supplier_id'] ?? 0);
+            if ($supplierId <= 0) {
+                continue;
+            }
+            $registerHoneyVariety(
+                $supplierId,
+                (string)($row['honey_variety'] ?? ''),
+                (float)($row['raw_quantity'] ?? 0),
+                (float)($row['filtered_quantity'] ?? 0)
+            );
+        }
+    }
+
+    $batchNumbersTableCheck = $db->queryOne("SHOW TABLES LIKE 'batch_numbers'");
+    if (!empty($batchNumbersTableCheck)) {
+        $batchHoneyRows = $db->query(
+            "SELECT DISTINCT honey_supplier_id AS supplier_id, honey_variety
+             FROM batch_numbers
+             WHERE honey_supplier_id IS NOT NULL
+               AND honey_supplier_id > 0
+               AND honey_variety IS NOT NULL
+               AND honey_variety <> ''"
+        );
+
+        foreach ($batchHoneyRows as $row) {
+            $supplierId = (int)($row['supplier_id'] ?? 0);
+            if ($supplierId <= 0) {
+                continue;
+            }
+            $registerHoneyVariety($supplierId, (string)($row['honey_variety'] ?? ''), 0.0, 0.0);
+        }
+    }
+
+    foreach ($honeyVarietyTracker as $supplierId => $varieties) {
+        $allEntries = array_values($varieties);
+        $rawEntries = array_values(array_filter($allEntries, static function ($entry) {
+            return (float)($entry['raw_quantity'] ?? 0) > 0;
+        }));
+        $filteredEntries = array_values(array_filter($allEntries, static function ($entry) {
+            return (float)($entry['filtered_quantity'] ?? 0) > 0;
+        }));
+
+        if (empty($rawEntries)) {
+            $rawEntries = $allEntries;
+        }
+        if (empty($filteredEntries)) {
+            $filteredEntries = $allEntries;
+        }
+
+        $honeyStockDataForJs[$supplierId]['all'] = $allEntries;
+        $honeyStockDataForJs[$supplierId]['honey_raw'] = $rawEntries;
+        $honeyStockDataForJs[$supplierId]['honey_filtered'] = $filteredEntries;
+    }
+} catch (Throwable $supplierDataException) {
+    error_log('final_products supplier data error: ' . $supplierDataException->getMessage());
+}
+
 $totalProductTemplates = count($productTemplates);
 ?>
 
@@ -2969,6 +3146,14 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
                     >
                     <div class="form-text">سيتم إنشاء تشغيلة جديدة وخصم الخامات وأدوات التعبئة المسجلة على القالب تلقائياً.</div>
                 </div>
+                <div class="mt-4">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <label class="form-label mb-0">الموردون المستخدمون في الخصم</label>
+                        <small class="text-muted" id="templateProductionComponentsHint">يتم اختيار المورد الافتراضي تلقائياً إذا كان متاحاً.</small>
+                    </div>
+                    <div id="templateProductionComponentsFeedback" class="mb-2"></div>
+                    <div id="templateProductionComponentsContainer" class="row g-3"></div>
+                </div>
             </div>
 
             <div class="modal-footer">
@@ -2984,6 +3169,269 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
 
 <?php if ($canProduceFromTemplates): ?>
 <script>
+window.productionSuppliers = <?php echo json_encode(array_map(static function ($supplier) {
+    return [
+        'id' => (int)($supplier['id'] ?? 0),
+        'name' => (string)($supplier['name'] ?? ''),
+        'type' => (string)($supplier['type'] ?? ''),
+    ];
+}, is_array($productionSuppliers) ? $productionSuppliers : []), JSON_UNESCAPED_UNICODE); ?>;
+window.tahiniSuppliers = <?php echo json_encode(array_map(static function ($supplier) {
+    return [
+        'id' => (int)($supplier['id'] ?? 0),
+        'name' => (string)($supplier['name'] ?? ''),
+        'type' => (string)($supplier['type'] ?? ''),
+    ];
+}, is_array($tahiniSuppliers) ? $tahiniSuppliers : []), JSON_UNESCAPED_UNICODE); ?>;
+window.honeyStockData = <?php echo json_encode($honeyStockDataForJs, JSON_UNESCAPED_UNICODE); ?>;
+window.templateDetailsEndpoint = <?php echo json_encode(getRelativeUrl('production.php?page=production&ajax=template_details'), JSON_UNESCAPED_UNICODE); ?>;
+
+window.getSuppliersForTemplateProductionComponent = function(component) {
+    const suppliers = Array.isArray(window.productionSuppliers) ? window.productionSuppliers : [];
+    const type = String(component?.type || '').toLowerCase();
+    const key = String(component?.key || '').toLowerCase();
+    const name = String(component?.name || component?.label || '').toLowerCase();
+
+    const filterByTypes = (allowedTypes) => suppliers.filter((supplier) => {
+        const supplierType = String(supplier?.type || '').toLowerCase();
+        return allowedTypes.some((allowedType) => supplierType === String(allowedType).toLowerCase());
+    });
+
+    if (type === 'beeswax' || key.startsWith('beeswax') || name.includes('شمع') || name.includes('beeswax') || key.includes('wax')) {
+        return filterByTypes(['beeswax']);
+    }
+    if (['honey_raw', 'honey_filtered', 'honey_general', 'honey_main'].includes(type) || name.includes('عسل') || name.includes('honey')) {
+        return filterByTypes(['honey']);
+    }
+    if (type === 'packaging' || key.startsWith('pack_') || name.includes('تعبئة') || name.includes('packaging')) {
+        return filterByTypes(['packaging']);
+    }
+    if (type === 'olive_oil' || name.includes('زيت زيتون') || name.includes('olive')) {
+        return filterByTypes(['olive_oil']);
+    }
+    if (type === 'derivatives' || name.includes('مشتق') || name.includes('derivative')) {
+        return filterByTypes(['derivatives']);
+    }
+    if (type === 'nuts' || name.includes('مكسرات') || name.includes('nuts')) {
+        return filterByTypes(['nuts']);
+    }
+    if (type === 'tahini' || name.includes('طحينة') || name.includes('tahini')) {
+        return Array.isArray(window.tahiniSuppliers) && window.tahiniSuppliers.length
+            ? window.tahiniSuppliers
+            : filterByTypes(['sesame']);
+    }
+    return [];
+};
+
+window.populateTemplateProductionHoneyVarieties = function(selectEl, supplierId, component) {
+    if (!selectEl) {
+        return;
+    }
+
+    const normalizeVariety = function(value) {
+        return value === null || value === undefined ? '' : String(value).trim();
+    };
+
+    const normalizedSupplierId = supplierId ? String(parseInt(supplierId, 10)) : '';
+    const defaultValue = normalizeVariety(component?.honey_variety || '');
+    selectEl.innerHTML = '';
+
+    const placeholderOption = document.createElement('option');
+    placeholderOption.value = '';
+    placeholderOption.textContent = normalizedSupplierId ? 'اختر نوع العسل' : 'اختر المورد أولاً';
+    placeholderOption.disabled = true;
+    placeholderOption.selected = true;
+    selectEl.appendChild(placeholderOption);
+
+    const supplierHoneyData = normalizedSupplierId && window.honeyStockData
+        ? (window.honeyStockData[normalizedSupplierId] || null)
+        : null;
+    const componentType = String(component?.type || '');
+
+    let items = [];
+    if (supplierHoneyData) {
+        if (componentType === 'honey_raw' && Array.isArray(supplierHoneyData.honey_raw)) {
+            items = supplierHoneyData.honey_raw;
+        } else if (componentType === 'honey_filtered' && Array.isArray(supplierHoneyData.honey_filtered)) {
+            items = supplierHoneyData.honey_filtered;
+        } else if (Array.isArray(supplierHoneyData.all)) {
+            items = supplierHoneyData.all;
+        }
+    }
+
+    const normalizedDefault = defaultValue.toLocaleLowerCase('ar');
+    let matched = false;
+
+    items.forEach((item) => {
+        const variety = normalizeVariety(item?.variety || 'غير محدد');
+        const option = document.createElement('option');
+        option.value = variety;
+        option.textContent = variety;
+        if (!matched && normalizedDefault && variety.toLocaleLowerCase('ar') === normalizedDefault) {
+            option.selected = true;
+            matched = true;
+            placeholderOption.selected = false;
+        }
+        selectEl.appendChild(option);
+    });
+
+    if (!items.length && defaultValue !== '') {
+        const fallbackOption = document.createElement('option');
+        fallbackOption.value = defaultValue;
+        fallbackOption.textContent = defaultValue + ' (من القالب)';
+        fallbackOption.selected = true;
+        selectEl.appendChild(fallbackOption);
+        placeholderOption.selected = false;
+    } else if (!matched && items.length === 1) {
+        selectEl.value = normalizeVariety(items[0]?.variety || 'غير محدد');
+        placeholderOption.selected = false;
+    }
+
+    selectEl.disabled = selectEl.options.length <= 1;
+};
+
+window.renderTemplateProductionComponents = function(details) {
+    const container = document.getElementById('templateProductionComponentsContainer');
+    const feedback = document.getElementById('templateProductionComponentsFeedback');
+    const hint = document.getElementById('templateProductionComponentsHint');
+
+    if (!container || !feedback || !hint) {
+        return;
+    }
+
+    container.innerHTML = '';
+    feedback.innerHTML = '';
+
+    if (!details || !details.success || !Array.isArray(details.components)) {
+        feedback.innerHTML = '<div class="alert alert-danger mb-0">تعذّر تحميل مكوّنات القالب.</div>';
+        return;
+    }
+
+    if (!details.components.length) {
+        feedback.innerHTML = '<div class="alert alert-warning mb-0">هذا القالب لا يحتوي على خامات أو أدوات تعبئة قابلة للخصم.</div>';
+        return;
+    }
+
+    hint.textContent = details.hint || 'اختر المورد الذي سيتم الخصم من مخزونه لكل مكوّن.';
+
+    details.components.forEach((component, index) => {
+        const componentKey = String(component.key || ('component_' + index));
+        const isPackaging = String(component.type || '').toLowerCase() === 'packaging' || componentKey.startsWith('pack_');
+        const suppliersList = window.getSuppliersForTemplateProductionComponent(component);
+        const wrapper = document.createElement('div');
+        wrapper.className = 'col-12';
+
+        const card = document.createElement('div');
+        card.className = 'border rounded-3 p-3 bg-light';
+
+        const title = document.createElement('div');
+        title.className = 'fw-semibold mb-1';
+        title.textContent = component.name || component.label || 'مكوّن';
+        card.appendChild(title);
+
+        const description = document.createElement('div');
+        description.className = 'text-muted small mb-3';
+        description.textContent = component.description || '';
+        card.appendChild(description);
+
+        const kindInput = document.createElement('input');
+        kindInput.type = 'hidden';
+        kindInput.name = `component_usage[${componentKey}][component_kind]`;
+        kindInput.value = isPackaging ? 'packaging' : 'raw';
+        card.appendChild(kindInput);
+
+        const templateItemIdInput = document.createElement('input');
+        templateItemIdInput.type = 'hidden';
+        templateItemIdInput.name = `component_usage[${componentKey}][template_item_id]`;
+        const rawIdMatch = componentKey.match(/_(\d+)$/);
+        templateItemIdInput.value = rawIdMatch ? rawIdMatch[1] : '';
+        card.appendChild(templateItemIdInput);
+
+        const nameInput = document.createElement('input');
+        nameInput.type = 'hidden';
+        nameInput.name = `component_usage[${componentKey}][name]`;
+        nameInput.value = component.name || component.label || '';
+        card.appendChild(nameInput);
+
+        const materialTypeInput = document.createElement('input');
+        materialTypeInput.type = 'hidden';
+        materialTypeInput.name = `component_usage[${componentKey}][material_type]`;
+        materialTypeInput.value = component.type || (isPackaging ? 'packaging' : 'raw_general');
+        card.appendChild(materialTypeInput);
+
+        const quantityPerUnitInput = document.createElement('input');
+        quantityPerUnitInput.type = 'hidden';
+        quantityPerUnitInput.name = `component_usage[${componentKey}][quantity_per_unit]`;
+        quantityPerUnitInput.value = component.quantity_per_unit || '';
+        card.appendChild(quantityPerUnitInput);
+
+        const unitInput = document.createElement('input');
+        unitInput.type = 'hidden';
+        unitInput.name = `component_usage[${componentKey}][unit]`;
+        unitInput.value = component.unit || component.unit_label || '';
+        card.appendChild(unitInput);
+
+        const supplierLabel = document.createElement('label');
+        supplierLabel.className = 'form-label';
+        supplierLabel.textContent = isPackaging ? 'مورد أداة التعبئة' : 'مورد الخامة';
+        card.appendChild(supplierLabel);
+
+        const supplierSelect = document.createElement('select');
+        supplierSelect.className = 'form-select form-select-sm mb-2';
+        supplierSelect.name = `component_usage[${componentKey}][supplier_id]`;
+        supplierSelect.required = true;
+
+        const placeholderOption = document.createElement('option');
+        placeholderOption.value = '';
+        placeholderOption.textContent = 'اختر المورد';
+        supplierSelect.appendChild(placeholderOption);
+
+        suppliersList.forEach((supplier) => {
+            const option = document.createElement('option');
+            option.value = String(supplier.id || '');
+            option.textContent = supplier.name || ('مورد #' + supplier.id);
+            if (component.default_supplier && parseInt(component.default_supplier, 10) === parseInt(supplier.id, 10)) {
+                option.selected = true;
+            }
+            supplierSelect.appendChild(option);
+        });
+
+        if (!component.default_supplier && suppliersList.length === 1) {
+            supplierSelect.value = String(suppliersList[0].id || '');
+        }
+
+        card.appendChild(supplierSelect);
+
+        if (!suppliersList.length) {
+            const noSupplierText = document.createElement('div');
+            noSupplierText.className = 'text-danger small';
+            noSupplierText.textContent = 'لا يوجد مورد مناسب متاح لهذا المكوّن حالياً.';
+            card.appendChild(noSupplierText);
+        }
+
+        if (['honey_raw', 'honey_filtered', 'honey_general', 'honey_main'].includes(String(component.type || '').toLowerCase())) {
+            const honeyLabel = document.createElement('label');
+            honeyLabel.className = 'form-label mt-2';
+            honeyLabel.textContent = 'نوع العسل';
+            card.appendChild(honeyLabel);
+
+            const honeySelect = document.createElement('select');
+            honeySelect.className = 'form-select form-select-sm';
+            honeySelect.name = `component_usage[${componentKey}][honey_variety]`;
+            honeySelect.required = true;
+            card.appendChild(honeySelect);
+
+            window.populateTemplateProductionHoneyVarieties(honeySelect, supplierSelect.value, component);
+            supplierSelect.addEventListener('change', function() {
+                window.populateTemplateProductionHoneyVarieties(honeySelect, this.value, component);
+            });
+        }
+
+        wrapper.appendChild(card);
+        container.appendChild(wrapper);
+    });
+};
+
 window.openTemplateProductionModal = function(trigger) {
     const button = trigger && trigger.nodeType === 1 ? trigger : null;
     if (!button) {
@@ -2994,6 +3442,8 @@ window.openTemplateProductionModal = function(trigger) {
     const templateNameInput = document.getElementById('templateProductionTemplateNameInput');
     const templateNameDisplay = document.getElementById('templateProductionTemplateNameDisplay');
     const templateProductionQuantityInput = document.getElementById('templateProductionQuantity');
+    const feedback = document.getElementById('templateProductionComponentsFeedback');
+    const container = document.getElementById('templateProductionComponentsContainer');
 
     const templateId = button.getAttribute('data-template-id') || '';
     const templateName = button.getAttribute('data-template-name') || 'غير محدد';
@@ -3014,6 +3464,29 @@ window.openTemplateProductionModal = function(trigger) {
             templateProductionQuantityInput.select();
         }, 150);
     }
+
+    if (feedback) {
+        feedback.innerHTML = '<div class="alert alert-info mb-0">جارٍ تحميل الموردين والمكوّنات...</div>';
+    }
+    if (container) {
+        container.innerHTML = '';
+    }
+
+    if (!templateId || !window.templateDetailsEndpoint) {
+        return;
+    }
+
+    const requestUrl = `${window.templateDetailsEndpoint}&template_id=${encodeURIComponent(templateId)}`;
+    fetch(requestUrl, { credentials: 'same-origin' })
+        .then((response) => response.json())
+        .then((data) => {
+            window.renderTemplateProductionComponents(data);
+        })
+        .catch((error) => {
+            if (feedback) {
+                feedback.innerHTML = `<div class="alert alert-danger mb-0">تعذّر تحميل المكوّنات: ${error.message}</div>`;
+            }
+        });
 };
 </script>
 <?php endif; ?>
@@ -4215,6 +4688,30 @@ window.openTemplateProductionModal = function(trigger) {
 (function() {
     const collapseElements = document.querySelectorAll('[id^="templateComponentsCollapse"]');
     if (!collapseElements.length) {
+        const templateProductionForm = document.querySelector('#templateProductionModal form');
+        if (templateProductionForm) {
+            templateProductionForm.addEventListener('submit', function(event) {
+                const supplierSelects = this.querySelectorAll('select[name$="[supplier_id]"]');
+                for (const select of supplierSelects) {
+                    if (!select.value) {
+                        event.preventDefault();
+                        alert('يرجى اختيار المورد المناسب لكل خامة أو أداة تعبئة قبل تنفيذ الإنتاج.');
+                        select.focus();
+                        return;
+                    }
+                }
+
+                const honeyVarietySelects = this.querySelectorAll('select[name$="[honey_variety]"]');
+                for (const select of honeyVarietySelects) {
+                    if (!select.disabled && !select.value) {
+                        event.preventDefault();
+                        alert('يرجى تحديد نوع العسل للمورد المختار.');
+                        select.focus();
+                        return;
+                    }
+                }
+            });
+        }
         return;
     }
 
@@ -4237,6 +4734,31 @@ window.openTemplateProductionModal = function(trigger) {
             }
         });
     });
+
+    const templateProductionForm = document.querySelector('#templateProductionModal form');
+    if (templateProductionForm) {
+        templateProductionForm.addEventListener('submit', function(event) {
+            const supplierSelects = this.querySelectorAll('select[name$="[supplier_id]"]');
+            for (const select of supplierSelects) {
+                if (!select.value) {
+                    event.preventDefault();
+                    alert('يرجى اختيار المورد المناسب لكل خامة أو أداة تعبئة قبل تنفيذ الإنتاج.');
+                    select.focus();
+                    return;
+                }
+            }
+
+            const honeyVarietySelects = this.querySelectorAll('select[name$="[honey_variety]"]');
+            for (const select of honeyVarietySelects) {
+                if (!select.disabled && !select.value) {
+                    event.preventDefault();
+                    alert('يرجى تحديد نوع العسل للمورد المختار.');
+                    select.focus();
+                    return;
+                }
+            }
+        });
+    }
 })();
 </script>
 
