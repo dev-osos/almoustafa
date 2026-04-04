@@ -500,7 +500,7 @@ if ($sessionError) {
         <h5><i class="bi bi-pencil-square"></i> إضافة مستلزمات جديدة</h5>
     </div>
     <div class="card-body">
-        <form method="POST" id="suppliesForm" class="supplies-container">
+        <form method="POST" id="suppliesForm" class="supplies-container" data-no-loading="true">
             <input type="hidden" name="action" value="save_supplies">
             <input type="hidden" name="items" id="itemsInput">
             
@@ -606,6 +606,38 @@ if ($sessionError) {
 <?php endif; ?>
 
 <script>
+const companySuppliesApiUrl = '<?php echo getRelativeUrl('api/company_supplies_api.php'); ?>';
+
+function showSuppliesMessage(message, type = 'success') {
+    const existingAlerts = document.querySelectorAll('.company-supplies-dynamic-alert');
+    existingAlerts.forEach((alert) => alert.remove());
+
+    const wrapper = document.createElement('div');
+    wrapper.className = `alert alert-${type} company-supplies-dynamic-alert`;
+    wrapper.setAttribute('role', 'alert');
+    wrapper.innerHTML = `<i class="bi ${type === 'success' ? 'bi-check-circle' : 'bi-exclamation-circle'} me-2"></i>${message}`;
+
+    const pageHeader = document.querySelector('.page-header');
+    if (pageHeader && pageHeader.parentNode) {
+        pageHeader.parentNode.insertBefore(wrapper, pageHeader.nextSibling);
+    }
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function resetSuppliesForm() {
+    const form = document.getElementById('suppliesForm');
+    const container = document.getElementById('itemsContainer');
+    const statusSelect = document.getElementById('statusSelect');
+
+    if (form) form.reset();
+    if (statusSelect) statusSelect.value = 'pending';
+    if (container) {
+        container.innerHTML = '';
+        addItem();
+    }
+}
+
 // Toggle dropdown menu
 function toggleDropdown(id) {
     const dropdown = document.getElementById('dropdown-' + id);
@@ -727,23 +759,27 @@ function handleSuppliesSubmit(e) {
 
     const formData = new FormData(form);
 
-    fetch(window.location.href, {
+    fetch(companySuppliesApiUrl, {
         method: 'POST',
         headers: {
             'X-Requested-With': 'XMLHttpRequest',
-            'Accept': 'text/html'
+            'Accept': 'application/json'
         },
-        body: formData
+        body: formData,
+        credentials: 'same-origin'
     })
-    .then(r => r.text())
-    .then(html => {
-        const main = document.querySelector('main');
-        if (main) {
-            main.innerHTML = html;
-            initializeItems();
+    .then(r => r.json())
+    .then(data => {
+        if (!data.success) {
+            throw new Error(data.message || 'حدث خطأ أثناء حفظ المستلزمات.');
         }
+
+        showSuppliesMessage(data.message || 'تم حفظ المستلزمات بنجاح.', 'success');
+        resetSuppliesForm();
     })
-    .catch(() => alert('حدث خطأ في الاتصال بالخادم.'))
+    .catch((error) => {
+        showSuppliesMessage(error.message || 'حدث خطأ في الاتصال بالخادم.', 'danger');
+    })
     .finally(() => {
         const btn = document.querySelector('#suppliesForm [type="submit"]');
         if (btn) btn.disabled = false;
