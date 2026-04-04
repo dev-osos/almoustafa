@@ -54,8 +54,8 @@ if (empty($_SESSION['_prod_tasks_migrations_done'])) {
         // توسيع عمود status ليشمل كل الحالات المطلوبة
         if (isset($columnsMap['status'])) {
             $statusCol = $db->queryOne("SHOW COLUMNS FROM tasks LIKE 'status'");
-            if (!empty($statusCol['Type']) && stripos((string)$statusCol['Type'], 'with_driver') === false) {
-                $db->execute("ALTER TABLE tasks MODIFY COLUMN status ENUM('pending','received','in_progress','completed','with_delegate','with_driver','delivered','returned','cancelled') DEFAULT 'pending'");
+            if (!empty($statusCol['Type']) && stripos((string)$statusCol['Type'], 'with_shipping_company') === false) {
+                $db->execute("ALTER TABLE tasks MODIFY COLUMN status ENUM('pending','received','in_progress','completed','with_delegate','with_driver','with_shipping_company','delivered','returned','cancelled') DEFAULT 'pending'");
             }
         }
         // إنشاء جدول driver_assignments إذا لم يكن موجوداً
@@ -826,7 +826,7 @@ function tasksHandleAction(string $action, array $input, array $context): array
             case 'change_status':
                 $taskId = isset($input['task_id']) ? (int) $input['task_id'] : 0;
                 $status = $input['status'] ?? 'pending';
-                $validStatuses = ['pending', 'received', 'in_progress', 'completed', 'with_delegate', 'with_driver', 'delivered', 'returned', 'cancelled'];
+                $validStatuses = ['pending', 'received', 'in_progress', 'completed', 'with_delegate', 'with_driver', 'with_shipping_company', 'delivered', 'returned', 'cancelled'];
 
                 if ($taskId <= 0 || !in_array($status, $validStatuses, true)) {
                     throw new RuntimeException('بيانات غير صحيحة لتحديث المهمة');
@@ -848,7 +848,7 @@ function tasksHandleAction(string $action, array $input, array $context): array
                     $values[] = $currentUser['id'];
                 }
 
-                $setParts[] = in_array($status, ['completed', 'with_delegate', 'with_driver', 'delivered', 'returned'], true) ? 'completed_at = NOW()' : 'completed_at = NULL';
+                $setParts[] = in_array($status, ['completed', 'with_delegate', 'with_driver', 'with_shipping_company', 'delivered', 'returned'], true) ? 'completed_at = NOW()' : 'completed_at = NULL';
                 $setParts[] = $status === 'received' ? 'received_at = NOW()' : 'received_at = NULL';
                 $setParts[] = $status === 'in_progress' ? 'started_at = NOW()' : 'started_at = NULL';
 
@@ -1133,14 +1133,14 @@ if ($filterSearchText !== '') {
 }
 
 if ($overdueFilter) {
-    $whereConditions[] = "t.status NOT IN ('completed','with_delegate','delivered','returned','cancelled')";
+    $whereConditions[] = "t.status NOT IN ('completed','with_delegate','with_driver','with_shipping_company','delivered','returned','cancelled')";
     $whereConditions[] = 't.due_date < CURDATE()';
 }
 
 // السائق يرى: مكتملة، مع المندوب، تم التوصيل، تم الارجاع + مع السائق (المعينة له فقط)
 // السائق لا يرى أوردرات التليجراف
 if ($isDriver) {
-    $driverAllowedStatuses = ['completed', 'with_delegate', 'with_driver', 'delivered', 'returned'];
+        $driverAllowedStatuses = ['completed', 'with_delegate', 'with_driver', 'with_shipping_company', 'delivered', 'returned'];
     if ($statusFilter === 'with_driver') {
         $whereConditions[] = "t.status = 'with_driver'";
         $whereConditions[] = "t.id IN (SELECT task_id FROM driver_assignments WHERE driver_id = ? AND status = 'accepted')";
@@ -1149,7 +1149,7 @@ if ($isDriver) {
         $whereConditions[] = 't.status = ?';
         $params[] = $statusFilter;
     } else {
-        $whereConditions[] = "(t.status IN ('completed', 'with_delegate', 'delivered', 'returned') OR (t.status = 'with_driver' AND t.id IN (SELECT task_id FROM driver_assignments WHERE driver_id = ? AND status = 'accepted')))";
+        $whereConditions[] = "(t.status IN ('completed', 'with_delegate', 'with_shipping_company', 'delivered', 'returned') OR (t.status = 'with_driver' AND t.id IN (SELECT task_id FROM driver_assignments WHERE driver_id = ? AND status = 'accepted')))";
         $params[] = $currentUser['id'];
     }
     // إخفاء أوردرات التليجراف عن السائق
@@ -2990,6 +2990,7 @@ if ($filterTaskId !== '' && !empty($tasks) && count($tasks) === 1) {
             'completed': 'مكتملة',
             'with_delegate': 'مع المندوب',
             'with_driver': 'مع السائق',
+            'with_shipping_company': 'مع شركة الشحن',
             'delivered': 'تم التوصيل',
             'returned': 'تم الارجاع',
             'cancelled': 'ملغاة'
@@ -3015,6 +3016,8 @@ if ($filterTaskId !== '' && !empty($tasks) && count($tasks) === 1) {
             : task.status === 'in_progress' ? 'primary'
             : task.status === 'completed' ? 'success'
             : task.status === 'with_delegate' ? 'info'
+            : task.status === 'with_driver' ? 'primary'
+            : task.status === 'with_shipping_company' ? 'warning'
             : task.status === 'delivered' ? 'success'
             : task.status === 'returned' ? 'secondary'
             : 'secondary';
@@ -3247,6 +3250,10 @@ if ($filterTaskId !== '' && !empty($tasks) && count($tasks) === 1) {
                 card.className = 'card text-center h-100 ' + (isActive ? 'bg-info text-white' : 'border-info');
                 number.className = (isActive ? 'text-white' : 'text-info') + ' mb-0';
                 small.className = isActive ? 'text-white-50' : 'text-muted';
+            } else if (status === 'with_shipping_company') {
+                card.className = 'card text-center h-100 ' + (isActive ? 'bg-warning text-dark' : 'border-warning');
+                number.className = (isActive ? 'text-dark' : 'text-warning') + ' mb-0';
+                small.className = isActive ? 'text-dark-50' : 'text-muted';
             } else if (status === 'with_driver' || status === 'all') {
                 card.className = 'card text-center h-100 ' + (isActive ? 'bg-primary text-white' : 'border-primary');
                 number.className = (isActive ? 'text-white' : 'text-primary') + ' mb-0';
