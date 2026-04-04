@@ -3319,7 +3319,7 @@ window.renderTemplateProductionComponents = function(details) {
         const isPackaging = String(component.type || '').toLowerCase() === 'packaging' || componentKey.startsWith('pack_');
         const suppliersList = window.getSuppliersForTemplateProductionComponent(component);
         const wrapper = document.createElement('div');
-        wrapper.className = 'col-12';
+        wrapper.className = 'col-12 col-md-6';
 
         const card = document.createElement('div');
         card.className = 'border rounded-3 p-3 bg-light';
