@@ -1814,6 +1814,14 @@ $typeColorMap = [
                                     </label>
                                 </div>
                             </div>
+                            <div class="col-12">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="generateReportCardExcludeManagementCollections" name="exclude_management_collections" value="1">
+                                    <label class="form-check-label" for="generateReportCardExcludeManagementCollections">
+                                        عدم تضمين الحركات التي يبدأ وصفها بـ "تحصيل للإدارة"
+                                    </label>
+                                </div>
+                            </div>
                             <div class="col-12 d-flex justify-content-end gap-2">
                                 <button type="submit" class="btn btn-success">
                                     <i class="bi bi-file-earmark-pdf me-1"></i>إنشاء التقرير
@@ -2319,12 +2327,16 @@ function handleReportCardSubmit(event) {
     
     const includePending = document.getElementById('generateReportCardIncludePending');
     const groupByType = document.getElementById('generateReportCardGroupByType');
+    const excludeManagementCollections = document.getElementById('generateReportCardExcludeManagementCollections');
     
     if (!includePending.checked) {
         params.delete('include_pending');
     }
     if (!groupByType.checked) {
         params.delete('group_by_type');
+    }
+    if (!excludeManagementCollections || !excludeManagementCollections.checked) {
+        params.delete('exclude_management_collections');
     }
     
     // فتح التقرير في تبويب جديد
@@ -2599,4 +2611,3 @@ if (!empty($company_cash_error)) {
 }
 ?>
 <!-- تم حذف المودالات - Cards أصبحت ثابتة دائماً ظاهرة -->
-

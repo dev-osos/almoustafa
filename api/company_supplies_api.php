@@ -40,11 +40,23 @@ if (!in_array($userRole, $allowedRoles, true)) {
 }
 
 $db = db();
-$action = $_POST['action'] ?? '';
+$requestData = $_POST;
+
+if (empty($requestData)) {
+    $rawBody = file_get_contents('php://input');
+    if (is_string($rawBody) && trim($rawBody) !== '') {
+        $decodedBody = json_decode($rawBody, true);
+        if (is_array($decodedBody)) {
+            $requestData = $decodedBody;
+        }
+    }
+}
+
+$action = $requestData['action'] ?? '';
 
 try {
     if ($action === 'save_supplies') {
-        $rawItems = $_POST['items'] ?? '[]';
+        $rawItems = $requestData['items'] ?? '[]';
         $items = json_decode((string) $rawItems, true);
 
         if (empty($items) || !is_array($items)) {
@@ -75,7 +87,7 @@ try {
             ];
         }
 
-        $status = (string) ($_POST['status'] ?? 'pending');
+        $status = (string) ($requestData['status'] ?? 'pending');
         if (!in_array($status, ['pending', 'purchased'], true)) {
             $status = 'pending';
         }
@@ -126,8 +138,8 @@ try {
         ], JSON_UNESCAPED_UNICODE);
         exit;
     } elseif ($action === 'update_status') {
-        $id = isset($_POST['id']) ? intval($_POST['id']) : 0;
-        $status = isset($_POST['status']) ? (string) $_POST['status'] : '';
+        $id = isset($requestData['id']) ? intval($requestData['id']) : 0;
+        $status = isset($requestData['status']) ? (string) $requestData['status'] : '';
         
         if ($id <= 0 || !in_array($status, ['pending', 'purchased'], true)) {
             echo json_encode(['success' => false, 'message' => 'بيانات غير صحيحة'], JSON_UNESCAPED_UNICODE);
@@ -166,7 +178,7 @@ try {
             exit;
         }
 
-        $id = isset($_POST['id']) ? intval($_POST['id']) : 0;
+        $id = isset($requestData['id']) ? intval($requestData['id']) : 0;
         if ($id <= 0) {
             echo json_encode(['success' => false, 'message' => 'بيانات غير صحيحة'], JSON_UNESCAPED_UNICODE);
             exit;
