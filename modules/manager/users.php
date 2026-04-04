@@ -393,7 +393,7 @@ $users = $db->query($sql, $params);
                         <div class="card-body">
                             <div class="d-flex justify-content-between align-items-start mb-2">
                                 <div>
-                                    <h6 class="mb-1"><?php echo htmlspecialchars($user['username']); ?></h6>
+                                    <h6 class="mb-1"><?php echo htmlspecialchars($user['username']); ?> <span class="badge bg-secondary ms-1">#<?php echo $user['id']; ?></span></h6>
                                     <small class="text-muted"><?php echo htmlspecialchars($user['full_name'] ?? '-'); ?></small>
                                 </div>
                                 <span class="badge bg-<?php 
@@ -458,6 +458,7 @@ $users = $db->query($sql, $params);
             <table class="table dashboard-table align-middle">
                 <thead>
                     <tr>
+                        <th>#</th>
                         <th>اسم المستخدم</th>
                         <th>الاسم الكامل</th>
                         <th>الدور</th>
@@ -471,11 +472,12 @@ $users = $db->query($sql, $params);
                 <tbody>
                     <?php if (empty($users)): ?>
                         <tr>
-                            <td colspan="8" class="text-center text-muted">لا توجد نتائج</td>
+                            <td colspan="9" class="text-center text-muted">لا توجد نتائج</td>
                         </tr>
                     <?php else: ?>
                         <?php foreach ($users as $user): ?>
                             <tr>
+                                <td><span class="badge bg-secondary"><?php echo $user['id']; ?></span></td>
                                 <td><?php echo htmlspecialchars($user['username']); ?></td>
                                 <td><?php echo htmlspecialchars($user['full_name'] ?? '-'); ?></td>
                                 <td>

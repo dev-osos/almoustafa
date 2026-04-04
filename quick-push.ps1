@@ -1,72 +1,72 @@
-# Script for Git Push
-# Pushes to upstream (https://github.com/dev-osos/almoustafa.git)
-# UTF-8 encoding
+# Quick Push to upstream (https://github.com/dev-osos/almoustafa.git)
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
+$env:GIT_MERGE_AUTOEDIT = "no"
 
-# Change to script directory
 $projectPath = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $projectPath
 
-Write-Host "Adding files..." -ForegroundColor Yellow
+Write-Host ""
+Write-Host "===== Quick Push =====" -ForegroundColor Cyan
 
-# Add all files
+# 1. Fetch latest from upstream
+Write-Host "[1/5] Fetching from upstream..." -ForegroundColor Yellow
+git fetch upstream main --quiet
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "  WARNING: Could not fetch. Continuing..." -ForegroundColor DarkYellow
+}
+
+# 2. Stage all changes
+Write-Host "[2/5] Staging changes..." -ForegroundColor Yellow
 git add -A
 
-# Check for changes
+# 3. Check if there is anything to commit
 $status = git status --porcelain
 if ([string]::IsNullOrWhiteSpace($status)) {
-    Write-Host "No changes to commit" -ForegroundColor Cyan
-    exit 0
-}
+    Write-Host "  No local changes to commit." -ForegroundColor Cyan
 
-# Create commit
-$msg = "Update - $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
-Write-Host "Creating commit..." -ForegroundColor Yellow
-git commit -m $msg
-
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "Error creating commit" -ForegroundColor Red
-    exit 1
-}
-
-# Fetch latest changes from remote
-Write-Host "Fetching latest changes from remote..." -ForegroundColor Yellow
-git fetch upstream main
-
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "Warning: Could not fetch from remote. Continuing with push..." -ForegroundColor Yellow
-}
-
-# Check if local branch is behind remote
-$localCommit = git rev-parse HEAD
-$remoteCommit = git rev-parse upstream/main 2>$null
-
-if ($LASTEXITCODE -eq 0 -and $localCommit -ne $remoteCommit) {
-    Write-Host "Remote has new changes. Pulling changes..." -ForegroundColor Yellow
-    git pull upstream main --no-rebase
-
+    # Still push if local is ahead of upstream
+    $ahead = git rev-list upstream/main..HEAD --count 2>$null
+    if ($ahead -gt 0) {
+        Write-Host "  Local is $ahead commit(s) ahead. Pushing..." -ForegroundColor Yellow
+    } else {
+        Write-Host "  Already up to date with upstream." -ForegroundColor Green
+        exit 0
+    }
+} else {
+    # 4. Commit
+    $msg = "Update - $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
+    Write-Host "[3/5] Committing: $msg" -ForegroundColor Yellow
+    git commit -m $msg
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "Error during pull. You may need to resolve conflicts manually." -ForegroundColor Red
-        Write-Host "Run 'git pull upstream main' manually to resolve conflicts." -ForegroundColor Yellow
+        Write-Host "  ERROR: Commit failed." -ForegroundColor Red
         exit 1
     }
-    Write-Host "Pull completed successfully!" -ForegroundColor Green
 }
 
-# Push to GitHub
-Write-Host "Pushing to GitHub (dev-osos/almoustafa)..." -ForegroundColor Yellow
-git push upstream main
+# 5. Rebase on upstream to avoid merge conflicts prompt
+Write-Host "[4/5] Rebasing on upstream/main..." -ForegroundColor Yellow
+git rebase upstream/main
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "  Rebase conflict detected. Aborting rebase..." -ForegroundColor Red
+    git rebase --abort
+    Write-Host "  Trying merge instead..." -ForegroundColor Yellow
+    git merge upstream/main --no-edit
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  ERROR: Merge failed. Resolve conflicts manually then run again." -ForegroundColor Red
+        exit 1
+    }
+}
 
+# 6. Push
+Write-Host "[5/5] Pushing to upstream (dev-osos/almoustafa)..." -ForegroundColor Yellow
+git push upstream main
 if ($LASTEXITCODE -eq 0) {
-    Write-Host "Push completed successfully!" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "  Done! Changes pushed successfully." -ForegroundColor Green
 } else {
-    Write-Host "Error during push" -ForegroundColor Red
-    Write-Host "Please check:" -ForegroundColor Yellow
-    Write-Host "1. Internet connection" -ForegroundColor Yellow
-    Write-Host "2. Authentication credentials" -ForegroundColor Yellow
-    Write-Host "3. Push permissions" -ForegroundColor Yellow
-    Write-Host "4. If conflicts exist, resolve them and try again" -ForegroundColor Yellow
+    Write-Host "  ERROR: Push failed." -ForegroundColor Red
+    Write-Host "  Try: git push upstream main --force-with-lease" -ForegroundColor DarkYellow
     exit 1
 }
