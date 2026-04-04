@@ -2374,6 +2374,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
             if (preg_match('/وصف البضاعة\s*:\s*([^\n]+)/u', $notes, $m)) {
                 $tgParcelDesc = trim($m[1]);
             }
+            
             $tgPiecesCount = 0;
             foreach ($products as $pCount) {
                 $qtyForCount = isset($pCount['quantity']) ? (float)$pCount['quantity'] : 0;
