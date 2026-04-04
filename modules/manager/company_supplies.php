@@ -98,13 +98,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     );
                     
                     $success = 'تم حفظ المستلزمات بنجاح.';
-                    addAuditLog(
+                    logAudit(
                         $currentUser['id'],
                         'company_supplies_create',
                         'company_supplies',
-                        'create',
-                        'تم حفظ مستلزمات جديدة',
-                        json_encode(['items_count' => count($items), 'status' => $status])
+                        null,
+                        null,
+                        ['message' => 'تم حفظ مستلزمات جديدة', 'items_count' => count($items), 'status' => $status]
                     );
                 }
             }
@@ -591,7 +591,15 @@ function handleSuppliesSubmit(e) {
         body: formData,
         credentials: 'same-origin'
     })
-    .then(r => r.json())
+    .then(async (r) => {
+        const text = await r.text();
+        try {
+            return JSON.parse(text);
+        } catch (parseError) {
+            console.error('Company supplies save response was not valid JSON:', text);
+            throw new Error('تعذر قراءة استجابة الخادم أثناء حفظ المستلزمات.');
+        }
+    })
     .then(data => {
         if (!data.success) {
             throw new Error(data.message || 'حدث خطأ أثناء حفظ المستلزمات.');

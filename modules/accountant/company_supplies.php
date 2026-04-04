@@ -99,13 +99,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     );
                     
                     $success = 'تم حفظ المستلزمات بنجاح.';
-                    addAuditLog(
+                    logAudit(
                         $currentUser['id'],
                         'company_supplies_create',
                         'company_supplies',
-                        'create',
-                        'تم حفظ مستلزمات جديدة',
-                        json_encode(['items_count' => count($items), 'status' => $status])
+                        null,
+                        null,
+                        ['message' => 'تم حفظ مستلزمات جديدة', 'items_count' => count($items), 'status' => $status]
                     );
                 }
             }

@@ -81,13 +81,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     [json_encode($items, JSON_UNESCAPED_UNICODE), $currentUser['id']]
                 );
 
-                addAuditLog(
+                logAudit(
                     $currentUser['id'],
                     'company_supplies_create',
                     'company_supplies',
-                    'create',
-                    'تم إنشاء مستلزمات من قبل إنتاج',
-                    json_encode(['items' => $items], JSON_UNESCAPED_UNICODE)
+                    null,
+                    null,
+                    ['message' => 'تم إنشاء مستلزمات من قبل إنتاج', 'items' => $items]
                 );
 
                 $success = 'تم تسجيل المستلزمات بنجاح.';
@@ -561,7 +561,15 @@ function handleSuppliesSubmit(e) {
         body: formData,
         credentials: 'same-origin'
     })
-    .then(r => r.json())
+    .then(async (r) => {
+        const text = await r.text();
+        try {
+            return JSON.parse(text);
+        } catch (parseError) {
+            console.error('Company supplies save response was not valid JSON:', text);
+            throw new Error('تعذر قراءة استجابة الخادم أثناء حفظ المستلزمات.');
+        }
+    })
     .then(data => {
         if (!data.success) {
             throw new Error(data.message || 'حدث خطأ أثناء حفظ المستلزمات.');

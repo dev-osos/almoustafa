@@ -121,13 +121,13 @@ try {
 
         $newId = method_exists($db, 'getLastInsertId') ? (int) $db->getLastInsertId() : 0;
 
-        addAuditLog(
+        logAudit(
             $currentUser['id'],
             'company_supplies_create',
             'company_supplies',
-            'create',
-            'تم حفظ مستلزمات جديدة',
-            json_encode(['items_count' => count($validatedItems), 'status' => $status], JSON_UNESCAPED_UNICODE)
+            $newId ?: null,
+            null,
+            ['message' => 'تم حفظ مستلزمات جديدة', 'items_count' => count($validatedItems), 'status' => $status]
         );
 
         echo json_encode([
@@ -160,13 +160,13 @@ try {
         );
         
         // تسجيل المراجعة
-        addAuditLog(
+        logAudit(
             $currentUser['id'],
             'company_supplies_update',
             'company_supplies',
-            'update',
-            'تم تحديث حالة الإيصال',
-            json_encode(['supply_id' => $id, 'status' => $status])
+            $id,
+            null,
+            ['message' => 'تم تحديث حالة الإيصال', 'status' => $status]
         );
         
         echo json_encode(['success' => true, 'message' => 'تم تحديث الحالة بنجاح'], JSON_UNESCAPED_UNICODE);
@@ -194,13 +194,13 @@ try {
         // حذف السجل
         $db->execute("DELETE FROM company_supplies WHERE id = ?", [$id]);
 
-        addAuditLog(
+        logAudit(
             $currentUser['id'],
             'company_supplies_delete',
             'company_supplies',
-            'delete',
-            'تم حذف الإيصال',
-            json_encode(['supply_id' => $id])
+            $id,
+            null,
+            ['message' => 'تم حذف الإيصال']
         );
 
         echo json_encode(['success' => true, 'message' => 'تم حذف الإيصال بنجاح'], JSON_UNESCAPED_UNICODE);
@@ -209,7 +209,7 @@ try {
         echo json_encode(['success' => false, 'message' => 'الإجراء غير معروف'], JSON_UNESCAPED_UNICODE);
         exit;
     }
-} catch (Exception $e) {
+} catch (Throwable $e) {
     error_log('Error in company_supplies_api: ' . $e->getMessage());
     http_response_code(500);
     echo json_encode(['success' => false, 'message' => 'حدث خطأ في الخادم'], JSON_UNESCAPED_UNICODE);
