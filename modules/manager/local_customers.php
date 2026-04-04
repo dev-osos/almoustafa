@@ -1609,6 +1609,58 @@ try {
 $summaryDebtorCount = $customerStats['debtor_count'] ?? 0;
 $summaryTotalDebt = (float)($customerStats['total_debt'] ?? 0.0);
 $summaryTotalCustomers = $customerStats['total_count'] ?? $totalCustomers;
+
+// --- بطاقة مبيعات الشهر ---
+$salesMonthYear  = (int)($_GET['sales_year']  ?? date('Y'));
+$salesMonthMonth = (int)($_GET['sales_month'] ?? date('n'));
+// تصحيح القيم خارج النطاق
+if ($salesMonthMonth < 1 || $salesMonthMonth > 12) { $salesMonthMonth = (int)date('n'); }
+if ($salesMonthYear  < 2000 || $salesMonthYear > 2100) { $salesMonthYear  = (int)date('Y'); }
+$salesMonthStart = sprintf('%04d-%02d-01', $salesMonthYear, $salesMonthMonth);
+$salesMonthEnd   = date('Y-m-t', mktime(0, 0, 0, $salesMonthMonth, 1, $salesMonthYear));
+
+$monthlySalesAmount = 0.0;
+try {
+    // 1. من local_invoices (عمود date)
+    $liExists = $db->queryOne("SHOW TABLES LIKE 'local_invoices'");
+    if (!empty($liExists)) {
+        $liHasDate = !empty($db->queryOne("SHOW COLUMNS FROM local_invoices LIKE 'date'"));
+        $liDateCol = $liHasDate ? 'date' : 'created_at';
+        $liRes = $db->queryOne(
+            "SELECT COALESCE(SUM(total_amount), 0) AS ms
+             FROM local_invoices
+             WHERE $liDateCol >= ? AND $liDateCol <= ?",
+            [$salesMonthStart, $salesMonthEnd . ' 23:59:59']
+        );
+        $monthlySalesAmount += (float)($liRes['ms'] ?? 0);
+    }
+    // 2. من local_customer_paper_invoices (عمود created_at)
+    $piExists = $db->queryOne("SHOW TABLES LIKE 'local_customer_paper_invoices'");
+    if (!empty($piExists)) {
+        $piRes = $db->queryOne(
+            "SELECT COALESCE(SUM(total_amount), 0) AS ms
+             FROM local_customer_paper_invoices
+             WHERE created_at >= ? AND created_at <= ?",
+            [$salesMonthStart, $salesMonthEnd . ' 23:59:59']
+        );
+        $monthlySalesAmount += (float)($piRes['ms'] ?? 0);
+    }
+} catch (Throwable $monthlySalesErr) {
+    error_log('Monthly sales calc error: ' . $monthlySalesErr->getMessage());
+}
+
+// بناء روابط التنقل بين الأشهر (يحتفظ بجميع GET params الأخرى)
+$_prevMonth = $salesMonthMonth - 1; $_prevYear = $salesMonthYear;
+if ($_prevMonth < 1) { $_prevMonth = 12; $_prevYear--; }
+$_nextMonth = $salesMonthMonth + 1; $_nextYear = $salesMonthYear;
+if ($_nextMonth > 12) { $_nextMonth = 1; $_nextYear++; }
+$_baseParams = array_diff_key($_GET, array_flip(['sales_month', 'sales_year']));
+$_prevUrl = '?' . http_build_query(array_merge($_baseParams, ['sales_month' => $_prevMonth, 'sales_year' => $_prevYear]));
+$_nextUrl = '?' . http_build_query(array_merge($_baseParams, ['sales_month' => $_nextMonth, 'sales_year' => $_nextYear]));
+$_isCurrentMonth = ($salesMonthYear == (int)date('Y') && $salesMonthMonth == (int)date('n'));
+$_nextUrl = $_isCurrentMonth ? null : $_nextUrl;
+$_arabicMonths = ['','يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+$_monthLabel = ($_arabicMonths[$salesMonthMonth] ?? $salesMonthMonth) . ' ' . $salesMonthYear;
 ?>
 
 <!-- Responsive Modals CSS - يجب أن يكون في البداية قبل أي محتوى -->
@@ -1996,6 +2048,32 @@ var dashboardWrapper = null;
                 </div>
                 <span class="text-success display-6 d-md-block d-none"><i class="bi bi-cash-coin"></i></span>
                 <span class="text-success fs-4 d-md-none"><i class="bi bi-cash-coin"></i></span>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-md-6 col-xl-3">
+        <div class="card shadow-sm border-0 h-100 border-start border-3 border-info">
+            <div class="card-body p-3">
+                <div class="d-flex align-items-center justify-content-between mb-1">
+                    <div class="text-muted small fw-semibold summary-card-label">مبيعات الشهر</div>
+                    <span class="text-info d-none d-md-block"><i class="bi bi-bar-chart-fill fs-4"></i></span>
+                </div>
+                <div class="fw-bold mb-1 summary-card-value" style="font-size:0.95rem;"><?php echo htmlspecialchars($_monthLabel); ?></div>
+                <div class="fs-5 fw-bold text-info mb-2 summary-card-value"><?php echo number_format($monthlySalesAmount, 2, '.', ',') . ' ' . getCurrencySymbol(); ?></div>
+                <div class="d-flex gap-2">
+                    <a href="<?php echo htmlspecialchars($_prevUrl); ?>" class="btn btn-outline-secondary btn-sm px-2 py-1" title="الشهر السابق">
+                        <i class="bi bi-chevron-right"></i>
+                    </a>
+                    <?php if (!$_isCurrentMonth): ?>
+                    <a href="<?php echo htmlspecialchars($_nextUrl); ?>" class="btn btn-outline-secondary btn-sm px-2 py-1" title="الشهر التالي">
+                        <i class="bi bi-chevron-left"></i>
+                    </a>
+                    <?php else: ?>
+                    <button class="btn btn-outline-secondary btn-sm px-2 py-1" disabled title="الشهر الحالي">
+                        <i class="bi bi-chevron-left"></i>
+                    </button>
+                    <?php endif; ?>
+                </div>
             </div>
         </div>
     </div>
@@ -2540,7 +2618,6 @@ function loadLocalCustomers(page) {
                             value="0"
                             oninput="updateCollectionSummary()"
                         >
-                        <div class="form-text text-warning"><i class="bi bi-tag me-1"></i>مبلغ الخصم يُحسم من رصيد العميل دون تحصيل نقدي، ويُسجل في سجل المعاملات كخصم.</div>
                     </div>
                     <div id="collectionSummaryBox" class="alert alert-info py-2 px-3 mb-3" style="display:none; font-size:0.9rem;">
                         <div class="d-flex justify-content-between"><span>مبلغ التحصيل:</span> <strong id="summaryAmount">0.00</strong></div>
@@ -2629,7 +2706,6 @@ function loadLocalCustomers(page) {
                     value="0"
                     oninput="updateCardCollectionSummary()"
                 >
-                <div class="form-text text-warning"><i class="bi bi-tag me-1"></i>مبلغ الخصم يُحسم من رصيد العميل دون تحصيل نقدي، ويُسجل في سجل المعاملات كخصم.</div>
             </div>
             <div id="cardCollectionSummaryBox" class="alert alert-info py-2 px-3 mb-3" style="display:none; font-size:0.9rem;">
                 <div class="d-flex justify-content-between"><span>مبلغ التحصيل:</span> <strong id="cardSummaryAmount">0.00</strong></div>
