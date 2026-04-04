@@ -1178,6 +1178,109 @@ foreach ($factoryProducts as $product) {
     font-style: italic;
 }
 
+/* ===== تصميم شبكة المنتجات وبطاقات القوالب ===== */
+.products-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+    padding: 20px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.product-card {
+    background: #ffffff;
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    border-radius: 14px;
+    padding: 24px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+.product-card:hover {
+    box-shadow: 0 8px 24px rgba(29, 78, 216, 0.12);
+    transform: translateY(-3px);
+    border-color: rgba(29, 78, 216, 0.2);
+}
+
+.product-status {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%);
+    color: white;
+    padding: 5px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.product-name {
+    font-size: 17px;
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 6px;
+    margin-top: 30px;
+    line-height: 1.4;
+    word-break: break-word;
+}
+
+.product-batch-id {
+    color: #64748b;
+    font-size: 13px;
+    margin-bottom: 12px;
+}
+
+.product-barcode-box {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 14px;
+    margin: 14px 0;
+    text-align: center;
+}
+
+.product-barcode-container {
+    min-height: 55px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.product-barcode-id {
+    font-size: 12px;
+    color: #94a3b8;
+    margin-top: 6px;
+    font-family: monospace;
+}
+
+.product-detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 7px 0;
+    border-bottom: 1px solid rgba(226, 232, 240, 0.5);
+    font-size: 14px;
+    color: #334155;
+}
+
+.product-detail-row:last-of-type {
+    border-bottom: none;
+}
+
+.product-detail-row span:first-child {
+    color: #64748b;
+    font-weight: 500;
+}
+
+/* ===== نهاية تصميم شبكة المنتجات ===== */
+
 @media (max-width: 768px) {
     .company-products-page {
         padding: 1rem 0;
