@@ -1,5 +1,5 @@
 # Script for Git Push
-# Pushes to origin (default: https://github.com/yson46693-droid/almostafa.git)
+# Pushes to upstream (https://github.com/dev-osos/almoustafa.git)
 # UTF-8 encoding
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -33,7 +33,7 @@ if ($LASTEXITCODE -ne 0) {
 
 # Fetch latest changes from remote
 Write-Host "Fetching latest changes from remote..." -ForegroundColor Yellow
-git fetch origin main
+git fetch upstream main
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Warning: Could not fetch from remote. Continuing with push..." -ForegroundColor Yellow
@@ -41,23 +41,23 @@ if ($LASTEXITCODE -ne 0) {
 
 # Check if local branch is behind remote
 $localCommit = git rev-parse HEAD
-$remoteCommit = git rev-parse origin/main 2>$null
+$remoteCommit = git rev-parse upstream/main 2>$null
 
 if ($LASTEXITCODE -eq 0 -and $localCommit -ne $remoteCommit) {
     Write-Host "Remote has new changes. Pulling changes..." -ForegroundColor Yellow
-    git pull origin main --no-rebase
-    
+    git pull upstream main --no-rebase
+
     if ($LASTEXITCODE -ne 0) {
         Write-Host "Error during pull. You may need to resolve conflicts manually." -ForegroundColor Red
-        Write-Host "Run 'git pull origin main' manually to resolve conflicts." -ForegroundColor Yellow
+        Write-Host "Run 'git pull upstream main' manually to resolve conflicts." -ForegroundColor Yellow
         exit 1
     }
     Write-Host "Pull completed successfully!" -ForegroundColor Green
 }
 
 # Push to GitHub
-Write-Host "Pushing to GitHub..." -ForegroundColor Yellow
-git push origin main
+Write-Host "Pushing to GitHub (dev-osos/almoustafa)..." -ForegroundColor Yellow
+git push upstream main
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "Push completed successfully!" -ForegroundColor Green
