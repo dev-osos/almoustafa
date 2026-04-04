@@ -349,7 +349,6 @@ $employees = $db->query("SELECT id, full_name, role FROM users WHERE status = 'a
 <script>
 (function() {
     const employeeDocsCanvasEl = document.getElementById('employeeDocumentsCanvas');
-    const employeeDocsCanvas = new bootstrap.Offcanvas(employeeDocsCanvasEl);
     const alertContainer = document.getElementById('employeeDocumentsAlert');
     const canManageEmployeeDocuments = <?php echo $canManageEmployeeDocuments ? 'true' : 'false'; ?>;
 
@@ -365,6 +364,66 @@ $employees = $db->query("SELECT id, full_name, role FROM users WHERE status = 'a
     const documentForm = document.getElementById('employeeDocumentForm');
     const formCard = document.getElementById('employeeDocumentFormCard');
     const documentsTableBody = document.querySelector('#employeeDocumentsTable tbody');
+    let employeeDocsCanvas = null;
+
+    function getEmployeeDocsCanvas() {
+        if (employeeDocsCanvas) {
+            return employeeDocsCanvas;
+        }
+
+        if (window.bootstrap && window.bootstrap.Offcanvas) {
+            employeeDocsCanvas = window.bootstrap.Offcanvas.getOrCreateInstance(employeeDocsCanvasEl);
+            return employeeDocsCanvas;
+        }
+
+        return null;
+    }
+
+    function showEmployeeDocsCanvas() {
+        const offcanvas = getEmployeeDocsCanvas();
+        if (offcanvas) {
+            offcanvas.show();
+            return;
+        }
+
+        employeeDocsCanvasEl.classList.add('show');
+        employeeDocsCanvasEl.style.visibility = 'visible';
+        employeeDocsCanvasEl.style.transform = 'translateY(0)';
+        employeeDocsCanvasEl.setAttribute('aria-modal', 'true');
+        employeeDocsCanvasEl.setAttribute('role', 'dialog');
+
+        let backdrop = document.getElementById('employeeDocumentsCanvasFallbackBackdrop');
+        if (!backdrop) {
+            backdrop = document.createElement('div');
+            backdrop.id = 'employeeDocumentsCanvasFallbackBackdrop';
+            backdrop.className = 'offcanvas-backdrop fade show';
+            backdrop.addEventListener('click', hideEmployeeDocsCanvas);
+            document.body.appendChild(backdrop);
+        }
+
+        document.body.classList.add('offcanvas-open');
+    }
+
+    function hideEmployeeDocsCanvas() {
+        const offcanvas = getEmployeeDocsCanvas();
+        if (offcanvas) {
+            offcanvas.hide();
+            return;
+        }
+
+        employeeDocsCanvasEl.classList.remove('show');
+        employeeDocsCanvasEl.style.visibility = '';
+        employeeDocsCanvasEl.style.transform = '';
+        employeeDocsCanvasEl.removeAttribute('aria-modal');
+        employeeDocsCanvasEl.removeAttribute('role');
+
+        const backdrop = document.getElementById('employeeDocumentsCanvasFallbackBackdrop');
+        if (backdrop) {
+            backdrop.remove();
+        }
+
+        document.body.classList.remove('offcanvas-open');
+    }
 
     function openEmployeeDocumentsCard(button, jumpToForm = false) {
         const employeeId = button.getAttribute('data-employee-id');
@@ -381,7 +440,7 @@ $employees = $db->query("SELECT id, full_name, role FROM users WHERE status = 'a
         if (docCancelEditBtn) docCancelEditBtn.classList.add('d-none');
 
         loadEmployeeDocuments(employeeId);
-        employeeDocsCanvas.show();
+        showEmployeeDocsCanvas();
 
         if (jumpToForm && canManageEmployeeDocuments && formCard) {
             setTimeout(() => {
@@ -499,6 +558,15 @@ $employees = $db->query("SELECT id, full_name, role FROM users WHERE status = 'a
             openEmployeeDocumentsCard(this, this.getAttribute('data-jump-to-form') === 'true');
         });
     });
+
+    const closeCanvasButton = employeeDocsCanvasEl.querySelector('[data-bs-dismiss="offcanvas"]');
+    if (closeCanvasButton) {
+        closeCanvasButton.addEventListener('click', function() {
+            if (!(window.bootstrap && window.bootstrap.Offcanvas)) {
+                hideEmployeeDocsCanvas();
+            }
+        });
+    }
 
     documentsTableBody.addEventListener('click', function(event) {
         const editButton = event.target.closest('.js-edit-document');
