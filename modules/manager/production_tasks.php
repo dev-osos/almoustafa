@@ -2347,31 +2347,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
                 }
             }
             $shippingFees = 0;
-            if (preg_match('/\رسوم الشحن :\s*([0-9.]+)/', $notes, $m)) {
+            if (preg_match('/رسوم الشحن\s*:\s*([0-9.]+)/u', $notes, $m)) {
                 $shippingFees = (float)$m[1];
             }
             $discount = 0;
-            if (preg_match('/\الخصم :\s*([0-9.]+)/', $notes, $m)) {
+            if (preg_match('/الخصم\s*:\s*([0-9.]+)/u', $notes, $m)) {
                 $discount = (float)$m[1];
             }
             $orderTitle = '';
-            if (preg_match('/\عنوان :\s*([^\n]+)/', $notes, $m)) {
+            if (preg_match('/عنوان\s*:\s*([^\n]+)/u', $notes, $m)) {
                 $orderTitle = trim($m[1]);
             }
             $tgGovernorate = '';
-            if (preg_match('/\المحافظة :\s*([^\n]+)/', $notes, $m)) {
+            if (preg_match('/المحافظة\s*:\s*([^\n]+)/u', $notes, $m)) {
                 $tgGovernorate = trim($m[1]);
             }
             $tgCity = '';
-            if (preg_match('/\المدينة :\s*([^\n]+)/', $notes, $m)) {
+            if (preg_match('/المدينة\s*:\s*([^\n]+)/u', $notes, $m)) {
                 $tgCity = trim($m[1]);
             }
             $tgWeight = '';
-            if (preg_match('/\الوزن :\s*([^\n]+)/', $notes, $m)) {
+            if (preg_match('/الوزن\s*:\s*([^\n]+)/u', $notes, $m)) {
                 $tgWeight = trim($m[1]);
             }
             $tgParcelDesc = '';
-            if (preg_match('/\وصف البضاعة :\s*([^\n]+)/', $notes, $m)) {
+            if (preg_match('/وصف البضاعة\s*:\s*([^\n]+)/u', $notes, $m)) {
                 $tgParcelDesc = trim($m[1]);
             }
             $tgPiecesCount = 0;
@@ -2382,7 +2382,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
                 }
             }
             $tgPiecesCount = max(1, (int)ceil($tgPiecesCount));
-            if (preg_match('/\عدد القطع :\s*([0-9.]+)/u', $notes, $m)) {
+            if (preg_match('/عدد القطع\s*:\s*([0-9.]+)/u', $notes, $m)) {
                 $tgPiecesCount = max(1, (int)ceil((float)$m[1]));
             }
             $advancePayment = 0;
@@ -2403,15 +2403,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
                 $details = preg_replace('/العمال المخصصون:[^\n]*/', '', $details);
                 $details = preg_replace('/العامل المخصص:[^\n]*/', '', $details);
                 $details = preg_replace('/المنتج:\s*[^\n]+/m', '', $details);
-                $details = preg_replace('/\رسوم الشحن :\s*[0-9.]+/', '', $details);
-                $details = preg_replace('/\الخصم :\s*[0-9.]+/', '', $details);
+                $details = preg_replace('/رسوم الشحن\s*:\s*[0-9.]+/u', '', $details);
+                $details = preg_replace('/الخصم\s*:\s*[0-9.]+/u', '', $details);
                 $details = preg_replace('/\[ADVANCE_PAYMENT\]:\s*[0-9.]+/', '', $details);
-                $details = preg_replace('/\عنوان :\s*[^\n]+/', '', $details);
-                $details = preg_replace('/\المحافظة :\s*[^\n]+/', '', $details);
-                $details = preg_replace('/\المدينة :\s*[^\n]+/', '', $details);
-                $details = preg_replace('/\الوزن :\s*[^\n]+/', '', $details);
-                $details = preg_replace('/\عدد القطع :\s*[^\n]+/u', '', $details);
-                $details = preg_replace('/\وصف البضاعة :\s*[^\n]+/', '', $details);
+                $details = preg_replace('/عنوان\s*:\s*[^\n]+/u', '', $details);
+                $details = preg_replace('/المحافظة\s*:\s*[^\n]+/u', '', $details);
+                $details = preg_replace('/المدينة\s*:\s*[^\n]+/u', '', $details);
+                $details = preg_replace('/الوزن\s*:\s*[^\n]+/u', '', $details);
+                $details = preg_replace('/عدد القطع\s*:\s*[^\n]+/u', '', $details);
+                $details = preg_replace('/وصف البضاعة\s*:\s*[^\n]+/u', '', $details);
                 $details = preg_replace('/\n\s*\n\s*\n+/', "\n\n", trim($details));
             }
             // تنسيق تاريخ الاستحقاق لـ input type="date" (YYYY-MM-DD)
