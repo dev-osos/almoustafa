@@ -295,6 +295,33 @@ $employees = $db->query("SELECT id, full_name, role FROM users WHERE status = 'a
     </div>
 </div>
 
+<style>
+@media (min-width: 768px) {
+    #employeeDocumentsCanvas {
+        width: 80vw !important;
+        max-width: 80vw;
+        height: 80vh !important;
+        max-height: 80vh !important;
+        margin: auto;
+        left: 50%;
+        right: auto;
+        bottom: 2vh;
+        transform: translateX(-50%) translateY(100%);
+        border-radius: 1rem;
+    }
+
+    #employeeDocumentsCanvas.show {
+        transform: translateX(-50%) translateY(0);
+    }
+}
+
+@media (max-width: 767.98px) {
+    #employeeDocumentsCanvas {
+        max-height: 80vh !important;
+    }
+}
+</style>
+
 <!-- بطاقة المستندات -->
 <div class="offcanvas offcanvas-bottom rounded-top" tabindex="-1" id="employeeDocumentsCanvas" aria-labelledby="employeeDocumentsCanvasLabel" style="max-height: 80vh;">
     <div class="offcanvas-header">
