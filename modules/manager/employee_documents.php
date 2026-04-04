@@ -121,7 +121,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
 
     if (!empty($docs)) {
         foreach ($docs as &$doc) {
-            $doc['file_url'] = !empty($doc['file_path']) ? getRelativeUrl(ltrim((string) $doc['file_path'], '/')) : '';
+            $doc['file_url'] = !empty($doc['id']) ? getRelativeUrl('api/view_employee_document.php?id=' . (int) $doc['id']) : '';
         }
         unset($doc);
     }
@@ -375,7 +375,7 @@ $employees = $db->query("SELECT id, full_name, role FROM users WHERE status = 'a
             <div class="card" id="employeeDocumentFormCard">
                 <div class="card-header">إضافة / تعديل مستند</div>
                 <div class="card-body">
-                    <form id="employeeDocumentForm"> 
+                    <form id="employeeDocumentForm" data-no-loading="true"> 
                         <input type="hidden" id="docAction" name="action" value="upload_document">
                         <input type="hidden" id="docId" name="document_id" value="0">
                         <input type="hidden" id="formEmployeeId" name="employee_id" value="0">
@@ -686,6 +686,9 @@ $employees = $db->query("SELECT id, full_name, role FROM users WHERE status = 'a
         documentForm.addEventListener('submit', function(event) {
             event.preventDefault();
             clearAlert();
+            if (typeof window.resetPageLoading === 'function') {
+                window.resetPageLoading();
+            }
 
             const activeEmployeeId = formEmployeeId.value;
             if (!activeEmployeeId) {
@@ -724,7 +727,12 @@ $employees = $db->query("SELECT id, full_name, role FROM users WHERE status = 'a
                         showAlert(data.message || 'فشل في العملية.', 'danger');
                     }
                 })
-                .catch(err => { console.error(err); showAlert(err.message || 'حدث خطأ غير متوقع.', 'danger'); });
+                .catch(err => { console.error(err); showAlert(err.message || 'حدث خطأ غير متوقع.', 'danger'); })
+                .finally(() => {
+                    if (typeof window.resetPageLoading === 'function') {
+                        window.resetPageLoading();
+                    }
+                });
         });
     }
 })();
