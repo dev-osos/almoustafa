@@ -4307,24 +4307,51 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                     </td>
                                     <td>
                                         <?php
-                                        $statusKey = trim((string) ($task['status'] ?? ''));
+                                        $rawStatusKey = trim((string) ($task['status'] ?? ''));
+                                        $statusKey = strtolower($rawStatusKey);
+                                        $statusKey = preg_replace('/[\s\-]+/', '_', $statusKey);
+                                        $statusKey = trim((string) $statusKey, '_');
+
                                         $statusAliases = [
+                                            'مع_شركة_الشحن' => 'with_shipping_company',
                                             'مع شركة الشحن' => 'with_shipping_company',
+                                            'with_shipping_company' => 'with_shipping_company',
+                                            'with_shipping_company.' => 'with_shipping_company',
+                                            'with_shipping_company,' => 'with_shipping_company',
+                                            'with_shipping_company_' => 'with_shipping_company',
+                                            'with_shipping_company__' => 'with_shipping_company',
+                                            'with_shipping_company___' => 'with_shipping_company',
+                                            'with_shipping_company____' => 'with_shipping_company',
+                                            'with_shipping_company_____' => 'with_shipping_company',
+                                            'with_shipping_company______' => 'with_shipping_company',
+                                            'with_shipping_company_______' => 'with_shipping_company',
                                             'with shipping company' => 'with_shipping_company',
+                                            'مع_المندوب' => 'with_delegate',
                                             'مع المندوب' => 'with_delegate',
+                                            'مع_السائق' => 'with_driver',
                                             'مع السائق' => 'with_driver',
                                             'معلقة' => 'pending',
                                             'مستلمة' => 'received',
+                                            'قيد_التنفيذ' => 'in_progress',
                                             'قيد التنفيذ' => 'in_progress',
                                             'مكتملة' => 'completed',
+                                            'تم_التوصيل' => 'delivered',
                                             'تم التوصيل' => 'delivered',
+                                            'تم_الارجاع' => 'returned',
                                             'تم الارجاع' => 'returned',
                                             'ملغاة' => 'cancelled',
                                         ];
-                                        if (isset($statusAliases[$statusKey])) {
+
+                                        if (isset($statusAliases[$rawStatusKey])) {
+                                            $statusKey = $statusAliases[$rawStatusKey];
+                                        } elseif (isset($statusAliases[$statusKey])) {
                                             $statusKey = $statusAliases[$statusKey];
                                         }
-                                        $statusMeta = $statusStyles[$statusKey] ?? ['class' => 'secondary', 'label' => 'غير معروفة'];
+
+                                        $statusMeta = $statusStyles[$statusKey] ?? [
+                                            'class' => 'secondary',
+                                            'label' => ($rawStatusKey !== '' ? $rawStatusKey : 'غير معروفة')
+                                        ];
                                         ?>
                                         <span class="badge bg-<?php echo htmlspecialchars($statusMeta['class']); ?>">
                                             <?php echo htmlspecialchars($statusMeta['label']); ?>

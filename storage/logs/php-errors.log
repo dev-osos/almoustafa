@@ -19,3 +19,5 @@
 [04-Apr-2026 11:20:42 Africa/Cairo] Database connection error: MySQL connection error: No such file or directory
 [04-Apr-2026 11:20:42 Africa/Cairo] Connection details - Host: localhost, Port: 3306, Database: u486977009_almostafa_v2, User: u486977009_almostafax
 [04-Apr-2026 13:12:25 Africa/Cairo] requireLogin() FAILED: User attempted to access protected page without valid session | Script: Standard input code | IsProtectedPage: false
+[04-Apr-2026 14:14:36 Africa/Cairo] Database connection error: MySQL connection error: No such file or directory
+[04-Apr-2026 14:14:36 Africa/Cairo] Connection details - Host: localhost, Port: 3306, Database: u486977009_almostafa_v2, User: u486977009_almostafax
