@@ -8,6 +8,10 @@ if (!defined('ACCESS_ALLOWED')) {
     die('Direct access not allowed');
 }
 
+if (ob_get_level() === 0) {
+    ob_start();
+}
+
 // تعطيل الكاش لضمان العرض السليم بعد التحديث
 if (!headers_sent()) {
     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0, private');
@@ -60,6 +64,16 @@ function safeText($value) {
     return trim((string) strip_tags($value));
 }
 
+function sendEmployeeDocumentsJson(array $payload) {
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 function uploadEmployeeFile($employeeId, $fieldName = 'file') {
     global $uploadBaseDir;
 
@@ -98,24 +112,18 @@ function uploadEmployeeFile($employeeId, $fieldName = 'file') {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['action'] === 'get_employee_docs' && isset($_GET['employee_id'])) {
-    header('Content-Type: application/json; charset=utf-8');
     $employeeId = (int) ($_GET['employee_id'] ?? 0);
     if ($employeeId <= 0) {
-        echo json_encode(['success' => false, 'message' => 'معرف الموظف غير صالح']);
-        exit;
+        sendEmployeeDocumentsJson(['success' => false, 'message' => 'معرف الموظف غير صالح']);
     }
 
     $docs = $db->query("SELECT ed.*, u.full_name AS uploaded_by_name FROM employee_documents ed LEFT JOIN users u ON ed.uploaded_by = u.id WHERE ed.employee_id = ? ORDER BY ed.created_at DESC", [$employeeId]);
 
-    echo json_encode(['success' => true, 'documents' => $docs ?: []], JSON_UNESCAPED_UNICODE);
-    exit;
+    sendEmployeeDocumentsJson(['success' => true, 'documents' => $docs ?: []]);
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     $isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
-    if ($isAjax) {
-        header('Content-Type: application/json; charset=utf-8');
-    }
 
     $action = $_POST['action'];
     $result = ['success' => false, 'message' => 'حدث خطأ غير معروف'];
@@ -129,7 +137,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $docName = safeText($_POST['name'] ?? '');
 
                 if ($employeeId <= 0 || $docName === '') {
-                $result['message'] = 'يجب اختيار الموظف وكتابة اسم المستند.';
+                    $result['message'] = 'يجب اختيار الموظف وكتابة اسم المستند.';
                 } else {
                     $emp = $db->queryOne("SELECT id FROM users WHERE id = ? AND status = 'active'", [$employeeId]);
                     if (!$emp) {
@@ -166,8 +174,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                             list($ok, $uploadData) = uploadEmployeeFile($doc['employee_id'], 'file');
                             if (!$ok) {
                                 $result['message'] = $uploadData;
-                                echo json_encode($result, JSON_UNESCAPED_UNICODE);
-                                exit;
+                                sendEmployeeDocumentsJson($result);
                             }
                             // حذف الملف القديم إن وجد
                             if (!empty($doc['file_path'])) {
@@ -179,8 +186,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                             $db->execute("UPDATE employee_documents SET name = ?, original_filename = ?, file_path = ?, updated_at = NOW() WHERE id = ?", [$docName, $uploadData['original'], $uploadData['relative'], $documentId]);
                             logAudit($currentUser['id'], 'update_employee_document_file', 'employee_documents', $documentId, null, ['employee_id' => $doc['employee_id']]);
                             $result = ['success' => true, 'message' => 'تم تحديث المستند بنجاح'];
-                            echo json_encode($result, JSON_UNESCAPED_UNICODE);
-                            exit;
+                            sendEmployeeDocumentsJson($result);
                         }
 
                         $db->execute("UPDATE employee_documents SET name = ? WHERE id = ?", $params);
@@ -222,8 +228,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     }
 
     if ($isAjax) {
-        echo json_encode($result, JSON_UNESCAPED_UNICODE);
-        exit;
+        sendEmployeeDocumentsJson($result);
     }
 
     // إذا لم يكن AJAX، لا شيء
@@ -458,14 +463,42 @@ $employees = $db->query("SELECT id, full_name, role FROM users WHERE status = 'a
 
     function clearAlert() { alertContainer.innerHTML = ''; }
 
+    function parseJsonResponse(response) {
+        return response.text().then((text) => {
+            let data = null;
+
+            try {
+                data = text ? JSON.parse(text) : null;
+            } catch (error) {
+                data = null;
+            }
+
+            if (!response.ok) {
+                const message = (data && data.message) ? data.message : (text || 'تعذر إتمام الطلب.');
+                throw new Error(message);
+            }
+
+            if (!data) {
+                throw new Error(text || 'استجابة غير صالحة من الخادم.');
+            }
+
+            return data;
+        });
+    }
+
     function loadEmployeeDocuments(employeeId) {
         clearAlert();
         documentsTableBody.innerHTML = '<tr><td colspan="6" class="text-center">جاري التحميل...</td></tr>';
 
         fetch('?page=employee_documents&action=get_employee_docs&employee_id=' + encodeURIComponent(employeeId), {
-            method: 'GET', credentials: 'same-origin'
+            method: 'GET',
+            credentials: 'same-origin',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json'
+            }
         })
-        .then(response => response.json())
+        .then(parseJsonResponse)
         .then(data => {
             if (!data.success) {
                 showAlert(data.message || 'تعذر تحميل المستندات.', 'danger');
@@ -504,7 +537,7 @@ $employees = $db->query("SELECT id, full_name, role FROM users WHERE status = 'a
         })
         .catch(err => {
             console.error(err);
-            showAlert('حدث خطأ غير متوقع أثناء جلب المستندات.', 'danger');
+            showAlert(err.message || 'حدث خطأ غير متوقع أثناء جلب المستندات.', 'danger');
             documentsTableBody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">فشل التحميل</td></tr>';
         });
     }
@@ -540,8 +573,16 @@ $employees = $db->query("SELECT id, full_name, role FROM users WHERE status = 'a
         formData.append('action', 'delete_document');
         formData.append('document_id', documentId);
 
-        fetch('?page=employee_documents', { method: 'POST', body: formData, credentials: 'same-origin' })
-            .then(res => res.json())
+        fetch('?page=employee_documents', {
+            method: 'POST',
+            body: formData,
+            credentials: 'same-origin',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json'
+            }
+        })
+            .then(parseJsonResponse)
             .then(data => {
                 if (data.success) {
                     showAlert(data.message, 'success');
@@ -550,7 +591,7 @@ $employees = $db->query("SELECT id, full_name, role FROM users WHERE status = 'a
                     showAlert(data.message || 'فشل حذف المستند', 'danger');
                 }
             })
-            .catch(err => { console.error(err); showAlert('حدث خطأ غير متوقع.', 'danger'); });
+            .catch(err => { console.error(err); showAlert(err.message || 'حدث خطأ غير متوقع.', 'danger'); });
     }
 
     document.querySelectorAll('.js-open-employee-docs').forEach((button) => {
@@ -610,8 +651,16 @@ $employees = $db->query("SELECT id, full_name, role FROM users WHERE status = 'a
             }
 
             const formData = new FormData(this);
-            fetch('?page=employee_documents', { method: 'POST', body: formData, credentials: 'same-origin' })
-                .then(res => res.json())
+            fetch('?page=employee_documents', {
+                method: 'POST',
+                body: formData,
+                credentials: 'same-origin',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                }
+            })
+                .then(parseJsonResponse)
                 .then(data => {
                     if (data.success) {
                         showAlert(data.message, 'success');
@@ -626,7 +675,7 @@ $employees = $db->query("SELECT id, full_name, role FROM users WHERE status = 'a
                         showAlert(data.message || 'فشل في العملية.', 'danger');
                     }
                 })
-                .catch(err => { console.error(err); showAlert('حدث خطأ غير متوقع.', 'danger'); });
+                .catch(err => { console.error(err); showAlert(err.message || 'حدث خطأ غير متوقع.', 'danger'); });
         });
     }
 })();
