@@ -144,7 +144,17 @@ if (!function_exists('managerEnsureTasksStatusEnum')) {
             $statusCol = $db->queryOne("SHOW COLUMNS FROM tasks LIKE 'status'");
             $statusType = (string) ($statusCol['Type'] ?? '');
             if ($statusType !== '' && stripos($statusType, 'with_shipping_company') === false) {
-                $db->execute("ALTER TABLE tasks MODIFY COLUMN status ENUM('pending','received','in_progress','completed','with_delegate','with_driver','with_shipping_company','delivered','returned','cancelled') DEFAULT 'pending'");
+                try {
+                    $db->execute("ALTER TABLE tasks MODIFY COLUMN status ENUM('pending','received','in_progress','completed','with_delegate','with_driver','with_shipping_company','delivered','returned','cancelled') DEFAULT 'pending'");
+                } catch (Throwable $enumError) {
+                    // إذا فشل تعديل ENUM (قد تكون صلاحيات غير كافية)، نحول العمود إلى VARCHAR
+                    error_log('managerEnsureTasksStatusEnum ENUM alter failed, trying VARCHAR: ' . $enumError->getMessage());
+                    try {
+                        $db->execute("ALTER TABLE tasks MODIFY COLUMN status VARCHAR(50) NOT NULL DEFAULT 'pending'");
+                    } catch (Throwable $varcharError) {
+                        error_log('managerEnsureTasksStatusEnum VARCHAR alter also failed: ' . $varcharError->getMessage());
+                    }
+                }
             }
         } catch (Throwable $e) {
             error_log('managerEnsureTasksStatusEnum error: ' . $e->getMessage());
@@ -1742,6 +1752,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $updateValues[] = $taskId;
                 
                 $db->execute($sql, $updateValues);
+
+                // التحقق من أن الحالة خُزِّنت فعلاً (قد لا يدعم ENUM القيمة)
+                $verifyTask = $db->queryOne("SELECT status FROM tasks WHERE id = ?", [$taskId]);
+                if (($verifyTask['status'] ?? '') !== $newStatus) {
+                    throw new Exception('تعذر تطبيق الحالة الجديدة. يرجى تحديث قاعدة البيانات عبر تشغيل migration أو التواصل مع الدعم الفني.');
+                }
 
                 logAudit(
                     $currentUser['id'],

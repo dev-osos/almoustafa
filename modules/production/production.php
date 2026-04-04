@@ -6628,6 +6628,7 @@ $lang = isset($translations) ? $translations : [];
         <h5 class="mb-0"><i class="bi bi-file-earmark-text me-2"></i>قوالب المنتجات - إنشاء إنتاج من قالب</h5>
         
     </div>
+    
     <?php if (!empty($templates)): ?>
     <?php
     $materialIconMap = [

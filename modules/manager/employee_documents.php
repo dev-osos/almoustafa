@@ -25,6 +25,7 @@ requireRole(['manager', 'accountant', 'developer']);
 
 $currentUser = getCurrentUser();
 $currentUserRole = strtolower($currentUser['role'] ?? '');
+$canManageEmployeeDocuments = ($currentUserRole === 'manager');
 $db = db();
 
 // إنشاء الجدول إذا لم يكن موجودًا
@@ -121,68 +122,75 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
     try {
         if ($action === 'upload_document') {
-            $employeeId = isset($_POST['employee_id']) ? (int) $_POST['employee_id'] : 0;
-            $docName = safeText($_POST['name'] ?? '');
-
-            if ($employeeId <= 0 || $docName === '') {
-                $result['message'] = 'يجب اختيار الموظف وكتابة اسم المستند.';
+            if (!$canManageEmployeeDocuments) {
+                $result['message'] = 'ليس لديك صلاحية إرفاق مستندات الموظفين.';
             } else {
-                $emp = $db->queryOne("SELECT id FROM users WHERE id = ? AND status = 'active'", [$employeeId]);
-                if (!$emp) {
-                    $result['message'] = 'الموظف غير موجود.';
+                $employeeId = isset($_POST['employee_id']) ? (int) $_POST['employee_id'] : 0;
+                $docName = safeText($_POST['name'] ?? '');
+
+                if ($employeeId <= 0 || $docName === '') {
+                $result['message'] = 'يجب اختيار الموظف وكتابة اسم المستند.';
                 } else {
-                    list($ok, $uploadData) = uploadEmployeeFile($employeeId, 'file');
-                    if (!$ok) {
-                        $result['message'] = $uploadData;
+                    $emp = $db->queryOne("SELECT id FROM users WHERE id = ? AND status = 'active'", [$employeeId]);
+                    if (!$emp) {
+                        $result['message'] = 'الموظف غير موجود.';
                     } else {
-                        $db->execute("INSERT INTO employee_documents (employee_id, name, original_filename, file_path, uploaded_by) VALUES (?, ?, ?, ?, ?)", [$employeeId, $docName, $uploadData['original'], $uploadData['relative'], $currentUser['id']]);
-                        logAudit($currentUser['id'], 'upload_employee_document', 'employee_documents', $db->getLastInsertId(), null, ['employee_id' => $employeeId, 'name' => $docName]);
-                        $result = ['success' => true, 'message' => 'تم رفع المستند بنجاح'];
+                        list($ok, $uploadData) = uploadEmployeeFile($employeeId, 'file');
+                        if (!$ok) {
+                            $result['message'] = $uploadData;
+                        } else {
+                            $db->execute("INSERT INTO employee_documents (employee_id, name, original_filename, file_path, uploaded_by) VALUES (?, ?, ?, ?, ?)", [$employeeId, $docName, $uploadData['original'], $uploadData['relative'], $currentUser['id']]);
+                            logAudit($currentUser['id'], 'upload_employee_document', 'employee_documents', $db->getLastInsertId(), null, ['employee_id' => $employeeId, 'name' => $docName]);
+                            $result = ['success' => true, 'message' => 'تم رفع المستند بنجاح'];
+                        }
                     }
                 }
             }
         } elseif ($action === 'update_document') {
-            $documentId = isset($_POST['document_id']) ? (int) $_POST['document_id'] : 0;
-            $docName = safeText($_POST['name'] ?? '');
-
-            if ($documentId <= 0 || $docName === '') {
-                $result['message'] = 'يجب اختيار المستند وادخال الاسم.';
+            if (!$canManageEmployeeDocuments) {
+                $result['message'] = 'ليس لديك صلاحية تعديل مستندات الموظفين.';
             } else {
-                $doc = $db->queryOne("SELECT * FROM employee_documents WHERE id = ?", [$documentId]);
-                if (!$doc) {
-                    $result['message'] = 'المستند غير موجود.';
-                } else {
-                    $updateFields = ['name' => $docName];
-                    $params = [$docName, $documentId];
+                $documentId = isset($_POST['document_id']) ? (int) $_POST['document_id'] : 0;
+                $docName = safeText($_POST['name'] ?? '');
 
-                    if (!empty($_FILES['file']) && $_FILES['file']['error'] !== UPLOAD_ERR_NO_FILE) {
-                        list($ok, $uploadData) = uploadEmployeeFile($doc['employee_id'], 'file');
-                        if (!$ok) {
-                            $result['message'] = $uploadData;
+                if ($documentId <= 0 || $docName === '') {
+                    $result['message'] = 'يجب اختيار المستند وادخال الاسم.';
+                } else {
+                    $doc = $db->queryOne("SELECT * FROM employee_documents WHERE id = ?", [$documentId]);
+                    if (!$doc) {
+                        $result['message'] = 'المستند غير موجود.';
+                    } else {
+                        $params = [$docName, $documentId];
+
+                        if (!empty($_FILES['file']) && $_FILES['file']['error'] !== UPLOAD_ERR_NO_FILE) {
+                            list($ok, $uploadData) = uploadEmployeeFile($doc['employee_id'], 'file');
+                            if (!$ok) {
+                                $result['message'] = $uploadData;
+                                echo json_encode($result, JSON_UNESCAPED_UNICODE);
+                                exit;
+                            }
+                            // حذف الملف القديم إن وجد
+                            if (!empty($doc['file_path'])) {
+                                $oldPath = __DIR__ . '/../../' . str_replace('/', DIRECTORY_SEPARATOR, $doc['file_path']);
+                                if (file_exists($oldPath)) {
+                                    @unlink($oldPath);
+                                }
+                            }
+                            $db->execute("UPDATE employee_documents SET name = ?, original_filename = ?, file_path = ?, updated_at = NOW() WHERE id = ?", [$docName, $uploadData['original'], $uploadData['relative'], $documentId]);
+                            logAudit($currentUser['id'], 'update_employee_document_file', 'employee_documents', $documentId, null, ['employee_id' => $doc['employee_id']]);
+                            $result = ['success' => true, 'message' => 'تم تحديث المستند بنجاح'];
                             echo json_encode($result, JSON_UNESCAPED_UNICODE);
                             exit;
                         }
-                        // حذف الملف القديم إن وجد
-                        if (!empty($doc['file_path'])) {
-                            $oldPath = __DIR__ . '/../../' . str_replace('/', DIRECTORY_SEPARATOR, $doc['file_path']);
-                            if (file_exists($oldPath)) {
-                                @unlink($oldPath);
-                            }
-                        }
-                        $db->execute("UPDATE employee_documents SET name = ?, original_filename = ?, file_path = ?, updated_at = NOW() WHERE id = ?", [$docName, $uploadData['original'], $uploadData['relative'], $documentId]);
-                        logAudit($currentUser['id'], 'update_employee_document_file', 'employee_documents', $documentId, null, ['employee_id' => $doc['employee_id']]);
-                        $result = ['success' => true, 'message' => 'تم تحديث المستند بنجاح'];
-                        echo json_encode($result, JSON_UNESCAPED_UNICODE);
-                        exit;
-                    }
 
-                    $db->execute("UPDATE employee_documents SET name = ? WHERE id = ?", $params);
-                    logAudit($currentUser['id'], 'update_employee_document', 'employee_documents', $documentId, null, ['employee_id' => $doc['employee_id']]);
-                    $result = ['success' => true, 'message' => 'تم تحديث اسم المستند بنجاح'];
+                        $db->execute("UPDATE employee_documents SET name = ? WHERE id = ?", $params);
+                        logAudit($currentUser['id'], 'update_employee_document', 'employee_documents', $documentId, null, ['employee_id' => $doc['employee_id']]);
+                        $result = ['success' => true, 'message' => 'تم تحديث اسم المستند بنجاح'];
+                    }
                 }
             }
         } elseif ($action === 'delete_document') {
-            if ($currentUserRole !== 'manager') {
+            if (!$canManageEmployeeDocuments) {
                 $result['message'] = 'ليس لديك صلاحية حذف المستندات.';
             } else {
                 $documentId = isset($_POST['document_id']) ? (int) $_POST['document_id'] : 0;
@@ -232,7 +240,7 @@ $employees = $db->query("SELECT id, full_name, role FROM users WHERE status = 'a
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h2><i class="bi bi-file-earmark-text me-2"></i>مستندات الموظفين</h2>
-        <span class="text-muted">يمكن لكل موظف إرفاق مستندات. الحذف للمدير فقط.</span>
+        <span class="text-muted"><?php echo $canManageEmployeeDocuments ? 'يمكنك إرفاق وتعديل وحذف المستندات لكل موظف.' : 'يمكنك استعراض مستندات الموظفين، بينما الإرفاق والتعديل والحذف متاحان للمدير فقط.'; ?></span>
     </div>
 
     <div class="card shadow-sm">
@@ -266,6 +274,11 @@ $employees = $db->query("SELECT id, full_name, role FROM users WHERE status = 'a
                                         <button type="button" class="btn btn-sm btn-outline-primary" data-employee-id="<?php echo (int) $emp['id']; ?>" data-employee-name="<?php echo htmlspecialchars($emp['full_name'], ENT_QUOTES); ?>" onclick="openEmployeeDocumentsCard(this)">
                                             <i class="bi bi-folder2-open"></i> عرض المستندات
                                         </button>
+                                        <?php if ($canManageEmployeeDocuments): ?>
+                                            <button type="button" class="btn btn-sm btn-primary mt-1 mt-md-0" data-employee-id="<?php echo (int) $emp['id']; ?>" data-employee-name="<?php echo htmlspecialchars($emp['full_name'], ENT_QUOTES); ?>" onclick="openEmployeeDocumentsCard(this, true)">
+                                                <i class="bi bi-paperclip"></i> إرفاق مستند
+                                            </button>
+                                        <?php endif; ?>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
@@ -305,27 +318,31 @@ $employees = $db->query("SELECT id, full_name, role FROM users WHERE status = 'a
             </table>
         </div>
 
-        <div class="card">
-            <div class="card-header">إضافة / تعديل مستند</div>
-            <div class="card-body">
-                <form id="employeeDocumentForm"> 
-                    <input type="hidden" id="docAction" name="action" value="upload_document">
-                    <input type="hidden" id="docId" name="document_id" value="0">
-                    <input type="hidden" id="formEmployeeId" name="employee_id" value="0">
+        <?php if ($canManageEmployeeDocuments): ?>
+            <div class="card" id="employeeDocumentFormCard">
+                <div class="card-header">إضافة / تعديل مستند</div>
+                <div class="card-body">
+                    <form id="employeeDocumentForm"> 
+                        <input type="hidden" id="docAction" name="action" value="upload_document">
+                        <input type="hidden" id="docId" name="document_id" value="0">
+                        <input type="hidden" id="formEmployeeId" name="employee_id" value="0">
 
-                    <div class="mb-3">
-                        <label class="form-label">اسم المستند <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="docName" name="name" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">الملف <span class="text-muted">(اختياري عند التعديل)</span></label>
-                        <input type="file" class="form-control" id="docFile" name="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.webp,.txt,.csv">
-                    </div>
-                    <button type="submit" class="btn btn-primary" id="docSubmitBtn">رفع المستند</button>
-                    <button type="button" class="btn btn-secondary d-none" id="docCancelEditBtn">إلغاء التعديل</button>
-                </form>
+                        <div class="mb-3">
+                            <label class="form-label">اسم المستند <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="docName" name="name" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">الملف <span class="text-muted">(اختياري عند التعديل)</span></label>
+                            <input type="file" class="form-control" id="docFile" name="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.webp,.txt,.csv">
+                        </div>
+                        <button type="submit" class="btn btn-primary" id="docSubmitBtn">رفع المستند</button>
+                        <button type="button" class="btn btn-secondary d-none" id="docCancelEditBtn">إلغاء التعديل</button>
+                    </form>
+                </div>
             </div>
-        </div>
+        <?php else: ?>
+            <div class="alert alert-info mb-0">الإرفاق والتعديل والحذف متاحون للمدير فقط.</div>
+        <?php endif; ?>
     </div>
 </div>
 
@@ -334,6 +351,7 @@ $employees = $db->query("SELECT id, full_name, role FROM users WHERE status = 'a
     const employeeDocsCanvasEl = document.getElementById('employeeDocumentsCanvas');
     const employeeDocsCanvas = new bootstrap.Offcanvas(employeeDocsCanvasEl);
     const alertContainer = document.getElementById('employeeDocumentsAlert');
+    const canManageEmployeeDocuments = <?php echo $canManageEmployeeDocuments ? 'true' : 'false'; ?>;
 
     const empIdInput = document.getElementById('empDocsEmployeeId');
     const empNameSpan = document.getElementById('empDocsEmployeeName');
@@ -344,24 +362,35 @@ $employees = $db->query("SELECT id, full_name, role FROM users WHERE status = 'a
     const docFileInput = document.getElementById('docFile');
     const docSubmitBtn = document.getElementById('docSubmitBtn');
     const docCancelEditBtn = document.getElementById('docCancelEditBtn');
+    const documentForm = document.getElementById('employeeDocumentForm');
+    const formCard = document.getElementById('employeeDocumentFormCard');
     const documentsTableBody = document.querySelector('#employeeDocumentsTable tbody');
 
-    window.openEmployeeDocumentsCard = (button) => {
+    window.openEmployeeDocumentsCard = (button, jumpToForm = false) => {
         const employeeId = button.getAttribute('data-employee-id');
         const employeeName = button.getAttribute('data-employee-name');
 
         empIdInput.value = employeeId;
         empNameSpan.textContent = employeeName;
-        formEmployeeId.value = employeeId;
-        docAction.value = 'upload_document';
-        docIdInput.value = '0';
-        docNameInput.value = '';
-        docFileInput.value = '';
-        docSubmitBtn.textContent = 'رفع المستند';
-        docCancelEditBtn.classList.add('d-none');
+        if (formEmployeeId) formEmployeeId.value = employeeId;
+        if (docAction) docAction.value = 'upload_document';
+        if (docIdInput) docIdInput.value = '0';
+        if (docNameInput) docNameInput.value = '';
+        if (docFileInput) docFileInput.value = '';
+        if (docSubmitBtn) docSubmitBtn.textContent = 'رفع المستند';
+        if (docCancelEditBtn) docCancelEditBtn.classList.add('d-none');
 
         loadEmployeeDocuments(employeeId);
         employeeDocsCanvas.show();
+
+        if (jumpToForm && canManageEmployeeDocuments && formCard) {
+            setTimeout(() => {
+                formCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                if (docNameInput) {
+                    docNameInput.focus();
+                }
+            }, 250);
+        }
     };
 
     function showAlert(message, type = 'success') {
@@ -404,10 +433,11 @@ $employees = $db->query("SELECT id, full_name, role FROM users WHERE status = 'a
                     `<td>${createdAt}</td>\n` +
                     `<td>${uploadedBy}</td>\n` +
                     '<td>' +
-                    `<button type="button" class="btn btn-sm btn-outline-secondary me-1" data-doc-id="${doc.id}" data-doc-name="${doc.name.replace(/"/g, '&quot;')}" onclick="startEditDocument(this)"><i class="bi bi-pencil"></i> تعديل</button>` +
-                    `<?php if ($currentUserRole === 'manager'): ?>` +
-                    `<button type="button" class="btn btn-sm btn-outline-danger" data-doc-id="${doc.id}" onclick="deleteDocument(${doc.id})"><i class="bi bi-trash"></i> حذف</button>` +
-                    `<?php endif; ?>` +
+                    (canManageEmployeeDocuments
+                        ? `<button type="button" class="btn btn-sm btn-outline-secondary me-1" data-doc-id="${doc.id}" data-doc-name="${(doc.name || '').replace(/"/g, '&quot;')}" onclick="startEditDocument(this)"><i class="bi bi-pencil"></i> تعديل</button>` +
+                          `<button type="button" class="btn btn-sm btn-outline-danger" data-doc-id="${doc.id}" onclick="deleteDocument(${doc.id})"><i class="bi bi-trash"></i> حذف</button>`
+                        : '-'
+                    ) +
                     '</td>';
 
                 documentsTableBody.appendChild(row);
@@ -421,6 +451,11 @@ $employees = $db->query("SELECT id, full_name, role FROM users WHERE status = 'a
     }
 
     window.startEditDocument = function(button) {
+        if (!canManageEmployeeDocuments) {
+            showAlert('ليس لديك صلاحية تعديل المستندات.', 'danger');
+            return;
+        }
+
         const docId = button.getAttribute('data-doc-id');
         const docName = button.getAttribute('data-doc-name');
 
@@ -433,6 +468,11 @@ $employees = $db->query("SELECT id, full_name, role FROM users WHERE status = 'a
     };
 
     window.deleteDocument = function(documentId) {
+        if (!canManageEmployeeDocuments) {
+            showAlert('ليس لديك صلاحية حذف المستندات.', 'danger');
+            return;
+        }
+
         if (!confirm('هل أنت متأكد من حذف هذا المستند؟')) {
             return;
         }
@@ -454,49 +494,53 @@ $employees = $db->query("SELECT id, full_name, role FROM users WHERE status = 'a
             .catch(err => { console.error(err); showAlert('حدث خطأ غير متوقع.', 'danger'); });
     };
 
-    docCancelEditBtn.addEventListener('click', function() {
-        docAction.value = 'upload_document';
-        docIdInput.value = '0';
-        docNameInput.value = '';
-        docFileInput.value = '';
-        docSubmitBtn.textContent = 'رفع المستند';
-        docCancelEditBtn.classList.add('d-none');
-    });
+    if (docCancelEditBtn) {
+        docCancelEditBtn.addEventListener('click', function() {
+            docAction.value = 'upload_document';
+            docIdInput.value = '0';
+            docNameInput.value = '';
+            docFileInput.value = '';
+            docSubmitBtn.textContent = 'رفع المستند';
+            docCancelEditBtn.classList.add('d-none');
+        });
+    }
 
-    document.getElementById('employeeDocumentForm').addEventListener('submit', function(event) {
-        event.preventDefault();
-        clearAlert();
+    if (documentForm) {
+        documentForm.addEventListener('submit', function(event) {
+            event.preventDefault();
+            clearAlert();
 
-        const activeEmployeeId = formEmployeeId.value;
-        if (!activeEmployeeId) {
-            showAlert('يرجى اختيار موظف أولاً.', 'danger');
-            return;
-        }
+            const activeEmployeeId = formEmployeeId.value;
+            if (!activeEmployeeId) {
+                showAlert('يرجى اختيار موظف أولاً.', 'danger');
+                return;
+            }
 
-        const nameVal = docNameInput.value.trim();
-        if (!nameVal) {
-            showAlert('يرجى إدخال اسم المستند.', 'danger');
-            return;
-        }
+            const nameVal = docNameInput.value.trim();
+            if (!nameVal) {
+                showAlert('يرجى إدخال اسم المستند.', 'danger');
+                return;
+            }
 
-        const formData = new FormData(this);
-        fetch('?page=employee_documents', { method: 'POST', body: formData, credentials: 'same-origin' })
-            .then(res => res.json())
-            .then(data => {
-                if (data.success) {
-                    showAlert(data.message, 'success');
-                    docAction.value = 'upload_document';
-                    docIdInput.value = '0';
-                    docNameInput.value = '';
-                    docFileInput.value = '';
-                    docSubmitBtn.textContent = 'رفع المستند';
-                    docCancelEditBtn.classList.add('d-none');
-                    loadEmployeeDocuments(activeEmployeeId);
-                } else {
-                    showAlert(data.message || 'فشل في العملية.', 'danger');
-                }
-            })
-            .catch(err => { console.error(err); showAlert('حدث خطأ غير متوقع.', 'danger'); });
-    });
+            const formData = new FormData(this);
+            fetch('?page=employee_documents', { method: 'POST', body: formData, credentials: 'same-origin' })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        showAlert(data.message, 'success');
+                        docAction.value = 'upload_document';
+                        docIdInput.value = '0';
+                        docNameInput.value = '';
+                        docFileInput.value = '';
+                        docSubmitBtn.textContent = 'رفع المستند';
+                        docCancelEditBtn.classList.add('d-none');
+                        loadEmployeeDocuments(activeEmployeeId);
+                    } else {
+                        showAlert(data.message || 'فشل في العملية.', 'danger');
+                    }
+                })
+                .catch(err => { console.error(err); showAlert('حدث خطأ غير متوقع.', 'danger'); });
+        });
+    }
 })();
 </script>
