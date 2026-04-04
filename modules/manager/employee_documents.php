@@ -119,6 +119,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
 
     $docs = $db->query("SELECT ed.*, u.full_name AS uploaded_by_name FROM employee_documents ed LEFT JOIN users u ON ed.uploaded_by = u.id WHERE ed.employee_id = ? ORDER BY ed.created_at DESC", [$employeeId]);
 
+    if (!empty($docs)) {
+        foreach ($docs as &$doc) {
+            $doc['file_url'] = !empty($doc['file_path']) ? getRelativeUrl(ltrim((string) $doc['file_path'], '/')) : '';
+        }
+        unset($doc);
+    }
+
     sendEmployeeDocumentsJson(['success' => true, 'documents' => $docs ?: []]);
 }
 
@@ -298,32 +305,46 @@ $employees = $db->query("SELECT id, full_name, role FROM users WHERE status = 'a
 <style>
 @media (min-width: 768px) {
     #employeeDocumentsCanvas {
+        --bs-offcanvas-height: 80vh;
         width: 80vw !important;
         max-width: 80vw;
+        min-height: 80vh !important;
         height: 80vh !important;
         max-height: 80vh !important;
-        margin: auto;
+        top: 10vh;
         left: 50%;
         right: auto;
-        bottom: 2vh;
+        bottom: auto;
         transform: translateX(-50%) translateY(100%);
         border-radius: 1rem;
+        overflow: hidden;
     }
 
     #employeeDocumentsCanvas.show {
         transform: translateX(-50%) translateY(0);
     }
+
+    #employeeDocumentsCanvas .offcanvas-body {
+        overflow-y: auto;
+    }
 }
 
 @media (max-width: 767.98px) {
     #employeeDocumentsCanvas {
+        --bs-offcanvas-height: 80vh;
+        min-height: 80vh !important;
+        height: 80vh !important;
         max-height: 80vh !important;
+    }
+
+    #employeeDocumentsCanvas .offcanvas-body {
+        overflow-y: auto;
     }
 }
 </style>
 
 <!-- بطاقة المستندات -->
-<div class="offcanvas offcanvas-bottom rounded-top" tabindex="-1" id="employeeDocumentsCanvas" aria-labelledby="employeeDocumentsCanvasLabel" style="max-height: 80vh;">
+<div class="offcanvas offcanvas-bottom rounded-top" tabindex="-1" id="employeeDocumentsCanvas" aria-labelledby="employeeDocumentsCanvasLabel" style="height:80vh;max-height:80vh;min-height:80vh;">
     <div class="offcanvas-header">
         <h5 class="offcanvas-title" id="employeeDocumentsCanvasLabel">مستندات الموظف</h5>
         <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
@@ -541,7 +562,8 @@ $employees = $db->query("SELECT id, full_name, role FROM users WHERE status = 'a
             documentsTableBody.innerHTML = '';
             data.documents.forEach((doc, index) => {
                 const row = document.createElement('tr');
-                const readLink = (doc.file_path ? `<a href="${doc.file_path}" target="_blank">${doc.original_filename}</a>` : '-');
+                const fileUrl = doc.file_url || doc.file_path || '';
+                const readLink = (fileUrl ? `<a href="${fileUrl}" target="_blank" rel="noopener noreferrer">${doc.original_filename}</a>` : '-');
                 const uploadedBy = doc.uploaded_by_name || '-';
                 const createdAt = doc.created_at ? doc.created_at : '-';
 
