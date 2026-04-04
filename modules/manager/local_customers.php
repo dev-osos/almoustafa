@@ -696,12 +696,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'collect_debt') {
         $customerId = isset($_POST['customer_id']) ? (int)$_POST['customer_id'] : 0;
         $amount = isset($_POST['amount']) ? cleanFinancialValue($_POST['amount']) : 0;
+        $discount = isset($_POST['discount']) ? max(0, cleanFinancialValue($_POST['discount'])) : 0;
         $collectionType = isset($_POST['collection_type']) ? trim($_POST['collection_type']) : 'direct'; // direct أو management
 
         if ($customerId <= 0) {
             $error = 'معرف العميل غير صالح.';
-        } elseif ($amount <= 0) {
-            $error = 'يجب إدخال مبلغ تحصيل أكبر من صفر.';
+        } elseif ($amount <= 0 && $discount <= 0) {
+            $error = 'يجب إدخال مبلغ تحصيل أو خصم نقدي أكبر من صفر.';
+        } elseif ($amount < 0) {
+            $error = 'مبلغ التحصيل لا يمكن أن يكون سالباً.';
         } elseif (!in_array($collectionType, ['direct', 'management'])) {
             $error = 'نوع التحصيل غير صالح.';
         } else {
@@ -723,7 +726,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $currentBalance = isset($customer['balance']) ? (float)$customer['balance'] : 0.0;
 
                 // السماح بالتحصيل حتى لو كان الرصيد صفر أو أقل (رصيد دائن)؛ المبلغ المحصل يخصم من الرصيد فإذا كان الرصيد صفر أو سالب يصبح المبلغ رصيداً دائناً للعميل
-                $newBalance = round($currentBalance - $amount, 2);
+                $newBalance = round($currentBalance - $amount - $discount, 2);
 
                 $db->execute(
                     "UPDATE local_customers SET balance = ? WHERE id = ?",
@@ -812,8 +815,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     );
                 }
 
+                // تسجيل الخصم النقدي في local_collections (إذا كان هناك خصم)
+                if ($discount > 0 && !empty($localCollectionsTableExists)) {
+                    $discountColumns = ['customer_id', 'amount', 'date', 'payment_method', 'collected_by'];
+                    $discountValues  = [$customerId, $discount, $collectionDate, 'discount', $currentUser['id']];
+                    $discountPlaceholders = array_fill(0, count($discountColumns), '?');
+
+                    if ($hasCollectionNumberColumn) {
+                        // رقم تحصيل منفصل للخصم
+                        $discountCollectionNumber = null;
+                        for ($attempt = 0; $attempt < 10; $attempt++) {
+                            $candidate = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+                            $exists = $db->queryOne("SELECT 1 FROM local_collections WHERE collection_number = ?", [$candidate]);
+                            if (empty($exists)) { $discountCollectionNumber = $candidate; break; }
+                        }
+                        if ($discountCollectionNumber !== null) {
+                            array_unshift($discountColumns, 'collection_number');
+                            array_unshift($discountValues, $discountCollectionNumber);
+                            array_unshift($discountPlaceholders, '?');
+                        }
+                    }
+
+                    if ($hasNotesColumn) {
+                        $discountColumns[] = 'notes';
+                        $discountValues[]  = 'خصم نقدي - ' . ($customer['name'] ?? '');
+                        $discountPlaceholders[] = '?';
+                    }
+
+                    if ($hasStatusColumn) {
+                        $discountColumns[] = 'status';
+                        $discountValues[]  = 'approved';
+                        $discountPlaceholders[] = '?';
+                    }
+
+                    $db->execute(
+                        "INSERT INTO local_collections (" . implode(', ', $discountColumns) . ") VALUES (" . implode(', ', $discountPlaceholders) . ")",
+                        $discountValues
+                    );
+
+                    logAudit($currentUser['id'], 'add_cash_discount_local_customer', 'local_collection', $db->getLastInsertId(), null, [
+                        'customer_id' => $customerId,
+                        'discount'    => $discount,
+                    ]);
+                }
+
                 // توزيع التحصيل على الفواتير المحلية (فقط الجزء الذي يغطي الدين؛ الزيادة تصبح رصيداً دائناً). إذا كان الرصيد صفر أو سالب فلا يوجد دين لتوزيع التحصيل عليه
-                $amountToDistribute = ($currentBalance > 0) ? min($amount, $currentBalance) : 0;
+                $amountToDistribute = ($currentBalance > 0) ? min($amount + $discount, $currentBalance) : 0;
                 $localInvoicesTableExists = $db->queryOne("SHOW TABLES LIKE 'local_invoices'");
                 if ($amountToDistribute > 0 && !empty($localInvoicesTableExists)) {
                     try {
@@ -923,9 +970,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $copyableLines = [
                     'تم التحصيل بنجاح',
                     'المبلغ المحصل: ' . formatCurrency($amount),
+                ];
+                if ($discount > 0) {
+                    $copyableLines[] = 'الخصم النقدي: ' . formatCurrency($discount);
+                }
+                $copyableLines = array_merge($copyableLines, [
                     'تاريخ التحصيل: ' . $collectionDate,
                     'المتبقي بعد التحصيل: ' . formatCurrency($newBalance),
-                ];
+                ]);
                 if ($customerName !== '') {
                     $copyableLines[] = 'العميل: ' . $customerName;
                 }
@@ -2472,8 +2524,29 @@ function loadLocalCustomers(page) {
                             min="0"
                             value="0"
                             required
+                            oninput="updateCollectionSummary()"
                         >
                         <div class="form-text">يمكن إدخال مبلغ أكبر من الدين؛ الفرق يُحول تلقائياً إلى رصيد دائن للعميل.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="collectionDiscount">خصم نقدي <small class="text-muted">(اختياري)</small></label>
+                        <input
+                            type="number"
+                            class="form-control"
+                            id="collectionDiscount"
+                            name="discount"
+                            step="0.01"
+                            min="0"
+                            value="0"
+                            oninput="updateCollectionSummary()"
+                        >
+                        <div class="form-text text-warning"><i class="bi bi-tag me-1"></i>مبلغ الخصم يُحسم من رصيد العميل دون تحصيل نقدي، ويُسجل في سجل المعاملات كخصم.</div>
+                    </div>
+                    <div id="collectionSummaryBox" class="alert alert-info py-2 px-3 mb-3" style="display:none; font-size:0.9rem;">
+                        <div class="d-flex justify-content-between"><span>مبلغ التحصيل:</span> <strong id="summaryAmount">0.00</strong></div>
+                        <div class="d-flex justify-content-between"><span>الخصم النقدي:</span> <strong id="summaryDiscount" class="text-warning">0.00</strong></div>
+                        <hr class="my-1">
+                        <div class="d-flex justify-content-between"><span>إجمالي الخصم من الرصيد:</span> <strong id="summaryTotal" class="text-success">0.00</strong></div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">نوع التحصيل <span class="text-danger">*</span></label>
@@ -2540,8 +2613,29 @@ function loadLocalCustomers(page) {
                     min="0"
                     value="0"
                     required
+                    oninput="updateCardCollectionSummary()"
                 >
                 <div class="form-text">يمكن إدخال مبلغ أكبر من الدين؛ الفرق يُحول تلقائياً إلى رصيد دائن للعميل.</div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="collectPaymentCardDiscount">خصم نقدي <small class="text-muted">(اختياري)</small></label>
+                <input
+                    type="number"
+                    class="form-control"
+                    id="collectPaymentCardDiscount"
+                    name="discount"
+                    step="0.01"
+                    min="0"
+                    value="0"
+                    oninput="updateCardCollectionSummary()"
+                >
+                <div class="form-text text-warning"><i class="bi bi-tag me-1"></i>مبلغ الخصم يُحسم من رصيد العميل دون تحصيل نقدي، ويُسجل في سجل المعاملات كخصم.</div>
+            </div>
+            <div id="cardCollectionSummaryBox" class="alert alert-info py-2 px-3 mb-3" style="display:none; font-size:0.9rem;">
+                <div class="d-flex justify-content-between"><span>مبلغ التحصيل:</span> <strong id="cardSummaryAmount">0.00</strong></div>
+                <div class="d-flex justify-content-between"><span>الخصم النقدي:</span> <strong id="cardSummaryDiscount" class="text-warning">0.00</strong></div>
+                <hr class="my-1">
+                <div class="d-flex justify-content-between"><span>إجمالي الخصم من الرصيد:</span> <strong id="cardSummaryTotal" class="text-success">0.00</strong></div>
             </div>
             <div class="mb-3">
                 <label class="form-label">نوع التحصيل <span class="text-danger">*</span></label>
@@ -4909,6 +5003,37 @@ window.showAddLocalCustomerModal = function() {
         }
     }
 };
+
+// دوال ملخص التحصيل + الخصم
+function updateCollectionSummary() {
+    const amount   = parseFloat(document.getElementById('collectionAmount')?.value) || 0;
+    const discount = parseFloat(document.getElementById('collectionDiscount')?.value) || 0;
+    const box = document.getElementById('collectionSummaryBox');
+    if (!box) return;
+    if (discount > 0 || amount > 0) {
+        box.style.display = '';
+        document.getElementById('summaryAmount').textContent   = amount.toFixed(2);
+        document.getElementById('summaryDiscount').textContent = discount.toFixed(2);
+        document.getElementById('summaryTotal').textContent    = (amount + discount).toFixed(2);
+    } else {
+        box.style.display = 'none';
+    }
+}
+
+function updateCardCollectionSummary() {
+    const amount   = parseFloat(document.getElementById('collectPaymentCardAmount')?.value) || 0;
+    const discount = parseFloat(document.getElementById('collectPaymentCardDiscount')?.value) || 0;
+    const box = document.getElementById('cardCollectionSummaryBox');
+    if (!box) return;
+    if (discount > 0 || amount > 0) {
+        box.style.display = '';
+        document.getElementById('cardSummaryAmount').textContent   = amount.toFixed(2);
+        document.getElementById('cardSummaryDiscount').textContent = discount.toFixed(2);
+        document.getElementById('cardSummaryTotal').textContent    = (amount + discount).toFixed(2);
+    } else {
+        box.style.display = 'none';
+    }
+}
 
 // دوال إغلاق Cards
 function closeCollectPaymentCard() {
