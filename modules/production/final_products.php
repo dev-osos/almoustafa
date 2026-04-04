@@ -3159,7 +3159,7 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
                         <small class="text-muted" id="templateProductionComponentsHint">يتم اختيار المورد الافتراضي تلقائياً إذا كان متاحاً.</small>
                     </div>
                     <div id="templateProductionComponentsFeedback" class="mb-2"></div>
-                    <div id="templateProductionComponentsContainer" class="d-flex flex-column gap-2"></div>
+                    <div id="templateProductionComponentsContainer" class="row g-2"></div>
                 </div>
             </div>
 
@@ -3326,7 +3326,7 @@ window.renderTemplateProductionComponents = function(details) {
         const isPackaging = String(component.type || '').toLowerCase() === 'packaging' || componentKey.startsWith('pack_');
         const suppliersList = window.getSuppliersForTemplateProductionComponent(component);
         const wrapper = document.createElement('div');
-        wrapper.className = 'template-production-component-row';
+        wrapper.className = 'col-12 col-md-6 template-production-component-row';
 
         const card = document.createElement('div');
         card.className = 'border rounded-3 bg-light';
