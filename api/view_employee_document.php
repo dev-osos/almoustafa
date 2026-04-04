@@ -49,6 +49,15 @@ if (!$document || empty($document['file_path'])) {
 }
 
 $relativePath = ltrim(str_replace(['../', '..\\', "\0"], '', (string) $document['file_path']), '/');
+$normalizedRelativePath = str_replace('\\', '/', $relativePath);
+
+if (strpos($normalizedRelativePath, 'uploads/employee_documents/') !== 0) {
+    http_response_code(403);
+    header('Content-Type: text/plain; charset=utf-8');
+    echo 'غير مصرح';
+    exit;
+}
+
 $baseDir = defined('BASE_PATH') ? rtrim(BASE_PATH, '/\\') : realpath(__DIR__ . '/..');
 $fullPath = realpath($baseDir . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativePath));
 
@@ -56,14 +65,6 @@ if (!$fullPath || !is_file($fullPath)) {
     http_response_code(404);
     header('Content-Type: text/plain; charset=utf-8');
     echo 'الملف غير موجود';
-    exit;
-}
-
-$baseDirReal = realpath($baseDir . DIRECTORY_SEPARATOR . 'uploads');
-if (!$baseDirReal || strpos($fullPath, $baseDirReal) !== 0) {
-    http_response_code(403);
-    header('Content-Type: text/plain; charset=utf-8');
-    echo 'غير مصرح';
     exit;
 }
 
