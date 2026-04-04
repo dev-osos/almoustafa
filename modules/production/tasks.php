@@ -54,12 +54,14 @@ if (empty($_SESSION['_prod_tasks_migrations_done'])) {
         // توسيع عمود status ليشمل كل الحالات المطلوبة
         if (isset($columnsMap['status'])) {
             $statusCol = $db->queryOne("SHOW COLUMNS FROM tasks LIKE 'status'");
-            if (!empty($statusCol['Type']) && stripos((string)$statusCol['Type'], 'with_shipping_company') === false) {
+            $statusType = strtolower((string) ($statusCol['Type'] ?? ''));
+            // إذا كان VARCHAR فهو يقبل أي قيمة — تخطي
+            if (!empty($statusType) && strpos($statusType, 'varchar') === false && stripos($statusType, 'with_shipping_company') === false) {
                 try {
                     $db->execute("ALTER TABLE tasks MODIFY COLUMN status ENUM('pending','received','in_progress','completed','with_delegate','with_driver','with_shipping_company','delivered','returned','cancelled') DEFAULT 'pending'");
                 } catch (Throwable $enumErr) {
-                    // إذا فشل ENUM، نحول لـ VARCHAR لضمان قبول أي قيمة
-                    error_log('tasks status ENUM alter failed, trying VARCHAR: ' . $enumErr->getMessage());
+                    // فشل تعديل ENUM — تحويل إلى VARCHAR
+                    error_log('tasks status ENUM alter failed, converting to VARCHAR: ' . $enumErr->getMessage());
                     try {
                         $db->execute("ALTER TABLE tasks MODIFY COLUMN status VARCHAR(50) NOT NULL DEFAULT 'pending'");
                     } catch (Throwable $varErr) {
@@ -177,12 +179,17 @@ if (!function_exists('tasksEnsureStatusEnum')) {
     {
         try {
             $statusCol = $db->queryOne("SHOW COLUMNS FROM tasks LIKE 'status'");
-            $statusType = (string) ($statusCol['Type'] ?? '');
-            if ($statusType !== '' && stripos($statusType, 'with_shipping_company') === false) {
+            $statusType = strtolower((string) ($statusCol['Type'] ?? ''));
+            // إذا كان العمود VARCHAR فهو يقبل أي قيمة — لا حاجة لتعديل
+            if ($statusType === '' || strpos($statusType, 'varchar') !== false) {
+                return;
+            }
+            // العمود ENUM — تحقق إن كانت القيمة الجديدة موجودة
+            if (stripos($statusType, 'with_shipping_company') === false) {
                 try {
                     $db->execute("ALTER TABLE tasks MODIFY COLUMN status ENUM('pending','received','in_progress','completed','with_delegate','with_driver','with_shipping_company','delivered','returned','cancelled') DEFAULT 'pending'");
                 } catch (Throwable $enumErr) {
-                    error_log('tasksEnsureStatusEnum ENUM alter failed, trying VARCHAR: ' . $enumErr->getMessage());
+                    error_log('tasksEnsureStatusEnum ENUM alter failed, converting to VARCHAR: ' . $enumErr->getMessage());
                     try {
                         $db->execute("ALTER TABLE tasks MODIFY COLUMN status VARCHAR(50) NOT NULL DEFAULT 'pending'");
                     } catch (Throwable $varErr) {
