@@ -341,6 +341,31 @@ $employees = $db->query("SELECT id, full_name, role FROM users WHERE status = 'a
         overflow-y: auto;
     }
 }
+
+.employee-doc-open-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.4rem 0.85rem;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #0d6efd, #0a58ca);
+    color: #fff !important;
+    font-weight: 600;
+    text-decoration: none;
+    box-shadow: 0 8px 18px rgba(13, 110, 253, 0.22);
+    transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
+}
+
+.employee-doc-open-btn:hover {
+    color: #fff !important;
+    transform: translateY(-1px);
+    box-shadow: 0 10px 22px rgba(13, 110, 253, 0.28);
+}
+
+.employee-doc-open-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 6px 14px rgba(13, 110, 253, 0.2);
+}
 </style>
 
 <!-- بطاقة المستندات -->
@@ -563,7 +588,9 @@ $employees = $db->query("SELECT id, full_name, role FROM users WHERE status = 'a
             data.documents.forEach((doc, index) => {
                 const row = document.createElement('tr');
                 const fileUrl = doc.file_url || doc.file_path || '';
-                const readLink = (fileUrl ? `<a href="${fileUrl}" target="_blank" rel="noopener noreferrer">${doc.original_filename}</a>` : '-');
+                const readLink = fileUrl
+                    ? `<a href="${fileUrl}" target="_blank" rel="noopener noreferrer" class="employee-doc-open-btn"><i class="bi bi-box-arrow-up-left"></i><span>عرض الملف</span></a>`
+                    : '-';
                 const uploadedBy = doc.uploaded_by_name || '-';
                 const createdAt = doc.created_at ? doc.created_at : '-';
 
