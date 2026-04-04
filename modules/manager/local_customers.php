@@ -7299,12 +7299,30 @@ function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns
         });
     })();
     collections.forEach(function(col) {
-        const safeNum = ('تحصيل - ' + (col.collection_number || col.id)).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const isDiscount = (col.notes || '').indexOf('خصم نقدي') >= 0;
+        const typeLabel = isDiscount ? 'خصم نقدي' : 'تحصيل';
+        const typeClass = isDiscount ? 'text-danger' : 'text-success';
+        
+        const safeNum = (typeLabel + ' - ' + (col.collection_number || col.id)).replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const dateStr = (col.date || col.created_at || '-').toString().substring(0, 10);
         const amount = parseFloat(col.amount || 0);
         const colCreatedBy = (col.created_by_name || '-').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        var labelText = 'تحصيل - ' + (col.collection_number || col.id);
-        var entry = { sortDate: normDate(col.date || col.created_at), effect: -amount, labelText: labelText, amountNum: amount, cells: ['<td>' + safeNum + '</td>', '<td class="text-success">' + amount.toFixed(2) + ' ج.م (تحصيل)</td>', '<td>' + dateStr + '</td>', '<td>' + colCreatedBy + '</td>', '<td><span class="text-muted small">تحصيل</span></td>'] };
+        
+        var labelText = typeLabel + ' - ' + (col.collection_number || col.id);
+        
+        var entry = { 
+            sortDate: normDate(col.date || col.created_at), 
+            effect: -amount, 
+            labelText: labelText, 
+            amountNum: amount, 
+            cells: [
+                '<td>' + safeNum + '</td>', 
+                '<td class="' + typeClass + '">' + amount.toFixed(2) + ' ج.م (' + typeLabel + ')</td>', 
+                '<td>' + dateStr + '</td>', 
+                '<td>' + colCreatedBy + '</td>', 
+                '<td><span class="text-muted small">' + typeLabel + '</span></td>'
+            ] 
+        };
         entry.searchableText = buildSearchableText(labelText, amount, dateStr);
         allEntries.push(entry);
     });
