@@ -271,11 +271,11 @@ $employees = $db->query("SELECT id, full_name, role FROM users WHERE status = 'a
                                     <td><?php echo htmlspecialchars($emp['role']); ?></td>
                                     <td><span class="badge bg-info"><?php echo $docsCount; ?></span></td>
                                     <td>
-                                        <button type="button" class="btn btn-sm btn-outline-primary" data-employee-id="<?php echo (int) $emp['id']; ?>" data-employee-name="<?php echo htmlspecialchars($emp['full_name'], ENT_QUOTES); ?>" onclick="openEmployeeDocumentsCard(this)">
+                                        <button type="button" class="btn btn-sm btn-outline-primary js-open-employee-docs" data-employee-id="<?php echo (int) $emp['id']; ?>" data-employee-name="<?php echo htmlspecialchars($emp['full_name'], ENT_QUOTES); ?>" data-jump-to-form="false">
                                             <i class="bi bi-folder2-open"></i> عرض المستندات
                                         </button>
                                         <?php if ($canManageEmployeeDocuments): ?>
-                                            <button type="button" class="btn btn-sm btn-primary mt-1 mt-md-0" data-employee-id="<?php echo (int) $emp['id']; ?>" data-employee-name="<?php echo htmlspecialchars($emp['full_name'], ENT_QUOTES); ?>" onclick="openEmployeeDocumentsCard(this, true)">
+                                            <button type="button" class="btn btn-sm btn-primary mt-1 mt-md-0 js-open-employee-docs" data-employee-id="<?php echo (int) $emp['id']; ?>" data-employee-name="<?php echo htmlspecialchars($emp['full_name'], ENT_QUOTES); ?>" data-jump-to-form="true">
                                                 <i class="bi bi-paperclip"></i> إرفاق مستند
                                             </button>
                                         <?php endif; ?>
@@ -366,7 +366,7 @@ $employees = $db->query("SELECT id, full_name, role FROM users WHERE status = 'a
     const formCard = document.getElementById('employeeDocumentFormCard');
     const documentsTableBody = document.querySelector('#employeeDocumentsTable tbody');
 
-    window.openEmployeeDocumentsCard = (button, jumpToForm = false) => {
+    function openEmployeeDocumentsCard(button, jumpToForm = false) {
         const employeeId = button.getAttribute('data-employee-id');
         const employeeName = button.getAttribute('data-employee-name');
 
@@ -391,7 +391,7 @@ $employees = $db->query("SELECT id, full_name, role FROM users WHERE status = 'a
                 }
             }, 250);
         }
-    };
+    }
 
     function showAlert(message, type = 'success') {
         alertContainer.innerHTML = `\n            <div class="alert alert-${type} alert-dismissible fade show" role="alert">\n                ${message}\n                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="إغلاق"></button>\n            </div>`;
@@ -434,8 +434,8 @@ $employees = $db->query("SELECT id, full_name, role FROM users WHERE status = 'a
                     `<td>${uploadedBy}</td>\n` +
                     '<td>' +
                     (canManageEmployeeDocuments
-                        ? `<button type="button" class="btn btn-sm btn-outline-secondary me-1" data-doc-id="${doc.id}" data-doc-name="${(doc.name || '').replace(/"/g, '&quot;')}" onclick="startEditDocument(this)"><i class="bi bi-pencil"></i> تعديل</button>` +
-                          `<button type="button" class="btn btn-sm btn-outline-danger" data-doc-id="${doc.id}" onclick="deleteDocument(${doc.id})"><i class="bi bi-trash"></i> حذف</button>`
+                        ? `<button type="button" class="btn btn-sm btn-outline-secondary me-1 js-edit-document" data-doc-id="${doc.id}" data-doc-name="${(doc.name || '').replace(/"/g, '&quot;')}"><i class="bi bi-pencil"></i> تعديل</button>` +
+                          `<button type="button" class="btn btn-sm btn-outline-danger js-delete-document" data-doc-id="${doc.id}"><i class="bi bi-trash"></i> حذف</button>`
                         : '-'
                     ) +
                     '</td>';
@@ -450,7 +450,7 @@ $employees = $db->query("SELECT id, full_name, role FROM users WHERE status = 'a
         });
     }
 
-    window.startEditDocument = function(button) {
+    function startEditDocument(button) {
         if (!canManageEmployeeDocuments) {
             showAlert('ليس لديك صلاحية تعديل المستندات.', 'danger');
             return;
@@ -465,9 +465,9 @@ $employees = $db->query("SELECT id, full_name, role FROM users WHERE status = 'a
         docFileInput.value = '';
         docSubmitBtn.textContent = 'حفظ التعديل';
         docCancelEditBtn.classList.remove('d-none');
-    };
+    }
 
-    window.deleteDocument = function(documentId) {
+    function deleteDocument(documentId) {
         if (!canManageEmployeeDocuments) {
             showAlert('ليس لديك صلاحية حذف المستندات.', 'danger');
             return;
@@ -492,7 +492,26 @@ $employees = $db->query("SELECT id, full_name, role FROM users WHERE status = 'a
                 }
             })
             .catch(err => { console.error(err); showAlert('حدث خطأ غير متوقع.', 'danger'); });
-    };
+    }
+
+    document.querySelectorAll('.js-open-employee-docs').forEach((button) => {
+        button.addEventListener('click', function() {
+            openEmployeeDocumentsCard(this, this.getAttribute('data-jump-to-form') === 'true');
+        });
+    });
+
+    documentsTableBody.addEventListener('click', function(event) {
+        const editButton = event.target.closest('.js-edit-document');
+        if (editButton) {
+            startEditDocument(editButton);
+            return;
+        }
+
+        const deleteButton = event.target.closest('.js-delete-document');
+        if (deleteButton) {
+            deleteDocument(parseInt(deleteButton.getAttribute('data-doc-id') || '0', 10));
+        }
+    });
 
     if (docCancelEditBtn) {
         docCancelEditBtn.addEventListener('click', function() {
