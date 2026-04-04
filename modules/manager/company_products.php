@@ -1546,6 +1546,7 @@ foreach ($factoryProducts as $product) {
         min-height: 45px;
     }
     
+    
     .product-barcode-id {
         font-size: 11px;
     }
