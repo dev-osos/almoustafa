@@ -3184,7 +3184,7 @@ window.tahiniSuppliers = <?php echo json_encode(array_map(static function ($supp
     ];
 }, is_array($tahiniSuppliers) ? $tahiniSuppliers : []), JSON_UNESCAPED_UNICODE); ?>;
 window.honeyStockData = <?php echo json_encode($honeyStockDataForJs, JSON_UNESCAPED_UNICODE); ?>;
-window.templateDetailsEndpoint = <?php echo json_encode(getRelativeUrl('production.php?page=production&ajax=template_details'), JSON_UNESCAPED_UNICODE); ?>;
+window.templateDetailsEndpoint = <?php echo json_encode(getDashboardUrl('production') . '?page=production&ajax=template_details', JSON_UNESCAPED_UNICODE); ?>;
 
 window.getSuppliersForTemplateProductionComponent = function(component) {
     const suppliers = Array.isArray(window.productionSuppliers) ? window.productionSuppliers : [];
@@ -3477,8 +3477,31 @@ window.openTemplateProductionModal = function(trigger) {
     }
 
     const requestUrl = `${window.templateDetailsEndpoint}&template_id=${encodeURIComponent(templateId)}`;
-    fetch(requestUrl, { credentials: 'same-origin' })
-        .then((response) => response.json())
+    fetch(requestUrl, {
+        credentials: 'same-origin',
+        headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+        .then(async (response) => {
+            const contentType = response.headers.get('content-type') || '';
+            const bodyText = await response.text();
+
+            if (!response.ok) {
+                throw new Error('فشل تحميل المكوّنات. رمز الاستجابة: ' + response.status);
+            }
+
+            if (!contentType.includes('application/json')) {
+                throw new Error('الخادم أعاد استجابة غير متوقعة بدلاً من JSON.');
+            }
+
+            try {
+                return JSON.parse(bodyText);
+            } catch (parseError) {
+                throw new Error('تعذّر قراءة بيانات المكوّنات من الخادم.');
+            }
+        })
         .then((data) => {
             window.renderTemplateProductionComponents(data);
         })
