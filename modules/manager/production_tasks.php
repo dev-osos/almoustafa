@@ -4307,7 +4307,23 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                     </td>
                                     <td>
                                         <?php
-                                        $statusKey = $task['status'] ?? '';
+                                        $statusKey = trim((string) ($task['status'] ?? ''));
+                                        $statusAliases = [
+                                            'مع شركة الشحن' => 'with_shipping_company',
+                                            'with shipping company' => 'with_shipping_company',
+                                            'مع المندوب' => 'with_delegate',
+                                            'مع السائق' => 'with_driver',
+                                            'معلقة' => 'pending',
+                                            'مستلمة' => 'received',
+                                            'قيد التنفيذ' => 'in_progress',
+                                            'مكتملة' => 'completed',
+                                            'تم التوصيل' => 'delivered',
+                                            'تم الارجاع' => 'returned',
+                                            'ملغاة' => 'cancelled',
+                                        ];
+                                        if (isset($statusAliases[$statusKey])) {
+                                            $statusKey = $statusAliases[$statusKey];
+                                        }
                                         $statusMeta = $statusStyles[$statusKey] ?? ['class' => 'secondary', 'label' => 'غير معروفة'];
                                         ?>
                                         <span class="badge bg-<?php echo htmlspecialchars($statusMeta['class']); ?>">
