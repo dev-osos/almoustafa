@@ -1655,12 +1655,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         if ($autoCustId > 0) {
                             $alreadyApproved = $db->queryOne("SELECT id FROM customer_task_purchases WHERE task_id = ?", [$taskId]);
                             if (!$alreadyApproved) {
-                                // فحص بنية جدول collections خارج الـ transaction
-                                $colHasStatus     = !empty($db->queryOne("SHOW COLUMNS FROM collections LIKE 'status'"));
-                                $colHasApprovedBy = !empty($db->queryOne("SHOW COLUMNS FROM collections LIKE 'approved_by'"));
-                                $colHasApprovedAt = !empty($db->queryOne("SHOW COLUMNS FROM collections LIKE 'approved_at'"));
-                                $colHasNotes      = !empty($db->queryOne("SHOW COLUMNS FROM collections LIKE 'notes'"));
-
                                 $taskNotesRowAuto = $db->queryOne("SELECT notes FROM tasks WHERE id = ? LIMIT 1", [$taskId]);
 
                                 $db->beginTransaction();
@@ -1681,35 +1675,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     "UPDATE tasks SET total_amount = ?, local_customer_id = ?, status = 'delivered' WHERE id = ?",
                                     [$autoGrossTotal, $autoCustId, $taskId]
                                 );
-                                // تسجيل المدفوع مقدماً كتحصيل في سجل المعاملات
-                                if ($advancePayment > 0) {
-                                    $advanceNotes = 'مدفوع مقدماً - أوردر #' . $taskId;
-                                    // بناء الأعمدة والقيم ديناميكياً حسب بنية الجدول
-                                    $colCols = ['customer_id', 'amount', 'date', 'payment_method', 'collected_by'];
-                                    $colVals = [$autoCustId, $advancePayment, $taskDateAuto, 'cash', $currentUser['id']];
-                                    $colPhs  = ['?', '?', '?', '?', '?'];
-                                    if ($colHasStatus) {
-                                        $colCols[] = 'status'; $colVals[] = 'approved'; $colPhs[] = '?';
-                                    }
-                                    if ($colHasApprovedBy) {
-                                        $colCols[] = 'approved_by'; $colVals[] = $currentUser['id']; $colPhs[] = '?';
-                                    }
-                                    if ($colHasApprovedAt) {
-                                        $colCols[] = 'approved_at'; $colVals[] = date('Y-m-d H:i:s'); $colPhs[] = '?';
-                                    }
-                                    if ($colHasNotes) {
-                                        $colCols[] = 'notes'; $colVals[] = $advanceNotes; $colPhs[] = '?';
-                                    }
-                                    $db->execute(
-                                        "INSERT INTO collections (" . implode(', ', $colCols) . ") VALUES (" . implode(', ', $colPhs) . ")",
-                                        $colVals
-                                    );
-                                    // خصم المدفوع مقدماً من رصيد العميل (لأنه دفع مسبقاً)
-                                    $db->execute(
-                                        "UPDATE local_customers SET balance = COALESCE(balance, 0) - ? WHERE id = ?",
-                                        [$advancePayment, $autoCustId]
-                                    );
-                                }
+                                // المدفوع مقدماً مُحتسَب ضمن autoNetAmount (لا يُضاف للرصيد)
+                                // لا حاجة لإدخال منفصل — الرصيد الصافي فقط هو ما يُضاف أعلاه
                                 $db->commit();
                                 logAudit(
                                     $currentUser['id'],
@@ -1721,7 +1688,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 );
                                 $autoApproveMsg = ' ✅ تم اعتماد الفاتورة تلقائياً وتغيير حالة الطلب إلى "تم التوصيل".';
                                 if ($advancePayment > 0) {
-                                    $autoApproveMsg .= ' تم تسجيل المدفوع مقدماً (' . number_format($advancePayment, 2) . ' ج.م) كتحصيل معتمد.';
+                                    $autoApproveMsg .= ' المدفوع مقدماً (' . number_format($advancePayment, 2) . ' ج.م) مُخصوم من رصيد العميل.';
                                 }
                             }
                         } else {
