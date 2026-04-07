@@ -1633,7 +1633,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 $autoSubtotal += round((float)$p['quantity'] * (float)$p['price'], 2);
                             }
                         }
-                        $autoFinalTotal = max(0, $autoSubtotal + $shippingFees - $discount);
+                        // المبلغ الكلي (بدون خصم المدفوع مقدماً) — يُحفظ في tasks.total_amount
+                        $autoGrossTotal = max(0, $autoSubtotal + $shippingFees - $discount);
+                        // المبلغ الصافي الذي يُضاف لرصيد العميل (بعد خصم المدفوع مقدماً)
+                        $autoNetAmount  = max(0, $autoGrossTotal - $advancePayment);
 
                         // تحديد العميل المحلي
                         $autoCustId = (int)($localCustomerIdForTask ?? 0);
@@ -1657,18 +1660,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 deductTaskProductsFromStock($db, $taskNotesRowAuto['notes'] ?? '');
                                 $taskNumberAuto = '#' . $taskId;
                                 $taskDateAuto   = date('Y-m-d');
+                                // يُسجَّل في سجل المشتريات بالمبلغ الصافي (بعد المدفوع مقدماً)
                                 $db->execute(
                                     "INSERT INTO customer_task_purchases (local_customer_id, task_id, task_number, total_amount, task_date) VALUES (?, ?, ?, ?, ?)",
-                                    [$autoCustId, $taskId, $taskNumberAuto, $autoFinalTotal, $taskDateAuto]
+                                    [$autoCustId, $taskId, $taskNumberAuto, $autoNetAmount, $taskDateAuto]
                                 );
+                                // يُضاف للرصيد فقط المبلغ الصافي
                                 $db->execute(
                                     "UPDATE local_customers SET balance = COALESCE(balance, 0) + ? WHERE id = ?",
-                                    [$autoFinalTotal, $autoCustId]
+                                    [$autoNetAmount, $autoCustId]
                                 );
                                 $db->execute(
                                     "UPDATE tasks SET total_amount = ?, local_customer_id = ?, status = 'delivered' WHERE id = ?",
-                                    [$autoFinalTotal, $autoCustId, $taskId]
+                                    [$autoGrossTotal, $autoCustId, $taskId]
                                 );
+                                // تسجيل المدفوع مقدماً كتحصيل في سجل المعاملات
+                                if ($advancePayment > 0) {
+                                    $colStatusCheck = $db->queryOne("SHOW COLUMNS FROM collections LIKE 'status'");
+                                    $colApprovedByCheck = $db->queryOne("SHOW COLUMNS FROM collections LIKE 'approved_by'");
+                                    $advanceNotes = 'مدفوع مقدماً - أوردر #' . $taskId;
+                                    if (!empty($colStatusCheck)) {
+                                        if (!empty($colApprovedByCheck)) {
+                                            $db->execute(
+                                                "INSERT INTO collections (customer_id, amount, date, payment_method, collected_by, status, approved_by, approved_at, notes) VALUES (?, ?, ?, 'cash', ?, 'approved', ?, NOW(), ?)",
+                                                [$autoCustId, $advancePayment, $taskDateAuto, $currentUser['id'], $currentUser['id'], $advanceNotes]
+                                            );
+                                        } else {
+                                            $db->execute(
+                                                "INSERT INTO collections (customer_id, amount, date, payment_method, collected_by, status, approved_at, notes) VALUES (?, ?, ?, 'cash', ?, 'approved', NOW(), ?)",
+                                                [$autoCustId, $advancePayment, $taskDateAuto, $currentUser['id'], $advanceNotes]
+                                            );
+                                        }
+                                    } else {
+                                        $db->execute(
+                                            "INSERT INTO collections (customer_id, amount, date, payment_method, collected_by, notes) VALUES (?, ?, ?, 'cash', ?, ?)",
+                                            [$autoCustId, $advancePayment, $taskDateAuto, $currentUser['id'], $advanceNotes]
+                                        );
+                                    }
+                                    // خصم المدفوع مقدماً من رصيد العميل (لأنه دفع مسبقاً)
+                                    $db->execute(
+                                        "UPDATE local_customers SET balance = COALESCE(balance, 0) - ? WHERE id = ?",
+                                        [$advancePayment, $autoCustId]
+                                    );
+                                }
                                 $db->commit();
                                 logAudit(
                                     $currentUser['id'],
@@ -1676,9 +1710,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     'tasks',
                                     $taskId,
                                     null,
-                                    ['local_customer_id' => $autoCustId, 'total_amount' => $autoFinalTotal]
+                                    ['local_customer_id' => $autoCustId, 'gross_total' => $autoGrossTotal, 'advance_payment' => $advancePayment, 'net_amount' => $autoNetAmount]
                                 );
                                 $autoApproveMsg = ' ✅ تم اعتماد الفاتورة تلقائياً وتغيير حالة الطلب إلى "تم التوصيل".';
+                                if ($advancePayment > 0) {
+                                    $autoApproveMsg .= ' تم تسجيل المدفوع مقدماً (' . number_format($advancePayment, 2) . ' ج.م) كتحصيل معتمد.';
+                                }
                             }
                         } else {
                             $autoApproveMsg = ' ⚠ لم يتم اعتماد الفاتورة تلقائياً: العميل غير مسجل في العملاء المحليين.';
