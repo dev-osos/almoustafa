@@ -5094,6 +5094,14 @@ var __shippingCompaniesForTask = <?php echo json_encode($shippingCompaniesForDro
 var __quCategories = <?php echo json_encode($quCategoriesForTask, JSON_UNESCAPED_UNICODE); ?>;
 var __quData = <?php echo json_encode($quDataForTask, JSON_UNESCAPED_UNICODE); ?>;
 
+function makeIdBadge(id) {
+    if (!id && id !== 0) return '';
+    return '<span class="almostafa-id-badge">' + String(id) + '</span> ';
+}
+function escHtml(str) {
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 var editProductIndex = 0;
 function buildEditProductRow(idx, product) {
     var p = product || { name: '', quantity: '', unit: 'قطعة', price: '', line_total: '', item_type: '' };
@@ -5995,15 +6003,6 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     if (editTaskTypeEl) {
         editTaskTypeEl.addEventListener('change', toggleEditTgFields);
-    }
-
-    // ===== دوال مساعدة مشتركة =====
-    function makeIdBadge(id) {
-        if (!id && id !== 0) return '';
-        return '<span class="almostafa-id-badge">' + String(id) + '</span> ';
-    }
-    function escHtml(str) {
-        return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
     // ===== نظام autocomplete للمحافظات والمدن + جلب المدن ديناميكياً =====
