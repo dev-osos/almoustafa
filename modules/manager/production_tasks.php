@@ -885,6 +885,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $advancePayment = (float) str_replace(',', '.', (string) $_POST['advance_payment']);
             if ($advancePayment < 0) $advancePayment = 0;
         }
+        $autoApproveInvoice = isset($_POST['auto_approve_invoice']) && $_POST['auto_approve_invoice'] == '1';
 
         // تحميل qu.json لحساب الكمية الفعلية للخصم عند الوحدة = شرينك
         $quDataForDeduction = [];
@@ -1618,11 +1619,82 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
 
+                // اعتماد الفاتورة تلقائياً إذا تم تفعيل الخيار
+                $autoApproveMsg = '';
+                if ($autoApproveInvoice && $taskId > 0 && !in_array($taskType, ['telegraph', 'shipping_company'], true)) {
+                    try {
+                        // حساب الإجمالي النهائي
+                        $autoSubtotal = 0;
+                        foreach ($products as $p) {
+                            $lt = $p['line_total'] ?? null;
+                            if ($lt !== null && is_numeric($lt)) {
+                                $autoSubtotal += (float)$lt;
+                            } elseif (isset($p['quantity']) && (float)($p['quantity'] ?? 0) > 0 && isset($p['price']) && is_numeric($p['price'] ?? null)) {
+                                $autoSubtotal += round((float)$p['quantity'] * (float)$p['price'], 2);
+                            }
+                        }
+                        $autoFinalTotal = max(0, $autoSubtotal + $shippingFees - $discount);
+
+                        // تحديد العميل المحلي
+                        $autoCustId = (int)($localCustomerIdForTask ?? 0);
+                        if ($autoCustId <= 0) {
+                            $autoName  = trim((string)($customerName ?? ''));
+                            $autoPhone = trim((string)($customerPhone ?? ''));
+                            if ($autoName !== '' || $autoPhone !== '') {
+                                $autoMatch = $db->queryOne(
+                                    "SELECT id FROM local_customers WHERE status = 'active' AND (name = ? OR phone = ?) LIMIT 1",
+                                    [$autoName, $autoPhone !== '' ? $autoPhone : $autoName]
+                                );
+                                $autoCustId = $autoMatch ? (int)$autoMatch['id'] : 0;
+                            }
+                        }
+
+                        if ($autoCustId > 0) {
+                            $alreadyApproved = $db->queryOne("SELECT id FROM customer_task_purchases WHERE task_id = ?", [$taskId]);
+                            if (!$alreadyApproved) {
+                                $db->beginTransaction();
+                                $taskNotesRowAuto = $db->queryOne("SELECT notes FROM tasks WHERE id = ? LIMIT 1", [$taskId]);
+                                deductTaskProductsFromStock($db, $taskNotesRowAuto['notes'] ?? '');
+                                $taskNumberAuto = '#' . $taskId;
+                                $taskDateAuto   = date('Y-m-d');
+                                $db->execute(
+                                    "INSERT INTO customer_task_purchases (local_customer_id, task_id, task_number, total_amount, task_date) VALUES (?, ?, ?, ?, ?)",
+                                    [$autoCustId, $taskId, $taskNumberAuto, $autoFinalTotal, $taskDateAuto]
+                                );
+                                $db->execute(
+                                    "UPDATE local_customers SET balance = COALESCE(balance, 0) + ? WHERE id = ?",
+                                    [$autoFinalTotal, $autoCustId]
+                                );
+                                $db->execute(
+                                    "UPDATE tasks SET total_amount = ?, local_customer_id = ?, status = 'delivered' WHERE id = ?",
+                                    [$autoFinalTotal, $autoCustId, $taskId]
+                                );
+                                $db->commit();
+                                logAudit(
+                                    $currentUser['id'],
+                                    'auto_approve_task_invoice',
+                                    'tasks',
+                                    $taskId,
+                                    null,
+                                    ['local_customer_id' => $autoCustId, 'total_amount' => $autoFinalTotal]
+                                );
+                                $autoApproveMsg = ' ✅ تم اعتماد الفاتورة تلقائياً وتغيير حالة الطلب إلى "تم التوصيل".';
+                            }
+                        } else {
+                            $autoApproveMsg = ' ⚠ لم يتم اعتماد الفاتورة تلقائياً: العميل غير مسجل في العملاء المحليين.';
+                        }
+                    } catch (Throwable $autoEx) {
+                        if (isset($db) && $db->inTransaction()) $db->rollBack();
+                        error_log('Auto approve invoice error: ' . $autoEx->getMessage());
+                        $autoApproveMsg = ' ⚠ حدث خطأ أثناء اعتماد الفاتورة تلقائياً.';
+                    }
+                }
+
                 // التوجيه إلى صفحة طباعة إيصال الأوردر مع فتح نافذة الطباعة تلقائياً (معاينة المتصفح)
                 $successMessage = count($assignees) > 0
                     ? 'تم إرسال المهمة بنجاح إلى ' . count($assignees) . ' من عمال الإنتاج.'
                     : 'تم إرسال المهمة بنجاح.';
-                $successMessage .= $tgShipmentMsg;
+                $successMessage .= $tgShipmentMsg . $autoApproveMsg;
                 $userRole = ($currentUser['role'] ?? '') === 'accountant' ? 'accountant' : 'manager';
                 preventDuplicateSubmission($successMessage, ['page' => 'production_tasks'], null, $userRole);
                 exit; // منع تنفيذ باقي الكود بعد إعادة التوجيه
@@ -3844,10 +3916,18 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             </div>
                         </div>
                     </div>
-                    <div class="d-flex justify-content-end mt-4 gap-2">
-                        <input type="hidden" id="currentDraftId" name="current_draft_id" value="">
-                        <button type="button" class="btn btn-outline-secondary" id="saveDraftBtn"><i class="bi bi-floppy me-1"></i>حفظ كمسودة</button>
-                        <button type="submit" id="createTaskSubmitBtn" class="btn btn-primary" disabled><i class="bi bi-send-check me-1"></i>إرسال المهمة</button>
+                    <div class="d-flex justify-content-between align-items-center mt-4 gap-2 flex-wrap">
+                        <div class="form-check form-switch ms-1">
+                            <input class="form-check-input" type="checkbox" name="auto_approve_invoice" id="autoApproveInvoice" value="1">
+                            <label class="form-check-label fw-semibold text-success" for="autoApproveInvoice">
+                                <i class="bi bi-check-circle me-1"></i>اعتماد الفاتورة تلقائياً وتغيير حالة الطلب إلى "تم التوصيل"
+                            </label>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <input type="hidden" id="currentDraftId" name="current_draft_id" value="">
+                            <button type="button" class="btn btn-outline-secondary" id="saveDraftBtn"><i class="bi bi-floppy me-1"></i>حفظ كمسودة</button>
+                            <button type="submit" id="createTaskSubmitBtn" class="btn btn-primary" disabled><i class="bi bi-send-check me-1"></i>إرسال المهمة</button>
+                        </div>
                     </div>
                 </form>
             </div>
