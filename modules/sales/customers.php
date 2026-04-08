@@ -5772,7 +5772,6 @@ document.addEventListener('DOMContentLoaded', function () {
                     <tr>
                         <th>ID</th>
                         <th>الاسم</th>
-                        <th>رقم الهاتف</th>
                         <th>الرصيد</th>
                         <th>العنوان</th>
                         <th>المنطقة</th>
@@ -5789,31 +5788,6 @@ document.addEventListener('DOMContentLoaded', function () {
                             <tr>
                                 <td><strong><?php echo (int)$customer['id']; ?></strong></td>
                                 <td><strong><?php echo htmlspecialchars($customer['name']); ?></strong></td>
-                                <td>
-                                    <?php
-                                    // جلب أرقام الهواتف من جدول customer_phones
-                                    $customerPhones = $db->query(
-                                        "SELECT phone FROM customer_phones WHERE customer_id = ? ORDER BY is_primary DESC, id ASC",
-                                        [$customer['id']]
-                                    );
-                                    if (empty($customerPhones) && !empty($customer['phone'])) {
-                                        // إذا لم تكن هناك أرقام في customer_phones، استخدم الرقم القديم
-                                        $customerPhones = [['phone' => $customer['phone']]];
-                                    }
-                                    if (!empty($customerPhones)) {
-                                        foreach ($customerPhones as $phoneData) {
-                                            $phoneNumber = trim($phoneData['phone'] ?? '');
-                                            if (!empty($phoneNumber)) {
-                                                echo '<a href="tel:' . htmlspecialchars($phoneNumber) . '" class="btn btn-sm btn-outline-primary me-1 mb-1" title="اتصل بـ ' . htmlspecialchars($phoneNumber) . '">';
-                                                echo '<i class="bi bi-telephone-fill"></i> ' ;
-                                                echo '</a>';
-                                            }
-                                        }
-                                    } else {
-                                        echo '-';
-                                    }
-                                    ?>
-                                </td>
                                 <td>
                                     <?php
                                         $customerBalanceValue = isset($customer['balance']) ? (float) $customer['balance'] : 0.0;
@@ -5845,7 +5819,7 @@ document.addEventListener('DOMContentLoaded', function () {
                                     $rawBalance = number_format($customerBalance, 2, '.', '');
                                     ?>
                                     <div class="dropdown">
-                                        <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" data-bs-strategy="fixed" aria-expanded="false">
                                             <i class="bi bi-three-dots-vertical"></i>
                                         </button>
                                         <ul class="dropdown-menu dropdown-menu-end">
@@ -5887,7 +5861,6 @@ document.addEventListener('DOMContentLoaded', function () {
                                                     <i class="bi bi-arrow-return-left me-2 text-warning"></i>مرتجع
                                                 </button>
                                             </li>
-                                            <li><hr class="dropdown-divider"></li>
                                             <li>
                                                 <button type="button" class="dropdown-item location-capture-btn"
                                                     data-customer-id="<?php echo (int)$customer['id']; ?>"
