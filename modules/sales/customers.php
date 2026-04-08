@@ -670,11 +670,12 @@ if ($section === 'delegates' && !$isSalesUser) {
                 $placeholders = implode(',', array_fill(0, count($delegateIds), '?'));
                 $customersByDelegate = $db->query(
                     "
-                        SELECT 
+                        SELECT
                             c.id,
                             c.name,
                             c.phone,
                             c.address,
+                            c.region_id,
                             c.balance,
                             c.status,
                             c.latitude,
@@ -702,6 +703,7 @@ if ($section === 'delegates' && !$isSalesUser) {
                         'name'                 => (string)($customerRow['name'] ?? ''),
                         'phone'                => (string)($customerRow['phone'] ?? ''),
                         'address'              => (string)($customerRow['address'] ?? ''),
+                        'region_id'            => (int)($customerRow['region_id'] ?? 0),
                         'balance'              => (float)($customerRow['balance'] ?? 0.0),
                         'balance_formatted'    => formatCurrency(abs((float)($customerRow['balance'] ?? 0.0))),
                         'status'               => (string)($customerRow['status'] ?? ''),
@@ -3817,9 +3819,9 @@ $delegateCards = [
                         </div>
                     </div>
                 </div>
-                <div class="table-responsive delegate-modal-table">
-                    <table class="table table-hover align-middle">
-                        <thead class="table-light">
+                <div class="table-responsive dashboard-table-wrapper delegate-modal-table">
+                    <table class="table dashboard-table align-middle">
+                        <thead>
                             <tr>
                                 <th>العميل</th>
                                 <th>رقم الهاتف</th>
@@ -4302,22 +4304,55 @@ document.addEventListener('DOMContentLoaded', function () {
         row.appendChild(statusCell);
 
         var actionsCell = document.createElement('td');
-        if (customer.latitude !== null && customer.longitude !== null) {
-            var mapLink = document.createElement('a');
-            mapLink.className = 'btn btn-sm btn-outline-info delegate-location-link';
-            mapLink.href = 'https://www.google.com/maps?q='
-                + encodeURIComponent(String(customer.latitude) + ',' + String(customer.longitude))
-                + '&hl=ar&z=16';
-            mapLink.target = '_blank';
-            mapLink.rel = 'noopener';
-            mapLink.innerHTML = '<i class="bi bi-geo-alt"></i>عرض الموقع';
-            actionsCell.appendChild(mapLink);
-        } else {
-            var noLocation = document.createElement('span');
-            noLocation.className = 'text-muted small';
-            noLocation.textContent = 'لا يوجد موقع';
-            actionsCell.appendChild(noLocation);
-        }
+        var actionsDiv = document.createElement('div');
+        actionsDiv.className = 'd-flex flex-wrap align-items-center gap-2';
+
+        // زر تعديل
+        var editBtn = document.createElement('button');
+        editBtn.type = 'button';
+        editBtn.className = 'btn btn-sm btn-outline-warning edit-customer-btn';
+        editBtn.setAttribute('data-customer-id', customer.id || '');
+        editBtn.setAttribute('data-customer-name', customer.name || '');
+        editBtn.setAttribute('data-customer-phone', customer.phone || '');
+        editBtn.setAttribute('data-customer-address', customer.address || '');
+        editBtn.setAttribute('data-customer-region-id', customer.region_id || 0);
+        editBtn.setAttribute('data-customer-balance', typeof customer.balance === 'number' ? customer.balance.toFixed(2) : '0.00');
+        editBtn.setAttribute('onclick', 'showEditCustomerModal(this)');
+        editBtn.innerHTML = '<i class="bi bi-pencil me-1"></i>تعديل';
+        actionsDiv.appendChild(editBtn);
+
+        // زر تحصيل
+        var balance = typeof customer.balance === 'number' ? customer.balance : 0;
+        var collectBtn = document.createElement('button');
+        collectBtn.type = 'button';
+        collectBtn.className = 'btn btn-sm ' + (balance > 0 ? 'btn-success' : 'btn-outline-secondary');
+        collectBtn.setAttribute('data-customer-id', customer.id || '');
+        collectBtn.setAttribute('data-customer-name', customer.name || '');
+        collectBtn.setAttribute('data-customer-balance', balance.toFixed(2));
+        collectBtn.setAttribute('data-customer-balance-formatted', customer.balance_formatted || '0');
+        collectBtn.setAttribute('onclick', 'showCollectPaymentModal(this)');
+        collectBtn.innerHTML = '<i class="bi bi-cash-coin me-1"></i>تحصيل';
+        actionsDiv.appendChild(collectBtn);
+
+        // زر سجل
+        var historyBtn = document.createElement('button');
+        historyBtn.type = 'button';
+        historyBtn.className = 'btn btn-sm btn-outline-info js-customer-history';
+        historyBtn.setAttribute('data-customer-id', customer.id || '');
+        historyBtn.setAttribute('data-customer-name', customer.name || '');
+        historyBtn.innerHTML = '<i class="bi bi-receipt me-1"></i>سجل';
+        actionsDiv.appendChild(historyBtn);
+
+        // زر مرتجع
+        var returnBtn = document.createElement('button');
+        returnBtn.type = 'button';
+        returnBtn.className = 'btn btn-sm btn-outline-warning js-customer-purchase-history';
+        returnBtn.setAttribute('data-customer-id', customer.id || '');
+        returnBtn.setAttribute('data-customer-name', customer.name || '');
+        returnBtn.innerHTML = '<i class="bi bi-arrow-return-left me-1"></i>مرتجع';
+        actionsDiv.appendChild(returnBtn);
+
+        actionsCell.appendChild(actionsDiv);
         row.appendChild(actionsCell);
 
         return row;
