@@ -5818,26 +5818,106 @@ document.addEventListener('DOMContentLoaded', function () {
                                     $formattedBalance = formatCurrency($displayBalanceForButton);
                                     $rawBalance = number_format($customerBalance, 2, '.', '');
                                     ?>
-                                    <button type="button"
-                                        class="btn btn-sm btn-outline-secondary js-customer-actions-btn"
-                                        data-bs-toggle="modal"
-                                        data-bs-target="#customerActionsModal"
-                                        data-customer-id="<?php echo (int)$customer['id']; ?>"
-                                        data-customer-name="<?php echo htmlspecialchars($customer['name']); ?>"
-                                        data-customer-phone="<?php echo htmlspecialchars($customer['phone'] ?? ''); ?>"
-                                        data-customer-address="<?php echo htmlspecialchars($customer['address'] ?? ''); ?>"
-                                        data-customer-region-id="<?php echo (int)($customer['region_id'] ?? 0); ?>"
-                                        data-customer-balance="<?php echo $rawBalance; ?>"
-                                        data-customer-balance-formatted="<?php echo htmlspecialchars($formattedBalance); ?>"
-                                        data-customer-balance-positive="<?php echo $customerBalance > 0 ? '1' : '0'; ?>"
-                                        data-can-edit="<?php echo in_array($currentRole, ['manager', 'developer', 'accountant', 'sales'], true) ? '1' : '0'; ?>"
-                                        data-has-location="<?php echo $hasLocation ? '1' : '0'; ?>"
-                                        <?php if ($hasLocation): ?>
-                                        data-latitude="<?php echo htmlspecialchars(number_format($latValue, 8, '.', '')); ?>"
-                                        data-longitude="<?php echo htmlspecialchars(number_format($lngValue, 8, '.', '')); ?>"
-                                        <?php endif; ?>>
+                                    <?php
+                                    $actionDataAttrs = '
+                                        data-customer-id="' . (int)$customer['id'] . '"
+                                        data-customer-name="' . htmlspecialchars($customer['name']) . '"
+                                        data-customer-phone="' . htmlspecialchars($customer['phone'] ?? '') . '"
+                                        data-customer-address="' . htmlspecialchars($customer['address'] ?? '') . '"
+                                        data-customer-region-id="' . (int)($customer['region_id'] ?? 0) . '"
+                                        data-customer-balance="' . $rawBalance . '"
+                                        data-customer-balance-formatted="' . htmlspecialchars($formattedBalance) . '"
+                                        data-customer-balance-positive="' . ($customerBalance > 0 ? '1' : '0') . '"
+                                        data-can-edit="' . (in_array($currentRole, ['manager', 'developer', 'accountant', 'sales'], true) ? '1' : '0') . '"
+                                        data-has-location="' . ($hasLocation ? '1' : '0') . '"
+                                        ' . ($hasLocation ? 'data-latitude="' . htmlspecialchars(number_format($latValue, 8, '.', '')) . '" data-longitude="' . htmlspecialchars(number_format($lngValue, 8, '.', '')) . '"' : '') . '
+                                    ';
+                                    $canEditRole = in_array($currentRole, ['manager', 'developer', 'accountant', 'sales'], true);
+                                    ?>
+                                    <!-- كمبيوتر: modal -->
+                                    <button type="button" class="btn btn-sm btn-outline-secondary js-customer-actions-btn d-none d-md-inline-flex"
+                                        data-bs-toggle="modal" data-bs-target="#customerActionsModal"
+                                        <?php echo $actionDataAttrs; ?>>
                                         <i class="bi bi-three-dots-vertical"></i>
                                     </button>
+                                    <!-- هاتف: dropup خارج حدود overflow -->
+                                    <div class="dropup d-md-none">
+                                        <button type="button"
+                                            class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                            data-bs-toggle="dropdown"
+                                            data-bs-strategy="fixed"
+                                            aria-expanded="false"
+                                            <?php echo $actionDataAttrs; ?>>
+                                            <i class="bi bi-three-dots-vertical"></i>
+                                        </button>
+                                        <ul class="dropdown-menu dropdown-menu-end">
+                                            <?php if (!empty($customer['phone'])): ?>
+                                            <li>
+                                                <a class="dropdown-item d-flex align-items-center gap-2 text-primary fw-semibold"
+                                                    href="tel:<?php echo htmlspecialchars($customer['phone']); ?>">
+                                                    <i class="bi bi-telephone-fill"></i><?php echo htmlspecialchars($customer['phone']); ?>
+                                                </a>
+                                            </li>
+                                            <li><hr class="dropdown-divider m-0"></li>
+                                            <?php endif; ?>
+                                            <?php if ($canEditRole): ?>
+                                            <li>
+                                                <button type="button" class="dropdown-item edit-customer-btn"
+                                                    onclick="showEditCustomerModal(this)"
+                                                    data-customer-id="<?php echo (int)$customer['id']; ?>"
+                                                    data-customer-name="<?php echo htmlspecialchars($customer['name']); ?>"
+                                                    data-customer-phone="<?php echo htmlspecialchars($customer['phone'] ?? ''); ?>"
+                                                    data-customer-address="<?php echo htmlspecialchars($customer['address'] ?? ''); ?>"
+                                                    data-customer-region-id="<?php echo (int)($customer['region_id'] ?? 0); ?>"
+                                                    data-customer-balance="<?php echo $rawBalance; ?>">
+                                                    <i class="bi bi-pencil me-2 text-warning"></i>تعديل
+                                                </button>
+                                            </li>
+                                            <?php endif; ?>
+                                            <li>
+                                                <button type="button" class="dropdown-item <?php echo $customerBalance > 0 ? 'text-success fw-semibold' : ''; ?>"
+                                                    onclick="showCollectPaymentModal(this)"
+                                                    data-customer-id="<?php echo (int)$customer['id']; ?>"
+                                                    data-customer-name="<?php echo htmlspecialchars($customer['name']); ?>"
+                                                    data-customer-balance="<?php echo $rawBalance; ?>"
+                                                    data-customer-balance-formatted="<?php echo htmlspecialchars($formattedBalance); ?>">
+                                                    <i class="bi bi-cash-coin me-2 text-success"></i>تحصيل
+                                                </button>
+                                            </li>
+                                            <li>
+                                                <button type="button" class="dropdown-item js-customer-history"
+                                                    data-customer-id="<?php echo (int)$customer['id']; ?>"
+                                                    data-customer-name="<?php echo htmlspecialchars($customer['name']); ?>">
+                                                    <i class="bi bi-receipt me-2 text-info"></i>سجل
+                                                </button>
+                                            </li>
+                                            <li>
+                                                <button type="button" class="dropdown-item js-customer-purchase-history"
+                                                    data-customer-id="<?php echo (int)$customer['id']; ?>"
+                                                    data-customer-name="<?php echo htmlspecialchars($customer['name']); ?>">
+                                                    <i class="bi bi-arrow-return-left me-2 text-warning"></i>مرتجع
+                                                </button>
+                                            </li>
+                                            <li>
+                                                <button type="button" class="dropdown-item location-capture-btn"
+                                                    data-customer-id="<?php echo (int)$customer['id']; ?>"
+                                                    data-customer-name="<?php echo htmlspecialchars($customer['name']); ?>">
+                                                    <i class="bi bi-geo-alt me-2 text-primary"></i>تحديد الموقع
+                                                </button>
+                                            </li>
+                                            <?php if ($hasLocation): ?>
+                                            <li>
+                                                <button type="button" class="dropdown-item location-view-btn"
+                                                    data-customer-id="<?php echo (int)$customer['id']; ?>"
+                                                    data-customer-name="<?php echo htmlspecialchars($customer['name']); ?>"
+                                                    data-latitude="<?php echo htmlspecialchars(number_format($latValue, 8, '.', '')); ?>"
+                                                    data-longitude="<?php echo htmlspecialchars(number_format($lngValue, 8, '.', '')); ?>">
+                                                    <i class="bi bi-map me-2 text-info"></i>عرض الموقع
+                                                </button>
+                                            </li>
+                                            <?php endif; ?>
+                                        </ul>
+                                    </div>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
