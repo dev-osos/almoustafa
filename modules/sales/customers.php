@@ -5820,7 +5820,7 @@ document.addEventListener('DOMContentLoaded', function () {
                                     ?>
                                     <div class="dropdown">
                                         <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" data-bs-strategy="fixed" aria-expanded="false">
-                                            <i class="bi bi-three-dots-vertical"></i>
+                                            <i class="bi bi-three-dots-vertical">الاجراءات</i>
                                         </button>
                                         <ul class="dropdown-menu dropdown-menu-end">
                                             <?php if (in_array($currentRole, ['manager', 'developer', 'accountant', 'sales'], true)): ?>
