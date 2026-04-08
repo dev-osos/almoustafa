@@ -4699,19 +4699,12 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     @media (max-width: 767.98px) {
-        /* تحسين الجدول الرئيسي للعملاء - عرض الشاشة كاملة على الهاتف */
+        /* تحسين الجدول الرئيسي للعملاء */
         .dashboard-table-wrapper {
             overflow-x: auto;
             -webkit-overflow-scrolling: touch;
-            width: 100vw;
-            max-width: 100vw;
-            position: relative;
-            left: 50%;
-            right: 50%;
-            margin-left: -50vw;
-            margin-right: -50vw;
-            padding: 0 0.75rem;
-            box-sizing: border-box;
+            width: 100%;
+            max-width: 100%;
         }
         
         .dashboard-table {
