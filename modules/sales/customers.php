@@ -4303,90 +4303,26 @@ document.addEventListener('DOMContentLoaded', function () {
         var balanceRaw = balance.toFixed(2);
 
         var actionsCell = document.createElement('td');
-        var dropdown = document.createElement('div');
-        dropdown.className = 'dropdown';
+        actionsCell.className = 'text-center';
 
-        var toggleBtn = document.createElement('button');
-        toggleBtn.type = 'button';
-        toggleBtn.className = 'btn btn-sm btn-outline-secondary dropdown-toggle';
-        toggleBtn.setAttribute('data-bs-toggle', 'dropdown');
-        toggleBtn.setAttribute('data-bs-strategy', 'fixed');
-        toggleBtn.setAttribute('aria-expanded', 'false');
-        toggleBtn.innerHTML = '<i class="bi bi-three-dots-vertical"></i>';
-        dropdown.appendChild(toggleBtn);
+        var triggerBtn = document.createElement('button');
+        triggerBtn.type = 'button';
+        triggerBtn.className = 'btn btn-sm btn-outline-secondary js-customer-actions-btn';
+        triggerBtn.setAttribute('data-bs-toggle', 'modal');
+        triggerBtn.setAttribute('data-bs-target', '#customerActionsModal');
+        triggerBtn.setAttribute('data-customer-id', customer.id || '');
+        triggerBtn.setAttribute('data-customer-name', customer.name || '');
+        triggerBtn.setAttribute('data-customer-phone', customer.phone || '');
+        triggerBtn.setAttribute('data-customer-address', customer.address || '');
+        triggerBtn.setAttribute('data-customer-region-id', customer.region_id || 0);
+        triggerBtn.setAttribute('data-customer-balance', balanceRaw);
+        triggerBtn.setAttribute('data-customer-balance-formatted', balanceFormatted);
+        triggerBtn.setAttribute('data-customer-balance-positive', balance > 0 ? '1' : '0');
+        triggerBtn.setAttribute('data-can-edit', '1');
+        triggerBtn.setAttribute('data-has-location', '0');
+        triggerBtn.innerHTML = '<i class="bi bi-three-dots-vertical"></i>';
 
-        var menu = document.createElement('ul');
-        menu.className = 'dropdown-menu dropdown-menu-end';
-
-        // اتصال
-        if (customer.phone) {
-            var phoneLi = document.createElement('li');
-            var phoneLink = document.createElement('a');
-            phoneLink.className = 'dropdown-item';
-            phoneLink.href = 'tel:' + customer.phone;
-            phoneLink.innerHTML = '<i class="bi bi-telephone me-2 text-primary"></i>' + customer.phone;
-            phoneLi.appendChild(phoneLink);
-            menu.appendChild(phoneLi);
-
-            var dividerLi = document.createElement('li');
-            dividerLi.innerHTML = '<hr class="dropdown-divider">';
-            menu.appendChild(dividerLi);
-        }
-
-        // تعديل
-        var editLi = document.createElement('li');
-        var editBtn = document.createElement('button');
-        editBtn.type = 'button';
-        editBtn.className = 'dropdown-item edit-customer-btn';
-        editBtn.setAttribute('data-customer-id', customer.id || '');
-        editBtn.setAttribute('data-customer-name', customer.name || '');
-        editBtn.setAttribute('data-customer-phone', customer.phone || '');
-        editBtn.setAttribute('data-customer-address', customer.address || '');
-        editBtn.setAttribute('data-customer-region-id', customer.region_id || 0);
-        editBtn.setAttribute('data-customer-balance', balanceRaw);
-        editBtn.setAttribute('onclick', 'showEditCustomerModal(this)');
-        editBtn.innerHTML = '<i class="bi bi-pencil me-2 text-warning"></i>تعديل';
-        editLi.appendChild(editBtn);
-        menu.appendChild(editLi);
-
-        // تحصيل
-        var collectLi = document.createElement('li');
-        var collectBtn = document.createElement('button');
-        collectBtn.type = 'button';
-        collectBtn.className = 'dropdown-item' + (balance > 0 ? ' text-success fw-semibold' : '');
-        collectBtn.setAttribute('data-customer-id', customer.id || '');
-        collectBtn.setAttribute('data-customer-name', customer.name || '');
-        collectBtn.setAttribute('data-customer-balance', balanceRaw);
-        collectBtn.setAttribute('data-customer-balance-formatted', balanceFormatted);
-        collectBtn.setAttribute('onclick', 'showCollectPaymentModal(this)');
-        collectBtn.innerHTML = '<i class="bi bi-cash-coin me-2 text-success"></i>تحصيل';
-        collectLi.appendChild(collectBtn);
-        menu.appendChild(collectLi);
-
-        // سجل
-        var historyLi = document.createElement('li');
-        var historyBtn = document.createElement('button');
-        historyBtn.type = 'button';
-        historyBtn.className = 'dropdown-item js-customer-history';
-        historyBtn.setAttribute('data-customer-id', customer.id || '');
-        historyBtn.setAttribute('data-customer-name', customer.name || '');
-        historyBtn.innerHTML = '<i class="bi bi-receipt me-2 text-info"></i>سجل';
-        historyLi.appendChild(historyBtn);
-        menu.appendChild(historyLi);
-
-        // مرتجع
-        var returnLi = document.createElement('li');
-        var returnBtn = document.createElement('button');
-        returnBtn.type = 'button';
-        returnBtn.className = 'dropdown-item js-customer-purchase-history';
-        returnBtn.setAttribute('data-customer-id', customer.id || '');
-        returnBtn.setAttribute('data-customer-name', customer.name || '');
-        returnBtn.innerHTML = '<i class="bi bi-arrow-return-left me-2 text-warning"></i>مرتجع';
-        returnLi.appendChild(returnBtn);
-        menu.appendChild(returnLi);
-
-        dropdown.appendChild(menu);
-        actionsCell.appendChild(dropdown);
+        actionsCell.appendChild(triggerBtn);
         row.appendChild(actionsCell);
 
         return row;
