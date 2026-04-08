@@ -5764,7 +5764,11 @@ document.addEventListener('DOMContentLoaded', function () {
     </div>
 </div>
 
-<!-- قائمة العملاء -->    
+<!-- قائمة العملاء -->
+<div class="card customers-list-card mt-3">
+    <div class="card-header d-flex align-items-center justify-content-between">
+        <h6 class="mb-0 fw-bold"><i class="bi bi-people me-2"></i>قائمة العملاء</h6>
+    </div>
     <div class="card-body">
         <div class="table-responsive dashboard-table-wrapper">
             <table class="table dashboard-table align-middle">
@@ -5967,6 +5971,7 @@ document.addEventListener('DOMContentLoaded', function () {
             </ul>
         </nav>
     </div>
+</div>
 </div>
 
 <!-- Modal إجراءات العميل (بدون backdrop) -->
