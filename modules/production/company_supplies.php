@@ -81,13 +81,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     [json_encode($items, JSON_UNESCAPED_UNICODE), $currentUser['id']]
                 );
 
-                addAuditLog(
+                logAudit(
                     $currentUser['id'],
                     'company_supplies_create',
                     'company_supplies',
-                    'create',
-                    'تم إنشاء مستلزمات من قبل إنتاج',
-                    json_encode(['items' => $items], JSON_UNESCAPED_UNICODE)
+                    null,
+                    null,
+                    ['message' => 'تم إنشاء مستلزمات من قبل إنتاج', 'items' => $items]
                 );
 
                 $success = 'تم تسجيل المستلزمات بنجاح.';
@@ -222,6 +222,102 @@ try {
 .btn-print:hover {
     background-color: #0056b3;
 }
+
+/* Responsive styles for mobile */
+@media (max-width: 768px) {
+    .supply-item-row {
+        grid-template-columns: 1fr;
+        gap: 12px;
+        margin-bottom: 20px;
+        padding: 15px;
+        background: #f8f9fa;
+        border-radius: 8px;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    .supply-item-row input,
+    .supply-item-row button {
+        width: 100%;
+        padding: 15px;
+        font-size: 16px; /* Prevent zoom on iOS */
+        box-sizing: border-box;
+    }
+
+    .supplies-table {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    .supplies-table table {
+        min-width: 100%;
+        width: 100%;
+        table-layout: auto;
+    }
+
+    .supplies-table th,
+    .supplies-table td {
+        padding: 8px 6px;
+        font-size: 13px;
+        white-space: nowrap;
+    }
+
+    .action-buttons {
+        flex-wrap: wrap;
+        gap: 8px;
+        flex-direction: column;
+    }
+
+    .action-buttons button {
+        width: 100%;
+        min-width: auto;
+        padding: 10px;
+        margin-bottom: 5px;
+    }
+
+    .status-badge {
+        font-size: 11px;
+        padding: 4px 6px;
+        white-space: nowrap;
+    }
+
+    .items-list {
+        font-size: 12px;
+        padding: 6px;
+        max-width: 200px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .items-list li {
+        font-size: 12px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .card {
+        margin: 10px;
+        width: calc(100% - 20px);
+        box-sizing: border-box;
+    }
+
+    .card-body {
+        padding: 15px;
+    }
+}
+
+@media (max-width: 480px) {
+    .page-header h2 {
+        font-size: 1.3rem;
+    }
+
+    .card-header h5 {
+        font-size: 1rem;
+    }
+}
 </style>
 
 <div class="page-header">
@@ -250,7 +346,7 @@ try {
         <h5><i class="bi bi-pencil-square"></i> إضافة مستلزمات جديدة</h5>
     </div>
     <div class="card-body supplies-container">
-        <form method="POST" id="suppliesForm">
+        <form method="POST" id="suppliesForm" data-no-loading="true">
             <input type="hidden" name="action" value="save_supplies">
             <input type="hidden" name="items" id="itemsInput">
 
@@ -335,14 +431,53 @@ try {
 </div>
 
 <script>
+const companySuppliesApiUrl = '<?php echo getRelativeUrl('api/company_supplies_api.php'); ?>';
+
+function showSuppliesMessage(message, type = 'success') {
+    const existingAlerts = document.querySelectorAll('.company-supplies-dynamic-alert');
+    existingAlerts.forEach((alert) => alert.remove());
+
+    const wrapper = document.createElement('div');
+    wrapper.className = `alert alert-${type} company-supplies-dynamic-alert`;
+    wrapper.setAttribute('role', 'alert');
+    wrapper.innerHTML = `<i class="bi ${type === 'success' ? 'bi-check-circle' : 'bi-exclamation-circle'} me-2"></i>${message}`;
+
+    const pageHeader = document.querySelector('.page-header');
+    if (pageHeader && pageHeader.parentNode) {
+        pageHeader.parentNode.insertBefore(wrapper, pageHeader.nextSibling);
+    }
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function resetSuppliesForm() {
+    const form = document.getElementById('suppliesForm');
+    const container = document.getElementById('itemsContainer');
+
+    if (form) form.reset();
+    if (container) {
+        container.innerHTML = '';
+        addItem();
+    }
+}
+
 function initializeItems() {
     const container = document.getElementById('itemsContainer');
     const addBtn = document.getElementById('addItemBtn');
 
+    if (!container || !addBtn) return;
+
+    addBtn.removeEventListener('click', addItem);
     addBtn.addEventListener('click', addItem);
 
     if (container.children.length === 0) {
         addItem();
+    }
+
+    const form = document.getElementById('suppliesForm');
+    if (form && !form.dataset.suppliesListenerAttached) {
+        form.dataset.suppliesListenerAttached = 'true';
+        form.addEventListener('submit', handleSuppliesSubmit);
     }
 }
 
@@ -400,24 +535,67 @@ function collectItems() {
     return items;
 }
 
-document.getElementById('suppliesForm').addEventListener('submit', function(e) {
+function handleSuppliesSubmit(e) {
     e.preventDefault();
 
     const items = collectItems();
-
     if (items.length === 0) {
         alert('يرجى إضافة عنصر واحد على الأقل وكُلّ بياناته صحيحة.');
         return;
     }
 
     document.getElementById('itemsInput').value = JSON.stringify(items);
-    this.submit();
-});
+
+    const form = document.getElementById('suppliesForm');
+    const submitBtn = form.querySelector('[type="submit"]');
+    if (submitBtn) submitBtn.disabled = true;
+
+    const formData = new FormData(form);
+
+    fetch(companySuppliesApiUrl, {
+        method: 'POST',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json'
+        },
+        body: formData,
+        credentials: 'same-origin'
+    })
+    .then(async (r) => {
+        const text = await r.text();
+        try {
+            return JSON.parse(text);
+        } catch (parseError) {
+            console.error('Company supplies save response was not valid JSON:', text);
+            throw new Error('تعذر قراءة استجابة الخادم أثناء حفظ المستلزمات.');
+        }
+    })
+    .then(data => {
+        if (!data.success) {
+            throw new Error(data.message || 'حدث خطأ أثناء حفظ المستلزمات.');
+        }
+
+        showSuppliesMessage(data.message || 'تم حفظ المستلزمات بنجاح.', 'success');
+        resetSuppliesForm();
+    })
+    .catch((error) => {
+        showSuppliesMessage(error.message || 'حدث خطأ في الاتصال بالخادم.', 'danger');
+    })
+    .finally(() => {
+        const btn = document.querySelector('#suppliesForm [type="submit"]');
+        if (btn) btn.disabled = false;
+    });
+}
 
 function printSupply(id, status) {
     const url = '<?php echo getRelativeUrl('print_company_supplies.php'); ?>?id=' + id + '&status=' + encodeURIComponent(status);
     window.open(url, 'print', 'width=800,height=600');
 }
 
-window.addEventListener('DOMContentLoaded', initializeItems);
+if (document.readyState !== 'loading') {
+    initializeItems();
+} else {
+    document.addEventListener('DOMContentLoaded', initializeItems);
+}
+window.addEventListener('ajaxNavigationComplete', initializeItems);
 </script>

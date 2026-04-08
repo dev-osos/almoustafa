@@ -17,6 +17,7 @@ if (!defined('ACCESS_ALLOWED')) {
     die('Direct access not allowed');
 }
 
+
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../includes/db.php';
 require_once __DIR__ . '/../../includes/auth.php';
@@ -98,13 +99,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     );
                     
                     $success = 'تم حفظ المستلزمات بنجاح.';
-                    addAuditLog(
+                    logAudit(
                         $currentUser['id'],
                         'company_supplies_create',
                         'company_supplies',
-                        'create',
-                        'تم حفظ مستلزمات جديدة',
-                        json_encode(['items_count' => count($items), 'status' => $status])
+                        null,
+                        null,
+                        ['message' => 'تم حفظ مستلزمات جديدة', 'items_count' => count($items), 'status' => $status]
                     );
                 }
             }
@@ -227,6 +228,75 @@ if ($sessionError) {
     color: white;
 }
 
+/* Dropdown Actions Styles */
+.dropdown-actions {
+    position: relative;
+    display: inline-block;
+}
+
+.btn-dropdown {
+    background-color: #6c757d;
+    color: white;
+    padding: 6px 12px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.btn-dropdown:hover {
+    background-color: #545b62;
+}
+
+.dropdown-menu {
+    display: none;
+    position: absolute;
+    background-color: white;
+    min-width: 160px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    border-radius: 4px;
+    z-index: 1000;
+    right: 0;
+    top: 100%;
+    margin-top: 5px;
+    border: 1px solid #ddd;
+}
+
+.dropdown-menu.show {
+    display: block;
+}
+
+.dropdown-menu a {
+    color: #333;
+    padding: 10px 15px;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    border-bottom: 1px solid #f0f0f0;
+    transition: background-color 0.2s;
+}
+
+.dropdown-menu a:last-child {
+    border-bottom: none;
+}
+
+.dropdown-menu a:hover {
+    background-color: #f8f9fa;
+}
+
+.dropdown-menu a.text-danger {
+    color: #dc3545;
+}
+
+.dropdown-menu a.text-danger:hover {
+    background-color: #f8d7da;
+}
+
 .action-buttons {
     display: flex;
     gap: 5px;
@@ -238,6 +308,139 @@ if ($sessionError) {
     border: none;
     border-radius: 4px;
     cursor: pointer;
+}
+
+/* Responsive styles for mobile */
+@media (max-width: 768px) {
+    .supplies-container,
+    .card,
+    .card-body,
+    form {
+        width: 100% !important;
+        max-width: 100vw !important;
+        overflow-x: hidden !important;
+        box-sizing: border-box !important;
+    }
+
+    .row {
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+    }
+
+    .col-md-6,
+    [class*="col-"] {
+        width: 100% !important;
+        max-width: 100% !important;
+        flex: 0 0 100% !important;
+        padding-left: 10px !important;
+        padding-right: 10px !important;
+    }
+
+    .form-select,
+    .form-control,
+    select,
+    input[type="text"],
+    input[type="number"] {
+        width: 100% !important;
+        max-width: 100% !important;
+        font-size: 16px !important;
+        box-sizing: border-box !important;
+    }
+
+    .supply-item-row {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 10px !important;
+        width: 100% !important;
+        padding: 10px !important;
+        background: #f8f9fa;
+        border-radius: 8px;
+        margin-bottom: 10px;
+        box-sizing: border-box !important;
+    }
+
+    .supply-item-row input,
+    .supply-item-row button {
+        width: 100% !important;
+        max-width: 100% !important;
+        padding: 12px !important;
+        font-size: 16px;
+        box-sizing: border-box !important;
+    }
+
+    .supplies-table {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    .supplies-table table {
+        min-width: 100%;
+        width: 100%;
+        table-layout: auto;
+    }
+
+    .supplies-table th,
+    .supplies-table td {
+        padding: 8px 6px;
+        font-size: 13px;
+        white-space: nowrap;
+    }
+
+    .action-buttons {
+        flex-wrap: wrap;
+        gap: 8px;
+        flex-direction: column;
+    }
+
+    .action-buttons button {
+        width: 100%;
+        min-width: auto;
+        padding: 10px;
+        margin-bottom: 5px;
+    }
+
+    .status-badge {
+        font-size: 11px;
+        padding: 4px 6px;
+        white-space: nowrap;
+    }
+
+    .items-list {
+        font-size: 12px;
+        padding: 6px;
+        max-width: 200px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .items-list li {
+        font-size: 12px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .card {
+        margin: 10px;
+        width: calc(100% - 20px);
+        box-sizing: border-box;
+    }
+
+    .card-body {
+        padding: 15px;
+    }
+}
+
+@media (max-width: 480px) {
+    .page-header h2 {
+        font-size: 1.3rem;
+    }
+
+    .card-header h5 {
+        font-size: 1rem;
+    }
 }
 
 .btn-print {
@@ -297,7 +500,7 @@ if ($sessionError) {
         <h5><i class="bi bi-pencil-square"></i> إضافة مستلزمات جديدة</h5>
     </div>
     <div class="card-body">
-        <form method="POST" id="suppliesForm" class="supplies-container">
+        <form method="POST" id="suppliesForm" class="supplies-container" data-no-loading="true">
             <input type="hidden" name="action" value="save_supplies">
             <input type="hidden" name="items" id="itemsInput">
             
@@ -376,18 +579,23 @@ if ($sessionError) {
                         <?php endif; ?>
                     </td>
                     <td>
-                        <div class="action-buttons">
-                            <button type="button" class="btn-print" onclick="printSupply(<?php echo $supply['id']; ?>, '<?php echo htmlspecialchars($statusLabel); ?>')">
-                                <i class="bi bi-printer"></i> طباعة
+                        <div class="dropdown-actions">
+                            <button type="button" class="btn-dropdown" onclick="toggleDropdown(<?php echo $supply['id']; ?>)">
+                                <i class="bi bi-three-dots-vertical"></i> إجراءات
                             </button>
-                            <?php if ($supply['status'] === 'pending'): ?>
-                            <button type="button" class="btn-status" onclick="updateStatus(<?php echo $supply['id']; ?>)">
-                                <i class="bi bi-check-lg"></i> تحديث
-                            </button>
-                            <button type="button" class="btn-status" onclick="deleteSupply(<?php echo $supply['id']; ?>)">
-                                <i class="bi bi-trash"></i> حذف
-                            </button>
-                            <?php endif; ?>
+                            <div class="dropdown-menu" id="dropdown-<?php echo $supply['id']; ?>">
+                                <a href="#" onclick="printSupply(<?php echo $supply['id']; ?>, '<?php echo htmlspecialchars($statusLabel); ?>'); return false;">
+                                    <i class="bi bi-printer"></i> طباعة
+                                </a>
+                                <?php if ($supply['status'] === 'pending'): ?>
+                                <a href="#" onclick="updateStatus(<?php echo $supply['id']; ?>); return false;">
+                                    <i class="bi bi-check-lg"></i> تحديث الحالة
+                                </a>
+                                <a href="#" class="text-danger" onclick="deleteSupply(<?php echo $supply['id']; ?>); return false;">
+                                    <i class="bi bi-trash"></i> حذف
+                                </a>
+                                <?php endif; ?>
+                            </div>
                         </div>
                     </td>
                 </tr>
@@ -398,15 +606,92 @@ if ($sessionError) {
 <?php endif; ?>
 
 <script>
+const companySuppliesApiUrl = '<?php echo getRelativeUrl('api/company_supplies_api.php'); ?>';
+
+function showSuppliesMessage(message, type = 'success') {
+    const existingAlerts = document.querySelectorAll('.company-supplies-dynamic-alert');
+    existingAlerts.forEach((alert) => alert.remove());
+
+    const wrapper = document.createElement('div');
+    wrapper.className = `alert alert-${type} company-supplies-dynamic-alert`;
+    wrapper.setAttribute('role', 'alert');
+    wrapper.innerHTML = `<i class="bi ${type === 'success' ? 'bi-check-circle' : 'bi-exclamation-circle'} me-2"></i>${message}`;
+
+    const pageHeader = document.querySelector('.page-header');
+    if (pageHeader && pageHeader.parentNode) {
+        pageHeader.parentNode.insertBefore(wrapper, pageHeader.nextSibling);
+    }
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function resetSuppliesForm() {
+    const form = document.getElementById('suppliesForm');
+    const container = document.getElementById('itemsContainer');
+    const statusSelect = document.getElementById('statusSelect');
+
+    if (form) form.reset();
+    if (statusSelect) statusSelect.value = 'pending';
+    if (container) {
+        container.innerHTML = '';
+        addItem();
+    }
+}
+
+// Toggle dropdown menu
+function toggleDropdown(id) {
+    const dropdown = document.getElementById('dropdown-' + id);
+    if (!dropdown) return;
+    
+    // Close all other open dropdowns
+    document.querySelectorAll('.dropdown-menu.show').forEach(function(menu) {
+        if (menu.id !== 'dropdown-' + id) {
+            menu.classList.remove('show');
+        }
+    });
+    
+    // Toggle current dropdown
+    dropdown.classList.toggle('show');
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.dropdown-actions')) {
+        document.querySelectorAll('.dropdown-menu.show').forEach(function(menu) {
+            menu.classList.remove('show');
+        });
+    }
+});
+
+// Prevent dropdown from closing when clicking on menu items
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.dropdown-menu a').forEach(function(item) {
+        item.addEventListener('click', function(e) {
+            e.stopPropagation();
+            // Close dropdown after action
+            const menu = this.closest('.dropdown-menu');
+            if (menu) menu.classList.remove('show');
+        });
+    });
+});
+
 function initializeItems() {
     const container = document.getElementById('itemsContainer');
     const addBtn = document.getElementById('addItemBtn');
-    
+
+    if (!container || !addBtn) return;
+
+    addBtn.removeEventListener('click', addItem);
     addBtn.addEventListener('click', addItem);
-    
-    // إضافة عنصر واحد افتراضياً
+
     if (container.children.length === 0) {
         addItem();
+    }
+
+    const form = document.getElementById('suppliesForm');
+    if (form && !form.dataset.suppliesListenerAttached) {
+        form.dataset.suppliesListenerAttached = 'true';
+        form.addEventListener('submit', handleSuppliesSubmit);
     }
 }
 
@@ -457,19 +742,49 @@ function collectItems() {
     return items;
 }
 
-document.getElementById('suppliesForm').addEventListener('submit', function(e) {
+function handleSuppliesSubmit(e) {
     e.preventDefault();
-    
+
     const items = collectItems();
-    
     if (items.length === 0) {
         alert('يرجى إضافة عنصر واحد على الأقل.');
         return;
     }
-    
+
     document.getElementById('itemsInput').value = JSON.stringify(items);
-    this.submit();
-});
+
+    const form = document.getElementById('suppliesForm');
+    const submitBtn = form.querySelector('[type="submit"]');
+    if (submitBtn) submitBtn.disabled = true;
+
+    const formData = new FormData(form);
+
+    fetch(companySuppliesApiUrl, {
+        method: 'POST',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json'
+        },
+        body: formData,
+        credentials: 'same-origin'
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (!data.success) {
+            throw new Error(data.message || 'حدث خطأ أثناء حفظ المستلزمات.');
+        }
+
+        showSuppliesMessage(data.message || 'تم حفظ المستلزمات بنجاح.', 'success');
+        resetSuppliesForm();
+    })
+    .catch((error) => {
+        showSuppliesMessage(error.message || 'حدث خطأ في الاتصال بالخادم.', 'danger');
+    })
+    .finally(() => {
+        const btn = document.querySelector('#suppliesForm [type="submit"]');
+        if (btn) btn.disabled = false;
+    });
+}
 
 function printSupply(id, status) {
     // فتح نافذة جديدة للطباعة
@@ -537,6 +852,10 @@ function deleteSupply(id) {
     });
 }
 
-// تهيئة الصفحة
-document.addEventListener('DOMContentLoaded', initializeItems);
+if (document.readyState !== 'loading') {
+    initializeItems();
+} else {
+    document.addEventListener('DOMContentLoaded', initializeItems);
+}
+window.addEventListener('ajaxNavigationComplete', initializeItems);
 </script>

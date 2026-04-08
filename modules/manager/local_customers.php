@@ -696,12 +696,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'collect_debt') {
         $customerId = isset($_POST['customer_id']) ? (int)$_POST['customer_id'] : 0;
         $amount = isset($_POST['amount']) ? cleanFinancialValue($_POST['amount']) : 0;
+        $discount = isset($_POST['discount']) ? max(0, cleanFinancialValue($_POST['discount'])) : 0;
         $collectionType = isset($_POST['collection_type']) ? trim($_POST['collection_type']) : 'direct'; // direct أو management
 
         if ($customerId <= 0) {
             $error = 'معرف العميل غير صالح.';
-        } elseif ($amount <= 0) {
-            $error = 'يجب إدخال مبلغ تحصيل أكبر من صفر.';
+        } elseif ($amount <= 0 && $discount <= 0) {
+            $error = 'يجب إدخال مبلغ تحصيل أو خصم نقدي أكبر من صفر.';
+        } elseif ($amount < 0) {
+            $error = 'مبلغ التحصيل لا يمكن أن يكون سالباً.';
         } elseif (!in_array($collectionType, ['direct', 'management'])) {
             $error = 'نوع التحصيل غير صالح.';
         } else {
@@ -723,7 +726,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $currentBalance = isset($customer['balance']) ? (float)$customer['balance'] : 0.0;
 
                 // السماح بالتحصيل حتى لو كان الرصيد صفر أو أقل (رصيد دائن)؛ المبلغ المحصل يخصم من الرصيد فإذا كان الرصيد صفر أو سالب يصبح المبلغ رصيداً دائناً للعميل
-                $newBalance = round($currentBalance - $amount, 2);
+                $newBalance = round($currentBalance - $amount - $discount, 2);
 
                 $db->execute(
                     "UPDATE local_customers SET balance = ? WHERE id = ?",
@@ -812,8 +815,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     );
                 }
 
+                // تسجيل الخصم النقدي في local_collections (إذا كان هناك خصم)
+                if ($discount > 0 && !empty($localCollectionsTableExists)) {
+                    $discountColumns = ['customer_id', 'amount', 'date', 'payment_method', 'collected_by'];
+                    $discountValues  = [$customerId, $discount, $collectionDate, 'discount', $currentUser['id']];
+                    $discountPlaceholders = array_fill(0, count($discountColumns), '?');
+
+                    if ($hasCollectionNumberColumn) {
+                        // رقم تحصيل منفصل للخصم
+                        $discountCollectionNumber = null;
+                        for ($attempt = 0; $attempt < 10; $attempt++) {
+                            $candidate = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+                            $exists = $db->queryOne("SELECT 1 FROM local_collections WHERE collection_number = ?", [$candidate]);
+                            if (empty($exists)) { $discountCollectionNumber = $candidate; break; }
+                        }
+                        if ($discountCollectionNumber !== null) {
+                            array_unshift($discountColumns, 'collection_number');
+                            array_unshift($discountValues, $discountCollectionNumber);
+                            array_unshift($discountPlaceholders, '?');
+                        }
+                    }
+
+                    if ($hasNotesColumn) {
+                        $discountColumns[] = 'notes';
+                        $discountValues[]  = 'خصم نقدي - ' . ($customer['name'] ?? '');
+                        $discountPlaceholders[] = '?';
+                    }
+
+                    if ($hasStatusColumn) {
+                        $discountColumns[] = 'status';
+                        $discountValues[]  = 'approved';
+                        $discountPlaceholders[] = '?';
+                    }
+
+                    $db->execute(
+                        "INSERT INTO local_collections (" . implode(', ', $discountColumns) . ") VALUES (" . implode(', ', $discountPlaceholders) . ")",
+                        $discountValues
+                    );
+
+                    logAudit($currentUser['id'], 'add_cash_discount_local_customer', 'local_collection', $db->getLastInsertId(), null, [
+                        'customer_id' => $customerId,
+                        'discount'    => $discount,
+                    ]);
+                }
+
                 // توزيع التحصيل على الفواتير المحلية (فقط الجزء الذي يغطي الدين؛ الزيادة تصبح رصيداً دائناً). إذا كان الرصيد صفر أو سالب فلا يوجد دين لتوزيع التحصيل عليه
-                $amountToDistribute = ($currentBalance > 0) ? min($amount, $currentBalance) : 0;
+                $amountToDistribute = ($currentBalance > 0) ? min($amount + $discount, $currentBalance) : 0;
                 $localInvoicesTableExists = $db->queryOne("SHOW TABLES LIKE 'local_invoices'");
                 if ($amountToDistribute > 0 && !empty($localInvoicesTableExists)) {
                     try {
@@ -923,9 +970,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $copyableLines = [
                     'تم التحصيل بنجاح',
                     'المبلغ المحصل: ' . formatCurrency($amount),
+                ];
+                if ($discount > 0) {
+                    $copyableLines[] = 'الخصم النقدي: ' . formatCurrency($discount);
+                }
+                $copyableLines = array_merge($copyableLines, [
                     'تاريخ التحصيل: ' . $collectionDate,
                     'المتبقي بعد التحصيل: ' . formatCurrency($newBalance),
-                ];
+                ]);
                 if ($customerName !== '') {
                     $copyableLines[] = 'العميل: ' . $customerName;
                 }
@@ -1557,6 +1609,61 @@ try {
 $summaryDebtorCount = $customerStats['debtor_count'] ?? 0;
 $summaryTotalDebt = (float)($customerStats['total_debt'] ?? 0.0);
 $summaryTotalCustomers = $customerStats['total_count'] ?? $totalCustomers;
+
+// --- بطاقة مبيعات الشهر ---
+$salesMonthYear  = (int)($_GET['sales_year']  ?? date('Y'));
+$salesMonthMonth = (int)($_GET['sales_month'] ?? date('n'));
+// تصحيح القيم خارج النطاق
+if ($salesMonthMonth < 1 || $salesMonthMonth > 12) { $salesMonthMonth = (int)date('n'); }
+if ($salesMonthYear  < 2000 || $salesMonthYear > 2100) { $salesMonthYear  = (int)date('Y'); }
+$salesMonthStart = sprintf('%04d-%02d-01', $salesMonthYear, $salesMonthMonth);
+$salesMonthEnd   = date('Y-m-t', mktime(0, 0, 0, $salesMonthMonth, 1, $salesMonthYear));
+
+$monthlySalesAmount = 0.0;
+try {
+    // 1. من local_invoices (فواتير النظام — تضيف دين للعميل)
+    $liExists = $db->queryOne("SHOW TABLES LIKE 'local_invoices'");
+    if (!empty($liExists)) {
+        $liHasDate = !empty($db->queryOne("SHOW COLUMNS FROM local_invoices LIKE 'date'"));
+        $liDateCol = $liHasDate ? 'date' : 'created_at';
+        $liRes = $db->queryOne(
+            "SELECT COALESCE(SUM(total_amount), 0) AS ms
+             FROM local_invoices
+             WHERE $liDateCol >= ? AND $liDateCol <= ?",
+            [$salesMonthStart, $salesMonthEnd]
+        );
+        $monthlySalesAmount += (float)($liRes['ms'] ?? 0);
+    }
+    // 2. من customer_task_purchases (أوردرات الإنتاج المعتمدة — تضيف دين للعميل)
+    $ctpExists = $db->queryOne("SHOW TABLES LIKE 'customer_task_purchases'");
+    if (!empty($ctpExists)) {
+        $ctpHasDate = !empty($db->queryOne("SHOW COLUMNS FROM customer_task_purchases LIKE 'task_date'"));
+        $ctpDateCol = $ctpHasDate ? 'task_date' : 'created_at';
+        $ctpRes = $db->queryOne(
+            "SELECT COALESCE(SUM(total_amount), 0) AS ms
+             FROM customer_task_purchases
+             WHERE $ctpDateCol >= ? AND $ctpDateCol <= ?",
+            [$salesMonthStart, $salesMonthEnd]
+        );
+        $monthlySalesAmount += (float)($ctpRes['ms'] ?? 0);
+    }
+    // ملاحظة: local_customer_paper_invoices هي رصيد دائن (تخفيض دين) وليست مبيعات — لا تُضاف هنا
+} catch (Throwable $monthlySalesErr) {
+    error_log('Monthly sales calc error: ' . $monthlySalesErr->getMessage());
+}
+
+// بناء روابط التنقل بين الأشهر (يحتفظ بجميع GET params الأخرى)
+$_prevMonth = $salesMonthMonth - 1; $_prevYear = $salesMonthYear;
+if ($_prevMonth < 1) { $_prevMonth = 12; $_prevYear--; }
+$_nextMonth = $salesMonthMonth + 1; $_nextYear = $salesMonthYear;
+if ($_nextMonth > 12) { $_nextMonth = 1; $_nextYear++; }
+$_baseParams = array_diff_key($_GET, array_flip(['sales_month', 'sales_year']));
+$_prevUrl = '?' . http_build_query(array_merge($_baseParams, ['sales_month' => $_prevMonth, 'sales_year' => $_prevYear]));
+$_nextUrl = '?' . http_build_query(array_merge($_baseParams, ['sales_month' => $_nextMonth, 'sales_year' => $_nextYear]));
+$_isCurrentMonth = ($salesMonthYear == (int)date('Y') && $salesMonthMonth == (int)date('n'));
+$_nextUrl = $_isCurrentMonth ? null : $_nextUrl;
+$_arabicMonths = ['','يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+$_monthLabel = ($_arabicMonths[$salesMonthMonth] ?? $salesMonthMonth) . ' ' . $salesMonthYear;
 ?>
 
 <!-- Responsive Modals CSS - يجب أن يكون في البداية قبل أي محتوى -->
@@ -1944,6 +2051,32 @@ var dashboardWrapper = null;
                 </div>
                 <span class="text-success display-6 d-md-block d-none"><i class="bi bi-cash-coin"></i></span>
                 <span class="text-success fs-4 d-md-none"><i class="bi bi-cash-coin"></i></span>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-md-6 col-xl-3">
+        <div class="card shadow-sm border-0 h-100 border-start border-3 border-info">
+            <div class="card-body p-3">
+                <div class="d-flex align-items-center justify-content-between mb-1">
+                    <div class="text-muted small fw-semibold summary-card-label">مبيعات الشهر</div>
+                    <span class="text-info d-none d-md-block"><i class="bi bi-bar-chart-fill fs-4"></i></span>
+                </div>
+                <div class="fw-bold mb-1 summary-card-value" style="font-size:0.95rem;"><?php echo htmlspecialchars($_monthLabel); ?></div>
+                <div class="fs-5 fw-bold text-info mb-2 summary-card-value"><?php echo number_format($monthlySalesAmount, 2, '.', ',') . ' ' . getCurrencySymbol(); ?></div>
+                <div class="d-flex gap-2">
+                    <a href="<?php echo htmlspecialchars($_prevUrl); ?>" class="btn btn-outline-secondary btn-sm px-2 py-1" title="الشهر السابق">
+                        <i class="bi bi-chevron-right"></i>
+                    </a>
+                    <?php if (!$_isCurrentMonth): ?>
+                    <a href="<?php echo htmlspecialchars($_nextUrl); ?>" class="btn btn-outline-secondary btn-sm px-2 py-1" title="الشهر التالي">
+                        <i class="bi bi-chevron-left"></i>
+                    </a>
+                    <?php else: ?>
+                    <button class="btn btn-outline-secondary btn-sm px-2 py-1" disabled title="الشهر الحالي">
+                        <i class="bi bi-chevron-left"></i>
+                    </button>
+                    <?php endif; ?>
+                </div>
             </div>
         </div>
     </div>
@@ -2472,8 +2605,28 @@ function loadLocalCustomers(page) {
                             min="0"
                             value="0"
                             required
+                            oninput="updateCollectionSummary()"
                         >
                         <div class="form-text">يمكن إدخال مبلغ أكبر من الدين؛ الفرق يُحول تلقائياً إلى رصيد دائن للعميل.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="collectionDiscount">خصم نقدي <small class="text-muted">(اختياري)</small></label>
+                        <input
+                            type="number"
+                            class="form-control"
+                            id="collectionDiscount"
+                            name="discount"
+                            step="0.01"
+                            min="0"
+                            value="0"
+                            oninput="updateCollectionSummary()"
+                        >
+                    </div>
+                    <div id="collectionSummaryBox" class="alert alert-info py-2 px-3 mb-3" style="display:none; font-size:0.9rem;">
+                        <div class="d-flex justify-content-between"><span>مبلغ التحصيل:</span> <strong id="summaryAmount">0.00</strong></div>
+                        <div class="d-flex justify-content-between"><span>الخصم النقدي:</span> <strong id="summaryDiscount" class="text-warning">0.00</strong></div>
+                        <hr class="my-1">
+                        <div class="d-flex justify-content-between"><span>إجمالي الخصم من الرصيد:</span> <strong id="summaryTotal" class="text-success">0.00</strong></div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">نوع التحصيل <span class="text-danger">*</span></label>
@@ -2540,8 +2693,28 @@ function loadLocalCustomers(page) {
                     min="0"
                     value="0"
                     required
+                    oninput="updateCardCollectionSummary()"
                 >
                 <div class="form-text">يمكن إدخال مبلغ أكبر من الدين؛ الفرق يُحول تلقائياً إلى رصيد دائن للعميل.</div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="collectPaymentCardDiscount">خصم نقدي <small class="text-muted">(اختياري)</small></label>
+                <input
+                    type="number"
+                    class="form-control"
+                    id="collectPaymentCardDiscount"
+                    name="discount"
+                    step="0.01"
+                    min="0"
+                    value="0"
+                    oninput="updateCardCollectionSummary()"
+                >
+            </div>
+            <div id="cardCollectionSummaryBox" class="alert alert-info py-2 px-3 mb-3" style="display:none; font-size:0.9rem;">
+                <div class="d-flex justify-content-between"><span>مبلغ التحصيل:</span> <strong id="cardSummaryAmount">0.00</strong></div>
+                <div class="d-flex justify-content-between"><span>الخصم النقدي:</span> <strong id="cardSummaryDiscount" class="text-warning">0.00</strong></div>
+                <hr class="my-1">
+                <div class="d-flex justify-content-between"><span>إجمالي الخصم من الرصيد:</span> <strong id="cardSummaryTotal" class="text-success">0.00</strong></div>
             </div>
             <div class="mb-3">
                 <label class="form-label">نوع التحصيل <span class="text-danger">*</span></label>
@@ -4910,6 +5083,37 @@ window.showAddLocalCustomerModal = function() {
     }
 };
 
+// دوال ملخص التحصيل + الخصم
+function updateCollectionSummary() {
+    const amount   = parseFloat(document.getElementById('collectionAmount')?.value) || 0;
+    const discount = parseFloat(document.getElementById('collectionDiscount')?.value) || 0;
+    const box = document.getElementById('collectionSummaryBox');
+    if (!box) return;
+    if (discount > 0 || amount > 0) {
+        box.style.display = '';
+        document.getElementById('summaryAmount').textContent   = amount.toFixed(2);
+        document.getElementById('summaryDiscount').textContent = discount.toFixed(2);
+        document.getElementById('summaryTotal').textContent    = (amount + discount).toFixed(2);
+    } else {
+        box.style.display = 'none';
+    }
+}
+
+function updateCardCollectionSummary() {
+    const amount   = parseFloat(document.getElementById('collectPaymentCardAmount')?.value) || 0;
+    const discount = parseFloat(document.getElementById('collectPaymentCardDiscount')?.value) || 0;
+    const box = document.getElementById('cardCollectionSummaryBox');
+    if (!box) return;
+    if (discount > 0 || amount > 0) {
+        box.style.display = '';
+        document.getElementById('cardSummaryAmount').textContent   = amount.toFixed(2);
+        document.getElementById('cardSummaryDiscount').textContent = discount.toFixed(2);
+        document.getElementById('cardSummaryTotal').textContent    = (amount + discount).toFixed(2);
+    } else {
+        box.style.display = 'none';
+    }
+}
+
 // دوال إغلاق Cards
 function closeCollectPaymentCard() {
     const card = document.getElementById('collectPaymentCard');
@@ -7095,12 +7299,30 @@ function displayLocalPurchaseHistory(history, paperInvoices, paperInvoiceReturns
         });
     })();
     collections.forEach(function(col) {
-        const safeNum = ('تحصيل - ' + (col.collection_number || col.id)).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const isDiscount = (col.notes || '').indexOf('خصم نقدي') >= 0;
+        const typeLabel = isDiscount ? 'خصم نقدي' : 'تحصيل';
+        const typeClass = isDiscount ? 'text-danger' : 'text-success';
+        
+        const safeNum = (typeLabel + ' - ' + (col.collection_number || col.id)).replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const dateStr = (col.date || col.created_at || '-').toString().substring(0, 10);
         const amount = parseFloat(col.amount || 0);
         const colCreatedBy = (col.created_by_name || '-').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        var labelText = 'تحصيل - ' + (col.collection_number || col.id);
-        var entry = { sortDate: normDate(col.date || col.created_at), effect: -amount, labelText: labelText, amountNum: amount, cells: ['<td>' + safeNum + '</td>', '<td class="text-success">' + amount.toFixed(2) + ' ج.م (تحصيل)</td>', '<td>' + dateStr + '</td>', '<td>' + colCreatedBy + '</td>', '<td><span class="text-muted small">تحصيل</span></td>'] };
+        
+        var labelText = typeLabel + ' - ' + (col.collection_number || col.id);
+        
+        var entry = { 
+            sortDate: normDate(col.date || col.created_at), 
+            effect: -amount, 
+            labelText: labelText, 
+            amountNum: amount, 
+            cells: [
+                '<td>' + safeNum + '</td>', 
+                '<td class="' + typeClass + '">' + amount.toFixed(2) + ' ج.م (' + typeLabel + ')</td>', 
+                '<td>' + dateStr + '</td>', 
+                '<td>' + colCreatedBy + '</td>', 
+                '<td><span class="text-muted small">' + typeLabel + '</span></td>'
+            ] 
+        };
         entry.searchableText = buildSearchableText(labelText, amount, dateStr);
         allEntries.push(entry);
     });

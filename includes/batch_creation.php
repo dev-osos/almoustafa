@@ -663,7 +663,10 @@ function batchCreationDeductTypedStock($pdo, array $material, float $unitsMultip
     }
 
     $totalRequired = $quantityPerUnit * $unitsMultiplier;
-    $materialType = (string)($material['material_type'] ?? 'other');
+    $materialType = trim((string)($material['material_type'] ?? 'other'));
+    $materialType = function_exists('mb_strtolower')
+        ? mb_strtolower($materialType, 'UTF-8')
+        : strtolower($materialType);
     $materialName = trim((string)($material['material_name'] ?? 'مادة خام'));
     $supplierId = isset($material['supplier_id']) ? (int)$material['supplier_id'] : null;
     $unit = $material['unit'] ?? 'وحدة';
@@ -821,6 +824,10 @@ function batchCreationDeductTypedStock($pdo, array $material, float $unitsMultip
             }
             break;
         case 'raw_general':
+        case 'ingredient':
+        case 'ingredients':
+        case 'other':
+        case 'general':
             // محاولة التعرف على نوع المادة من اسمها والبحث في الجداول الخاصة
             $normalizedName = mb_strtolower(trim($materialName), 'UTF-8');
             
@@ -2728,4 +2735,3 @@ function batchCreationCreate(int $templateId, int $units, array $rawUsage = [], 
         ];
     }
 }
-

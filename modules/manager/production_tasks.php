@@ -137,6 +137,36 @@ if (!function_exists('enforceTasksRetentionLimit')) {
     }
 }
 
+if (!function_exists('managerEnsureTasksStatusEnum')) {
+    function managerEnsureTasksStatusEnum($db): void
+    {
+        try {
+            $statusCol = $db->queryOne("SHOW COLUMNS FROM tasks LIKE 'status'");
+            $statusType = strtolower((string) ($statusCol['Type'] ?? ''));
+            // إذا كان العمود VARCHAR فهو يقبل أي قيمة — لا حاجة لتعديل
+            if ($statusType === '' || strpos($statusType, 'varchar') !== false) {
+                return;
+            }
+            // العمود ENUM — تحقق إن كانت القيمة الجديدة موجودة
+            if (stripos($statusType, 'with_shipping_company') === false) {
+                try {
+                    $db->execute("ALTER TABLE tasks MODIFY COLUMN status ENUM('pending','received','in_progress','completed','with_delegate','with_driver','with_shipping_company','delivered','returned','cancelled') DEFAULT 'pending'");
+                } catch (Throwable $enumError) {
+                    // فشل تعديل ENUM — تحويل إلى VARCHAR يقبل أي قيمة
+                    error_log('managerEnsureTasksStatusEnum ENUM alter failed, converting to VARCHAR: ' . $enumError->getMessage());
+                    try {
+                        $db->execute("ALTER TABLE tasks MODIFY COLUMN status VARCHAR(50) NOT NULL DEFAULT 'pending'");
+                    } catch (Throwable $varcharError) {
+                        error_log('managerEnsureTasksStatusEnum VARCHAR alter also failed: ' . $varcharError->getMessage());
+                    }
+                }
+            }
+        } catch (Throwable $e) {
+            error_log('managerEnsureTasksStatusEnum error: ' . $e->getMessage());
+        }
+    }
+}
+
 requireRole(['manager', 'accountant', 'developer']);
 
 $db = db();
@@ -355,6 +385,7 @@ $hasStatusChangedBy = false;
 $columns = array_column($db->query("SHOW COLUMNS FROM tasks") ?: [], 'Field');
 $columnsMap = array_flip($columns);
 $hasStatusChangedBy = isset($columnsMap['status_changed_by']);
+managerEnsureTasksStatusEnum($db);
 
 if (empty($_SESSION['_pt_migrations_done'])) {
     try {
@@ -854,6 +885,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $advancePayment = (float) str_replace(',', '.', (string) $_POST['advance_payment']);
             if ($advancePayment < 0) $advancePayment = 0;
         }
+        $autoApproveInvoice = isset($_POST['auto_approve_invoice']) && $_POST['auto_approve_invoice'] == '1';
 
         // تحميل qu.json لحساب الكمية الفعلية للخصم عند الوحدة = شرينك
         $quDataForDeduction = [];
@@ -1587,11 +1619,93 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
 
+                // اعتماد الفاتورة تلقائياً إذا تم تفعيل الخيار
+                $autoApproveMsg = '';
+                if ($autoApproveInvoice && $taskId > 0 && !in_array($taskType, ['telegraph', 'shipping_company'], true)) {
+                    try {
+                        // حساب الإجمالي النهائي
+                        $autoSubtotal = 0;
+                        foreach ($products as $p) {
+                            $lt = $p['line_total'] ?? null;
+                            if ($lt !== null && is_numeric($lt)) {
+                                $autoSubtotal += (float)$lt;
+                            } elseif (isset($p['quantity']) && (float)($p['quantity'] ?? 0) > 0 && isset($p['price']) && is_numeric($p['price'] ?? null)) {
+                                $autoSubtotal += round((float)$p['quantity'] * (float)$p['price'], 2);
+                            }
+                        }
+                        // المبلغ الكلي (بدون خصم المدفوع مقدماً) — يُحفظ في tasks.total_amount
+                        $autoGrossTotal = max(0, $autoSubtotal + $shippingFees - $discount);
+                        // المبلغ الصافي الذي يُضاف لرصيد العميل (بعد خصم المدفوع مقدماً)
+                        $autoNetAmount  = max(0, $autoGrossTotal - $advancePayment);
+
+                        // تحديد العميل المحلي
+                        $autoCustId = (int)($localCustomerIdForTask ?? 0);
+                        if ($autoCustId <= 0) {
+                            $autoName  = trim((string)($customerName ?? ''));
+                            $autoPhone = trim((string)($customerPhone ?? ''));
+                            if ($autoName !== '' || $autoPhone !== '') {
+                                $autoMatch = $db->queryOne(
+                                    "SELECT id FROM local_customers WHERE status = 'active' AND (name = ? OR phone = ?) LIMIT 1",
+                                    [$autoName, $autoPhone !== '' ? $autoPhone : $autoName]
+                                );
+                                $autoCustId = $autoMatch ? (int)$autoMatch['id'] : 0;
+                            }
+                        }
+
+                        if ($autoCustId > 0) {
+                            $alreadyApproved = $db->queryOne("SELECT id FROM customer_task_purchases WHERE task_id = ?", [$taskId]);
+                            if (!$alreadyApproved) {
+                                $taskNotesRowAuto = $db->queryOne("SELECT notes FROM tasks WHERE id = ? LIMIT 1", [$taskId]);
+
+                                $db->beginTransaction();
+                                deductTaskProductsFromStock($db, $taskNotesRowAuto['notes'] ?? '');
+                                $taskNumberAuto = '#' . $taskId;
+                                $taskDateAuto   = date('Y-m-d');
+                                // يُسجَّل في سجل المشتريات بالمبلغ الصافي (بعد المدفوع مقدماً)
+                                $db->execute(
+                                    "INSERT INTO customer_task_purchases (local_customer_id, task_id, task_number, total_amount, task_date) VALUES (?, ?, ?, ?, ?)",
+                                    [$autoCustId, $taskId, $taskNumberAuto, $autoNetAmount, $taskDateAuto]
+                                );
+                                // يُضاف للرصيد فقط المبلغ الصافي
+                                $db->execute(
+                                    "UPDATE local_customers SET balance = COALESCE(balance, 0) + ? WHERE id = ?",
+                                    [$autoNetAmount, $autoCustId]
+                                );
+                                $db->execute(
+                                    "UPDATE tasks SET total_amount = ?, local_customer_id = ?, status = 'delivered' WHERE id = ?",
+                                    [$autoGrossTotal, $autoCustId, $taskId]
+                                );
+                                // المدفوع مقدماً مُحتسَب ضمن autoNetAmount (لا يُضاف للرصيد)
+                                // لا حاجة لإدخال منفصل — الرصيد الصافي فقط هو ما يُضاف أعلاه
+                                $db->commit();
+                                logAudit(
+                                    $currentUser['id'],
+                                    'auto_approve_task_invoice',
+                                    'tasks',
+                                    $taskId,
+                                    null,
+                                    ['local_customer_id' => $autoCustId, 'gross_total' => $autoGrossTotal, 'advance_payment' => $advancePayment, 'net_amount' => $autoNetAmount]
+                                );
+                                $autoApproveMsg = ' ✅ تم اعتماد الفاتورة تلقائياً وتغيير حالة الطلب إلى "تم التوصيل".';
+                                if ($advancePayment > 0) {
+                                    $autoApproveMsg .= ' المدفوع مقدماً (' . number_format($advancePayment, 2) . ' ج.م) مُخصوم من رصيد العميل.';
+                                }
+                            }
+                        } else {
+                            $autoApproveMsg = ' ⚠ لم يتم اعتماد الفاتورة تلقائياً: العميل غير مسجل في العملاء المحليين.';
+                        }
+                    } catch (Throwable $autoEx) {
+                        if (isset($db) && $db->inTransaction()) $db->rollBack();
+                        error_log('Auto approve invoice error: ' . $autoEx->getMessage() . ' in ' . $autoEx->getFile() . ':' . $autoEx->getLine());
+                        $autoApproveMsg = ' ⚠ حدث خطأ أثناء اعتماد الفاتورة تلقائياً: ' . $autoEx->getMessage();
+                    }
+                }
+
                 // التوجيه إلى صفحة طباعة إيصال الأوردر مع فتح نافذة الطباعة تلقائياً (معاينة المتصفح)
                 $successMessage = count($assignees) > 0
                     ? 'تم إرسال المهمة بنجاح إلى ' . count($assignees) . ' من عمال الإنتاج.'
                     : 'تم إرسال المهمة بنجاح.';
-                $successMessage .= $tgShipmentMsg;
+                $successMessage .= $tgShipmentMsg . $autoApproveMsg;
                 $userRole = ($currentUser['role'] ?? '') === 'accountant' ? 'accountant' : 'manager';
                 preventDuplicateSubmission($successMessage, ['page' => 'production_tasks'], null, $userRole);
                 exit; // منع تنفيذ باقي الكود بعد إعادة التوجيه
@@ -1678,7 +1792,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($taskId <= 0) {
             $error = 'معرف المهمة غير صحيح.';
-        } elseif (!in_array($newStatus, ['pending', 'received', 'in_progress', 'completed', 'with_delegate', 'delivered', 'returned', 'cancelled'], true)) {
+        } elseif (!in_array($newStatus, ['pending', 'received', 'in_progress', 'completed', 'with_delegate', 'with_shipping_company', 'delivered', 'returned', 'cancelled'], true)) {
             $error = 'حالة المهمة غير صحيحة.';
         } else {
             try {
@@ -1707,7 +1821,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $updateValues = [$newStatus];
                 
                 // إضافة timestamps حسب الحالة
-                if (in_array($newStatus, ['completed', 'with_delegate', 'delivered', 'returned'], true)) {
+                if (in_array($newStatus, ['completed', 'with_delegate', 'with_shipping_company', 'delivered', 'returned'], true)) {
                     $updateFields[] = 'completed_at = NOW()';
                 } elseif ($newStatus === 'in_progress') {
                     $updateFields[] = 'started_at = NOW()';
@@ -1726,6 +1840,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $updateValues[] = $taskId;
                 
                 $db->execute($sql, $updateValues);
+
+                // التحقق من أن الحالة خُزِّنت فعلاً (قد لا يدعم ENUM القيمة)
+                $verifyTask = $db->queryOne("SELECT status FROM tasks WHERE id = ?", [$taskId]);
+                if (($verifyTask['status'] ?? '') !== $newStatus) {
+                    throw new Exception('تعذر تطبيق الحالة الجديدة. يرجى تحديث قاعدة البيانات عبر تشغيل migration أو التواصل مع الدعم الفني.');
+                }
 
                 logAudit(
                     $currentUser['id'],
@@ -2310,33 +2430,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
                 }
             }
             $shippingFees = 0;
-            if (preg_match('/\رسوم الشحن :\s*([0-9.]+)/', $notes, $m)) {
+            if (preg_match('/رسوم الشحن\s*:\s*([0-9.]+)/u', $notes, $m)) {
                 $shippingFees = (float)$m[1];
             }
             $discount = 0;
-            if (preg_match('/\الخصم :\s*([0-9.]+)/', $notes, $m)) {
+            if (preg_match('/الخصم\s*:\s*([0-9.]+)/u', $notes, $m)) {
                 $discount = (float)$m[1];
             }
             $orderTitle = '';
-            if (preg_match('/\عنوان :\s*([^\n]+)/', $notes, $m)) {
+            if (preg_match('/عنوان\s*:\s*([^\n]+)/u', $notes, $m)) {
                 $orderTitle = trim($m[1]);
             }
             $tgGovernorate = '';
-            if (preg_match('/\المحافظة :\s*([^\n]+)/', $notes, $m)) {
+            if (preg_match('/المحافظة\s*:\s*([^\n]+)/u', $notes, $m)) {
                 $tgGovernorate = trim($m[1]);
             }
             $tgCity = '';
-            if (preg_match('/\المدينة :\s*([^\n]+)/', $notes, $m)) {
+            if (preg_match('/المدينة\s*:\s*([^\n]+)/u', $notes, $m)) {
                 $tgCity = trim($m[1]);
             }
             $tgWeight = '';
-            if (preg_match('/\الوزن :\s*([^\n]+)/', $notes, $m)) {
+            if (preg_match('/الوزن\s*:\s*([^\n]+)/u', $notes, $m)) {
                 $tgWeight = trim($m[1]);
             }
             $tgParcelDesc = '';
-            if (preg_match('/\وصف البضاعة :\s*([^\n]+)/', $notes, $m)) {
+            if (preg_match('/وصف البضاعة\s*:\s*([^\n]+)/u', $notes, $m)) {
                 $tgParcelDesc = trim($m[1]);
             }
+            
             $tgPiecesCount = 0;
             foreach ($products as $pCount) {
                 $qtyForCount = isset($pCount['quantity']) ? (float)$pCount['quantity'] : 0;
@@ -2345,7 +2466,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
                 }
             }
             $tgPiecesCount = max(1, (int)ceil($tgPiecesCount));
-            if (preg_match('/\عدد القطع :\s*([0-9.]+)/u', $notes, $m)) {
+            if (preg_match('/عدد القطع\s*:\s*([0-9.]+)/u', $notes, $m)) {
                 $tgPiecesCount = max(1, (int)ceil((float)$m[1]));
             }
             $advancePayment = 0;
@@ -2366,15 +2487,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
                 $details = preg_replace('/العمال المخصصون:[^\n]*/', '', $details);
                 $details = preg_replace('/العامل المخصص:[^\n]*/', '', $details);
                 $details = preg_replace('/المنتج:\s*[^\n]+/m', '', $details);
-                $details = preg_replace('/\رسوم الشحن :\s*[0-9.]+/', '', $details);
-                $details = preg_replace('/\الخصم :\s*[0-9.]+/', '', $details);
+                $details = preg_replace('/رسوم الشحن\s*:\s*[0-9.]+/u', '', $details);
+                $details = preg_replace('/الخصم\s*:\s*[0-9.]+/u', '', $details);
                 $details = preg_replace('/\[ADVANCE_PAYMENT\]:\s*[0-9.]+/', '', $details);
-                $details = preg_replace('/\عنوان :\s*[^\n]+/', '', $details);
-                $details = preg_replace('/\المحافظة :\s*[^\n]+/', '', $details);
-                $details = preg_replace('/\المدينة :\s*[^\n]+/', '', $details);
-                $details = preg_replace('/\الوزن :\s*[^\n]+/', '', $details);
-                $details = preg_replace('/\عدد القطع :\s*[^\n]+/u', '', $details);
-                $details = preg_replace('/\وصف البضاعة :\s*[^\n]+/', '', $details);
+                $details = preg_replace('/عنوان\s*:\s*[^\n]+/u', '', $details);
+                $details = preg_replace('/المحافظة\s*:\s*[^\n]+/u', '', $details);
+                $details = preg_replace('/المدينة\s*:\s*[^\n]+/u', '', $details);
+                $details = preg_replace('/الوزن\s*:\s*[^\n]+/u', '', $details);
+                $details = preg_replace('/عدد القطع\s*:\s*[^\n]+/u', '', $details);
+                $details = preg_replace('/وصف البضاعة\s*:\s*[^\n]+/u', '', $details);
                 $details = preg_replace('/\n\s*\n\s*\n+/', "\n\n", trim($details));
             }
             // تنسيق تاريخ الاستحقاق لـ input type="date" (YYYY-MM-DD)
@@ -2624,6 +2745,7 @@ $statsTemplate = [
     'completed' => 0,
     'with_delegate' => 0,
     'with_driver' => 0,
+    'with_shipping_company' => 0,
     'delivered' => 0,
     'returned' => 0,
     'cancelled' => 0
@@ -2661,7 +2783,7 @@ try {
     }
     // حساب الإجمالي من مجموع الحالات (أدق من COUNT المنفرد ويتجنب truncation في بعض بيئات MySQL/PHP)
     $stats['total'] = (int)$stats['pending'] + (int)$stats['received'] + (int)$stats['in_progress']
-        + (int)$stats['completed'] + (int)$stats['with_delegate'] + (int)$stats['with_driver'] + (int)$stats['delivered'] + (int)$stats['returned'];
+        + (int)$stats['completed'] + (int)$stats['with_delegate'] + (int)$stats['with_driver'] + (int)$stats['with_shipping_company'] + (int)$stats['delivered'] + (int)$stats['returned'];
 } catch (Exception $e) {
     error_log('Manager task stats error: ' . $e->getMessage());
 }
@@ -2676,8 +2798,11 @@ $recentTasks = [];
 $statusStyles = [
     'pending' => ['class' => 'warning', 'label' => 'معلقة'],
     'received' => ['class' => 'info', 'label' => 'مستلمة'],
+    'in_progress' => ['class' => 'primary', 'label' => 'قيد التنفيذ'],
     'completed' => ['class' => 'success', 'label' => 'مكتملة'],
     'with_delegate' => ['class' => 'info', 'label' => 'مع المندوب'],
+    'with_driver' => ['class' => 'primary', 'label' => 'مع السائق'],
+    'with_shipping_company' => ['class' => 'warning', 'label' => 'مع شركة الشحن'],
     'delivered' => ['class' => 'success', 'label' => 'تم التوصيل'],
     'returned' => ['class' => 'secondary', 'label' => 'تم الارجاع'],
     'cancelled' => ['class' => 'danger', 'label' => 'ملغاة']
@@ -3465,7 +3590,18 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                 </div>
             </a>
         </div>
-        
+
+        <div class="col-4 col-sm-4 col-md-2">
+            <a href="?page=production_tasks&status=with_shipping_company" class="text-decoration-none status-filter-card" data-status="with_shipping_company">
+                <div class="card <?php echo $statusFilter === 'with_shipping_company' ? 'bg-warning text-dark' : 'border-warning'; ?> h-100">
+                    <div class="card-body text-center py-2 px-2">
+                        <div class="<?php echo $statusFilter === 'with_shipping_company' ? 'text-dark' : 'text-muted'; ?> small mb-1">مع شركة الشحن</div>
+                        <div class="fs-5 <?php echo $statusFilter === 'with_shipping_company' ? 'text-dark' : 'text-warning'; ?> fw-semibold"><?php echo $stats['with_shipping_company']; ?></div>
+                    </div>
+                </div>
+            </a>
+        </div>
+
         <div class="col-4 col-sm-4 col-md-2">
             <a href="?page=production_tasks&status=with_driver" class="text-decoration-none status-filter-card" data-status="with_driver">
                 <div class="card <?php echo $statusFilter === 'with_driver' ? 'bg-info text-white' : 'border-info'; ?> h-100">
@@ -3791,10 +3927,18 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             </div>
                         </div>
                     </div>
-                    <div class="d-flex justify-content-end mt-4 gap-2">
-                        <input type="hidden" id="currentDraftId" name="current_draft_id" value="">
-                        <button type="button" class="btn btn-outline-secondary" id="saveDraftBtn"><i class="bi bi-floppy me-1"></i>حفظ كمسودة</button>
-                        <button type="submit" class="btn btn-primary"><i class="bi bi-send-check me-1"></i>إرسال المهمة</button>
+                    <div class="d-flex justify-content-between align-items-center mt-4 gap-2 flex-wrap">
+                        <div class="form-check form-switch ms-1">
+                            <input class="form-check-input" type="checkbox" name="auto_approve_invoice" id="autoApproveInvoice" value="1">
+                            <label class="form-check-label fw-semibold text-success" for="autoApproveInvoice">
+                                <i class="bi bi-check-circle me-1"></i>اعتماد الفاتورة تلقائياً وتغيير حالة الطلب إلى "تم التوصيل"
+                            </label>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <input type="hidden" id="currentDraftId" name="current_draft_id" value="">
+                            <button type="button" class="btn btn-outline-secondary" id="saveDraftBtn"><i class="bi bi-floppy me-1"></i>حفظ كمسودة</button>
+                            <button type="submit" id="createTaskSubmitBtn" class="btn btn-primary" disabled><i class="bi bi-send-check me-1"></i>إرسال المهمة</button>
+                        </div>
                     </div>
                 </form>
             </div>
@@ -4086,9 +4230,14 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             <label class="form-label small mb-0">بحث سريع</label>
                             <input type="text" name="search_text" id="recentTasksSearchText" class="form-control form-control-sm recent-tasks-dynamic-filter" placeholder="نص في العنوان، الملاحظات، العميل..." value="<?php echo htmlspecialchars($filterSearchText, ENT_QUOTES, 'UTF-8'); ?>">
                         </div>
-                        <div class="col-6 col-md-4 col-lg-2">
+                        <div class="col-5 col-md-3 col-lg-2">
                             <label class="form-label small mb-0">رقم الاوردر</label>
-                            <input type="text" name="task_id" id="recentTasksFilterTaskId" class="form-control form-control-sm recent-tasks-dynamic-filter" placeholder="#" value="<?php echo htmlspecialchars($filterTaskId, ENT_QUOTES, 'UTF-8'); ?>">
+                            <input type="text" name="task_id" id="recentTasksFilterTaskId" class="form-control form-control-sm" placeholder="#" value="<?php echo htmlspecialchars($filterTaskId, ENT_QUOTES, 'UTF-8'); ?>">
+                        </div>
+                        <div class="col-1 col-md-1 col-lg-1 align-self-end">
+                            <button type="submit" class="btn btn-primary btn-sm w-100" title="بحث">
+                                <i class="bi bi-search"></i>
+                            </button>
                         </div>
                         <div class="col-6 col-md-4 col-lg-2">
                             <label class="form-label small mb-0">اسم العميل / هاتف</label>
@@ -4250,8 +4399,57 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                     </td>
                                     <td>
                                         <?php
-                                        $statusKey = $task['status'] ?? '';
-                                        $statusMeta = $statusStyles[$statusKey] ?? ['class' => 'secondary', 'label' => 'غير معروفة'];
+                                        $rawStatusKey = trim((string) ($task['status'] ?? ''));
+                                        $statusKey = strtolower($rawStatusKey);
+                                        $statusKey = preg_replace('/[\s\-]+/', '_', $statusKey);
+                                        $statusKey = trim((string) $statusKey, '_');
+
+                                        $statusAliases = [
+                                            'مع_شركة_الشحن' => 'with_shipping_company',
+                                            'مع شركة الشحن' => 'with_shipping_company',
+                                            'with_shipping_company' => 'with_shipping_company',
+                                            'with_shipping_company.' => 'with_shipping_company',
+                                            'with_shipping_company,' => 'with_shipping_company',
+                                            'with_shipping_company_' => 'with_shipping_company',
+                                            'with_shipping_company__' => 'with_shipping_company',
+                                            'with_shipping_company___' => 'with_shipping_company',
+                                            'with_shipping_company____' => 'with_shipping_company',
+                                            'with_shipping_company_____' => 'with_shipping_company',
+                                            'with_shipping_company______' => 'with_shipping_company',
+                                            'with_shipping_company_______' => 'with_shipping_company',
+                                            'with shipping company' => 'with_shipping_company',
+                                            'مع_المندوب' => 'with_delegate',
+                                            'مع المندوب' => 'with_delegate',
+                                            'مع_السائق' => 'with_driver',
+                                            'مع السائق' => 'with_driver',
+                                            'معلقة' => 'pending',
+                                            'مستلمة' => 'received',
+                                            'قيد_التنفيذ' => 'in_progress',
+                                            'قيد التنفيذ' => 'in_progress',
+                                            'مكتملة' => 'completed',
+                                            'تم_التوصيل' => 'delivered',
+                                            'تم التوصيل' => 'delivered',
+                                            'تم_الارجاع' => 'returned',
+                                            'تم الارجاع' => 'returned',
+                                            'ملغاة' => 'cancelled',
+                                        ];
+
+                                        if (isset($statusAliases[$rawStatusKey])) {
+                                            $statusKey = $statusAliases[$rawStatusKey];
+                                        } elseif (isset($statusAliases[$statusKey])) {
+                                            $statusKey = $statusAliases[$statusKey];
+                                        }
+
+                                        $isShippingOrder = in_array($displayType, ['telegraph', 'shipping_company'], true);
+                                        $isApprovedForShipping = in_array((int)($task['id'] ?? 0), $approvedTaskIds, true);
+                                        if (($rawStatusKey === '' || !isset($statusStyles[$statusKey])) && $isShippingOrder && $isApprovedForShipping) {
+                                            $statusKey = 'with_shipping_company';
+                                        }
+
+                                        $statusMeta = $statusStyles[$statusKey] ?? [
+                                            'class' => 'secondary',
+                                            'label' => ($rawStatusKey !== '' ? $rawStatusKey : 'غير معروفة')
+                                        ];
                                         ?>
                                         <span class="badge bg-<?php echo htmlspecialchars($statusMeta['class']); ?>">
                                             <?php echo htmlspecialchars($statusMeta['label']); ?>
@@ -4561,6 +4759,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
         'pending':       { bg: 'bg-warning',   text: 'text-dark',  border: 'border-warning', countClass: 'text-warning', labelActive: 'text-dark-50' },
         'completed':     { bg: 'bg-success',   text: 'text-white', border: 'border-success', countClass: 'text-success', labelActive: 'text-white-50' },
         'with_delegate': { bg: 'bg-info',      text: 'text-white', border: 'border-info',    countClass: 'text-info',    labelActive: 'text-white-50' },
+        'with_shipping_company': { bg: 'bg-warning', text: 'text-dark', border: 'border-warning', countClass: 'text-warning', labelActive: 'text-dark' },
         'delivered':     { bg: 'bg-success',    text: 'text-white', border: 'border-success', countClass: 'text-success', labelActive: 'text-white-50' },
         'returned':      { bg: 'bg-secondary',  text: 'text-white', border: 'border-secondary', countClass: 'text-secondary', labelActive: 'text-white-50' }
     };
@@ -4702,6 +4901,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             <option value="pending">معلقة</option>
                             <option value="completed">مكتملة</option>
                             <option value="with_delegate">مع المندوب</option>
+                            <option value="with_shipping_company">مع شركة الشحن</option>
                             <option value="delivered">تم التوصيل</option>
                             <option value="returned">تم الارجاع</option>
                             <option value="cancelled">ملغاة</option>
@@ -4747,6 +4947,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             <option value="pending">معلقة</option>
                             <option value="completed">مكتملة</option>
                             <option value="with_delegate">مع المندوب</option>
+                            <option value="with_shipping_company">مع شركة الشحن</option>
                             <option value="delivered">تم التوصيل</option>
                             <option value="returned">تم الارجاع</option>
                             <option value="cancelled">ملغاة</option>
@@ -4892,6 +5093,14 @@ var __repCustomersForTask = <?php echo json_encode($repCustomersForTask); ?>;
 var __shippingCompaniesForTask = <?php echo json_encode($shippingCompaniesForDropdown); ?>;
 var __quCategories = <?php echo json_encode($quCategoriesForTask, JSON_UNESCAPED_UNICODE); ?>;
 var __quData = <?php echo json_encode($quDataForTask, JSON_UNESCAPED_UNICODE); ?>;
+
+function makeIdBadge(id) {
+    if (!id && id !== 0) return '';
+    return '<span class="almostafa-id-badge">' + String(id) + '</span> ';
+}
+function escHtml(str) {
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 
 var editProductIndex = 0;
 function buildEditProductRow(idx, product) {
@@ -5535,6 +5744,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     submitName.value = this.dataset.name || '';
                     if (this.dataset.phone) submitPhone.value = this.dataset.phone;
                     dropEl.classList.add('d-none');
+                    inputEl.dispatchEvent(new Event('input'));
                     // ملء بيانات التليجراف تلقائياً إذا كان نوع الأوردر تليجراف
                     var typeEl = document.getElementById('taskTypeSelect');
                     if (typeEl && typeEl.value === 'telegraph') {
@@ -5582,6 +5792,20 @@ document.addEventListener('DOMContentLoaded', function () {
 
         initCustomerSearch(localSearch, localId, localDrop, localCustomers, function(c) { return c.id + ' - ' + c.name + (c.phone ? ' — ' + c.phone : ''); }, matchLocalCustomer);
         initCustomerSearch(repSearch, repId, repDrop, repCustomers, function(c) { return c.id + ' - ' + (c.rep_name ? c.name + ' (' + c.rep_name + ')' : c.name); }, matchRepCustomer);
+
+        var submitBtn = document.getElementById('createTaskSubmitBtn');
+        function updateCreateSubmitBtnState() {
+            if (!submitBtn) return;
+            var v = document.querySelector('input[name="customer_type_radio_task"]:checked');
+            var val = v ? v.value : 'local';
+            var activeSearch = (val === 'local') ? localSearch : repSearch;
+            submitBtn.disabled = !activeSearch || !activeSearch.value.trim();
+        }
+        if (localSearch) localSearch.addEventListener('input', updateCreateSubmitBtnState);
+        if (repSearch) repSearch.addEventListener('input', updateCreateSubmitBtnState);
+        document.querySelectorAll('input[name="customer_type_radio_task"]').forEach(function(r) {
+            r.addEventListener('change', updateCreateSubmitBtnState);
+        });
 
         document.addEventListener('click', function(e) {
             if (!e.target.closest('.search-wrap')) {
@@ -5779,15 +6003,6 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     if (editTaskTypeEl) {
         editTaskTypeEl.addEventListener('change', toggleEditTgFields);
-    }
-
-    // ===== دوال مساعدة مشتركة =====
-    function makeIdBadge(id) {
-        if (!id && id !== 0) return '';
-        return '<span class="almostafa-id-badge">' + String(id) + '</span> ';
-    }
-    function escHtml(str) {
-        return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
     // ===== نظام autocomplete للمحافظات والمدن + جلب المدن ديناميكياً =====
@@ -7620,6 +7835,7 @@ window.openChangeStatusModal = function(taskId, currentStatus) {
                                     <option value="pending">معلقة</option>
                                     <option value="completed">مكتملة</option>
                                     <option value="with_delegate">مع المندوب</option>
+                                    <option value="with_shipping_company">مع شركة الشحن</option>
                                     <option value="delivered">تم التوصيل</option>
                                     <option value="returned">تم الارجاع</option>
                                     <option value="cancelled">ملغاة</option>
@@ -7684,6 +7900,7 @@ window.openChangeStatusModal = function(taskId, currentStatus) {
             'received': 'مستلمة',
             'completed': 'مكتملة',
             'with_delegate': 'مع المندوب',
+            'with_shipping_company': 'مع شركة الشحن',
             'delivered': 'تم التوصيل',
             'returned': 'تم الارجاع',
             'cancelled': 'ملغاة'
@@ -7694,6 +7911,7 @@ window.openChangeStatusModal = function(taskId, currentStatus) {
             'received': 'info',
             'completed': 'success',
             'with_delegate': 'info',
+            'with_shipping_company': 'warning',
             'delivered': 'success',
             'returned': 'secondary',
             'cancelled': 'danger'
@@ -7757,6 +7975,7 @@ window.openChangeStatusModal = function(taskId, currentStatus) {
         'received': 'مستلمة',
         'completed': 'مكتملة',
         'with_delegate': 'مع المندوب',
+        'with_shipping_company': 'مع شركة الشحن',
         'delivered': 'تم التوصيل',
         'returned': 'تم الارجاع',
         'cancelled': 'ملغاة'
@@ -7767,6 +7986,7 @@ window.openChangeStatusModal = function(taskId, currentStatus) {
         'received': 'info',
         'completed': 'success',
         'with_delegate': 'info',
+        'with_shipping_company': 'warning',
         'delivered': 'success',
         'returned': 'secondary',
         'cancelled': 'danger'
@@ -8450,4 +8670,3 @@ document.addEventListener('click', function (e) {
     }
 })();
 </script>
-

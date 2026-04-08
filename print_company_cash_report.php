@@ -28,6 +28,7 @@ $dateFrom = isset($_GET['date_from']) ? trim($_GET['date_from']) : date('Y-m-01'
 $dateTo = isset($_GET['date_to']) ? trim($_GET['date_to']) : date('Y-m-d');
 $includePending = isset($_GET['include_pending']) && $_GET['include_pending'] == '1';
 $groupByType = isset($_GET['group_by_type']) && $_GET['group_by_type'] == '1';
+$excludeManagementCollections = isset($_GET['exclude_management_collections']) && $_GET['exclude_management_collections'] == '1';
 
 // التحقق من صحة التواريخ
 if (!strtotime($dateFrom) || !strtotime($dateTo)) {
@@ -105,6 +106,13 @@ foreach ($financialTransactions as $trans) {
 }
 foreach ($accountantTransactions as $trans) {
     $allTransactions[] = $trans;
+}
+
+if ($excludeManagementCollections) {
+    $allTransactions = array_values(array_filter($allTransactions, static function ($trans) {
+        $description = trim((string) ($trans['description'] ?? ''));
+        return preg_match('/^تحصيل للإدارة/u', $description) !== 1;
+    }));
 }
 
 // ترتيب حسب التاريخ
@@ -522,6 +530,10 @@ $statusLabels = [
                 <span>تاريخ الإنشاء: <strong><?php echo date('Y/m/d H:i'); ?></strong></span>
                 <span>|</span>
                 <span>أنشأه: <strong><?php echo htmlspecialchars($currentUser['full_name'] ?? $currentUser['username'] ?? 'غير معروف', ENT_QUOTES, 'UTF-8'); ?></strong></span>
+                <?php if ($excludeManagementCollections): ?>
+                <span>|</span>
+                <span>تم الاستبعاد: <strong>الحركات التي يبدأ وصفها بـ "تحصيل للإدارة"</strong></span>
+                <?php endif; ?>
             </div>
         </div>
         

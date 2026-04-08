@@ -14,12 +14,14 @@ require_once __DIR__ . '/../../includes/path_helper.php';
 require_once __DIR__ . '/../../includes/table_styles.php';
 require_once __DIR__ . '/../../includes/vehicle_inventory.php';
 require_once __DIR__ . '/../../includes/audit_log.php';
+require_once __DIR__ . '/../../includes/batch_creation.php';
 
 requireRole(['production', 'accountant', 'manager', 'developer']);
 
 $currentUser = getCurrentUser();
 $db = db();
 $isManager = isset($currentUser['role']) && in_array($currentUser['role'], ['manager', 'developer'], true);
+$canProduceFromTemplates = isset($currentUser['role']) && in_array($currentUser['role'], ['production', 'accountant', 'manager', 'developer'], true);
 $managerInventoryUrl = getRelativeUrl('manager.php?page=final_products');
 $productionInventoryUrl = getRelativeUrl('production.php?page=inventory');
 $finalProductsUrl = getRelativeUrl('production.php?page=final_products');
@@ -40,6 +42,9 @@ $sessionSuccessKey = 'production_inventory_success';
 // إنشاء token لمنع duplicate submission
 if (!isset($_SESSION['transfer_submission_token'])) {
     $_SESSION['transfer_submission_token'] = bin2hex(random_bytes(32));
+}
+if (!isset($_SESSION['template_production_token'])) {
+    $_SESSION['template_production_token'] = bin2hex(random_bytes(32));
 }
 
 if (!empty($_SESSION[$sessionErrorKey])) {
@@ -1354,6 +1359,124 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION[$sessionTokenKey] = bin2hex(random_bytes(32));
             }
         }
+    } elseif ($canProduceFromTemplates && $postAction === 'produce_from_template') {
+        $submissionToken = $_POST['template_production_token'] ?? '';
+        $sessionTokenKey = 'template_production_token';
+        $storedToken = $_SESSION[$sessionTokenKey] ?? null;
+
+        if ($submissionToken === '' || $submissionToken !== $storedToken) {
+            $_SESSION[$sessionErrorKey] = 'تم إرسال طلب الإنتاج هذا مسبقاً. يرجى تحديث الصفحة قبل إعادة المحاولة.';
+            productionSafeRedirect($productionInventoryUrl, $productionRedirectParams, $productionRedirectRole);
+            exit;
+        }
+
+        unset($_SESSION[$sessionTokenKey]);
+
+        $templateId = intval($_POST['template_id'] ?? 0);
+        $productionQuantity = intval($_POST['production_quantity'] ?? 0);
+        $templateName = trim((string)($_POST['template_name'] ?? ''));
+        $componentUsage = $_POST['component_usage'] ?? [];
+
+        if ($templateId <= 0) {
+            $_SESSION[$sessionErrorKey] = 'يرجى اختيار قالب صالح للإنتاج.';
+            $_SESSION[$sessionTokenKey] = bin2hex(random_bytes(32));
+            productionSafeRedirect($productionInventoryUrl, $productionRedirectParams, $productionRedirectRole);
+            exit;
+        }
+
+        if ($productionQuantity <= 0) {
+            $_SESSION[$sessionErrorKey] = 'يرجى إدخال كمية إنتاج صحيحة أكبر من صفر.';
+            $_SESSION[$sessionTokenKey] = bin2hex(random_bytes(32));
+            productionSafeRedirect($productionInventoryUrl, $productionRedirectParams, $productionRedirectRole);
+            exit;
+        }
+
+        try {
+            $rawUsage = [];
+            $packagingUsage = [];
+
+            if (is_array($componentUsage)) {
+                foreach ($componentUsage as $componentKey => $componentRow) {
+                    if (!is_array($componentRow)) {
+                        continue;
+                    }
+
+                    $supplierId = isset($componentRow['supplier_id']) ? intval($componentRow['supplier_id']) : 0;
+                    $componentKind = trim((string)($componentRow['component_kind'] ?? 'raw'));
+                    $templateItemId = isset($componentRow['template_item_id']) ? intval($componentRow['template_item_id']) : 0;
+                    $componentName = trim((string)($componentRow['name'] ?? ''));
+                    $materialType = trim((string)($componentRow['material_type'] ?? ''));
+                    $honeyVariety = trim((string)($componentRow['honey_variety'] ?? ''));
+                    $quantityPerUnit = isset($componentRow['quantity_per_unit']) ? floatval($componentRow['quantity_per_unit']) : 0.0;
+                    $unit = trim((string)($componentRow['unit'] ?? ''));
+
+                    if ($supplierId <= 0) {
+                        continue;
+                    }
+
+                    $payload = [
+                        'template_item_id' => $templateItemId > 0 ? $templateItemId : null,
+                        'supplier_id' => $supplierId,
+                        'quantity_per_unit' => $quantityPerUnit,
+                        'unit' => $unit !== '' ? $unit : null,
+                    ];
+
+                    if ($componentKind === 'packaging') {
+                        $payload['name'] = $componentName !== '' ? $componentName : ('مادة تعبئة ' . $componentKey);
+                        $payload['packaging_name'] = $payload['name'];
+                        $packagingUsage[] = $payload;
+                    } else {
+                        $payload['material_name'] = $componentName !== '' ? $componentName : ('مادة خام ' . $componentKey);
+                        $payload['display_name'] = $payload['material_name'];
+                        $payload['material_type'] = $materialType !== '' ? $materialType : 'raw_general';
+                        if ($honeyVariety !== '') {
+                            $payload['honey_variety'] = $honeyVariety;
+                        }
+                        $rawUsage[] = $payload;
+                    }
+                }
+            }
+
+            $result = batchCreationCreate($templateId, $productionQuantity, $rawUsage, $packagingUsage);
+
+            if (!empty($result['success'])) {
+                if (!empty($currentUser['id'])) {
+                    try {
+                        logAudit(
+                            $currentUser['id'],
+                            'produce_from_template',
+                            'product_templates',
+                            $templateId,
+                            null,
+                            [
+                                'template_name' => $templateName !== '' ? $templateName : ($result['product_name'] ?? null),
+                                'quantity' => $productionQuantity,
+                                'batch_id' => $result['batch_id'] ?? null,
+                                'batch_number' => $result['batch_number'] ?? null,
+                            ]
+                        );
+                    } catch (Throwable $auditException) {
+                        error_log('produce_from_template audit log error: ' . $auditException->getMessage());
+                    }
+                }
+
+                $_SESSION[$sessionSuccessKey] = sprintf(
+                    'تم إنتاج %s وحدة من القالب %s بنجاح. رقم التشغيلة: %s',
+                    number_format($productionQuantity),
+                    $templateName !== '' ? $templateName : ($result['product_name'] ?? 'غير محدد'),
+                    $result['batch_number'] ?? '—'
+                );
+            } else {
+                $_SESSION[$sessionErrorKey] = $result['message'] ?? 'تعذر تنفيذ الإنتاج من القالب.';
+            }
+        } catch (Throwable $e) {
+            error_log('produce_from_template error: ' . $e->getMessage());
+            $_SESSION[$sessionErrorKey] = 'حدث خطأ أثناء تنفيذ الإنتاج من القالب: ' . $e->getMessage();
+        }
+
+        $_SESSION[$sessionTokenKey] = bin2hex(random_bytes(32));
+        productionSafeRedirect($productionInventoryUrl, $productionRedirectParams, $productionRedirectRole);
+        exit;
     } elseif ($isProductionRole && $postAction === 'transfer_external_product') {
         // معالج نقل المنتجات الخارجية لعمال الإنتاج فقط
         $submissionToken = $_POST['transfer_token'] ?? '';
@@ -2428,6 +2551,350 @@ if ($isProductionRole) {
         $externalProductsForProduction = [];
     }
 }
+
+// الحصول على قوالب المنتجات
+$productTemplates = [];
+try {
+    $productTemplates = $db->query("
+        SELECT 
+            pt.id,
+            pt.product_name,
+            pt.unit_price,
+            pt.template_type,
+            pt.source_template_id,
+            pt.details_json,
+            pt.status,
+            pt.created_at,
+            COALESCE(SUM(fp.quantity_produced), 0) as available_quantity
+        FROM product_templates pt
+        LEFT JOIN finished_products fp ON fp.product_name = pt.product_name
+        WHERE pt.status = 'active'
+        GROUP BY pt.id, pt.product_name, pt.unit_price, pt.template_type, pt.source_template_id, pt.details_json, pt.status, pt.created_at
+        ORDER BY pt.product_name ASC
+    ");
+    // Debug: Log the count
+    error_log('Product templates count: ' . count($productTemplates));
+} catch (Exception $e) {
+    error_log('Error fetching product templates: ' . $e->getMessage());
+}
+
+$productTemplateComponents = [];
+if (!empty($productTemplates)) {
+    $templateIds = [];
+    $unifiedSourceMap = [];
+
+    foreach ($productTemplates as $template) {
+        $templateId = (int)($template['id'] ?? 0);
+        if ($templateId <= 0) {
+            continue;
+        }
+
+        $templateIds[] = $templateId;
+        $productTemplateComponents[$templateId] = [
+            'raw_materials' => [],
+            'packaging' => [],
+        ];
+
+        $templateType = (string)($template['template_type'] ?? '');
+        $sourceTemplateId = (int)($template['source_template_id'] ?? 0);
+        if ($templateType === 'unified' && $sourceTemplateId > 0) {
+            $unifiedSourceMap[$sourceTemplateId][] = $templateId;
+        }
+    }
+
+    if (!empty($templateIds)) {
+        $placeholders = implode(',', array_fill(0, count($templateIds), '?'));
+
+        try {
+            $rawRows = $db->query(
+                "SELECT template_id, material_name, quantity_per_unit, unit
+                 FROM product_template_raw_materials
+                 WHERE template_id IN ($placeholders)
+                 ORDER BY template_id ASC, id ASC",
+                $templateIds
+            );
+
+            foreach ($rawRows as $row) {
+                $templateId = (int)($row['template_id'] ?? 0);
+                if (!isset($productTemplateComponents[$templateId])) {
+                    continue;
+                }
+                $productTemplateComponents[$templateId]['raw_materials'][] = [
+                    'name' => trim((string)($row['material_name'] ?? 'مادة خام')),
+                    'quantity' => (float)($row['quantity_per_unit'] ?? 0),
+                    'unit' => (string)($row['unit'] ?? 'وحدة'),
+                ];
+            }
+        } catch (Exception $e) {
+            error_log('Error fetching product template raw materials: ' . $e->getMessage());
+        }
+
+        try {
+            $packagingRows = $db->query(
+                "SELECT template_id, packaging_name, quantity_per_unit
+                 FROM product_template_packaging
+                 WHERE template_id IN ($placeholders)
+                 ORDER BY template_id ASC, id ASC",
+                $templateIds
+            );
+
+            foreach ($packagingRows as $row) {
+                $templateId = (int)($row['template_id'] ?? 0);
+                if (!isset($productTemplateComponents[$templateId])) {
+                    continue;
+                }
+                $productTemplateComponents[$templateId]['packaging'][] = [
+                    'name' => trim((string)($row['packaging_name'] ?? 'أداة تعبئة')),
+                    'quantity' => (float)($row['quantity_per_unit'] ?? 0),
+                    'unit' => 'قطعة',
+                ];
+            }
+        } catch (Exception $e) {
+            error_log('Error fetching product template packaging: ' . $e->getMessage());
+        }
+    }
+
+    if (!empty($unifiedSourceMap)) {
+        $unifiedSourceIds = array_keys($unifiedSourceMap);
+        $unifiedPlaceholders = implode(',', array_fill(0, count($unifiedSourceIds), '?'));
+
+        try {
+            $unifiedRawRows = $db->query(
+                "SELECT template_id, material_name, quantity, unit
+                 FROM template_raw_materials
+                 WHERE template_id IN ($unifiedPlaceholders)
+                 ORDER BY template_id ASC, id ASC",
+                $unifiedSourceIds
+            );
+
+            foreach ($unifiedRawRows as $row) {
+                $sourceTemplateId = (int)($row['template_id'] ?? 0);
+                foreach ($unifiedSourceMap[$sourceTemplateId] ?? [] as $productTemplateId) {
+                    if (!empty($productTemplateComponents[$productTemplateId]['raw_materials'])) {
+                        continue;
+                    }
+                    $productTemplateComponents[$productTemplateId]['raw_materials'][] = [
+                        'name' => trim((string)($row['material_name'] ?? 'مادة خام')),
+                        'quantity' => (float)($row['quantity'] ?? 0),
+                        'unit' => (string)($row['unit'] ?? 'وحدة'),
+                    ];
+                }
+            }
+        } catch (Exception $e) {
+            error_log('Error fetching unified template raw materials: ' . $e->getMessage());
+        }
+
+        try {
+            $unifiedPackagingRows = $db->query(
+                "SELECT tp.template_id,
+                        COALESCE(tp.packaging_name, pm.name, CONCAT('أداة تعبئة #', tp.packaging_material_id)) AS packaging_name,
+                        tp.quantity_per_unit
+                 FROM template_packaging tp
+                 LEFT JOIN packaging_materials pm ON pm.id = tp.packaging_material_id
+                 WHERE tp.template_id IN ($unifiedPlaceholders)
+                 ORDER BY tp.template_id ASC, tp.id ASC",
+                $unifiedSourceIds
+            );
+
+            foreach ($unifiedPackagingRows as $row) {
+                $sourceTemplateId = (int)($row['template_id'] ?? 0);
+                foreach ($unifiedSourceMap[$sourceTemplateId] ?? [] as $productTemplateId) {
+                    if (!empty($productTemplateComponents[$productTemplateId]['packaging'])) {
+                        continue;
+                    }
+                    $productTemplateComponents[$productTemplateId]['packaging'][] = [
+                        'name' => trim((string)($row['packaging_name'] ?? 'أداة تعبئة')),
+                        'quantity' => (float)($row['quantity_per_unit'] ?? 0),
+                        'unit' => 'قطعة',
+                    ];
+                }
+            }
+        } catch (Exception $e) {
+            error_log('Error fetching unified template packaging: ' . $e->getMessage());
+        }
+    }
+
+    foreach ($productTemplates as $template) {
+        $templateId = (int)($template['id'] ?? 0);
+        if ($templateId <= 0 || !isset($productTemplateComponents[$templateId])) {
+            continue;
+        }
+
+        $detailsJson = trim((string)($template['details_json'] ?? ''));
+        if ($detailsJson === '') {
+            continue;
+        }
+
+        $detailsPayload = json_decode($detailsJson, true);
+        if (!is_array($detailsPayload)) {
+            continue;
+        }
+
+        if (empty($productTemplateComponents[$templateId]['raw_materials']) && !empty($detailsPayload['raw_materials']) && is_array($detailsPayload['raw_materials'])) {
+            foreach ($detailsPayload['raw_materials'] as $rawItem) {
+                $name = trim((string)($rawItem['name'] ?? $rawItem['material_name'] ?? ''));
+                $quantity = isset($rawItem['quantity']) ? (float)$rawItem['quantity'] : (isset($rawItem['quantity_per_unit']) ? (float)$rawItem['quantity_per_unit'] : 0);
+                $unit = (string)($rawItem['unit'] ?? 'وحدة');
+                if ($name === '' || $quantity <= 0) {
+                    continue;
+                }
+                $productTemplateComponents[$templateId]['raw_materials'][] = [
+                    'name' => $name,
+                    'quantity' => $quantity,
+                    'unit' => $unit,
+                ];
+            }
+        }
+
+        if (empty($productTemplateComponents[$templateId]['packaging']) && !empty($detailsPayload['packaging']) && is_array($detailsPayload['packaging'])) {
+            foreach ($detailsPayload['packaging'] as $packItem) {
+                $name = trim((string)($packItem['name'] ?? $packItem['packaging_name'] ?? 'أداة تعبئة'));
+                $quantity = isset($packItem['quantity']) ? (float)$packItem['quantity'] : (isset($packItem['quantity_per_unit']) ? (float)$packItem['quantity_per_unit'] : 0);
+                if ($quantity <= 0) {
+                    continue;
+                }
+                $productTemplateComponents[$templateId]['packaging'][] = [
+                    'name' => $name,
+                    'quantity' => $quantity,
+                    'unit' => 'قطعة',
+                ];
+            }
+        }
+    }
+}
+
+// جلب الموردين النشطين لاستخدامهم في مودال الإنتاج من القالب
+$productionSuppliers = [];
+$tahiniSuppliers = [];
+$honeyStockDataForJs = [];
+
+try {
+    $suppliersTableCheck = $db->queryOne("SHOW TABLES LIKE 'suppliers'");
+    if (!empty($suppliersTableCheck)) {
+        $productionSuppliers = $db->query("SELECT id, name, type FROM suppliers WHERE status = 'active' ORDER BY name");
+    }
+
+    $tahiniStockTableCheck = $db->queryOne("SHOW TABLES LIKE 'tahini_stock'");
+    if (!empty($tahiniStockTableCheck) && !empty($suppliersTableCheck)) {
+        $tahiniSuppliers = $db->query(
+            "SELECT DISTINCT s.id, s.name, s.type
+             FROM tahini_stock ts
+             INNER JOIN suppliers s ON ts.supplier_id = s.id
+             WHERE ts.quantity > 0 AND s.status = 'active'
+             ORDER BY s.name"
+        );
+    }
+
+    $honeyVarietyTracker = [];
+    $ensureHoneySupplierBucket = static function (int $supplierId) use (&$honeyStockDataForJs, &$honeyVarietyTracker): void {
+        if (!isset($honeyStockDataForJs[$supplierId])) {
+            $honeyStockDataForJs[$supplierId] = [
+                'all' => [],
+                'honey_raw' => [],
+                'honey_filtered' => [],
+            ];
+        }
+        if (!isset($honeyVarietyTracker[$supplierId])) {
+            $honeyVarietyTracker[$supplierId] = [];
+        }
+    };
+
+    $registerHoneyVariety = static function (int $supplierId, string $variety, float $rawQty = 0.0, float $filteredQty = 0.0) use (&$ensureHoneySupplierBucket, &$honeyVarietyTracker): void {
+        if ($supplierId <= 0) {
+            return;
+        }
+
+        $ensureHoneySupplierBucket($supplierId);
+
+        $normalizedVariety = trim($variety);
+        if ($normalizedVariety === '') {
+            $normalizedVariety = 'غير محدد';
+        }
+
+        $trackerKey = function_exists('mb_strtolower')
+            ? mb_strtolower($normalizedVariety, 'UTF-8')
+            : strtolower($normalizedVariety);
+
+        if (!isset($honeyVarietyTracker[$supplierId][$trackerKey])) {
+            $honeyVarietyTracker[$supplierId][$trackerKey] = [
+                'variety' => $normalizedVariety,
+                'raw_quantity' => 0.0,
+                'filtered_quantity' => 0.0,
+            ];
+        }
+
+        $honeyVarietyTracker[$supplierId][$trackerKey]['raw_quantity'] += $rawQty;
+        $honeyVarietyTracker[$supplierId][$trackerKey]['filtered_quantity'] += $filteredQty;
+    };
+
+    $honeyStockTableCheck = $db->queryOne("SHOW TABLES LIKE 'honey_stock'");
+    if (!empty($honeyStockTableCheck)) {
+        $honeyStockRows = $db->query(
+            "SELECT supplier_id, honey_variety,
+                    COALESCE(raw_honey_quantity, 0) AS raw_quantity,
+                    COALESCE(filtered_honey_quantity, 0) AS filtered_quantity
+             FROM honey_stock"
+        );
+
+        foreach ($honeyStockRows as $row) {
+            $supplierId = (int)($row['supplier_id'] ?? 0);
+            if ($supplierId <= 0) {
+                continue;
+            }
+            $registerHoneyVariety(
+                $supplierId,
+                (string)($row['honey_variety'] ?? ''),
+                (float)($row['raw_quantity'] ?? 0),
+                (float)($row['filtered_quantity'] ?? 0)
+            );
+        }
+    }
+
+    $batchNumbersTableCheck = $db->queryOne("SHOW TABLES LIKE 'batch_numbers'");
+    if (!empty($batchNumbersTableCheck)) {
+        $batchHoneyRows = $db->query(
+            "SELECT DISTINCT honey_supplier_id AS supplier_id, honey_variety
+             FROM batch_numbers
+             WHERE honey_supplier_id IS NOT NULL
+               AND honey_supplier_id > 0
+               AND honey_variety IS NOT NULL
+               AND honey_variety <> ''"
+        );
+
+        foreach ($batchHoneyRows as $row) {
+            $supplierId = (int)($row['supplier_id'] ?? 0);
+            if ($supplierId <= 0) {
+                continue;
+            }
+            $registerHoneyVariety($supplierId, (string)($row['honey_variety'] ?? ''), 0.0, 0.0);
+        }
+    }
+
+    foreach ($honeyVarietyTracker as $supplierId => $varieties) {
+        $allEntries = array_values($varieties);
+        $rawEntries = array_values(array_filter($allEntries, static function ($entry) {
+            return (float)($entry['raw_quantity'] ?? 0) > 0;
+        }));
+        $filteredEntries = array_values(array_filter($allEntries, static function ($entry) {
+            return (float)($entry['filtered_quantity'] ?? 0) > 0;
+        }));
+
+        if (empty($rawEntries)) {
+            $rawEntries = $allEntries;
+        }
+        if (empty($filteredEntries)) {
+            $filteredEntries = $allEntries;
+        }
+
+        $honeyStockDataForJs[$supplierId]['all'] = $allEntries;
+        $honeyStockDataForJs[$supplierId]['honey_raw'] = $rawEntries;
+        $honeyStockDataForJs[$supplierId]['honey_filtered'] = $filteredEntries;
+    }
+} catch (Throwable $supplierDataException) {
+    error_log('final_products supplier data error: ' . $supplierDataException->getMessage());
+}
+
+$totalProductTemplates = count($productTemplates);
 ?>
 
 <div class="header">
@@ -2456,59 +2923,7 @@ $filterDateFrom = isset($_GET['date_from']) ? trim($_GET['date_from']) : '';
 $filterDateTo = isset($_GET['date_to']) ? trim($_GET['date_to']) : '';
 $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) : '';
 ?>
-<div class="card shadow-sm mb-4" style="margin: 0 25px 25px;">
-    <div class="card-header bg-light">
-        <h6 class="mb-0"><i class="bi bi-funnel me-2"></i>البحث والفلترة</h6>
-    </div>
-    <div class="card-body">
-        <form method="GET" action="" id="filterForm" class="row g-3">
-            <input type="hidden" name="page" value="inventory">
-            <input type="hidden" name="fp" value="1">
-            
-            <div class="col-md-4">
-                <label for="search" class="form-label"><i class="bi bi-search me-1"></i>البحث</label>
-                <input type="text" 
-                       class="form-control" 
-                       id="search" 
-                       name="search" 
-                       value="<?php echo htmlspecialchars($searchQuery); ?>" 
-                       placeholder="ابحث عن اسم المنتج أو رقم التشغيلة...">
-            </div>
-            
-            <div class="col-md-3">
-                <label for="date_from" class="form-label"><i class="bi bi-calendar-event me-1"></i>من تاريخ</label>
-                <input type="date" 
-                       class="form-control" 
-                       id="date_from" 
-                       name="date_from" 
-                       value="<?php echo htmlspecialchars($filterDateFrom); ?>">
-            </div>
-            
-            <div class="col-md-3">
-                <label for="date_to" class="form-label"><i class="bi bi-calendar-event me-1"></i>إلى تاريخ</label>
-                <input type="date" 
-                       class="form-control" 
-                       id="date_to" 
-                       name="date_to" 
-                       value="<?php echo htmlspecialchars($filterDateTo); ?>">
-            </div>
-            
-            <div class="col-md-2">
-                <label class="form-label d-block">&nbsp;</label>
-                <div class="d-flex gap-2">
-                    <button type="submit" class="btn btn-primary flex-fill">
-                        <i class="bi bi-search me-1"></i>بحث
-                    </button>
-                    <?php if ($searchQuery || $filterDateFrom || $filterDateTo): ?>
-                    <a href="?page=inventory" class="btn btn-outline-secondary">
-                        <i class="bi bi-x-circle"></i>
-                    </a>
-                    <?php endif; ?>
-                </div>
-            </div>
-        </form>
-    </div>
-</div>
+
 
 <?php if ($primaryWarehouse): ?>
     
@@ -2536,6 +2951,710 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
 <?php endif; ?>
+
+<!-- قسم قوالب المنتجات -->
+<div style="margin: 25px;">
+    <div style="background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%); color: white; padding: 1.5rem 1.75rem; border-radius: 16px 16px 0 0; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 12px rgba(29, 78, 216, 0.15); margin-bottom: 0;">
+        <h5 style="margin: 0; font-weight: 600; display: flex; align-items: center; gap: 0.75rem; font-size: 1.15rem;">
+            <i class="bi bi-diagram-3"></i>
+            قوالب المنتجات
+        </h5>
+        <span style="background: rgba(255, 255, 255, 0.25); color: white; padding: 0.45rem 0.9rem; border-radius: 25px; font-size: 0.875rem; font-weight: 600;"><?php echo $totalProductTemplates; ?> قالب</span>
+    </div>
+    
+    <div style="background: white; border-radius: 0 0 16px 16px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08); overflow: hidden; padding: 2rem;">
+        <!-- شريط البحث والفلترة -->
+        <div style="margin-bottom: 1.5rem; padding: 1rem; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 12px;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                <div>
+                    <label style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem; color: #666;">
+                        <i class="bi bi-search me-1"></i>البحث
+                    </label>
+                    <input type="text" class="form-control form-control-sm" id="templateSearchInput" placeholder="اسم القالب..." autocomplete="off" style="border-radius: 8px;">
+                </div>
+                <div>
+                    <label style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem; color: #666;">
+                        <i class="bi bi-funnel me-1"></i>فلترة الكمية
+                    </label>
+                    <select class="form-control form-control-sm" id="templateQuantityFilter" style="border-radius: 8px;">
+                        <option value="all">جميع القوالب</option>
+                        <option value="available">متاحة (كمية > 0)</option>
+                        <option value="unavailable">غير متاحة (كمية = 0)</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem; color: #666;">
+                        <i class="bi bi-sort-numeric-down me-1"></i>الترتيب
+                    </label>
+                    <select class="form-control form-control-sm" id="templateSortOrder" style="border-radius: 8px;">
+                        <option value="name_asc">الاسم (أ-ي)</option>
+                        <option value="name_desc">الاسم (ي-أ)</option>
+                        <option value="quantity_desc">الكمية (الأعلى أولاً)</option>
+                        <option value="quantity_asc">الكمية (الأقل أولاً)</option>
+                        <option value="price_desc">السعر (الأعلى أولاً)</option>
+                        <option value="price_asc">السعر (الأقل أولاً)</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- عرض القوالب -->
+        <div id="templateProductsContainer">
+            <?php if (empty($productTemplates)): ?>
+                <div style="padding: 25px; text-align: center; color: #94a3b8;">
+                    <i class="bi bi-info-circle me-2"></i>
+                    لا توجد قوالب منتجات حالياً
+                </div>
+            <?php else: ?>
+                <div id="templateProductsGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px;">
+                    <?php foreach ($productTemplates as $template): ?>
+                        <?php
+                            $templateName = htmlspecialchars($template['product_name'] ?? 'غير محدد');
+                            $templatePrice = floatval($template['unit_price'] ?? 0);
+                            $templateId = $template['id'] ?? 0;
+                            $availableQuantity = floatval($template['available_quantity'] ?? 0);
+                            $templateComponents = $productTemplateComponents[$templateId] ?? ['raw_materials' => [], 'packaging' => []];
+                            $templateRawMaterials = $templateComponents['raw_materials'] ?? [];
+                            $templatePackagingItems = $templateComponents['packaging'] ?? [];
+                            $templateDetailsCollapseId = 'templateComponentsCollapse' . $templateId;
+                        ?>
+                        <div class="product-card" style="position: relative; background: white; padding: 20px; border: 1px solid #e2e6f3; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); transition: all 0.3s ease;">
+                            <div style="position: absolute; top: 15px; left: 15px; background: #2e89ff; padding: 6px 14px; border-radius: 20px; color: white; font-size: 12px; font-weight: bold;">
+                                <i class="bi bi-diagram-3 me-1"></i>قالب
+                            </div>
+                            
+                            <div class="product-name" style="font-size: 16px; font-weight: bold; color: #0d2f66; margin-bottom: 6px; margin-top: 10px;"><?php echo $templateName; ?></div>
+                            <div style="color: #94a3b8; font-size: 13px; margin-bottom: 10px;">الكود: <?php echo $templateId; ?></div>
+                            
+                            <div style="font-size: 13px; margin-top: 8px; display: flex; justify-content: space-between;">
+                                <span>السعر:</span>
+                                <span style="color: #059669; font-weight: 600;"><?php echo formatCurrency($templatePrice); ?></span>
+                            </div>
+                            <div style="font-size: 13px; margin-top: 5px; display: flex; justify-content: space-between;">
+                                <span>الكمية المتاحة:</span>
+                                <span style="color: #2563eb; font-weight: 600;"><?php echo number_format($availableQuantity, 2); ?> قطعة</span>
+                            </div>
+
+                            <div style="margin-top: 14px; padding-top: 14px; border-top: 1px dashed #d7deee;">
+                                <div style="display: flex; gap: 8px; align-items: stretch;">
+                                    <button
+                                        type="button"
+                                        class="btn btn-sm btn-outline-primary d-flex justify-content-between align-items-center template-components-toggle"
+                                        data-bs-toggle="collapse"
+                                        data-bs-target="#<?php echo htmlspecialchars($templateDetailsCollapseId, ENT_QUOTES, 'UTF-8'); ?>"
+                                        aria-expanded="false"
+                                        aria-controls="<?php echo htmlspecialchars($templateDetailsCollapseId, ENT_QUOTES, 'UTF-8'); ?>"
+                                        style="border-radius: 10px; flex: 1 1 auto;"
+                                    >
+                                        <span><i class="bi bi-list-stars me-1"></i>عرض المكونات</span>
+                                        <i class="bi bi-chevron-down template-components-toggle-icon"></i>
+                                    </button>
+                                    <?php if ($canProduceFromTemplates): ?>
+                                        <button
+                                            type="button"
+                                            class="btn btn-sm btn-success js-open-template-production-modal"
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#templateProductionModal"
+                                            data-template-id="<?php echo intval($templateId); ?>"
+                                            data-template-name="<?php echo htmlspecialchars($template['product_name'] ?? 'غير محدد', ENT_QUOTES, 'UTF-8'); ?>"
+                                            onclick="window.openTemplateProductionModal && window.openTemplateProductionModal(this)"
+                                            style="border-radius: 10px; white-space: nowrap;"
+                                        >
+                                            <i class="bi bi-gear-wide-connected me-1"></i>إنتاج
+                                        </button>
+                                    <?php endif; ?>
+                                </div>
+
+                                <div class="collapse mt-3" id="<?php echo htmlspecialchars($templateDetailsCollapseId, ENT_QUOTES, 'UTF-8'); ?>">
+                                    <?php if (empty($templateRawMaterials) && empty($templatePackagingItems)): ?>
+                                        <div style="padding: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; color: #64748b; font-size: 13px;">
+                                            لا توجد بيانات خامات أو أدوات تعبئة مسجلة لهذا القالب.
+                                        </div>
+                                    <?php else: ?>
+                                        <?php if (!empty($templateRawMaterials)): ?>
+                                            <div style="margin-bottom: <?php echo !empty($templatePackagingItems) ? '12px' : '0'; ?>; padding: 12px; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 10px;">
+                                                <div style="font-size: 13px; font-weight: 700; color: #9a3412; margin-bottom: 8px;">
+                                                    <i class="bi bi-droplet-half me-1"></i>الخامات
+                                                </div>
+                                                <ul style="list-style: none; padding: 0; margin: 0;">
+                                                    <?php foreach ($templateRawMaterials as $rawItem): ?>
+                                                        <li style="font-size: 13px; color: #431407; display: flex; justify-content: space-between; gap: 12px; padding: 5px 0;">
+                                                            <span><?php echo htmlspecialchars($rawItem['name'] ?? 'مادة خام'); ?></span>
+                                                            <strong><?php echo number_format((float)($rawItem['quantity'] ?? 0), 3) . ' ' . htmlspecialchars($rawItem['unit'] ?? 'وحدة'); ?></strong>
+                                                        </li>
+                                                    <?php endforeach; ?>
+                                                </ul>
+                                            </div>
+                                        <?php endif; ?>
+
+                                        <?php if (!empty($templatePackagingItems)): ?>
+                                            <div style="padding: 12px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px;">
+                                                <div style="font-size: 13px; font-weight: 700; color: #1d4ed8; margin-bottom: 8px;">
+                                                    <i class="bi bi-box-seam me-1"></i>أدوات التعبئة
+                                                </div>
+                                                <ul style="list-style: none; padding: 0; margin: 0;">
+                                                    <?php foreach ($templatePackagingItems as $packagingItem): ?>
+                                                        <li style="font-size: 13px; color: #1e3a8a; display: flex; justify-content: space-between; gap: 12px; padding: 5px 0;">
+                                                            <span><?php echo htmlspecialchars($packagingItem['name'] ?? 'أداة تعبئة'); ?></span>
+                                                            <strong><?php echo number_format((float)($packagingItem['quantity'] ?? 0), 3) . ' ' . htmlspecialchars($packagingItem['unit'] ?? 'قطعة'); ?></strong>
+                                                        </li>
+                                                    <?php endforeach; ?>
+                                                </ul>
+                                            </div>
+                                        <?php endif; ?>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+        </div>
+    </div>
+</div>
+
+<?php if ($canProduceFromTemplates): ?>
+<style>
+@media (max-width: 767.98px) {
+    #templateProductionComponentsContainer .template-production-component-row > div {
+        grid-template-columns: 1fr !important;
+    }
+}
+</style>
+<div class="modal fade" id="templateProductionModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <form class="modal-content" method="POST">
+            <input type="hidden" name="action" value="produce_from_template">
+            <input type="hidden" name="template_production_token" value="<?php echo htmlspecialchars($_SESSION['template_production_token'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+            <input type="hidden" name="template_id" id="templateProductionTemplateId" value="">
+            <input type="hidden" name="template_name" id="templateProductionTemplateNameInput" value="">
+
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="bi bi-gear-wide-connected me-2"></i>إنتاج من القالب</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="إغلاق"></button>
+            </div>
+
+            <div class="modal-body" style="max-height: 72vh; overflow-y: auto; padding: 1rem;">
+                <div class="mb-3">
+                    <label class="form-label">اسم القالب</label>
+                    <input type="text" class="form-control" id="templateProductionTemplateNameDisplay" readonly>
+                </div>
+                <div class="mb-0">
+                    <label class="form-label" for="templateProductionQuantity">كمية الإنتاج</label>
+                    <input
+                        type="number"
+                        class="form-control"
+                        id="templateProductionQuantity"
+                        name="production_quantity"
+                        min="1"
+                        step="1"
+                        value="1"
+                        required
+                    >
+                    <div class="form-text">سيتم إنشاء تشغيلة جديدة وخصم الخامات وأدوات التعبئة المسجلة على القالب تلقائياً.</div>
+                </div>
+                <div class="mt-4">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <label class="form-label mb-0">الموردون المستخدمون في الخصم</label>
+                        <small class="text-muted" id="templateProductionComponentsHint">يتم اختيار المورد الافتراضي تلقائياً إذا كان متاحاً.</small>
+                    </div>
+                    <div id="templateProductionComponentsFeedback" class="mb-2"></div>
+                    <div id="templateProductionComponentsContainer" class="row g-2"></div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                <button type="submit" class="btn btn-success">
+                    <i class="bi bi-check-circle me-1"></i>تنفيذ الإنتاج
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+<?php endif; ?>
+
+<?php if ($canProduceFromTemplates): ?>
+<script>
+window.productionSuppliers = <?php echo json_encode(array_map(static function ($supplier) {
+    return [
+        'id' => (int)($supplier['id'] ?? 0),
+        'name' => (string)($supplier['name'] ?? ''),
+        'type' => (string)($supplier['type'] ?? ''),
+    ];
+}, is_array($productionSuppliers) ? $productionSuppliers : []), JSON_UNESCAPED_UNICODE); ?>;
+window.tahiniSuppliers = <?php echo json_encode(array_map(static function ($supplier) {
+    return [
+        'id' => (int)($supplier['id'] ?? 0),
+        'name' => (string)($supplier['name'] ?? ''),
+        'type' => (string)($supplier['type'] ?? ''),
+    ];
+}, is_array($tahiniSuppliers) ? $tahiniSuppliers : []), JSON_UNESCAPED_UNICODE); ?>;
+window.honeyStockData = <?php echo json_encode($honeyStockDataForJs, JSON_UNESCAPED_UNICODE); ?>;
+window.templateDetailsEndpoint = <?php echo json_encode(getDashboardUrl('production') . '?page=production&ajax=template_details', JSON_UNESCAPED_UNICODE); ?>;
+
+window.getSuppliersForTemplateProductionComponent = function(component) {
+    const suppliers = Array.isArray(window.productionSuppliers) ? window.productionSuppliers : [];
+    const type = String(component?.type || '').toLowerCase();
+    const key = String(component?.key || '').toLowerCase();
+    const name = String(component?.name || component?.label || '').toLowerCase();
+
+    const filterByTypes = (allowedTypes) => suppliers.filter((supplier) => {
+        const supplierType = String(supplier?.type || '').toLowerCase();
+        return allowedTypes.some((allowedType) => supplierType === String(allowedType).toLowerCase());
+    });
+
+    if (type === 'beeswax' || key.startsWith('beeswax') || name.includes('شمع') || name.includes('beeswax') || key.includes('wax')) {
+        return filterByTypes(['beeswax']);
+    }
+    if (['honey_raw', 'honey_filtered', 'honey_general', 'honey_main'].includes(type) || name.includes('عسل') || name.includes('honey')) {
+        return filterByTypes(['honey']);
+    }
+    if (type === 'packaging' || key.startsWith('pack_') || name.includes('تعبئة') || name.includes('packaging')) {
+        return filterByTypes(['packaging']);
+    }
+    if (type === 'olive_oil' || name.includes('زيت زيتون') || name.includes('olive')) {
+        return filterByTypes(['olive_oil']);
+    }
+    if (type === 'derivatives' || name.includes('مشتق') || name.includes('derivative')) {
+        return filterByTypes(['derivatives']);
+    }
+    if (type === 'nuts' || name.includes('مكسرات') || name.includes('nuts')) {
+        return filterByTypes(['nuts']);
+    }
+    if (type === 'tahini' || name.includes('طحينة') || name.includes('tahini')) {
+        return Array.isArray(window.tahiniSuppliers) && window.tahiniSuppliers.length
+            ? window.tahiniSuppliers
+            : filterByTypes(['sesame']);
+    }
+    return [];
+};
+
+window.populateTemplateProductionHoneyVarieties = function(selectEl, supplierId, component) {
+    if (!selectEl) {
+        return;
+    }
+
+    const normalizeVariety = function(value) {
+        return value === null || value === undefined ? '' : String(value).trim();
+    };
+
+    const normalizedSupplierId = supplierId ? String(parseInt(supplierId, 10)) : '';
+    const defaultValue = normalizeVariety(component?.honey_variety || '');
+    selectEl.innerHTML = '';
+
+    const placeholderOption = document.createElement('option');
+    placeholderOption.value = '';
+    placeholderOption.textContent = normalizedSupplierId ? 'اختر نوع العسل' : 'اختر المورد أولاً';
+    placeholderOption.disabled = true;
+    placeholderOption.selected = true;
+    selectEl.appendChild(placeholderOption);
+
+    const supplierHoneyData = normalizedSupplierId && window.honeyStockData
+        ? (window.honeyStockData[normalizedSupplierId] || null)
+        : null;
+    const componentType = String(component?.type || '');
+
+    let items = [];
+    if (supplierHoneyData) {
+        if (componentType === 'honey_raw' && Array.isArray(supplierHoneyData.honey_raw)) {
+            items = supplierHoneyData.honey_raw;
+        } else if (componentType === 'honey_filtered' && Array.isArray(supplierHoneyData.honey_filtered)) {
+            items = supplierHoneyData.honey_filtered;
+        } else if (Array.isArray(supplierHoneyData.all)) {
+            items = supplierHoneyData.all;
+        }
+    }
+
+    const normalizedDefault = defaultValue.toLocaleLowerCase('ar');
+    let matched = false;
+
+    items.forEach((item) => {
+        const variety = normalizeVariety(item?.variety || 'غير محدد');
+        const option = document.createElement('option');
+        option.value = variety;
+        option.textContent = variety;
+        if (!matched && normalizedDefault && variety.toLocaleLowerCase('ar') === normalizedDefault) {
+            option.selected = true;
+            matched = true;
+            placeholderOption.selected = false;
+        }
+        selectEl.appendChild(option);
+    });
+
+    if (!items.length && defaultValue !== '') {
+        const fallbackOption = document.createElement('option');
+        fallbackOption.value = defaultValue;
+        fallbackOption.textContent = defaultValue + ' (من القالب)';
+        fallbackOption.selected = true;
+        selectEl.appendChild(fallbackOption);
+        placeholderOption.selected = false;
+    } else if (!matched && items.length === 1) {
+        selectEl.value = normalizeVariety(items[0]?.variety || 'غير محدد');
+        placeholderOption.selected = false;
+    }
+
+    selectEl.disabled = selectEl.options.length <= 1;
+};
+
+window.renderTemplateProductionComponents = function(details) {
+    const container = document.getElementById('templateProductionComponentsContainer');
+    const feedback = document.getElementById('templateProductionComponentsFeedback');
+    const hint = document.getElementById('templateProductionComponentsHint');
+
+    if (!container || !feedback || !hint) {
+        return;
+    }
+
+    container.innerHTML = '';
+    feedback.innerHTML = '';
+
+    if (!details || !details.success || !Array.isArray(details.components)) {
+        feedback.innerHTML = '<div class="alert alert-danger mb-0">تعذّر تحميل مكوّنات القالب.</div>';
+        return;
+    }
+
+    if (!details.components.length) {
+        feedback.innerHTML = '<div class="alert alert-warning mb-0">هذا القالب لا يحتوي على خامات أو أدوات تعبئة قابلة للخصم.</div>';
+        return;
+    }
+
+    hint.textContent = details.hint || 'اختر المورد الذي سيتم الخصم من مخزونه لكل مكوّن.';
+
+    details.components.forEach((component, index) => {
+        const componentKey = String(component.key || ('component_' + index));
+        const isPackaging = String(component.type || '').toLowerCase() === 'packaging' || componentKey.startsWith('pack_');
+        const suppliersList = window.getSuppliersForTemplateProductionComponent(component);
+        const wrapper = document.createElement('div');
+        wrapper.className = 'col-12 col-md-6 template-production-component-row';
+
+        const card = document.createElement('div');
+        card.className = 'border rounded-3 bg-light';
+        card.style.padding = '0.65rem 0.75rem';
+        card.style.lineHeight = '1.2';
+        card.style.display = 'grid';
+        card.style.gridTemplateColumns = 'minmax(0, 1.15fr) minmax(260px, 0.85fr)';
+        card.style.gap = '0.75rem';
+        card.style.alignItems = 'center';
+
+        const infoColumn = document.createElement('div');
+        infoColumn.style.minWidth = '0';
+
+        const title = document.createElement('div');
+        title.className = 'fw-semibold mb-1';
+        title.style.fontSize = '0.88rem';
+        title.textContent = component.name || component.label || 'مكوّن';
+        infoColumn.appendChild(title);
+
+        const description = document.createElement('div');
+        description.className = 'text-muted';
+        description.style.fontSize = '0.72rem';
+        description.textContent = component.description || '';
+        infoColumn.appendChild(description);
+        card.appendChild(infoColumn);
+
+        const controlsColumn = document.createElement('div');
+        controlsColumn.style.minWidth = '0';
+
+        const kindInput = document.createElement('input');
+        kindInput.type = 'hidden';
+        kindInput.name = `component_usage[${componentKey}][component_kind]`;
+        kindInput.value = isPackaging ? 'packaging' : 'raw';
+        card.appendChild(kindInput);
+
+        const templateItemIdInput = document.createElement('input');
+        templateItemIdInput.type = 'hidden';
+        templateItemIdInput.name = `component_usage[${componentKey}][template_item_id]`;
+        const rawIdMatch = componentKey.match(/_(\d+)$/);
+        templateItemIdInput.value = rawIdMatch ? rawIdMatch[1] : '';
+        card.appendChild(templateItemIdInput);
+
+        const nameInput = document.createElement('input');
+        nameInput.type = 'hidden';
+        nameInput.name = `component_usage[${componentKey}][name]`;
+        nameInput.value = component.name || component.label || '';
+        card.appendChild(nameInput);
+
+        const materialTypeInput = document.createElement('input');
+        materialTypeInput.type = 'hidden';
+        materialTypeInput.name = `component_usage[${componentKey}][material_type]`;
+        materialTypeInput.value = component.type || (isPackaging ? 'packaging' : 'raw_general');
+        card.appendChild(materialTypeInput);
+
+        const quantityPerUnitInput = document.createElement('input');
+        quantityPerUnitInput.type = 'hidden';
+        quantityPerUnitInput.name = `component_usage[${componentKey}][quantity_per_unit]`;
+        quantityPerUnitInput.value = component.quantity_per_unit || '';
+        card.appendChild(quantityPerUnitInput);
+
+        const unitInput = document.createElement('input');
+        unitInput.type = 'hidden';
+        unitInput.name = `component_usage[${componentKey}][unit]`;
+        unitInput.value = component.unit || component.unit_label || '';
+        card.appendChild(unitInput);
+
+        const supplierLabel = document.createElement('label');
+        supplierLabel.className = 'form-label mb-1';
+        supplierLabel.style.fontSize = '0.72rem';
+        supplierLabel.textContent = isPackaging ? 'مورد أداة التعبئة' : 'مورد الخامة';
+        controlsColumn.appendChild(supplierLabel);
+
+        const supplierSelect = document.createElement('select');
+        supplierSelect.className = 'form-select form-select-sm mb-2';
+        supplierSelect.style.fontSize = '0.78rem';
+        supplierSelect.style.paddingTop = '0.28rem';
+        supplierSelect.style.paddingBottom = '0.28rem';
+        supplierSelect.name = `component_usage[${componentKey}][supplier_id]`;
+        supplierSelect.required = true;
+
+        const placeholderOption = document.createElement('option');
+        placeholderOption.value = '';
+        placeholderOption.textContent = 'اختر المورد';
+        supplierSelect.appendChild(placeholderOption);
+
+        suppliersList.forEach((supplier) => {
+            const option = document.createElement('option');
+            option.value = String(supplier.id || '');
+            option.textContent = supplier.name || ('مورد #' + supplier.id);
+            if (component.default_supplier && parseInt(component.default_supplier, 10) === parseInt(supplier.id, 10)) {
+                option.selected = true;
+            }
+            supplierSelect.appendChild(option);
+        });
+
+        if (!component.default_supplier && suppliersList.length === 1) {
+            supplierSelect.value = String(suppliersList[0].id || '');
+        }
+
+        controlsColumn.appendChild(supplierSelect);
+
+        if (!suppliersList.length) {
+            const noSupplierText = document.createElement('div');
+            noSupplierText.className = 'text-danger small';
+            noSupplierText.style.fontSize = '0.68rem';
+            noSupplierText.textContent = 'لا يوجد مورد مناسب متاح لهذا المكوّن حالياً.';
+            controlsColumn.appendChild(noSupplierText);
+        }
+
+        if (['honey_raw', 'honey_filtered', 'honey_general', 'honey_main'].includes(String(component.type || '').toLowerCase())) {
+            const honeyLabel = document.createElement('label');
+            honeyLabel.className = 'form-label mt-2 mb-1';
+            honeyLabel.style.fontSize = '0.72rem';
+            honeyLabel.textContent = 'نوع العسل';
+            controlsColumn.appendChild(honeyLabel);
+
+            const honeySelect = document.createElement('select');
+            honeySelect.className = 'form-select form-select-sm';
+            honeySelect.style.fontSize = '0.78rem';
+            honeySelect.style.paddingTop = '0.28rem';
+            honeySelect.style.paddingBottom = '0.28rem';
+            honeySelect.name = `component_usage[${componentKey}][honey_variety]`;
+            honeySelect.required = true;
+            controlsColumn.appendChild(honeySelect);
+
+            window.populateTemplateProductionHoneyVarieties(honeySelect, supplierSelect.value, component);
+            supplierSelect.addEventListener('change', function() {
+                window.populateTemplateProductionHoneyVarieties(honeySelect, this.value, component);
+            });
+        }
+
+        card.appendChild(controlsColumn);
+        wrapper.appendChild(card);
+        container.appendChild(wrapper);
+    });
+};
+
+window.openTemplateProductionModal = function(trigger) {
+    const button = trigger && trigger.nodeType === 1 ? trigger : null;
+    if (!button) {
+        return;
+    }
+
+    const templateIdInput = document.getElementById('templateProductionTemplateId');
+    const templateNameInput = document.getElementById('templateProductionTemplateNameInput');
+    const templateNameDisplay = document.getElementById('templateProductionTemplateNameDisplay');
+    const templateProductionQuantityInput = document.getElementById('templateProductionQuantity');
+    const feedback = document.getElementById('templateProductionComponentsFeedback');
+    const container = document.getElementById('templateProductionComponentsContainer');
+
+    const templateId = button.getAttribute('data-template-id') || '';
+    const templateName = button.getAttribute('data-template-name') || 'غير محدد';
+
+    if (templateIdInput) {
+        templateIdInput.value = templateId;
+    }
+    if (templateNameInput) {
+        templateNameInput.value = templateName;
+    }
+    if (templateNameDisplay) {
+        templateNameDisplay.value = templateName;
+    }
+    if (templateProductionQuantityInput) {
+        templateProductionQuantityInput.value = '1';
+        setTimeout(function() {
+            templateProductionQuantityInput.focus();
+            templateProductionQuantityInput.select();
+        }, 150);
+    }
+
+    if (feedback) {
+        feedback.innerHTML = '<div class="alert alert-info mb-0">جارٍ تحميل الموردين والمكوّنات...</div>';
+    }
+    if (container) {
+        container.innerHTML = '';
+    }
+
+    if (!templateId || !window.templateDetailsEndpoint) {
+        return;
+    }
+
+    const requestUrl = `${window.templateDetailsEndpoint}&template_id=${encodeURIComponent(templateId)}`;
+    fetch(requestUrl, {
+        credentials: 'same-origin',
+        headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+        .then(async (response) => {
+            const contentType = response.headers.get('content-type') || '';
+            const bodyText = await response.text();
+
+            if (!response.ok) {
+                throw new Error('فشل تحميل المكوّنات. رمز الاستجابة: ' + response.status);
+            }
+
+            if (!contentType.includes('application/json')) {
+                throw new Error('الخادم أعاد استجابة غير متوقعة بدلاً من JSON.');
+            }
+
+            try {
+                return JSON.parse(bodyText);
+            } catch (parseError) {
+                throw new Error('تعذّر قراءة بيانات المكوّنات من الخادم.');
+            }
+        })
+        .then((data) => {
+            window.renderTemplateProductionComponents(data);
+        })
+        .catch((error) => {
+            if (feedback) {
+                feedback.innerHTML = `<div class="alert alert-danger mb-0">تعذّر تحميل المكوّنات: ${error.message}</div>`;
+            }
+        });
+};
+</script>
+<?php endif; ?>
+
+<!-- JavaScript للبحث والفلترة في قوالب المنتجات -->
+<script>
+(function() {
+    const templateSearchInput = document.getElementById('templateSearchInput');
+    const templateQuantityFilter = document.getElementById('templateQuantityFilter');
+    const templateSortOrder = document.getElementById('templateSortOrder');
+    
+    function filterAndSortTemplates() {
+        const searchText = (templateSearchInput?.value || '').toLowerCase();
+        const quantityFilter = templateQuantityFilter?.value || 'all';
+        const sortOrder = templateSortOrder?.value || 'name_asc';
+        
+        const grid = document.getElementById('templateProductsGrid');
+        if (!grid) return;
+        
+        const cards = Array.from(grid.querySelectorAll('.product-card'));
+        let visibleCount = 0;
+        
+        // فلترة البطاقات
+        const filteredCards = cards.filter(card => {
+            const productName = card.querySelector('.product-name')?.textContent.toLowerCase() || '';
+            const quantityText = card.querySelector('div[style*="color: #2563eb"]')?.textContent || '';
+            const quantity = parseFloat(quantityText.replace(/[^\d.]/g, '')) || 0;
+            
+            // فحص البحث
+            const matchesSearch = productName.includes(searchText);
+            
+            // فحص فلتر الكمية
+            let matchesQuantity = true;
+            if (quantityFilter === 'available') {
+                matchesQuantity = quantity > 0;
+            } else if (quantityFilter === 'unavailable') {
+                matchesQuantity = quantity === 0;
+            }
+            
+            return matchesSearch && matchesQuantity;
+        });
+        
+        // ترتيب البطاقات
+        filteredCards.sort((a, b) => {
+            const nameA = a.querySelector('.product-name')?.textContent.toLowerCase() || '';
+            const nameB = b.querySelector('.product-name')?.textContent.toLowerCase() || '';
+            
+            const quantityA = parseFloat(a.querySelector('div[style*="color: #2563eb"]')?.textContent.replace(/[^\d.]/g, '') || '0');
+            const quantityB = parseFloat(b.querySelector('div[style*="color: #2563eb"]')?.textContent.replace(/[^\d.]/g, '') || '0');
+            
+            const priceA = parseFloat(a.querySelector('span[style*="color: #059669"]')?.textContent.replace(/[^\d.]/g, '') || '0');
+            const priceB = parseFloat(b.querySelector('span[style*="color: #059669"]')?.textContent.replace(/[^\d.]/g, '') || '0');
+            
+            switch (sortOrder) {
+                case 'name_desc':
+                    return nameB.localeCompare(nameA);
+                case 'quantity_desc':
+                    return quantityB - quantityA;
+                case 'quantity_asc':
+                    return quantityA - quantityB;
+                case 'price_desc':
+                    return priceB - priceA;
+                case 'price_asc':
+                    return priceA - priceB;
+                case 'name_asc':
+                default:
+                    return nameA.localeCompare(nameB);
+            }
+        });
+        
+        // إخفاء جميع البطاقات أولاً
+        cards.forEach(card => card.style.display = 'none');
+        
+        // إظهار البطاقات المفلترة والمرتبة
+        filteredCards.forEach(card => {
+            card.style.display = '';
+            visibleCount++;
+        });
+        
+        // إظهار رسالة عند عدم وجود نتائج
+        const noResultsMessage = grid.querySelector('.no-results-message');
+        if (visibleCount === 0) {
+            if (!noResultsMessage) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'no-results-message';
+                messageDiv.style.cssText = 'grid-column: 1/-1; padding: 25px; text-align: center; color: #94a3b8;';
+                messageDiv.innerHTML = '<i class="bi bi-info-circle me-2"></i>لا توجد قوالب منتجات تطابق معايير البحث والفلترة';
+                grid.appendChild(messageDiv);
+            }
+        } else {
+            if (noResultsMessage) {
+                noResultsMessage.remove();
+            }
+        }
+    }
+    
+    // إضافة event listeners
+    if (templateSearchInput) {
+        templateSearchInput.addEventListener('input', filterAndSortTemplates);
+    }
+    
+    if (templateQuantityFilter) {
+        templateQuantityFilter.addEventListener('change', filterAndSortTemplates);
+    }
+    
+    if (templateSortOrder) {
+        templateSortOrder.addEventListener('change', filterAndSortTemplates);
+    }
+    
+    // تشغيل الفلترة الأولية
+    filterAndSortTemplates();
+})();
+</script>
 
 <style>
 /* إصلاح مشكلة عرض القوائم المنسدلة بشكل نصف واضح في النماذج */
@@ -3059,327 +4178,6 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
     }
 </style>
 
-<!-- تحميل مكتبة JsBarcode -->
-<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
-
-<?php if (!empty($finishedProductsRows)): ?>
-    <div class="grid">
-        <?php foreach ($finishedProductsRows as $finishedRow): ?>
-            <?php
-                $batchNumber = $finishedRow['batch_number'] ?? '';
-                $productName = htmlspecialchars($finishedRow['product_name'] ?? 'غير محدد');
-                $productionDate = !empty($finishedRow['production_date']) ? htmlspecialchars(formatDate($finishedRow['production_date'])) : '—';
-                $quantity = number_format((float)($finishedRow['quantity_produced'] ?? 0), 2);
-                $viewUrl = $batchNumber
-                    ? getRelativeUrl('production.php?page=batch_numbers&batch_number=' . urlencode($batchNumber))
-                    : '#';
-                
-                // Generate barcode image URL
-                $barcodeImageUrl = 'https://www.free-barcode-generator.net/wp-content/themes/barcode/images/barcode-img.png';
-                if ($batchNumber && function_exists('generateBarcodeHTML')) {
-                    // Use the barcode generation function if available
-                    $barcodeHtml = generateBarcodeHTML($batchNumber);
-                }
-            ?>
-            <div class="card">
-                <div class="status">
-                    <i class="bi bi-check-circle me-1"></i>finished
-                </div>
-
-                <div class="prod-name"><?php echo $productName; ?></div>
-                <?php if ($batchNumber): ?>
-                    <a href="#" class="prod-id"><?php echo htmlspecialchars($batchNumber); ?></a>
-                <?php else: ?>
-                    <span class="prod-id">—</span>
-                <?php endif; ?>
-
-                <div class="barcode-box">
-                    <?php if ($batchNumber): ?>
-                        <div class="barcode-container" data-batch="<?php echo htmlspecialchars($batchNumber); ?>">
-                            <svg class="barcode-svg" style="width: 100%; height: 50px;"></svg>
-                        </div>
-                        <div class="barcode-id"><?php echo htmlspecialchars($batchNumber); ?></div>
-                    <?php else: ?>
-                        <div class="barcode-id" style="color: #999;">لا يوجد باركود</div>
-                    <?php endif; ?>
-                </div>
-
-                <div class="detail-row"><span>تاريخ الإنتاج:</span> <span><?php echo $productionDate; ?></span></div>
-                <div class="detail-row"><span>الكمية:</span> <span><?php echo $quantity; ?></span></div>
-
-                <?php if ($batchNumber): ?>
-                    <div style="display: flex; gap: 10px; margin-top: 15px;">
-                        <button type="button" 
-                                class="btn-view js-batch-details" 
-                                style="border: none; cursor: pointer; flex: 1;"
-                                data-batch="<?php echo htmlspecialchars($batchNumber); ?>"
-                                data-product="<?php echo htmlspecialchars($finishedRow['product_name'] ?? ''); ?>"
-                                data-view-url="<?php echo htmlspecialchars($viewUrl); ?>">
-                            <i class="bi bi-eye me-1"></i>عرض التفاصيل
-                        </button>
-                        <button type="button" 
-                                class="btn-view js-print-barcode" 
-                                style="border: none; cursor: pointer; flex: 1; background: #28a745;"
-                                data-batch="<?php echo htmlspecialchars($batchNumber); ?>"
-                                data-product="<?php echo htmlspecialchars($finishedRow['product_name'] ?? ''); ?>"
-                                data-quantity="<?php echo htmlspecialchars($quantity); ?>">
-                            <i class="bi bi-printer me-1"></i>طباعة الباركود
-                        </button>
-                    </div>
-                <?php else: ?>
-                    <span class="btn-view" style="opacity: 0.5; cursor: not-allowed; display: inline-block; margin-top: 15px;">
-                        <i class="bi bi-eye me-1"></i>عرض التفاصيل
-                    </span>
-                <?php endif; ?>
-            </div>
-        <?php endforeach; ?>
-    </div>
-    
-    <!-- توليد الباركودات -->
-    <script>
-    (function() {
-        var maxRetries = 50;
-        var retryCount = 0;
-        
-        function generateAllBarcodes() {
-            if (typeof JsBarcode === 'undefined') {
-                retryCount++;
-                if (retryCount < maxRetries) {
-                    // إعادة المحاولة بعد 100ms
-                    setTimeout(generateAllBarcodes, 100);
-                } else {
-                    console.error('JsBarcode library failed to load');
-                    // عرض أرقام التشغيلة كنص بديل
-                    document.querySelectorAll('.barcode-container[data-batch]').forEach(function(container) {
-                        var batchNumber = container.getAttribute('data-batch');
-                        var svg = container.querySelector('svg');
-                        if (svg) {
-                            svg.innerHTML = '<text x="50%" y="50%" text-anchor="middle" font-size="14" fill="#666" font-family="Arial">' + batchNumber + '</text>';
-                        }
-                    });
-                }
-                return;
-            }
-            
-            // توليد الباركود لكل بطاقة
-            var containers = document.querySelectorAll('.barcode-container[data-batch]');
-            if (containers.length === 0) {
-                return;
-            }
-            
-            containers.forEach(function(container) {
-                var batchNumber = container.getAttribute('data-batch');
-                var svg = container.querySelector('svg.barcode-svg');
-                
-                if (svg && batchNumber && batchNumber.trim() !== '') {
-                    try {
-                        // مسح محتوى SVG أولاً
-                        svg.innerHTML = '';
-                        
-                        // توليد الباركود
-                        JsBarcode(svg, batchNumber, {
-                            format: "CODE128",
-                            width: 2,
-                            height: 50,
-                            displayValue: false,
-                            margin: 5,
-                            background: "#ffffff",
-                            lineColor: "#000000"
-                        });
-                    } catch (error) {
-                        console.error('Error generating barcode for ' + batchNumber + ':', error);
-                        svg.innerHTML = '<text x="50%" y="50%" text-anchor="middle" font-size="12" fill="#666" font-family="Arial">' + batchNumber + '</text>';
-                    }
-                }
-            });
-        }
-        
-        // تشغيل بعد تحميل الصفحة
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', function() {
-                setTimeout(generateAllBarcodes, 200);
-            });
-        } else {
-            setTimeout(generateAllBarcodes, 200);
-        }
-    })();
-    </script>
-    
-    <?php 
-    // حساب عدد الصفحات الإجمالي
-    $finishedProductsTotalPages = max(1, (int) ceil($finishedProductsCount / $finishedProductsPerPage));
-    
-    // بناء رابط الصفحة الحالية مع الحفاظ على المعاملات الأخرى
-    $queryParams = [];
-    foreach ($_GET as $key => $value) {
-        if ($key !== 'fp') {
-            $queryParams[$key] = $value;
-        }
-    }
-    // التأكد من وجود page=inventory في المعاملات
-    if (!isset($queryParams['page'])) {
-        $queryParams['page'] = 'inventory';
-    }
-    
-    // دالة مساعدة لبناء رابط الصفحة
-    $buildPageUrl = function($pageNum) use ($queryParams) {
-        $params = $queryParams;
-        $params['fp'] = $pageNum;
-        // استخدام رابط نسبي يبدأ بـ ? لأننا في dashboard/production.php
-        return '?' . http_build_query($params);
-    };
-    ?>
-    
-    <?php if ($finishedProductsTotalPages > 1): ?>
-    <div style="padding: 0 25px 25px;">
-        <nav aria-label="صفحات جدول المنتجات" class="mt-4">
-            <ul class="pagination justify-content-center flex-wrap mb-0">
-                <li class="page-item <?php echo $finishedProductsPageNum <= 1 ? 'disabled' : ''; ?>">
-                    <a class="page-link" href="<?php echo htmlspecialchars($buildPageUrl($finishedProductsPageNum - 1)); ?>" 
-                       <?php echo $finishedProductsPageNum <= 1 ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>
-                        <i class="bi bi-chevron-right"></i> السابق
-                    </a>
-                </li>
-                
-                <?php
-                // عرض أرقام الصفحات
-                $startPage = max(1, $finishedProductsPageNum - 2);
-                $endPage = min($finishedProductsTotalPages, $finishedProductsPageNum + 2);
-                
-                if ($startPage > 1): ?>
-                    <li class="page-item">
-                        <a class="page-link" href="<?php echo htmlspecialchars($buildPageUrl(1)); ?>">1</a>
-                    </li>
-                    <?php if ($startPage > 2): ?>
-                        <li class="page-item disabled">
-                            <span class="page-link">...</span>
-                        </li>
-                    <?php endif; ?>
-                <?php endif; ?>
-                
-                <?php for ($i = $startPage; $i <= $endPage; $i++): ?>
-                    <li class="page-item <?php echo $i === $finishedProductsPageNum ? 'active' : ''; ?>">
-                        <a class="page-link" href="<?php echo htmlspecialchars($buildPageUrl($i)); ?>">
-                            <?php echo $i; ?>
-                        </a>
-                    </li>
-                <?php endfor; ?>
-                
-                <?php if ($endPage < $finishedProductsTotalPages): ?>
-                    <?php if ($endPage < $finishedProductsTotalPages - 1): ?>
-                        <li class="page-item disabled">
-                            <span class="page-link">...</span>
-                        </li>
-                    <?php endif; ?>
-                    <li class="page-item">
-                        <a class="page-link" href="<?php echo htmlspecialchars($buildPageUrl($finishedProductsTotalPages)); ?>">
-                            <?php echo $finishedProductsTotalPages; ?>
-                        </a>
-                    </li>
-                <?php endif; ?>
-                
-                <li class="page-item <?php echo $finishedProductsPageNum >= $finishedProductsTotalPages ? 'disabled' : ''; ?>">
-                    <a class="page-link" href="<?php echo htmlspecialchars($buildPageUrl($finishedProductsPageNum + 1)); ?>"
-                       <?php echo $finishedProductsPageNum >= $finishedProductsTotalPages ? 'tabindex="-1" aria-disabled="true"' : ''; ?>>
-                        التالي <i class="bi bi-chevron-left"></i>
-                    </a>
-                </li>
-            </ul>
-            <div class="text-center text-muted small mt-2">
-                عرض <?php echo number_format($finishedProductsOffset + 1); ?> - <?php echo number_format(min($finishedProductsOffset + $finishedProductsPerPage, $finishedProductsCount)); ?> 
-                من أصل <?php echo number_format($finishedProductsCount); ?> منتج
-            </div>
-        </nav>
-    </div>
-    <?php elseif ($finishedProductsCount > 0): ?>
-    <div style="padding: 0 25px 25px; text-align: center; color: #666; font-size: 14px; margin-top: 15px;">
-        عرض جميع <?php echo number_format($finishedProductsCount); ?> منتج
-    </div>
-    <?php endif; ?>
-<?php else: ?>
-    <div style="padding: 25px;">
-        <div class="alert alert-info mb-0">
-            <i class="bi bi-info-circle me-2"></i>
-            لا توجد بيانات متاحة حالياً.
-        </div>
-    </div>
-<?php endif; ?>
-
-<!-- Modal طباعة الباركود - للكمبيوتر فقط -->
-<div class="modal fade d-none d-md-block" id="printBarcodesModal" tabindex="-1">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable">
-        <div class="modal-content">
-            <div class="modal-header bg-success text-white">
-                <h5 class="modal-title"><i class="bi bi-printer me-2"></i>طباعة الباركود</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <div class="alert alert-success">
-                    <i class="bi bi-check-circle me-2"></i>
-                    جاهز للطباعة
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">اسم المنتج</label>
-                    <input type="text" class="form-control" id="barcode_product_name" readonly>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">عدد الباركودات المراد طباعتها</label>
-                    <input type="number" class="form-control" id="barcode_print_quantity" min="1" value="1">
-                    <small class="text-muted">سيتم طباعة نفس رقم التشغيلة بعدد المرات المحدد</small>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">أرقام التشغيلة</label>
-                    <div class="border rounded p-3" style="max-height: 200px; overflow-y: auto;">
-                        <div id="batch_numbers_list"></div>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إغلاق</button>
-                <button type="button" class="btn btn-primary" onclick="printBarcodes()">
-                    <i class="bi bi-printer me-2"></i>طباعة
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Card طباعة الباركود - للموبايل فقط -->
-<div class="card shadow-sm mb-4 d-md-none" id="printBarcodesCard" style="display: none;">
-    <div class="card-header bg-success text-white">
-        <h5 class="mb-0">
-            <i class="bi bi-printer me-2"></i>طباعة الباركود
-        </h5>
-    </div>
-    <div class="card-body">
-        <div class="alert alert-success">
-            <i class="bi bi-check-circle me-2"></i>
-            جاهز للطباعة
-        </div>
-        <div class="mb-3">
-            <label class="form-label">اسم المنتج</label>
-            <input type="text" class="form-control" id="barcodeCardProductName" readonly>
-        </div>
-        <div class="mb-3">
-            <label class="form-label">عدد الباركودات المراد طباعتها</label>
-            <input type="number" class="form-control" id="barcodeCardPrintQuantity" min="1" value="1">
-            <small class="text-muted">سيتم طباعة نفس رقم التشغيلة بعدد المرات المحدد</small>
-        </div>
-        <div class="mb-3">
-            <label class="form-label">أرقام التشغيلة</label>
-            <div class="border rounded p-3" style="max-height: 200px; overflow-y: auto;">
-                <div id="batchNumbersListCard"></div>
-            </div>
-        </div>
-        <div class="d-flex gap-2">
-            <button type="button" class="btn btn-primary" onclick="printBarcodesFromCard()">
-                <i class="bi bi-printer me-2"></i>طباعة
-            </button>
-            <button type="button" class="btn btn-secondary" onclick="closePrintBarcodesCard()">إغلاق</button>
-        </div>
-    </div>
-</div>
-
 <?php if ($isManager): ?>
 <div class="card shadow-sm mt-4">
     <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
@@ -3482,6 +4280,48 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
         <span class="badge bg-light text-dark"><?php echo number_format(count($externalProductsForProduction)); ?> منتج</span>
     </div>
     <div class="card-body">
+        <div class="row g-3 align-items-end mb-3">
+            <div class="col-md-6">
+                <label for="externalProductsSearchInput" class="form-label">بحث باسم المنتج</label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input
+                        type="text"
+                        class="form-control"
+                        id="externalProductsSearchInput"
+                        placeholder="اكتب اسم المنتج للبحث"
+                    >
+                </div>
+            </div>
+            <div class="col-md-3">
+                <label for="externalProductsMinQty" class="form-label">الكمية من</label>
+                <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    class="form-control"
+                    id="externalProductsMinQty"
+                    placeholder="0.00"
+                >
+            </div>
+            <div class="col-md-3">
+                <label for="externalProductsMaxQty" class="form-label">الكمية إلى</label>
+                <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    class="form-control"
+                    id="externalProductsMaxQty"
+                    placeholder="بدون حد أقصى"
+                >
+            </div>
+        </div>
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+            <small class="text-muted">يمكنك تصفية المنتجات حسب الاسم أو نطاق الكمية المتاحة.</small>
+            <span class="badge bg-info-subtle text-info-emphasis" id="externalProductsVisibleCount">
+                <?php echo number_format(count($externalProductsForProduction)); ?> / <?php echo number_format(count($externalProductsForProduction)); ?> منتج
+            </span>
+        </div>
         <div class="table-responsive dashboard-table-wrapper">
             <table class="table dashboard-table align-middle mb-0">
                 <thead class="table-light">
@@ -3490,32 +4330,34 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
                         <th>كمية المنتج</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="externalProductsTableBody">
                     <?php foreach ($externalProductsForProduction as $externalProduct): ?>
-                    <tr>
+                    <?php
+                    $productId = (int)($externalProduct['id'] ?? 0);
+                    $availableQty = (float)($externalProduct['quantity'] ?? 0);
+                    
+                    // حساب الكمية المحجوزة في طلبات النقل المعلقة
+                    if ($primaryWarehouse && $productId > 0) {
+                        $pendingTransfers = $db->queryOne(
+                            "SELECT COALESCE(SUM(wti.quantity), 0) AS pending_quantity
+                             FROM warehouse_transfer_items wti
+                             INNER JOIN warehouse_transfers wt ON wt.id = wti.transfer_id
+                             WHERE wti.product_id = ? AND wt.from_warehouse_id = ? AND wt.status = 'pending'",
+                            [$productId, $primaryWarehouse['id']]
+                        );
+                        $availableQty -= (float)($pendingTransfers['pending_quantity'] ?? 0);
+                        $availableQty = max(0, $availableQty);
+                    }
+                    ?>
+                    <tr
+                        data-product-name="<?php echo htmlspecialchars(mb_strtolower($externalProduct['name'] ?? '', 'UTF-8'), ENT_QUOTES, 'UTF-8'); ?>"
+                        data-quantity="<?php echo htmlspecialchars((string)$availableQty, ENT_QUOTES, 'UTF-8'); ?>"
+                    >
                         <td>
                             <strong><?php echo htmlspecialchars($externalProduct['name'] ?? ''); ?></strong>
                         </td>
                         <td>
-                            <?php 
-                            $productId = (int)($externalProduct['id'] ?? 0);
-                            $availableQty = (float)($externalProduct['quantity'] ?? 0);
-                            
-                            // حساب الكمية المحجوزة في طلبات النقل المعلقة
-                            if ($primaryWarehouse && $productId > 0) {
-                                $pendingTransfers = $db->queryOne(
-                                    "SELECT COALESCE(SUM(wti.quantity), 0) AS pending_quantity
-                                     FROM warehouse_transfer_items wti
-                                     INNER JOIN warehouse_transfers wt ON wt.id = wti.transfer_id
-                                     WHERE wti.product_id = ? AND wt.from_warehouse_id = ? AND wt.status = 'pending'",
-                                    [$productId, $primaryWarehouse['id']]
-                                );
-                                $availableQty -= (float)($pendingTransfers['pending_quantity'] ?? 0);
-                                $availableQty = max(0, $availableQty);
-                            }
-                            
-                            echo number_format($availableQty, 2); 
-                            ?>
+                            <?php echo number_format($availableQty, 2); ?>
                         </td>
                     </tr>
                     <?php endforeach; ?>
@@ -3524,6 +4366,135 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
         </div>
     </div>
 </div>
+
+<script>
+(function() {
+    const searchInput = document.getElementById('externalProductsSearchInput');
+    const minQtyInput = document.getElementById('externalProductsMinQty');
+    const maxQtyInput = document.getElementById('externalProductsMaxQty');
+    const tableBody = document.getElementById('externalProductsTableBody');
+    const visibleCountBadge = document.getElementById('externalProductsVisibleCount');
+
+    if (!searchInput || !minQtyInput || !maxQtyInput || !tableBody || !visibleCountBadge) {
+        return;
+    }
+
+    const rows = Array.from(tableBody.querySelectorAll('tr'));
+    const totalCount = rows.length;
+
+    function updateVisibleCount(visibleCount) {
+        visibleCountBadge.textContent = `${visibleCount.toLocaleString('en-US')} / ${totalCount.toLocaleString('en-US')} منتج`;
+    }
+
+    function filterExternalProducts() {
+        const searchText = (searchInput.value || '').trim().toLocaleLowerCase('ar');
+        const minQty = minQtyInput.value === '' ? null : parseFloat(minQtyInput.value);
+        const maxQty = maxQtyInput.value === '' ? null : parseFloat(maxQtyInput.value);
+        let visibleCount = 0;
+
+        rows.forEach((row) => {
+            const productName = row.dataset.productName || '';
+            const quantity = parseFloat(row.dataset.quantity || '0');
+
+            const matchesSearch = searchText === '' || productName.includes(searchText);
+            const matchesMinQty = minQty === null || quantity >= minQty;
+            const matchesMaxQty = maxQty === null || quantity <= maxQty;
+            const isVisible = matchesSearch && matchesMinQty && matchesMaxQty;
+
+            row.style.display = isVisible ? '' : 'none';
+            if (isVisible) {
+                visibleCount += 1;
+            }
+        });
+
+        updateVisibleCount(visibleCount);
+    }
+
+    [searchInput, minQtyInput, maxQtyInput].forEach((input) => {
+        input.addEventListener('input', filterExternalProducts);
+    });
+
+    filterExternalProducts();
+})();
+</script>
+
+<script>
+(function() {
+    const collapseElements = document.querySelectorAll('[id^="templateComponentsCollapse"]');
+    if (!collapseElements.length) {
+        const templateProductionForm = document.querySelector('#templateProductionModal form');
+        if (templateProductionForm) {
+            templateProductionForm.addEventListener('submit', function(event) {
+                const supplierSelects = this.querySelectorAll('select[name$="[supplier_id]"]');
+                for (const select of supplierSelects) {
+                    if (!select.value) {
+                        event.preventDefault();
+                        alert('يرجى اختيار المورد المناسب لكل خامة أو أداة تعبئة قبل تنفيذ الإنتاج.');
+                        select.focus();
+                        return;
+                    }
+                }
+
+                const honeyVarietySelects = this.querySelectorAll('select[name$="[honey_variety]"]');
+                for (const select of honeyVarietySelects) {
+                    if (!select.disabled && !select.value) {
+                        event.preventDefault();
+                        alert('يرجى تحديد نوع العسل للمورد المختار.');
+                        select.focus();
+                        return;
+                    }
+                }
+            });
+        }
+        return;
+    }
+
+    collapseElements.forEach((collapseElement) => {
+        collapseElement.addEventListener('show.bs.collapse', function() {
+            const toggleButton = document.querySelector(`[data-bs-target="#${this.id}"]`);
+            const icon = toggleButton?.querySelector('.template-components-toggle-icon');
+            if (icon) {
+                icon.classList.remove('bi-chevron-down');
+                icon.classList.add('bi-chevron-up');
+            }
+        });
+
+        collapseElement.addEventListener('hide.bs.collapse', function() {
+            const toggleButton = document.querySelector(`[data-bs-target="#${this.id}"]`);
+            const icon = toggleButton?.querySelector('.template-components-toggle-icon');
+            if (icon) {
+                icon.classList.remove('bi-chevron-up');
+                icon.classList.add('bi-chevron-down');
+            }
+        });
+    });
+
+    const templateProductionForm = document.querySelector('#templateProductionModal form');
+    if (templateProductionForm) {
+        templateProductionForm.addEventListener('submit', function(event) {
+            const supplierSelects = this.querySelectorAll('select[name$="[supplier_id]"]');
+            for (const select of supplierSelects) {
+                if (!select.value) {
+                    event.preventDefault();
+                    alert('يرجى اختيار المورد المناسب لكل خامة أو أداة تعبئة قبل تنفيذ الإنتاج.');
+                    select.focus();
+                    return;
+                }
+            }
+
+            const honeyVarietySelects = this.querySelectorAll('select[name$="[honey_variety]"]');
+            for (const select of honeyVarietySelects) {
+                if (!select.disabled && !select.value) {
+                    event.preventDefault();
+                    alert('يرجى تحديد نوع العسل للمورد المختار.');
+                    select.focus();
+                    return;
+                }
+            }
+        });
+    }
+})();
+</script>
 
 <!-- Modal نقل منتج خارجي - للكمبيوتر فقط -->
 <div class="modal fade d-none d-md-block" id="transferExternalProductModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
@@ -3674,7 +4645,7 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
     const productIdInput = document.getElementById('transferExternalProductId');
     const productNameInput = document.getElementById('transferExternalProductName');
     const availableQtyInput = document.getElementById('transferExternalAvailableQty');
-    const quantityInput = document.getElementById('transferExternalQuantity');
+    const transferExternalQuantityInput = document.getElementById('transferExternalQuantity');
     const maxQtySpan = document.getElementById('transferExternalMaxQty');
     
     if (!transferModal || !transferForm) return;
@@ -3725,9 +4696,9 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
                 if (productNameInput) productNameInput.value = productName;
                 if (availableQtyInput) availableQtyInput.value = availableQty.toFixed(2) + ' ' + unit;
                 if (maxQtySpan) maxQtySpan.textContent = availableQty.toFixed(2) + ' ' + unit;
-                if (quantityInput) {
-                    quantityInput.value = '';
-                    quantityInput.max = availableQty.toFixed(2);
+                if (transferExternalQuantityInput) {
+                    transferExternalQuantityInput.value = '';
+                    transferExternalQuantityInput.max = availableQty.toFixed(2);
                 }
                 
                 const bsModal = new bootstrap.Modal(transferModal);
@@ -3736,8 +4707,8 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
         });
     });
     
-    if (quantityInput) {
-        quantityInput.addEventListener('input', function() {
+    if (transferExternalQuantityInput) {
+        transferExternalQuantityInput.addEventListener('input', function() {
             const maxQty = parseFloat(this.max || '0');
             const currentQty = parseFloat(this.value || '0');
             if (currentQty > maxQty) {
@@ -4510,7 +5481,7 @@ if (!window.transferFormInitialized) {
                 const batchIdInput = row.querySelector('.selected-batch-id');
                 const batchNumberInput = row.querySelector('.selected-batch-number');
                 const availableHint = row.querySelector('.available-hint');
-                const quantityInput = row.querySelector('.quantity-input');
+                const rowQuantityInput = row.querySelector('.quantity-input');
                 
                 if (productIdInput) {
                     productIdInput.value = selectedOption ? parseInt(selectedOption.dataset.productId || '0', 10) : '';
@@ -4540,14 +5511,14 @@ if (!window.transferFormInitialized) {
                     }
                 }
                 
-                if (quantityInput) {
+                if (rowQuantityInput) {
                     if (available > 0) {
-                        quantityInput.setAttribute('max', available);
-                        if (parseFloat(quantityInput.value || '0') > available) {
-                            quantityInput.value = available;
+                        rowQuantityInput.setAttribute('max', available);
+                        if (parseFloat(rowQuantityInput.value || '0') > available) {
+                            rowQuantityInput.value = available;
                         }
                     } else {
-                        quantityInput.removeAttribute('max');
+                        rowQuantityInput.removeAttribute('max');
                     }
                 }
             }
@@ -4640,9 +5611,9 @@ if (!window.transferFormInitialized) {
                 const selectedOption = select.options[select.selectedIndex];
                 if (selectedOption && selectedOption.value) {
                     const available = parseFloat(selectedOption.dataset.available || '0');
-                    const quantityInput = row.querySelector('.quantity-input');
-                    if (quantityInput && available > 0) {
-                        quantityInput.setAttribute('max', available);
+                    const rowQuantityInput = row.querySelector('.quantity-input');
+                    if (rowQuantityInput && available > 0) {
+                        rowQuantityInput.setAttribute('max', available);
                     }
                 }
             }
@@ -4813,9 +5784,9 @@ if (!window.transferFormInitialized) {
 
             for (const row of rows) {
                 const select = row.querySelector('.product-select');
-                const quantityInput = row.querySelector('.quantity-input');
+                const rowQuantityInput = row.querySelector('.quantity-input');
 
-                if (!select || !quantityInput) {
+                if (!select || !rowQuantityInput) {
                     isSubmitting = false;
                     if (submitButton) {
                         submitButton.disabled = false;
@@ -4835,9 +5806,9 @@ if (!window.transferFormInitialized) {
                     return;
                 }
 
-                const max = parseFloat(quantityInput.getAttribute('max') || '0');
-                const min = parseFloat(quantityInput.getAttribute('min') || '0');
-                const value = parseFloat(quantityInput.value || '0');
+                const max = parseFloat(rowQuantityInput.getAttribute('max') || '0');
+                const min = parseFloat(rowQuantityInput.getAttribute('min') || '0');
+                const value = parseFloat(rowQuantityInput.value || '0');
 
                 if (value < min) {
                     isSubmitting = false;
@@ -6157,9 +7128,9 @@ function showBarcodePrintModal(batchNumber, productName, defaultQuantity) {
             productNameInput.value = productName || '';
         }
         
-        const quantityInput = document.getElementById('barcodeCardPrintQuantity');
-        if (quantityInput) {
-            quantityInput.value = quantity;
+        const barcodeCardQuantityInput = document.getElementById('barcodeCardPrintQuantity');
+        if (barcodeCardQuantityInput) {
+            barcodeCardQuantityInput.value = quantity;
         }
         
         const batchListContainer = document.getElementById('batchNumbersListCard');
@@ -6200,9 +7171,9 @@ function showBarcodePrintModal(batchNumber, productName, defaultQuantity) {
             quantityText.textContent = quantity;
         }
         
-        const quantityInput = document.getElementById('barcode_print_quantity');
-        if (quantityInput) {
-            quantityInput.value = quantity;
+        const barcodeModalQuantityInput = document.getElementById('barcode_print_quantity');
+        if (barcodeModalQuantityInput) {
+            barcodeModalQuantityInput.value = quantity;
         }
         
         const batchListContainer = document.getElementById('batch_numbers_list');
@@ -6233,8 +7204,8 @@ function printBarcodes() {
         return;
     }
 
-    const quantityInput = document.getElementById('barcode_print_quantity');
-    const printQuantity = quantityInput ? parseInt(quantityInput.value, 10) : 1;
+    const barcodePrintQuantityInput = document.getElementById('barcode_print_quantity');
+    const printQuantity = barcodePrintQuantityInput ? parseInt(barcodePrintQuantityInput.value, 10) : 1;
     
     if (!printQuantity || printQuantity < 1) {
         alert('يرجى إدخال عدد صحيح للطباعة');
@@ -6253,8 +7224,8 @@ function printBarcodesFromCard() {
         return;
     }
 
-    const quantityInput = document.getElementById('barcodeCardPrintQuantity');
-    const printQuantity = quantityInput ? parseInt(quantityInput.value, 10) : 1;
+    const barcodeCardPrintQuantityInput = document.getElementById('barcodeCardPrintQuantity');
+    const printQuantity = barcodeCardPrintQuantityInput ? parseInt(barcodeCardPrintQuantityInput.value, 10) : 1;
     
     if (!printQuantity || printQuantity < 1) {
         alert('يرجى إدخال عدد صحيح للطباعة');
@@ -6425,10 +7396,10 @@ document.addEventListener('DOMContentLoaded', function() {
         // إضافة معالجات الأحداث
         document.querySelectorAll('.product-checkbox-receive').forEach(cb => {
             cb.addEventListener('change', function() {
-                const quantityInput = this.closest('tr').querySelector('.quantity-input-receive');
-                quantityInput.disabled = !this.checked;
+                const receiveQuantityInput = this.closest('tr').querySelector('.quantity-input-receive');
+                receiveQuantityInput.disabled = !this.checked;
                 if (!this.checked) {
-                    quantityInput.value = '';
+                    receiveQuantityInput.value = '';
                 }
                 updateReceiveSubmitButton();
             });
@@ -6452,8 +7423,8 @@ document.addEventListener('DOMContentLoaded', function() {
         let hasValidQuantity = false;
         
         checkedBoxes.forEach(cb => {
-            const quantityInput = cb.closest('tr').querySelector('.quantity-input-receive');
-            const quantity = parseFloat(quantityInput.value) || 0;
+            const receiveQuantityInput = cb.closest('tr').querySelector('.quantity-input-receive');
+            const quantity = parseFloat(receiveQuantityInput.value) || 0;
             if (quantity > 0) {
                 hasValidQuantity = true;
             }
@@ -6474,8 +7445,8 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
             checkedBoxes.forEach((cb, index) => {
-                const quantityInput = cb.closest('tr').querySelector('.quantity-input-receive');
-                const quantity = parseFloat(quantityInput.value) || 0;
+                const receiveQuantityInput = cb.closest('tr').querySelector('.quantity-input-receive');
+                const quantity = parseFloat(receiveQuantityInput.value) || 0;
                 
                 if (quantity <= 0) {
                     e.preventDefault();
@@ -6510,11 +7481,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     this.appendChild(batchNumberInput);
                 }
                 
-                const quantityInput = document.createElement('input');
-                quantityInput.type = 'hidden';
-                quantityInput.name = `${itemPrefix}[quantity]`;
-                quantityInput.value = quantity;
-                this.appendChild(quantityInput);
+                const hiddenQuantityInput = document.createElement('input');
+                hiddenQuantityInput.type = 'hidden';
+                hiddenQuantityInput.name = `${itemPrefix}[quantity]`;
+                hiddenQuantityInput.value = quantity;
+                this.appendChild(hiddenQuantityInput);
             });
         });
         
@@ -6758,6 +7729,3 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 })();
 </script>
-
-
-
