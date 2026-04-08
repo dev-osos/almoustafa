@@ -3824,7 +3824,6 @@ $delegateCards = [
                         <thead>
                             <tr>
                                 <th>العميل</th>
-                                <th>رقم الهاتف</th>
                                 <th>العنوان</th>
                                 <th>الرصيد</th>
                                 <th>آخر تحديث</th>
@@ -3834,7 +3833,7 @@ $delegateCards = [
                         </thead>
                         <tbody class="delegate-modal-body">
                             <tr>
-                                <td colspan="7" class="text-center text-muted py-4">
+                                <td colspan="6" class="text-center text-muted py-4">
                                     لا توجد بيانات متاحة.
                                 </td>
                             </tr>
@@ -4242,7 +4241,7 @@ document.addEventListener('DOMContentLoaded', function () {
         tableBody.innerHTML = '';
         var emptyRow = document.createElement('tr');
         var emptyCell = document.createElement('td');
-        emptyCell.colSpan = 7;
+        emptyCell.colSpan = 6;
         emptyCell.className = 'text-center text-muted py-4';
         emptyCell.textContent = message || 'لا توجد بيانات متاحة.';
         emptyRow.appendChild(emptyCell);
@@ -4283,10 +4282,6 @@ document.addEventListener('DOMContentLoaded', function () {
         nameCell.appendChild(nameStrong);
         row.appendChild(nameCell);
 
-        var phoneCell = document.createElement('td');
-        phoneCell.textContent = customer.phone || '—';
-        row.appendChild(phoneCell);
-
         var addressCell = document.createElement('td');
         addressCell.textContent = customer.address || '—';
         row.appendChild(addressCell);
@@ -4315,12 +4310,28 @@ document.addEventListener('DOMContentLoaded', function () {
         toggleBtn.type = 'button';
         toggleBtn.className = 'btn btn-sm btn-outline-secondary dropdown-toggle';
         toggleBtn.setAttribute('data-bs-toggle', 'dropdown');
+        toggleBtn.setAttribute('data-bs-strategy', 'fixed');
         toggleBtn.setAttribute('aria-expanded', 'false');
         toggleBtn.innerHTML = '<i class="bi bi-three-dots-vertical"></i>';
         dropdown.appendChild(toggleBtn);
 
         var menu = document.createElement('ul');
         menu.className = 'dropdown-menu dropdown-menu-end';
+
+        // اتصال
+        if (customer.phone) {
+            var phoneLi = document.createElement('li');
+            var phoneLink = document.createElement('a');
+            phoneLink.className = 'dropdown-item';
+            phoneLink.href = 'tel:' + customer.phone;
+            phoneLink.innerHTML = '<i class="bi bi-telephone me-2 text-primary"></i>' + customer.phone;
+            phoneLi.appendChild(phoneLink);
+            menu.appendChild(phoneLi);
+
+            var dividerLi = document.createElement('li');
+            dividerLi.innerHTML = '<hr class="dropdown-divider">';
+            menu.appendChild(dividerLi);
+        }
 
         // تعديل
         var editLi = document.createElement('li');
