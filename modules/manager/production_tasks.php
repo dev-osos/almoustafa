@@ -1857,7 +1857,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 );
 
                 $db->commit();
-                
+
+                // إذا كان الطلب AJAX، أعد JSON مباشرةً
+                if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+                    header('Content-Type: application/json; charset=utf-8');
+                    echo json_encode(['success' => true, 'status' => $newStatus], JSON_UNESCAPED_UNICODE);
+                    exit;
+                }
+
                 // استخدام preventDuplicateSubmission لإعادة التوجيه مع cache-busting
                 $successMessage = 'تم تحديث حالة المهمة بنجاح.';
                 // تحديد role بناءً على المستخدم الحالي
@@ -1866,6 +1873,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit; // منع تنفيذ باقي الكود بعد إعادة التوجيه
             } catch (Exception $updateError) {
                 $db->rollBack();
+                if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+                    header('Content-Type: application/json; charset=utf-8');
+                    echo json_encode(['success' => false, 'error' => $updateError->getMessage()], JSON_UNESCAPED_UNICODE);
+                    exit;
+                }
                 $error = 'تعذر تحديث حالة المهمة: ' . $updateError->getMessage();
             }
         }
@@ -4451,9 +4463,36 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                             'label' => ($rawStatusKey !== '' ? $rawStatusKey : 'غير معروفة')
                                         ];
                                         ?>
+                                        <?php if ($isManager || $isAccountant): ?>
+                                        <div class="dropdown">
+                                            <span class="badge bg-<?php echo htmlspecialchars($statusMeta['class']); ?> status-badge-dropdown"
+                                                  role="button"
+                                                  data-bs-toggle="dropdown"
+                                                  aria-expanded="false"
+                                                  data-task-id="<?php echo (int)$task['id']; ?>"
+                                                  data-current-status="<?php echo htmlspecialchars($statusKey); ?>"
+                                                  style="cursor:pointer;">
+                                                <?php echo htmlspecialchars($statusMeta['label']); ?> <i class="bi bi-chevron-down" style="font-size:0.65em;"></i>
+                                            </span>
+                                            <ul class="dropdown-menu dropdown-menu-end">
+                                                <?php foreach ($statusStyles as $sKey => $sMeta): ?>
+                                                <li>
+                                                    <a class="dropdown-item status-quick-change<?php echo ($sKey === $statusKey) ? ' active' : ''; ?>"
+                                                       href="#"
+                                                       data-task-id="<?php echo (int)$task['id']; ?>"
+                                                       data-status="<?php echo htmlspecialchars($sKey); ?>">
+                                                        <span class="badge bg-<?php echo htmlspecialchars($sMeta['class']); ?> me-1">&nbsp;</span>
+                                                        <?php echo htmlspecialchars($sMeta['label']); ?>
+                                                    </a>
+                                                </li>
+                                                <?php endforeach; ?>
+                                            </ul>
+                                        </div>
+                                        <?php else: ?>
                                         <span class="badge bg-<?php echo htmlspecialchars($statusMeta['class']); ?>">
                                             <?php echo htmlspecialchars($statusMeta['label']); ?>
                                         </span>
+                                        <?php endif; ?>
                                         <?php if (!empty($task['status_changed_by_name'])): ?>
                                         <div class="text-muted small mt-1">
                                             <i class="bi bi-person me-1"></i><?php echo htmlspecialchars($task['status_changed_by_name']); ?>
@@ -8668,5 +8707,85 @@ document.addEventListener('click', function (e) {
         document.body.appendChild(t);
         setTimeout(function () { t.remove(); }, 3000);
     }
+})();
+</script>
+
+<script>
+(function () {
+    var statusMeta = {
+        'pending':               { cls: 'warning',   label: 'معلقة' },
+        'received':              { cls: 'info',       label: 'مستلمة' },
+        'in_progress':           { cls: 'primary',    label: 'قيد التنفيذ' },
+        'completed':             { cls: 'success',    label: 'مكتملة' },
+        'with_delegate':         { cls: 'info',       label: 'مع المندوب' },
+        'with_driver':           { cls: 'primary',    label: 'مع السائق' },
+        'with_shipping_company': { cls: 'warning',    label: 'مع شركة الشحن' },
+        'delivered':             { cls: 'success',    label: 'تم التوصيل' },
+        'returned':              { cls: 'secondary',  label: 'تم الارجاع' },
+        'cancelled':             { cls: 'danger',     label: 'ملغاة' }
+    };
+
+    function showStatusToast(msg, ok) {
+        var t = document.createElement('div');
+        t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:' + (ok ? '#198754' : '#dc3545') + ';color:#fff;padding:10px 22px;border-radius:8px;z-index:9999;font-size:0.95rem;box-shadow:0 2px 8px rgba(0,0,0,.2);';
+        t.textContent = msg;
+        document.body.appendChild(t);
+        setTimeout(function () { t.remove(); }, 3000);
+    }
+
+    document.addEventListener('click', function (e) {
+        var item = e.target.closest('.status-quick-change');
+        if (!item) return;
+        e.preventDefault();
+
+        var taskId = item.dataset.taskId;
+        var newStatus = item.dataset.status;
+
+        // إيجاد الـ badge المقابل
+        var badge = document.querySelector('.status-badge-dropdown[data-task-id="' + taskId + '"]');
+        if (!badge) return;
+
+        var meta = statusMeta[newStatus];
+        if (!meta) return;
+
+        // تعطيل مؤقت
+        badge.style.opacity = '0.5';
+        badge.style.pointerEvents = 'none';
+
+        var formData = new FormData();
+        formData.append('action', 'update_task_status');
+        formData.append('task_id', taskId);
+        formData.append('status', newStatus);
+
+        fetch(window.location.pathname + '?page=production_tasks', {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            body: formData
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            if (data.success) {
+                // تحديث الـ badge
+                badge.className = badge.className.replace(/\bbg-\S+/, 'bg-' + meta.cls);
+                badge.dataset.currentStatus = newStatus;
+                badge.innerHTML = meta.label + ' <i class="bi bi-chevron-down" style="font-size:0.65em;"></i>';
+
+                // تحديث active في القائمة
+                var allItems = badge.closest('.dropdown').querySelectorAll('.status-quick-change');
+                allItems.forEach(function (i) {
+                    i.classList.toggle('active', i.dataset.status === newStatus);
+                });
+
+                showStatusToast('تم تحديث الحالة', true);
+            } else {
+                showStatusToast(data.error || 'حدث خطأ', false);
+            }
+        })
+        .catch(function () { showStatusToast('تعذر الاتصال بالخادم', false); })
+        .finally(function () {
+            badge.style.opacity = '';
+            badge.style.pointerEvents = '';
+        });
+    });
 })();
 </script>
