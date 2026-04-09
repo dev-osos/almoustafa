@@ -326,13 +326,16 @@ if ($page === 'company_products' && isset($_GET['action']) && $_GET['action'] ==
         $finishedTableExists = $db->queryOne("SHOW TABLES LIKE 'finished_products'");
         if (!empty($finishedTableExists)) {
             $factoryStagnant = $db->query("
-                SELECT fp.id, fp.product_name AS name, COALESCE(fp.product_category,'غير محدد') AS category,
+                SELECT fp.id, COALESCE(NULLIF(TRIM(fp.product_name),''), pr.name, 'غير محدد') AS name,
+                    COALESCE(pr.category,'غير محدد') AS category,
                     fp.quantity_produced AS quantity, fp.unit_price, fp.batch_number, fp.production_date,
                     'factory' AS product_type,
                     (SELECT MAX(im.created_at) FROM inventory_movements im WHERE im.product_id = fp.product_id AND im.type = 'out') AS last_deduction_at
-                FROM finished_products fp WHERE fp.quantity_produced > 0
+                FROM finished_products fp
+                LEFT JOIN products pr ON pr.id = fp.product_id
+                WHERE fp.quantity_produced > 0
                 HAVING (last_deduction_at IS NULL OR last_deduction_at < ?)
-                ORDER BY last_deduction_at ASC, fp.product_name ASC
+                ORDER BY last_deduction_at ASC, name ASC
             ", [$cutoff]);
             foreach ($factoryStagnant as $row) $result[] = $row;
         }
