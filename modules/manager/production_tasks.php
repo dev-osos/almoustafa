@@ -305,11 +305,18 @@ try {
         if ($hasFPTable) {
             $productTemplatesForTask = $db->query("
                 SELECT pt.id, pt.product_name,
-                       COALESCE(SUM(fp.quantity_produced), 0) AS available_qty
+                       COALESCE((
+                           SELECT SUM(fp2.quantity_produced)
+                           FROM finished_products fp2
+                           LEFT JOIN products pr2 ON fp2.product_id = pr2.id
+                           WHERE (
+                               TRIM(fp2.product_name) = TRIM(pt.product_name)
+                               OR TRIM(COALESCE(NULLIF(fp2.product_name,''), pr2.name)) = TRIM(pt.product_name)
+                           )
+                           AND fp2.quantity_produced > 0
+                       ), 0) AS available_qty
                 FROM product_templates pt
-                LEFT JOIN finished_products fp ON fp.product_name = pt.product_name
                 WHERE pt.status = 'active'
-                GROUP BY pt.id, pt.product_name
                 ORDER BY pt.product_name ASC
             ");
         } else {
@@ -3908,6 +3915,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                                 <option value="">— اختر النوع —</option>
                                                 <option value="external">منتجات خارجية</option>
                                                 <option value="template">🏭 منتجات المصنع</option>
+                                                <option value="second_grade">فرز تاني</option>
                                                 <option value="raw_material">خامات</option>
                                                 <option value="packaging">أدوات تعبئة</option>
                                             </select>
@@ -5267,9 +5275,10 @@ function buildEditProductRow(idx, product) {
     var isRawMat = itemType === 'raw_material';
     var isTemplate = itemType === 'template';
     var isPackaging = itemType === 'packaging';
-    var typeSelectorVal = ['external','template','raw_material','packaging'].indexOf(itemType) !== -1 ? itemType : '';
+    var isSecondGrade = itemType === 'second_grade';
+    var typeSelectorVal = ['external','template','second_grade','raw_material','packaging'].indexOf(itemType) !== -1 ? itemType : '';
     var isExternal = itemType === 'external';
-    var unitList = isRawMat ? ['كيلو','جرام'] : (isTemplate ? ['قطعة','كرتونة'] : (isExternal ? ['كرتونة','شرينك','دسته','قطعة'] : (isPackaging ? ['قطعة','عبوة','كرتونة','دسته'] : ['كرتونة','عبوة','كيلو','جرام','شرينك','دسته','قطعة'])));
+    var unitList = isRawMat ? ['كيلو','جرام'] : (isTemplate ? ['قطعة','كرتونة'] : (isSecondGrade ? ['قطعة','كيلو','كرتونة'] : (isExternal ? ['كرتونة','شرينك','دسته','قطعة'] : (isPackaging ? ['قطعة','عبوة','كرتونة','دسته'] : ['كرتونة','عبوة','كيلو','جرام','شرينك','دسته','قطعة']))));
     var unitOpts = unitList.map(function(u) {
         return '<option value="' + u + '"' + (u === unitVal ? ' selected' : '') + '>' + u + '</option>';
     }).join('');
@@ -5277,6 +5286,7 @@ function buildEditProductRow(idx, product) {
         '<option value=""' + (typeSelectorVal === '' ? ' selected' : '') + '>— اختر النوع —</option>' +
         '<option value="external"' + (typeSelectorVal === 'external' ? ' selected' : '') + '>📦 منتجات خارجية</option>' +
         '<option value="template"' + (typeSelectorVal === 'template' ? ' selected' : '') + '>🏭 منتجات المصنع</option>' +
+        '<option value="second_grade"' + (typeSelectorVal === 'second_grade' ? ' selected' : '') + '>♻️ فرز تاني</option>' +
         '<option value="raw_material"' + (typeSelectorVal === 'raw_material' ? ' selected' : '') + '>⚗️ خامات</option>' +
         '<option value="packaging"' + (typeSelectorVal === 'packaging' ? ' selected' : '') + '>🧴 أدوات تعبئة</option>';
     var quCats = (typeof __quCategories !== 'undefined' && Array.isArray(__quCategories)) ? __quCategories : [];
@@ -6620,9 +6630,9 @@ document.addEventListener('DOMContentLoaded', function () {
         var qtyEl = rawQtyWrap.querySelector('.raw-material-qty-value');
         if (!qtyEl) return;
         var detail = getProductDetail(productName);
-        if (detail && (detail.type === 'raw_material' || detail.type === 'packaging' || detail.type === 'template') && detail.available_qty !== undefined) {
+        if (detail && (detail.type === 'raw_material' || detail.type === 'packaging' || detail.type === 'template' || detail.type === 'second_grade' || detail.type === 'external') && detail.available_qty !== undefined) {
             var qty = parseFloat(detail.available_qty);
-            var qtyUnit = (detail.type === 'packaging') ? (detail.unit || 'قطعة') : (detail.type === 'template' ? 'قطعة' : 'كيلو');
+            var qtyUnit = (detail.type === 'packaging') ? (detail.unit || 'قطعة') : (detail.type === 'raw_material' ? 'كيلو' : (detail.unit || 'قطعة'));
             qtyEl.textContent = qty.toLocaleString('ar-EG', {maximumFractionDigits: 3}) + ' ' + qtyUnit;
             qtyEl.className = 'raw-material-qty-value fw-semibold ' + (qty > 0 ? 'text-success' : 'text-danger');
         } else {
@@ -6657,6 +6667,13 @@ document.addEventListener('DOMContentLoaded', function () {
                 return '<option value="' + u + '"' + (u === keepExt ? ' selected' : '') + '>' + u + '</option>';
             }).join('');
             row.setAttribute('data-item-type', 'external');
+        } else if (type === 'second_grade') {
+            var sgUnits = ['قطعة','كيلو','كرتونة'];
+            var keepSg = sgUnits.indexOf(currentUnit) !== -1 ? currentUnit : 'قطعة';
+            unitSelect.innerHTML = sgUnits.map(function(u) {
+                return '<option value="' + u + '"' + (u === keepSg ? ' selected' : '') + '>' + u + '</option>';
+            }).join('');
+            row.setAttribute('data-item-type', 'second_grade');
         } else if (type === 'packaging') {
             var pkgUnits = ['قطعة','عبوة','كرتونة','دسته'];
             var keepPkg = pkgUnits.indexOf(currentUnit) !== -1 ? currentUnit : 'قطعة';
@@ -6733,12 +6750,15 @@ document.addEventListener('DOMContentLoaded', function () {
             // تجميع حسب النوع
             var externals = [];
             var templateItems = [];
+            var secondGradeItems = [];
             var rawMaterials = [];
             var packagingItems = [];
             filtered.forEach(function(name) {
                 var detail = getProductDetail(name);
                 if (detail && detail.type === 'external') {
                     externals.push({ name: name, detail: detail });
+                } else if (detail && detail.type === 'second_grade') {
+                    secondGradeItems.push({ name: name, detail: detail });
                 } else if (detail && detail.type === 'raw_material') {
                     rawMaterials.push({ name: name, detail: detail });
                 } else if (detail && detail.type === 'packaging') {
@@ -6779,6 +6799,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             addSection('📦 المنتجات الخارجية', externals);
             addSection('🏭 قوالب المنتجات', templateItems);
+            addSection('♻️ فرز تاني', secondGradeItems);
             addSection('⚗️ الخامات', rawMaterials);
             addSection('🧴 أدوات التعبئة', packagingItems);
             dropEl.classList.remove('d-none');
@@ -6868,6 +6889,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         <option value="">— اختر النوع —</option>
                         <option value="external">📦 منتجات خارجية</option>
                         <option value="template">🏭 منتجات المصنع</option>
+                        <option value="second_grade">♻️ فرز تاني</option>
                         <option value="raw_material">⚗️ خامات</option>
                         <option value="packaging">🧴 أدوات تعبئة</option>
                     </select>

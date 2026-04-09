@@ -49,14 +49,21 @@ try {
             $hasTemplateCode = !empty($db->queryOne("SHOW COLUMNS FROM product_templates LIKE 'template_code'"));
             $selectCols = $hasTemplateCode ? 'pt.id, pt.product_name, pt.template_code' : 'pt.id, pt.product_name';
             if ($hasFP) {
-                // نفس الاستعلام المستخدم في company_products.php
+                // نفس الاستعلام المستخدم في company_products.php مع دعم المطابقة عبر product_id أيضاً
                 $productTemplates = $db->query("
                     SELECT {$selectCols},
-                           COALESCE(SUM(fp.quantity_produced), 0) AS available_qty
+                           COALESCE((
+                               SELECT SUM(fp2.quantity_produced)
+                               FROM finished_products fp2
+                               LEFT JOIN products pr2 ON fp2.product_id = pr2.id
+                               WHERE (
+                                   TRIM(fp2.product_name) = TRIM(pt.product_name)
+                                   OR TRIM(COALESCE(NULLIF(fp2.product_name,''), pr2.name)) = TRIM(pt.product_name)
+                               )
+                               AND fp2.quantity_produced > 0
+                           ), 0) AS available_qty
                     FROM product_templates pt
-                    LEFT JOIN finished_products fp ON fp.product_name = pt.product_name
                     WHERE pt.status = 'active'
-                    GROUP BY pt.id, pt.product_name
                     ORDER BY pt.product_name ASC
                 ");
             } else {
@@ -158,6 +165,33 @@ try {
         }
     } catch (Exception $e) {
         error_log('Error fetching external products for templates: ' . $e->getMessage());
+    }
+
+    // ===== جلب منتجات الفرز التاني =====
+    try {
+        $secondGradeProducts = $db->query("
+            SELECT id, name, COALESCE(quantity, 0) AS available_qty, COALESCE(unit, 'قطعة') AS unit
+            FROM products
+            WHERE product_type = 'second_grade' AND status = 'active' AND name IS NOT NULL AND name != ''
+            ORDER BY name ASC
+        ");
+        foreach ($secondGradeProducts as $row) {
+            $name = trim($row['name'] ?? '');
+            if ($name !== '' && !isset($seenNames[$name])) {
+                $seenNames[$name] = true;
+                $templates[] = $name;
+                $templatesDetailed[] = [
+                    'id'            => (int)$row['id'],
+                    'name'          => $name,
+                    'code'          => null,
+                    'type'          => 'second_grade',
+                    'available_qty' => round((float)($row['available_qty'] ?? 0), 2),
+                    'unit'          => trim($row['unit'] ?? 'قطعة'),
+                ];
+            }
+        }
+    } catch (Exception $e) {
+        error_log('Error fetching second grade products for templates: ' . $e->getMessage());
     }
 
     // ===== جلب الخامات من مخزن الخامات =====
