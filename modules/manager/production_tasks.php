@@ -6790,7 +6790,7 @@ document.addEventListener('DOMContentLoaded', function () {
                             var _typeSelector = _row.querySelector('.product-type-selector');
                             if (_typeSelector && itemDetailType) _typeSelector.value = itemDetailType;
                             applyRawMaterialUnitRestriction(_row, itemDetailType);
-                            if (itemDetailType === 'raw_material' || itemDetailType === 'packaging' || itemDetailType === 'template') updateRawMaterialQtyDisplay(_row, item.name);
+                            updateRawMaterialQtyDisplay(_row, item.name);
                             setTimeout(function() { if (typeof fetchProductPriceHistory === 'function') fetchProductPriceHistory(_row); }, 50);
                         }
                     });
