@@ -44,16 +44,14 @@ try {
         if (!empty($unifiedTemplatesCheck)) {
             $hasTemplateCode = !empty($db->queryOne("SHOW COLUMNS FROM unified_product_templates LIKE 'template_code'"));
             $selectCols = $hasTemplateCode ? 'upt.id, upt.product_name, upt.template_code' : 'upt.id, upt.product_name';
+            $hasFP = !empty($db->queryOne("SHOW TABLES LIKE 'finished_products'"));
+            $qtyExpr = $hasFP
+                ? "COALESCE((SELECT SUM(fp.quantity_produced) FROM finished_products fp WHERE fp.product_name = upt.product_name), 0)"
+                : "COALESCE((SELECT SUM(p.quantity) FROM products p WHERE p.name = upt.product_name AND p.status = 'active' AND (p.product_type = 'internal' OR p.product_type IS NULL)), 0)";
             $unifiedTemplates = $db->query("
                 SELECT {$selectCols},
-                       COALESCE(pr.qty, 0) AS available_qty
+                       {$qtyExpr} AS available_qty
                 FROM unified_product_templates upt
-                LEFT JOIN (
-                    SELECT name, SUM(quantity) AS qty
-                    FROM products
-                    WHERE status = 'active' AND (product_type = 'internal' OR product_type IS NULL)
-                    GROUP BY name
-                ) pr ON pr.name = upt.product_name
                 WHERE upt.status = 'active'
                 ORDER BY upt.product_name ASC
             ");
@@ -82,16 +80,14 @@ try {
         if (!empty($templatesCheck)) {
             $hasTemplateCode = !empty($db->queryOne("SHOW COLUMNS FROM product_templates LIKE 'template_code'"));
             $selectCols = $hasTemplateCode ? 'pt.id, pt.product_name, pt.template_code' : 'pt.id, pt.product_name';
+            $hasFP2 = !empty($db->queryOne("SHOW TABLES LIKE 'finished_products'"));
+            $qtyExpr2 = $hasFP2
+                ? "COALESCE((SELECT SUM(fp.quantity_produced) FROM finished_products fp WHERE fp.product_name = pt.product_name), 0)"
+                : "COALESCE((SELECT SUM(p.quantity) FROM products p WHERE p.name = pt.product_name AND p.status = 'active' AND (p.product_type = 'internal' OR p.product_type IS NULL)), 0)";
             $productTemplates = $db->query("
                 SELECT {$selectCols},
-                       COALESCE(pr.qty, 0) AS available_qty
+                       {$qtyExpr2} AS available_qty
                 FROM product_templates pt
-                LEFT JOIN (
-                    SELECT name, SUM(quantity) AS qty
-                    FROM products
-                    WHERE status = 'active' AND (product_type = 'internal' OR product_type IS NULL)
-                    GROUP BY name
-                ) pr ON pr.name = pt.product_name
                 WHERE pt.status = 'active'
                 ORDER BY pt.product_name ASC
             ");

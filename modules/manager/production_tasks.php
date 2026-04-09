@@ -296,43 +296,32 @@ if (is_readable($quJsonPath)) {
     }
 }
 
-// جلب قوالب المنتجات مع الكميات المتاحة
+// جلب قوالب المنتجات مع الكميات المتاحة (من finished_products كما في صفحة منتجات الشركة)
 $productTemplatesForTask = [];
 try {
-    // محاولة من unified_product_templates أولاً
-    $upt = $db->queryOne("SHOW TABLES LIKE 'unified_product_templates'");
-    if (!empty($upt)) {
+    $hasFPTable = !empty($db->queryOne("SHOW TABLES LIKE 'finished_products'"));
+    $qtySubquery = $hasFPTable
+        ? "(SELECT COALESCE(SUM(fp.quantity_produced),0) FROM finished_products fp WHERE fp.product_name = tpl.product_name)"
+        : "(SELECT COALESCE(SUM(p.quantity),0) FROM products p WHERE p.name = tpl.product_name AND p.status='active' AND (p.product_type='internal' OR p.product_type IS NULL))";
+
+    $uptExists = !empty($db->queryOne("SHOW TABLES LIKE 'unified_product_templates'"));
+    $ptExists  = !empty($db->queryOne("SHOW TABLES LIKE 'product_templates'"));
+
+    if ($uptExists) {
         $productTemplatesForTask = $db->query("
-            SELECT upt.id, upt.product_name,
-                   COALESCE(pr.qty, 0) AS available_qty
-            FROM unified_product_templates upt
-            LEFT JOIN (
-                SELECT name, SUM(quantity) AS qty
-                FROM products
-                WHERE status = 'active' AND (product_type = 'internal' OR product_type IS NULL)
-                GROUP BY name
-            ) pr ON pr.name = upt.product_name
-            WHERE upt.status = 'active'
-            ORDER BY upt.product_name ASC
+            SELECT tpl.id, tpl.product_name, {$qtySubquery} AS available_qty
+            FROM unified_product_templates tpl
+            WHERE tpl.status = 'active'
+            ORDER BY tpl.product_name ASC
         ");
     }
-    if (empty($productTemplatesForTask)) {
-        $pt = $db->queryOne("SHOW TABLES LIKE 'product_templates'");
-        if (!empty($pt)) {
-            $productTemplatesForTask = $db->query("
-                SELECT pt.id, pt.product_name,
-                       COALESCE(pr.qty, 0) AS available_qty
-                FROM product_templates pt
-                LEFT JOIN (
-                    SELECT name, SUM(quantity) AS qty
-                    FROM products
-                    WHERE status = 'active' AND (product_type = 'internal' OR product_type IS NULL)
-                    GROUP BY name
-                ) pr ON pr.name = pt.product_name
-                WHERE pt.status = 'active'
-                ORDER BY pt.product_name ASC
-            ");
-        }
+    if (empty($productTemplatesForTask) && $ptExists) {
+        $productTemplatesForTask = $db->query("
+            SELECT tpl.id, tpl.product_name, {$qtySubquery} AS available_qty
+            FROM product_templates tpl
+            WHERE tpl.status = 'active'
+            ORDER BY tpl.product_name ASC
+        ");
     }
 } catch (Exception $e) {
     error_log('Error fetching product templates for task form: ' . $e->getMessage());
