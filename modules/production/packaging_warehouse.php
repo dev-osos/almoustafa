@@ -3845,9 +3845,11 @@ const nextCodeApiUrl = '<?php echo getRelativeUrl('production.php?page=packaging
         });
     }
 
-    document.addEventListener('DOMContentLoaded', function () {
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function () { showPage(INIT_PAGE); });
+    } else {
         showPage(INIT_PAGE);
-    });
+    }
 })();
 
 document.addEventListener('DOMContentLoaded', function () {
