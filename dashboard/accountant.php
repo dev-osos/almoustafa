@@ -330,24 +330,36 @@ if ($page === 'company_products' && isset($_GET['action']) && $_GET['action'] ==
                     COALESCE(pr.category,'غير محدد') AS category,
                     fp.quantity_produced AS quantity, fp.unit_price, fp.batch_number, fp.production_date,
                     'factory' AS product_type,
-                    (SELECT MAX(im.created_at) FROM inventory_movements im WHERE im.product_id = fp.product_id AND im.type = 'out') AS last_deduction_at
+                    GREATEST(
+                        COALESCE((SELECT MAX(im.created_at) FROM inventory_movements im WHERE im.product_id = fp.product_id AND im.type = 'out'), '2000-01-01'),
+                        COALESCE(pr.updated_at, '2000-01-01')
+                    ) AS last_deduction_at
                 FROM finished_products fp
                 LEFT JOIN products pr ON pr.id = fp.product_id
                 WHERE fp.quantity_produced > 0
-                HAVING (last_deduction_at IS NULL OR last_deduction_at < ?)
+                HAVING last_deduction_at < ?
                 ORDER BY last_deduction_at ASC, name ASC
             ", [$cutoff]);
-            foreach ($factoryStagnant as $row) $result[] = $row;
+            foreach ($factoryStagnant as $row) {
+                if ($row['last_deduction_at'] === '2000-01-01 00:00:00') $row['last_deduction_at'] = null;
+                $result[] = $row;
+            }
         }
         $externalStagnant = $db->query("
             SELECT p.id, p.name, COALESCE(p.category,'غير محدد') AS category, p.quantity, p.unit_price,
                 NULL AS batch_number, NULL AS production_date, p.product_type,
-                (SELECT MAX(im.created_at) FROM inventory_movements im WHERE im.product_id = p.id AND im.type = 'out') AS last_deduction_at
+                GREATEST(
+                    COALESCE((SELECT MAX(im.created_at) FROM inventory_movements im WHERE im.product_id = p.id AND im.type = 'out'), '2000-01-01'),
+                    COALESCE(p.updated_at, '2000-01-01')
+                ) AS last_deduction_at
             FROM products p WHERE p.product_type IN ('external','second_grade') AND p.status = 'active' AND p.quantity > 0
-            HAVING (last_deduction_at IS NULL OR last_deduction_at < ?)
+            HAVING last_deduction_at < ?
             ORDER BY last_deduction_at ASC, p.name ASC
         ", [$cutoff]);
-        foreach ($externalStagnant as $row) $result[] = $row;
+        foreach ($externalStagnant as $row) {
+            if ($row['last_deduction_at'] === '2000-01-01 00:00:00') $row['last_deduction_at'] = null;
+            $result[] = $row;
+        }
         echo json_encode(['success' => true, 'days' => $days, 'data' => $result, 'cutoff' => $cutoff]);
     } catch (Exception $e) {
         echo json_encode(['success' => false, 'message' => $e->getMessage()]);
