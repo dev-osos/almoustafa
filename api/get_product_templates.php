@@ -38,59 +38,36 @@ try {
     $templatesDetailed = []; // تفاصيل كاملة مع الكود/ID
     $seenNames = [];         // لمنع التكرار
 
-    // جلب القوالب من unified_product_templates إذا كان موجوداً
-    try {
-        $unifiedTemplatesCheck = $db->queryOne("SHOW TABLES LIKE 'unified_product_templates'");
-        if (!empty($unifiedTemplatesCheck)) {
-            $hasTemplateCode = !empty($db->queryOne("SHOW COLUMNS FROM unified_product_templates LIKE 'template_code'"));
-            $selectCols = $hasTemplateCode ? 'upt.id, upt.product_name, upt.template_code' : 'upt.id, upt.product_name';
-            $hasFP = !empty($db->queryOne("SHOW TABLES LIKE 'finished_products'"));
-            $qtyExpr = $hasFP
-                ? "COALESCE((SELECT SUM(fp.quantity_produced) FROM finished_products fp WHERE fp.product_name = upt.product_name), 0)"
-                : "COALESCE((SELECT SUM(p.quantity) FROM products p WHERE p.name = upt.product_name AND p.status = 'active' AND (p.product_type = 'internal' OR p.product_type IS NULL)), 0)";
-            $unifiedTemplates = $db->query("
-                SELECT {$selectCols},
-                       {$qtyExpr} AS available_qty
-                FROM unified_product_templates upt
-                WHERE upt.status = 'active'
-                ORDER BY upt.product_name ASC
-            ");
-            foreach ($unifiedTemplates as $template) {
-                $templateName = trim($template['product_name'] ?? '');
-                if ($templateName !== '' && !isset($seenNames[$templateName])) {
-                    $seenNames[$templateName] = true;
-                    $templates[] = $templateName;
-                    $templatesDetailed[] = [
-                        'id'            => (int)$template['id'],
-                        'name'          => $templateName,
-                        'code'          => $template['template_code'] ?? null,
-                        'type'          => 'template',
-                        'available_qty' => round((float)($template['available_qty'] ?? 0), 2),
-                    ];
-                }
-            }
-        }
-    } catch (Exception $e) {
-        error_log('Error fetching unified_product_templates: ' . $e->getMessage());
-    }
+    // فحص وجود finished_products مرة واحدة
+    $hasFP = !empty($db->queryOne("SHOW TABLES LIKE 'finished_products'"));
 
-    // جلب القوالب من product_templates إذا كان موجوداً أيضاً
+    // نفس استعلام company_products.php تماماً: product_templates أولاً مع finished_products
+    // جلب القوالب من product_templates (المصدر الرئيسي المتزامن مع company_products)
     try {
         $templatesCheck = $db->queryOne("SHOW TABLES LIKE 'product_templates'");
         if (!empty($templatesCheck)) {
             $hasTemplateCode = !empty($db->queryOne("SHOW COLUMNS FROM product_templates LIKE 'template_code'"));
             $selectCols = $hasTemplateCode ? 'pt.id, pt.product_name, pt.template_code' : 'pt.id, pt.product_name';
-            $hasFP2 = !empty($db->queryOne("SHOW TABLES LIKE 'finished_products'"));
-            $qtyExpr2 = $hasFP2
-                ? "COALESCE((SELECT SUM(fp.quantity_produced) FROM finished_products fp WHERE fp.product_name = pt.product_name), 0)"
-                : "COALESCE((SELECT SUM(p.quantity) FROM products p WHERE p.name = pt.product_name AND p.status = 'active' AND (p.product_type = 'internal' OR p.product_type IS NULL)), 0)";
-            $productTemplates = $db->query("
-                SELECT {$selectCols},
-                       {$qtyExpr2} AS available_qty
-                FROM product_templates pt
-                WHERE pt.status = 'active'
-                ORDER BY pt.product_name ASC
-            ");
+            if ($hasFP) {
+                // نفس الاستعلام المستخدم في company_products.php
+                $productTemplates = $db->query("
+                    SELECT {$selectCols},
+                           COALESCE(SUM(fp.quantity_produced), 0) AS available_qty
+                    FROM product_templates pt
+                    LEFT JOIN finished_products fp ON fp.product_name = pt.product_name
+                    WHERE pt.status = 'active'
+                    GROUP BY pt.id, pt.product_name
+                    ORDER BY pt.product_name ASC
+                ");
+            } else {
+                $productTemplates = $db->query("
+                    SELECT {$selectCols},
+                           COALESCE((SELECT SUM(p.quantity) FROM products p WHERE p.name = pt.product_name AND p.status = 'active' AND (p.product_type = 'internal' OR p.product_type IS NULL)), 0) AS available_qty
+                    FROM product_templates pt
+                    WHERE pt.status = 'active'
+                    ORDER BY pt.product_name ASC
+                ");
+            }
             foreach ($productTemplates as $template) {
                 $templateName = trim($template['product_name'] ?? '');
                 if ($templateName !== '' && !isset($seenNames[$templateName])) {
@@ -108,6 +85,50 @@ try {
         }
     } catch (Exception $e) {
         error_log('Error fetching product_templates: ' . $e->getMessage());
+    }
+
+    // جلب القوالب من unified_product_templates (تكملة لما لم يُضف من product_templates)
+    try {
+        $unifiedTemplatesCheck = $db->queryOne("SHOW TABLES LIKE 'unified_product_templates'");
+        if (!empty($unifiedTemplatesCheck)) {
+            $hasTemplateCode = !empty($db->queryOne("SHOW COLUMNS FROM unified_product_templates LIKE 'template_code'"));
+            $selectCols = $hasTemplateCode ? 'upt.id, upt.product_name, upt.template_code' : 'upt.id, upt.product_name';
+            if ($hasFP) {
+                $unifiedTemplates = $db->query("
+                    SELECT {$selectCols},
+                           COALESCE(SUM(fp.quantity_produced), 0) AS available_qty
+                    FROM unified_product_templates upt
+                    LEFT JOIN finished_products fp ON fp.product_name = upt.product_name
+                    WHERE upt.status = 'active'
+                    GROUP BY upt.id, upt.product_name
+                    ORDER BY upt.product_name ASC
+                ");
+            } else {
+                $unifiedTemplates = $db->query("
+                    SELECT {$selectCols},
+                           COALESCE((SELECT SUM(p.quantity) FROM products p WHERE p.name = upt.product_name AND p.status = 'active' AND (p.product_type = 'internal' OR p.product_type IS NULL)), 0) AS available_qty
+                    FROM unified_product_templates upt
+                    WHERE upt.status = 'active'
+                    ORDER BY upt.product_name ASC
+                ");
+            }
+            foreach ($unifiedTemplates as $template) {
+                $templateName = trim($template['product_name'] ?? '');
+                if ($templateName !== '' && !isset($seenNames[$templateName])) {
+                    $seenNames[$templateName] = true;
+                    $templates[] = $templateName;
+                    $templatesDetailed[] = [
+                        'id'            => (int)$template['id'],
+                        'name'          => $templateName,
+                        'code'          => $template['template_code'] ?? null,
+                        'type'          => 'template',
+                        'available_qty' => round((float)($template['available_qty'] ?? 0), 2),
+                    ];
+                }
+            }
+        }
+    } catch (Exception $e) {
+        error_log('Error fetching unified_product_templates: ' . $e->getMessage());
     }
 
     // جلب أسماء المنتجات الخارجية من products
