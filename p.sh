@@ -1,6 +1,7 @@
 #!/bin/bash
 # Script for Git Push (zsh/bash)
 # Usage: ./p.sh [commit message]
+
 # Pushes to origin (default: https://github.com/dev-osos/almoustafa.git)
 
 YELLOW='\033[33m'
