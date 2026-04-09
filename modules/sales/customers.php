@@ -670,11 +670,12 @@ if ($section === 'delegates' && !$isSalesUser) {
                 $placeholders = implode(',', array_fill(0, count($delegateIds), '?'));
                 $customersByDelegate = $db->query(
                     "
-                        SELECT 
+                        SELECT
                             c.id,
                             c.name,
                             c.phone,
                             c.address,
+                            c.region_id,
                             c.balance,
                             c.status,
                             c.latitude,
@@ -702,6 +703,7 @@ if ($section === 'delegates' && !$isSalesUser) {
                         'name'                 => (string)($customerRow['name'] ?? ''),
                         'phone'                => (string)($customerRow['phone'] ?? ''),
                         'address'              => (string)($customerRow['address'] ?? ''),
+                        'region_id'            => (int)($customerRow['region_id'] ?? 0),
                         'balance'              => (float)($customerRow['balance'] ?? 0.0),
                         'balance_formatted'    => formatCurrency(abs((float)($customerRow['balance'] ?? 0.0))),
                         'status'               => (string)($customerRow['status'] ?? ''),
@@ -3817,12 +3819,11 @@ $delegateCards = [
                         </div>
                     </div>
                 </div>
-                <div class="table-responsive delegate-modal-table">
-                    <table class="table table-hover align-middle">
-                        <thead class="table-light">
+                <div class="table-responsive dashboard-table-wrapper delegate-modal-table">
+                    <table class="table dashboard-table align-middle">
+                        <thead>
                             <tr>
                                 <th>العميل</th>
-                                <th>رقم الهاتف</th>
                                 <th>العنوان</th>
                                 <th>الرصيد</th>
                                 <th>آخر تحديث</th>
@@ -3832,7 +3833,7 @@ $delegateCards = [
                         </thead>
                         <tbody class="delegate-modal-body">
                             <tr>
-                                <td colspan="7" class="text-center text-muted py-4">
+                                <td colspan="6" class="text-center text-muted py-4">
                                     لا توجد بيانات متاحة.
                                 </td>
                             </tr>
@@ -4240,7 +4241,7 @@ document.addEventListener('DOMContentLoaded', function () {
         tableBody.innerHTML = '';
         var emptyRow = document.createElement('tr');
         var emptyCell = document.createElement('td');
-        emptyCell.colSpan = 7;
+        emptyCell.colSpan = 6;
         emptyCell.className = 'text-center text-muted py-4';
         emptyCell.textContent = message || 'لا توجد بيانات متاحة.';
         emptyRow.appendChild(emptyCell);
@@ -4281,10 +4282,6 @@ document.addEventListener('DOMContentLoaded', function () {
         nameCell.appendChild(nameStrong);
         row.appendChild(nameCell);
 
-        var phoneCell = document.createElement('td');
-        phoneCell.textContent = customer.phone || '—';
-        row.appendChild(phoneCell);
-
         var addressCell = document.createElement('td');
         addressCell.textContent = customer.address || '—';
         row.appendChild(addressCell);
@@ -4301,23 +4298,31 @@ document.addEventListener('DOMContentLoaded', function () {
         statusCell.appendChild(createBadge(customer.status || ''));
         row.appendChild(statusCell);
 
+        var balance = typeof customer.balance === 'number' ? customer.balance : 0;
+        var balanceFormatted = customer.balance_formatted || '0';
+        var balanceRaw = balance.toFixed(2);
+
         var actionsCell = document.createElement('td');
-        if (customer.latitude !== null && customer.longitude !== null) {
-            var mapLink = document.createElement('a');
-            mapLink.className = 'btn btn-sm btn-outline-info delegate-location-link';
-            mapLink.href = 'https://www.google.com/maps?q='
-                + encodeURIComponent(String(customer.latitude) + ',' + String(customer.longitude))
-                + '&hl=ar&z=16';
-            mapLink.target = '_blank';
-            mapLink.rel = 'noopener';
-            mapLink.innerHTML = '<i class="bi bi-geo-alt"></i>عرض الموقع';
-            actionsCell.appendChild(mapLink);
-        } else {
-            var noLocation = document.createElement('span');
-            noLocation.className = 'text-muted small';
-            noLocation.textContent = 'لا يوجد موقع';
-            actionsCell.appendChild(noLocation);
-        }
+        actionsCell.className = 'text-center';
+
+        var triggerBtn = document.createElement('button');
+        triggerBtn.type = 'button';
+        triggerBtn.className = 'btn btn-sm btn-outline-secondary js-customer-actions-btn';
+        triggerBtn.setAttribute('data-bs-toggle', 'modal');
+        triggerBtn.setAttribute('data-bs-target', '#customerActionsModal');
+        triggerBtn.setAttribute('data-customer-id', customer.id || '');
+        triggerBtn.setAttribute('data-customer-name', customer.name || '');
+        triggerBtn.setAttribute('data-customer-phone', customer.phone || '');
+        triggerBtn.setAttribute('data-customer-address', customer.address || '');
+        triggerBtn.setAttribute('data-customer-region-id', customer.region_id || 0);
+        triggerBtn.setAttribute('data-customer-balance', balanceRaw);
+        triggerBtn.setAttribute('data-customer-balance-formatted', balanceFormatted);
+        triggerBtn.setAttribute('data-customer-balance-positive', balance > 0 ? '1' : '0');
+        triggerBtn.setAttribute('data-can-edit', '1');
+        triggerBtn.setAttribute('data-has-location', '0');
+        triggerBtn.innerHTML = '<i class="bi bi-three-dots-vertical"></i>';
+
+        actionsCell.appendChild(triggerBtn);
         row.appendChild(actionsCell);
 
         return row;
@@ -4608,18 +4613,13 @@ document.addEventListener('DOMContentLoaded', function () {
         padding: 1.35rem 1.25rem;
     }
 
-    /* الأزرار في عمود الإجراءات: 2×2 على جميع الشاشات */
-    .dashboard-table tbody td:last-child .d-flex {
-        display: grid !important;
-        grid-template-columns: 1fr 1fr !important;
-        gap: 0.25rem !important;
-        width: 100% !important;
+    /* زر الإجراءات المجمع */
+    .dashboard-table tbody td:last-child .dropdown-toggle {
+        white-space: nowrap;
     }
 
-    .dashboard-table tbody td:last-child .btn {
-        width: 100% !important;
-        min-width: 0 !important;
-        max-width: 100% !important;
+    .dashboard-table tbody td:last-child .dropdown-menu {
+        min-width: 160px;
     }
 
     @media (max-width: 992px) {
@@ -4635,23 +4635,16 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     @media (max-width: 767.98px) {
-        /* تحسين الجدول الرئيسي للعملاء - عرض الشاشة كاملة على الهاتف */
+        /* تحسين الجدول الرئيسي للعملاء */
         .dashboard-table-wrapper {
             overflow-x: auto;
             -webkit-overflow-scrolling: touch;
-            width: 100vw;
-            max-width: 100vw;
-            position: relative;
-            left: 50%;
-            right: 50%;
-            margin-left: -50vw;
-            margin-right: -50vw;
-            padding: 0 0.75rem;
-            box-sizing: border-box;
+            width: 100%;
+            max-width: 100%;
         }
         
         .dashboard-table {
-            min-width: 850px;
+            min-width: 720px;
             font-size: 0.85rem;
             width: 100%;
             table-layout: fixed;
@@ -4702,18 +4695,12 @@ document.addEventListener('DOMContentLoaded', function () {
             min-width: 65px;
         }
         
-        /* الموقع */
+        /* الإجراءات */
         .dashboard-table thead th:nth-child(7),
         .dashboard-table tbody td:nth-child(7) {
-            width: 12%;
-            min-width: 90px;
-        }
-        
-        /* الإجراءات */
-        .dashboard-table thead th:nth-child(8),
-        .dashboard-table tbody td:nth-child(8) {
-            width: 20%;
-            min-width: 140px;
+            width: 7%;
+            min-width: 55px;
+            text-align: center;
         }
         
         .dashboard-table thead th {
@@ -4747,17 +4734,6 @@ document.addEventListener('DOMContentLoaded', function () {
             padding: 0.2rem 0.4rem;
         }
         
-        /* تحسين عمود الموقع */
-        .dashboard-table tbody td:nth-child(6) .d-flex {
-            flex-direction: column;
-            align-items: flex-start;
-            gap: 0.3rem;
-        }
-        
-        .dashboard-table tbody td:nth-child(6) .btn {
-            width: 100%;
-            justify-content: center;
-        }
     }
 
     @media (max-width: 575.98px) {
@@ -5717,57 +5693,33 @@ document.addEventListener('DOMContentLoaded', function () {
     </div>
 </div>
 
-<!-- قائمة العملاء -->    
-    <div class="card-body">
+<!-- قائمة العملاء -->
+<div class="card customers-list-card mt-3">
+    <div class="card-header d-flex align-items-center justify-content-between">
+        <h6 class="mb-0 fw-bold"><i class="bi bi-people me-2"></i>قائمة العملاء</h6>
+    </div>
         <div class="table-responsive dashboard-table-wrapper">
             <table class="table dashboard-table align-middle">
                 <thead>
                     <tr>
                         <th>ID</th>
                         <th>الاسم</th>
-                        <th>رقم الهاتف</th>
                         <th>الرصيد</th>
                         <th>العنوان</th>
                         <th>المنطقة</th>
-                        <th>الموقع</th>
                         <th>الإجراءات</th>
                     </tr>
                 </thead>
                 <tbody id="customersTableBody">
                     <?php if (empty($customers)): ?>
                         <tr>
-                            <td colspan="8" class="text-center text-muted">لا يوجد عملاء</td>
+                            <td colspan="7" class="text-center text-muted">لا يوجد عملاء</td>
                         </tr>
                     <?php else: ?>
                         <?php foreach ($customers as $customer): ?>
                             <tr>
                                 <td><strong><?php echo (int)$customer['id']; ?></strong></td>
                                 <td><strong><?php echo htmlspecialchars($customer['name']); ?></strong></td>
-                                <td>
-                                    <?php
-                                    // جلب أرقام الهواتف من جدول customer_phones
-                                    $customerPhones = $db->query(
-                                        "SELECT phone FROM customer_phones WHERE customer_id = ? ORDER BY is_primary DESC, id ASC",
-                                        [$customer['id']]
-                                    );
-                                    if (empty($customerPhones) && !empty($customer['phone'])) {
-                                        // إذا لم تكن هناك أرقام في customer_phones، استخدم الرقم القديم
-                                        $customerPhones = [['phone' => $customer['phone']]];
-                                    }
-                                    if (!empty($customerPhones)) {
-                                        foreach ($customerPhones as $phoneData) {
-                                            $phoneNumber = trim($phoneData['phone'] ?? '');
-                                            if (!empty($phoneNumber)) {
-                                                echo '<a href="tel:' . htmlspecialchars($phoneNumber) . '" class="btn btn-sm btn-outline-primary me-1 mb-1" title="اتصل بـ ' . htmlspecialchars($phoneNumber) . '">';
-                                                echo '<i class="bi bi-telephone-fill"></i> ' ;
-                                                echo '</a>';
-                                            }
-                                        }
-                                    } else {
-                                        echo '-';
-                                    }
-                                    ?>
-                                </td>
                                 <td>
                                     <?php
                                         $customerBalanceValue = isset($customer['balance']) ? (float) $customer['balance'] : 0.0;
@@ -5793,83 +5745,110 @@ document.addEventListener('DOMContentLoaded', function () {
                                         $customer['longitude'] !== null;
                                     $latValue = $hasLocation ? (float)$customer['latitude'] : null;
                                     $lngValue = $hasLocation ? (float)$customer['longitude'] : null;
-                                    ?>
-                                    <div class="d-flex flex-wrap align-items-center gap-2">
-                                        <button
-                                            type="button"
-                                            class="btn btn-sm btn-outline-primary location-capture-btn"
-                                            data-customer-id="<?php echo (int)$customer['id']; ?>"
-                                            data-customer-name="<?php echo htmlspecialchars($customer['name']); ?>"
-                                        >
-                                            <i class="bi bi-geo-alt me-1"></i>تحديد
-                                        </button>
-                                        <?php if ($hasLocation): ?>
-                                            <button
-                                                type="button"
-                                                class="btn btn-sm btn-outline-info location-view-btn"
-                                                data-customer-id="<?php echo (int)$customer['id']; ?>"
-                                                data-customer-name="<?php echo htmlspecialchars($customer['name']); ?>"
-                                                data-latitude="<?php echo htmlspecialchars(number_format($latValue, 8, '.', '')); ?>"
-                                                data-longitude="<?php echo htmlspecialchars(number_format($lngValue, 8, '.', '')); ?>"
-                                            >
-                                                <i class="bi bi-map me-1"></i>عرض
-                                            </button>
-                                        <?php else: ?>
-                                            <span class="badge bg-secondary-subtle text-secondary">غير محدد</span>
-                                        <?php endif; ?>
-                                    </div>
-                                </td>
-                                <td>
-                                    <?php
                                     $customerBalance = isset($customer['balance']) ? (float)$customer['balance'] : 0.0;
-                                    // عند عرض الرصيد الدائن، نعرض القيمة المطلقة
                                     $displayBalanceForButton = $customerBalance < 0 ? abs($customerBalance) : $customerBalance;
                                     $formattedBalance = formatCurrency($displayBalanceForButton);
                                     $rawBalance = number_format($customerBalance, 2, '.', '');
                                     ?>
-                                    <div class="d-flex flex-wrap align-items-center gap-2">
-                                        <?php if (in_array($currentRole, ['manager', 'developer', 'accountant', 'sales'], true)): ?>
-                                        <button
-                                            type="button"
-                                            class="btn btn-sm btn-outline-warning edit-customer-btn"
-                                            onclick="showEditCustomerModal(this)"
-                                            data-customer-id="<?php echo (int)$customer['id']; ?>"
-                                            data-customer-name="<?php echo htmlspecialchars($customer['name']); ?>"
-                                            data-customer-phone="<?php echo htmlspecialchars($customer['phone'] ?? ''); ?>"
-                                            data-customer-address="<?php echo htmlspecialchars($customer['address'] ?? ''); ?>"
-                                            data-customer-region-id="<?php echo (int)($customer['region_id'] ?? 0); ?>"
-                                            data-customer-balance="<?php echo $rawBalance; ?>"
-                                        >
-                                            <i class="bi bi-pencil me-1"></i>تعديل
+                                    <?php
+                                    $actionDataAttrs = '
+                                        data-customer-id="' . (int)$customer['id'] . '"
+                                        data-customer-name="' . htmlspecialchars($customer['name']) . '"
+                                        data-customer-phone="' . htmlspecialchars($customer['phone'] ?? '') . '"
+                                        data-customer-address="' . htmlspecialchars($customer['address'] ?? '') . '"
+                                        data-customer-region-id="' . (int)($customer['region_id'] ?? 0) . '"
+                                        data-customer-balance="' . $rawBalance . '"
+                                        data-customer-balance-formatted="' . htmlspecialchars($formattedBalance) . '"
+                                        data-customer-balance-positive="' . ($customerBalance > 0 ? '1' : '0') . '"
+                                        data-can-edit="' . (in_array($currentRole, ['manager', 'developer', 'accountant', 'sales'], true) ? '1' : '0') . '"
+                                        data-has-location="' . ($hasLocation ? '1' : '0') . '"
+                                        ' . ($hasLocation ? 'data-latitude="' . htmlspecialchars(number_format($latValue, 8, '.', '')) . '" data-longitude="' . htmlspecialchars(number_format($lngValue, 8, '.', '')) . '"' : '') . '
+                                    ';
+                                    $canEditRole = in_array($currentRole, ['manager', 'developer', 'accountant', 'sales'], true);
+                                    ?>
+                                    <!-- كمبيوتر: modal -->
+                                    <button type="button" class="btn btn-sm btn-outline-secondary js-customer-actions-btn d-none d-md-inline-flex"
+                                        data-bs-toggle="modal" data-bs-target="#customerActionsModal"
+                                        <?php echo $actionDataAttrs; ?>>
+                                        <i class="bi bi-three-dots-vertical"></i>
+                                    </button>
+                                    <!-- هاتف: dropup خارج حدود overflow -->
+                                    <div class="dropup d-md-none">
+                                        <button type="button"
+                                            class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                            data-bs-toggle="dropdown"
+                                            data-bs-strategy="fixed"
+                                            aria-expanded="false"
+                                            <?php echo $actionDataAttrs; ?>>
+                                            <i class="bi bi-three-dots-vertical"></i>
                                         </button>
-                                        <?php endif; ?>
-                                        <button
-                                            type="button"
-                                            class="btn btn-sm <?php echo $customerBalance > 0 ? 'btn-success' : 'btn-outline-secondary'; ?>"
-                                            onclick="showCollectPaymentModal(this)"
-                                            data-customer-id="<?php echo (int)$customer['id']; ?>"
-                                            data-customer-name="<?php echo htmlspecialchars($customer['name']); ?>"
-                                            data-customer-balance="<?php echo $rawBalance; ?>"
-                                            data-customer-balance-formatted="<?php echo htmlspecialchars($formattedBalance); ?>"
-                                        >
-                                            <i class="bi bi-cash-coin me-1"></i>تحصيل
-                                        </button>
-                                        <button
-                                            type="button"
-                                            class="btn btn-sm btn-outline-info js-customer-history"
-                                            data-customer-id="<?php echo (int)$customer['id']; ?>"
-                                            data-customer-name="<?php echo htmlspecialchars($customer['name']); ?>"
-                                        >
-                                            <i class="bi bi-receipt me-1"></i>سجل 
-                                        </button>
-                                        <button
-                                            type="button"
-                                            class="btn btn-sm btn-outline-warning js-customer-purchase-history"
-                                            data-customer-id="<?php echo (int)$customer['id']; ?>"
-                                            data-customer-name="<?php echo htmlspecialchars($customer['name']); ?>"
-                                        >
-                                            <i class="bi bi-arrow-return-left me-1"></i>مرتجع
-                                        </button>
+                                        <ul class="dropdown-menu dropdown-menu-end">
+                                            <?php if (!empty($customer['phone'])): ?>
+                                            <li>
+                                                <a class="dropdown-item d-flex align-items-center gap-2 text-primary fw-semibold"
+                                                    href="tel:<?php echo htmlspecialchars($customer['phone']); ?>">
+                                                    <i class="bi bi-telephone-fill"></i><?php echo htmlspecialchars($customer['phone']); ?>
+                                                </a>
+                                            </li>
+                                            <li><hr class="dropdown-divider m-0"></li>
+                                            <?php endif; ?>
+                                            <?php if ($canEditRole): ?>
+                                            <li>
+                                                <button type="button" class="dropdown-item edit-customer-btn"
+                                                    onclick="showEditCustomerModal(this)"
+                                                    data-customer-id="<?php echo (int)$customer['id']; ?>"
+                                                    data-customer-name="<?php echo htmlspecialchars($customer['name']); ?>"
+                                                    data-customer-phone="<?php echo htmlspecialchars($customer['phone'] ?? ''); ?>"
+                                                    data-customer-address="<?php echo htmlspecialchars($customer['address'] ?? ''); ?>"
+                                                    data-customer-region-id="<?php echo (int)($customer['region_id'] ?? 0); ?>"
+                                                    data-customer-balance="<?php echo $rawBalance; ?>">
+                                                    <i class="bi bi-pencil me-2 text-warning"></i>تعديل
+                                                </button>
+                                            </li>
+                                            <?php endif; ?>
+                                            <li>
+                                                <button type="button" class="dropdown-item <?php echo $customerBalance > 0 ? 'text-success fw-semibold' : ''; ?>"
+                                                    onclick="showCollectPaymentModal(this)"
+                                                    data-customer-id="<?php echo (int)$customer['id']; ?>"
+                                                    data-customer-name="<?php echo htmlspecialchars($customer['name']); ?>"
+                                                    data-customer-balance="<?php echo $rawBalance; ?>"
+                                                    data-customer-balance-formatted="<?php echo htmlspecialchars($formattedBalance); ?>">
+                                                    <i class="bi bi-cash-coin me-2 text-success"></i>تحصيل
+                                                </button>
+                                            </li>
+                                            <li>
+                                                <button type="button" class="dropdown-item js-customer-history"
+                                                    data-customer-id="<?php echo (int)$customer['id']; ?>"
+                                                    data-customer-name="<?php echo htmlspecialchars($customer['name']); ?>">
+                                                    <i class="bi bi-receipt me-2 text-info"></i>سجل
+                                                </button>
+                                            </li>
+                                            <li>
+                                                <button type="button" class="dropdown-item js-customer-purchase-history"
+                                                    data-customer-id="<?php echo (int)$customer['id']; ?>"
+                                                    data-customer-name="<?php echo htmlspecialchars($customer['name']); ?>">
+                                                    <i class="bi bi-arrow-return-left me-2 text-warning"></i>مرتجع
+                                                </button>
+                                            </li>
+                                            <li>
+                                                <button type="button" class="dropdown-item location-capture-btn"
+                                                    data-customer-id="<?php echo (int)$customer['id']; ?>"
+                                                    data-customer-name="<?php echo htmlspecialchars($customer['name']); ?>">
+                                                    <i class="bi bi-geo-alt me-2 text-primary"></i>تحديد الموقع
+                                                </button>
+                                            </li>
+                                            <?php if ($hasLocation): ?>
+                                            <li>
+                                                <button type="button" class="dropdown-item location-view-btn"
+                                                    data-customer-id="<?php echo (int)$customer['id']; ?>"
+                                                    data-customer-name="<?php echo htmlspecialchars($customer['name']); ?>"
+                                                    data-latitude="<?php echo htmlspecialchars(number_format($latValue, 8, '.', '')); ?>"
+                                                    data-longitude="<?php echo htmlspecialchars(number_format($lngValue, 8, '.', '')); ?>">
+                                                    <i class="bi bi-map me-2 text-info"></i>عرض الموقع
+                                                </button>
+                                            </li>
+                                            <?php endif; ?>
+                                        </ul>
                                     </div>
                                 </td>
                             </tr>
@@ -5919,8 +5898,167 @@ document.addEventListener('DOMContentLoaded', function () {
                 </li>
             </ul>
         </nav>
+</div>
+</div>
+
+<!-- Modal إجراءات العميل (بدون backdrop) -->
+<div class="modal fade" id="customerActionsModal" tabindex="-1" aria-hidden="true"
+     data-bs-backdrop="false" data-bs-keyboard="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:320px">
+        <div class="modal-content border shadow-lg">
+            <div class="modal-header py-2 px-3">
+                <h6 class="modal-title mb-0 fw-bold" id="customerActionsModalTitle">إجراءات العميل</h6>
+                <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="modal" aria-label="إغلاق"></button>
+            </div>
+            <div class="modal-body p-2" id="customerActionsModalBody">
+                <!-- يُملأ ديناميكياً بواسطة JS -->
+            </div>
+        </div>
     </div>
 </div>
+
+<script>
+(function () {
+    var actionsModal = document.getElementById('customerActionsModal');
+    if (!actionsModal) return;
+
+    actionsModal.addEventListener('show.bs.modal', function (e) {
+        var btn = e.relatedTarget;
+        if (!btn) return;
+
+        var id              = btn.getAttribute('data-customer-id') || '';
+        var name            = btn.getAttribute('data-customer-name') || '';
+        var phone           = btn.getAttribute('data-customer-phone') || '';
+        var address         = btn.getAttribute('data-customer-address') || '';
+        var regionId        = btn.getAttribute('data-customer-region-id') || '0';
+        var balance         = btn.getAttribute('data-customer-balance') || '0.00';
+        var balanceFmt      = btn.getAttribute('data-customer-balance-formatted') || '0';
+        var balancePositive = btn.getAttribute('data-customer-balance-positive') === '1';
+        var canEdit         = btn.getAttribute('data-can-edit') === '1';
+        var hasLocation     = btn.getAttribute('data-has-location') === '1';
+        var lat             = btn.getAttribute('data-latitude') || '';
+        var lng             = btn.getAttribute('data-longitude') || '';
+
+        document.getElementById('customerActionsModalTitle').textContent = name;
+
+        var body = document.getElementById('customerActionsModalBody');
+        body.innerHTML = '';
+
+        function makeBtn(html, cls, attrs) {
+            var li = document.createElement('li');
+            li.className = 'list-group-item list-group-item-action border-0 px-3 py-2 d-flex align-items-center gap-2 ' + (cls || '');
+            Object.keys(attrs || {}).forEach(function (k) { li.setAttribute(k, attrs[k]); });
+            li.innerHTML = html;
+            return li;
+        }
+
+        var ul = document.createElement('ul');
+        ul.className = 'list-group list-group-flush';
+
+        // اتصال
+        if (phone) {
+            var phoneLi = document.createElement('li');
+            phoneLi.className = 'list-group-item list-group-item-action border-0 px-3 py-2';
+            var phoneA = document.createElement('a');
+            phoneA.href = 'tel:' + phone;
+            phoneA.className = 'd-flex align-items-center gap-2 text-decoration-none text-primary fw-semibold';
+            phoneA.innerHTML = '<i class="bi bi-telephone-fill"></i>' + phone;
+            phoneLi.appendChild(phoneA);
+            ul.appendChild(phoneLi);
+
+            var hr = document.createElement('li');
+            hr.innerHTML = '<hr class="m-0">';
+            ul.appendChild(hr);
+        }
+
+        // تعديل
+        if (canEdit) {
+            var editLi = makeBtn(
+                '<i class="bi bi-pencil text-warning"></i><span>تعديل</span>',
+                'edit-customer-btn',
+                {
+                    'data-customer-id': id,
+                    'data-customer-name': name,
+                    'data-customer-phone': phone,
+                    'data-customer-address': address,
+                    'data-customer-region-id': regionId,
+                    'data-customer-balance': balance,
+                    'onclick': 'showEditCustomerModal(this); bootstrap.Modal.getInstance(document.getElementById("customerActionsModal")).hide();'
+                }
+            );
+            ul.appendChild(editLi);
+        }
+
+        // تحصيل
+        var collectLi = makeBtn(
+            '<i class="bi bi-cash-coin text-success"></i><span class="' + (balancePositive ? 'text-success fw-semibold' : '') + '">تحصيل</span>',
+            '',
+            {
+                'data-customer-id': id,
+                'data-customer-name': name,
+                'data-customer-balance': balance,
+                'data-customer-balance-formatted': balanceFmt,
+                'onclick': 'showCollectPaymentModal(this); bootstrap.Modal.getInstance(document.getElementById("customerActionsModal")).hide();'
+            }
+        );
+        ul.appendChild(collectLi);
+
+        // سجل
+        var historyLi = makeBtn(
+            '<i class="bi bi-receipt text-info"></i><span>سجل المشتريات</span>',
+            'js-customer-history',
+            {
+                'data-customer-id': id,
+                'data-customer-name': name,
+                'data-bs-dismiss': 'modal'
+            }
+        );
+        ul.appendChild(historyLi);
+
+        // مرتجع
+        var returnLi = makeBtn(
+            '<i class="bi bi-arrow-return-left text-warning"></i><span>مرتجع</span>',
+            'js-customer-purchase-history',
+            {
+                'data-customer-id': id,
+                'data-customer-name': name,
+                'data-bs-dismiss': 'modal'
+            }
+        );
+        ul.appendChild(returnLi);
+
+        // تحديد الموقع
+        var captureLi = makeBtn(
+            '<i class="bi bi-geo-alt text-primary"></i><span>تحديد الموقع</span>',
+            'location-capture-btn',
+            {
+                'data-customer-id': id,
+                'data-customer-name': name,
+                'data-bs-dismiss': 'modal'
+            }
+        );
+        ul.appendChild(captureLi);
+
+        // عرض الموقع
+        if (hasLocation) {
+            var viewLi = makeBtn(
+                '<i class="bi bi-map text-info"></i><span>عرض الموقع</span>',
+                'location-view-btn',
+                {
+                    'data-customer-id': id,
+                    'data-customer-name': name,
+                    'data-latitude': lat,
+                    'data-longitude': lng,
+                    'data-bs-dismiss': 'modal'
+                }
+            );
+            ul.appendChild(viewLi);
+        }
+
+        body.appendChild(ul);
+    });
+})();
+</script>
 
 <!-- Modal تحصيل ديون العميل -->
 <!-- للكمبيوتر فقط -->
