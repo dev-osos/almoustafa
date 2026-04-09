@@ -3824,11 +3824,43 @@ try {
         error_log('shipping_orders: failed fetching external products -> ' . $externalError->getMessage());
     }
     
+    // جلب منتجات الفرز التاني
+    try {
+        $secondGradeProducts = $db->query("
+            SELECT
+                id,
+                name,
+                quantity,
+                COALESCE(unit, 'قطعة') as unit,
+                unit_price
+            FROM products
+            WHERE product_type = 'second_grade'
+              AND status = 'active'
+              AND quantity > 0
+            ORDER BY name ASC
+        ");
+        foreach ($secondGradeProducts as $sg) {
+            $productsList[] = [
+                'id'          => (int)$sg['id'],
+                'name'        => ($sg['name'] ?? 'غير محدد') . ' (ف.ت)',
+                'quantity'    => (float)($sg['quantity'] ?? 0),
+                'unit'        => $sg['unit'] ?? 'قطعة',
+                'unit_price'  => (float)($sg['unit_price'] ?? 0),
+                'batch_number'=> null,
+                'batch_id'    => null,
+                'product_type'=> 'second_grade',
+                'original_id' => (int)$sg['id'],
+            ];
+        }
+    } catch (Throwable $sgError) {
+        error_log('shipping_orders: failed fetching second_grade products -> ' . $sgError->getMessage());
+    }
+
     // ترتيب المنتجات حسب الاسم
     usort($productsList, function($a, $b) {
         return strcmp($a['name'] ?? '', $b['name'] ?? '');
     });
-    
+
     $availableProducts = $productsList;
     
 } catch (Throwable $productsError) {

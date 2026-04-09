@@ -391,6 +391,143 @@ null,
                 preventDuplicateSubmission(null, ['page' => 'company_products'], null, $redirectRole, 'تعذر إضافة الكمية.');
             }
         }
+    // ===== الفرز التاني =====
+    } elseif ($action === 'create_second_grade_product') {
+        if ($currentUser['role'] === 'accountant' || $currentUser['role'] === 'production') {
+            preventDuplicateSubmission(null, ['page' => 'company_products'], null, $redirectRole, 'ليس لديك صلاحية لإضافة منتجات الفرز التاني.');
+        } else {
+            $name = trim($_POST['product_name'] ?? '');
+            $quantity = max(0, floatval($_POST['quantity'] ?? 0));
+            $unitPrice = max(0, floatval($_POST['unit_price'] ?? 0));
+            $unit = trim($_POST['unit'] ?? 'قطعة');
+            $categoryId = intval($_POST['category_id'] ?? 0);
+            $customCategory = trim($_POST['custom_category'] ?? '');
+            if ($name === '') {
+                preventDuplicateSubmission(null, ['page' => 'company_products'], null, $redirectRole, 'يرجى إدخال اسم المنتج.');
+            } else {
+                try {
+                    // ترقية ENUM إذا لزم
+                    try {
+                        $col = $db->queryOne("SHOW COLUMNS FROM products LIKE 'product_type'");
+                        if ($col && strpos($col['Type'] ?? '', 'second_grade') === false) {
+                            $db->execute("ALTER TABLE `products` MODIFY COLUMN `product_type` ENUM('internal','external','second_grade') DEFAULT 'internal'");
+                        }
+                    } catch (Exception $e) {}
+
+                    $categoryName = 'فرز تاني';
+                    if ($categoryId > 0) {
+                        $cat = $db->queryOne("SELECT name FROM product_categories WHERE id = ?", [$categoryId]);
+                        if ($cat) $categoryName = $cat['name'];
+                    } elseif (!empty($customCategory)) {
+                        try { $db->execute("INSERT INTO product_categories (name, is_default) VALUES (?, 0)", [$customCategory]); } catch (Exception $e) {}
+                        $categoryName = $customCategory;
+                    }
+
+                    $db->execute(
+                        "INSERT INTO products (name, category, product_type, quantity, unit, unit_price, status) VALUES (?, ?, 'second_grade', ?, ?, ?, 'active')",
+                        [$name, $categoryName, $quantity, $unit, $unitPrice]
+                    );
+                    $productId = $db->getLastInsertId();
+                    logAudit($currentUser['id'], 'create_second_grade_product', 'product', $productId, null, ['name' => $name, 'quantity' => $quantity, 'unit_price' => $unitPrice]);
+                    preventDuplicateSubmission('تم إضافة منتج الفرز التاني بنجاح.', ['page' => 'company_products'], null, $redirectRole);
+                } catch (Exception $e) {
+                    error_log('create_second_grade_product error: ' . $e->getMessage());
+                    preventDuplicateSubmission(null, ['page' => 'company_products'], null, $redirectRole, 'تعذر إضافة المنتج. يرجى المحاولة لاحقاً.');
+                }
+            }
+        }
+
+    } elseif ($action === 'update_second_grade_product') {
+        $isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
+        if ($isAjax) { while (ob_get_level() > 0) ob_end_clean(); }
+        if ($currentUser['role'] === 'accountant' || $currentUser['role'] === 'production') {
+            if ($isAjax) { header('Content-Type: application/json; charset=UTF-8'); echo json_encode(['success' => false, 'message' => 'ليس لديك صلاحية.']); exit; }
+            preventDuplicateSubmission(null, ['page' => 'company_products'], null, $redirectRole, 'ليس لديك صلاحية.');
+        } else {
+            $productId = intval($_POST['product_id'] ?? 0);
+            $name = trim($_POST['product_name'] ?? '');
+            $quantity = max(0, floatval($_POST['quantity'] ?? 0));
+            $unitPrice = max(0, floatval($_POST['unit_price'] ?? 0));
+            $unit = trim($_POST['unit'] ?? 'قطعة');
+            $categoryId = intval($_POST['category_id'] ?? 0);
+            $customCategory = trim($_POST['custom_category'] ?? '');
+            if ($productId <= 0 || $name === '') {
+                if ($isAjax) { header('Content-Type: application/json; charset=UTF-8'); echo json_encode(['success' => false, 'message' => 'بيانات غير صحيحة.']); exit; }
+                preventDuplicateSubmission(null, ['page' => 'company_products'], null, $redirectRole, 'بيانات غير صحيحة.');
+            } else {
+                try {
+                    $categoryName = null;
+                    if ($categoryId > 0) {
+                        $cat = $db->queryOne("SELECT name FROM product_categories WHERE id = ?", [$categoryId]);
+                        if ($cat) $categoryName = $cat['name'];
+                    } elseif (!empty($customCategory)) {
+                        try { $db->execute("INSERT INTO product_categories (name, is_default) VALUES (?, 0)", [$customCategory]); } catch (Exception $e) {}
+                        $categoryName = $customCategory;
+                    }
+                    if ($categoryName === null) {
+                        $ex = $db->queryOne("SELECT category FROM products WHERE id = ?", [$productId]);
+                        $categoryName = $ex['category'] ?? null;
+                    }
+                    $db->execute(
+                        "UPDATE products SET name = ?, category = ?, quantity = ?, unit = ?, unit_price = ?, updated_at = NOW() WHERE id = ? AND product_type = 'second_grade'",
+                        [$name, $categoryName, $quantity, $unit, $unitPrice, $productId]
+                    );
+                    logAudit($currentUser['id'], 'update_second_grade_product', 'product', $productId, null, ['name' => $name, 'quantity' => $quantity, 'unit_price' => $unitPrice]);
+                    if ($isAjax) {
+                        header('Content-Type: application/json; charset=UTF-8');
+                        echo json_encode(['success' => true, 'message' => 'تم تحديث المنتج بنجاح.', 'product' => ['id' => $productId, 'name' => $name, 'quantity' => $quantity, 'unit' => $unit, 'unit_price' => $unitPrice, 'category' => $categoryName, 'total_value' => $quantity * $unitPrice]]);
+                        exit;
+                    }
+                    preventDuplicateSubmission('تم تحديث منتج الفرز التاني بنجاح.', ['page' => 'company_products'], null, $redirectRole);
+                } catch (Exception $e) {
+                    error_log('update_second_grade_product error: ' . $e->getMessage());
+                    if ($isAjax) { header('Content-Type: application/json; charset=UTF-8'); echo json_encode(['success' => false, 'message' => 'تعذر تحديث المنتج.']); exit; }
+                    preventDuplicateSubmission(null, ['page' => 'company_products'], null, $redirectRole, 'تعذر تحديث المنتج.');
+                }
+            }
+        }
+
+    } elseif ($action === 'delete_second_grade_product') {
+        if ($currentUser['role'] === 'accountant' || $currentUser['role'] === 'production') {
+            preventDuplicateSubmission(null, ['page' => 'company_products'], null, $redirectRole, 'ليس لديك صلاحية.');
+        } else {
+            $productId = intval($_POST['product_id'] ?? 0);
+            if ($productId <= 0) {
+                preventDuplicateSubmission(null, ['page' => 'company_products'], null, $redirectRole, 'بيانات غير صحيحة.');
+            } else {
+                try {
+                    $db->execute("DELETE FROM products WHERE id = ? AND product_type = 'second_grade'", [$productId]);
+                    logAudit($currentUser['id'], 'delete_second_grade_product', 'product', $productId, null, []);
+                    preventDuplicateSubmission('تم حذف المنتج بنجاح.', ['page' => 'company_products'], null, $redirectRole);
+                } catch (Exception $e) {
+                    error_log('delete_second_grade_product error: ' . $e->getMessage());
+                    preventDuplicateSubmission(null, ['page' => 'company_products'], null, $redirectRole, 'تعذر حذف المنتج.');
+                }
+            }
+        }
+
+    } elseif ($action === 'add_quantity_second_grade_product') {
+        $productId = intval($_POST['product_id'] ?? 0);
+        $quantityToAdd = max(0, floatval($_POST['quantity_to_add'] ?? 0));
+        if ($productId <= 0 || $quantityToAdd <= 0) {
+            preventDuplicateSubmission(null, ['page' => 'company_products'], null, $redirectRole, 'بيانات غير صحيحة. أدخل كمية صحيحة.');
+        } else {
+            try {
+                $row = $db->queryOne("SELECT id, quantity FROM products WHERE id = ? AND product_type = 'second_grade' AND status = 'active'", [$productId]);
+                if (!$row) {
+                    preventDuplicateSubmission(null, ['page' => 'company_products'], null, $redirectRole, 'المنتج غير موجود.');
+                } else {
+                    $newQuantity = floatval($row['quantity'] ?? 0) + $quantityToAdd;
+                    $db->execute("UPDATE products SET quantity = ? WHERE id = ?", [$newQuantity, $productId]);
+                    logAudit($currentUser['id'], 'add_quantity_second_grade_product', 'product', $productId, null, ['quantity_added' => $quantityToAdd, 'new_quantity' => $newQuantity]);
+                    preventDuplicateSubmission('تم إضافة الكمية بنجاح.', ['page' => 'company_products'], null, $redirectRole);
+                }
+            } catch (Exception $e) {
+                error_log('add_quantity_second_grade_product error: ' . $e->getMessage());
+                preventDuplicateSubmission(null, ['page' => 'company_products'], null, $redirectRole, 'تعذر إضافة الكمية.');
+            }
+        }
+
     } elseif ($action === 'add_quantity_factory_product') {
         // إضافة كمية لمنتج مصنع (تشغيلة) - متاح لعامل الإنتاج والمدير والمحاسب
         $batchId = intval($_POST['batch_id'] ?? 0);
@@ -866,6 +1003,29 @@ try {
     error_log('Error fetching external products: ' . $e->getMessage());
 }
 
+// الحصول على منتجات الفرز التاني
+$secondGradeProducts = [];
+try {
+    $secondGradeProducts = $db->query("
+        SELECT
+            id,
+            name,
+            COALESCE(category, '') as category,
+            quantity,
+            COALESCE(unit, 'قطعة') as unit,
+            unit_price,
+            (quantity * unit_price) as total_value,
+            created_at,
+            updated_at
+        FROM products
+        WHERE product_type = 'second_grade'
+          AND status = 'active'
+        ORDER BY name ASC
+    ");
+} catch (Exception $e) {
+    error_log('Error fetching second_grade products: ' . $e->getMessage());
+}
+
 // الحصول على قوالب المنتجات
 $productTemplates = [];
 try {
@@ -890,10 +1050,15 @@ try {
 // إحصائيات
 $totalFactoryProducts = count($factoryProducts);
 $totalExternalProducts = count($externalProducts);
+$totalSecondGradeProducts = count($secondGradeProducts);
 $totalProductTemplates = count($productTemplates);
 $totalExternalValue = 0;
 foreach ($externalProducts as $ext) {
     $totalExternalValue += floatval($ext['total_value'] ?? 0);
+}
+$totalSecondGradeValue = 0;
+foreach ($secondGradeProducts as $sg) {
+    $totalSecondGradeValue += floatval($sg['total_value'] ?? 0);
 }
 
 // حساب القيمة الإجمالية لمنتجات المصنع بناءً على الكمية المتاحة
@@ -1864,6 +2029,113 @@ foreach ($factoryProducts as $product) {
     </div>
 </div>
 
+<!-- قسم الفرز التاني -->
+<div class="card company-card mt-4" id="secondGradeSection">
+    <div class="section-header" data-section="secondGrade">
+        <h5>
+            <i class="bi bi-layers"></i>
+            الفرز التاني
+        </h5>
+        <div class="d-flex gap-2 align-items-center">
+            <span class="badge" id="secondGradeCount"><?php echo $totalSecondGradeProducts; ?> منتج</span>
+            <?php if ($currentUser['role'] !== 'accountant' && !$isProductionRole): ?>
+            <button type="button" class="btn btn-success-custom btn-sm" onclick="event.stopPropagation(); showAddSecondGradeModal()">
+                <i class="bi bi-plus-circle me-1"></i>إضافة منتج
+            </button>
+            <?php endif; ?>
+            <i class="bi bi-chevron-down collapse-arrow"></i>
+        </div>
+    </div>
+    <div class="card-body section-collapse-body" id="secondGradeBody">
+        <!-- شريط البحث والفلترة -->
+        <div class="mb-3 p-3 bg-light rounded" style="border: 1px solid #dee2e6;">
+            <div class="row g-3">
+                <div class="col-12 col-md-4">
+                    <label class="form-label small mb-1"><i class="bi bi-search me-1"></i>البحث</label>
+                    <input type="text" class="form-control form-control-sm" id="sgSearchInput" placeholder="اسم المنتج..." autocomplete="off">
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="form-label small mb-1"><i class="bi bi-funnel me-1"></i>فلترة الكمية</label>
+                    <select class="form-control form-control-sm" id="sgQuantityFilter">
+                        <option value="all">جميع المنتجات</option>
+                        <option value="available">متاحة (كمية > 0)</option>
+                        <option value="unavailable">غير متاحة (كمية = 0)</option>
+                    </select>
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="form-label small mb-1"><i class="bi bi-sort-numeric-down me-1"></i>الترتيب</label>
+                    <select class="form-control form-control-sm" id="sgSortOrder">
+                        <option value="name_asc">الاسم (أ-ي)</option>
+                        <option value="name_desc">الاسم (ي-أ)</option>
+                        <option value="quantity_desc">الكمية (الأعلى أولاً)</option>
+                        <option value="quantity_asc">الكمية (الأقل أولاً)</option>
+                        <option value="price_desc">السعر (الأعلى أولاً)</option>
+                        <option value="price_asc">السعر (الأقل أولاً)</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <?php if (empty($secondGradeProducts)): ?>
+            <div class="alert alert-info mb-0">
+                <i class="bi bi-info-circle me-2"></i>
+                لا توجد منتجات فرز تاني. <?php if ($currentUser['role'] !== 'accountant' && !$isProductionRole): ?>يمكنك إضافة منتجات جديدة بالضغط على زر "إضافة منتج".<?php endif; ?>
+            </div>
+        <?php else: ?>
+        <div class="products-grid" id="secondGradeProductsGrid">
+            <?php foreach ($secondGradeProducts as $product):
+                $id = intval($product['id']);
+                $productName = htmlspecialchars($product['name'] ?? 'غير محدد');
+                $quantity = number_format(floatval($product['quantity'] ?? 0), 2);
+                $unit = htmlspecialchars($product['unit'] ?? 'قطعة');
+                $unitPrice = floatval($product['unit_price'] ?? 0);
+                $totalValue = floatval($product['total_value'] ?? 0);
+            ?>
+                <div class="product-card">
+                    <div class="product-name"><?php echo $productName; ?></div>
+                    <div style="color: #94a3b8; font-size: 13px; margin-bottom: 10px;">الكود: <?php echo $id; ?></div>
+                    <?php $sgCategory = htmlspecialchars($product['category'] ?? '—'); ?>
+                    <div class="product-detail-row"><span>الصنف:</span> <span><?php echo $sgCategory; ?></span></div>
+                    <div class="product-detail-row"><span>الكمية:</span> <span><strong><?php echo $quantity; ?> <?php echo $unit; ?></strong></span></div>
+                    <div class="product-detail-row"><span>سعر الوحدة:</span> <span><?php echo formatCurrency($unitPrice); ?></span></div>
+                    <div class="product-detail-row"><span>الإجمالي:</span> <span><strong class="text-success"><?php echo formatCurrency($totalValue); ?></strong></span></div>
+                    <div class="product-actions" style="display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap;">
+                    <?php if ($currentUser['role'] !== 'accountant' && !$isProductionRole): ?>
+                        <button type="button"
+                                class="btn btn-outline-primary js-edit-second-grade"
+                                style="flex: 1; min-width: calc(50% - 5px); border-radius: 10px; padding: 10px 16px; font-weight: bold; font-size: 13px;"
+                                data-id="<?php echo $id; ?>"
+                                data-name="<?php echo htmlspecialchars($product['name'], ENT_QUOTES); ?>"
+                                data-quantity="<?php echo $product['quantity']; ?>"
+                                data-unit="<?php echo htmlspecialchars($product['unit'] ?? 'قطعة', ENT_QUOTES); ?>"
+                                data-price="<?php echo $product['unit_price']; ?>"
+                                data-category="<?php echo htmlspecialchars($product['category'] ?? '', ENT_QUOTES); ?>">
+                            <i class="bi bi-pencil me-1"></i>تعديل
+                        </button>
+                        <button type="button"
+                                class="btn btn-outline-danger js-delete-second-grade"
+                                style="flex: 1; min-width: calc(50% - 5px); border-radius: 10px; padding: 10px 16px; font-weight: bold; font-size: 13px;"
+                                data-id="<?php echo $id; ?>"
+                                data-name="<?php echo htmlspecialchars($product['name'], ENT_QUOTES); ?>">
+                            <i class="bi bi-trash me-1"></i>حذف
+                        </button>
+                    <?php endif; ?>
+                        <button type="button"
+                                class="btn btn-outline-secondary js-add-qty-second-grade"
+                                style="flex: 1; min-width: calc(50% - 5px); border-radius: 10px; padding: 10px 16px; font-weight: bold; font-size: 13px;"
+                                data-product-id="<?php echo $id; ?>"
+                                data-product-name="<?php echo htmlspecialchars($product['name'], ENT_QUOTES); ?>"
+                                data-quantity="<?php echo $product['quantity']; ?>">
+                            <i class="bi bi-plus-circle me-1"></i>إضافة كمية
+                        </button>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
+    </div>
+</div>
+
 
 
 
@@ -2216,6 +2488,141 @@ foreach ($factoryProducts as $product) {
     </div>
 </div>
 
+<!-- Card للموبايل - إضافة منتج فرز تاني -->
+<div class="card shadow-sm mb-4" id="addSecondGradeCard" style="display: none;">
+    <div class="card-header bg-success text-white">
+        <h5 class="mb-0"><i class="bi bi-plus-circle me-2"></i>إضافة منتج فرز تاني</h5>
+    </div>
+    <div class="card-body">
+        <form method="POST">
+            <input type="hidden" name="action" value="create_second_grade_product">
+            <div class="mb-3">
+                <label class="form-label">اسم المنتج <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" name="product_name" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">الصنف</label>
+                <select class="form-control" name="category_id">
+                    <option value="">اختر الصنف</option>
+                    <?php foreach ($productCategories as $cat): ?>
+                        <option value="<?php echo intval($cat['id']); ?>"><?php echo htmlspecialchars($cat['name']); ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="row">
+                <div class="col-6 mb-3">
+                    <label class="form-label">الكمية</label>
+                    <input type="number" step="0.01" class="form-control" name="quantity" min="0" value="0">
+                </div>
+                <div class="col-6 mb-3">
+                    <label class="form-label">الوحدة</label>
+                    <input type="text" class="form-control" name="unit" value="قطعة">
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">سعر الوحدة</label>
+                <input type="number" step="0.01" class="form-control" name="unit_price" min="0" value="0">
+            </div>
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-success">إضافة</button>
+                <button type="button" class="btn btn-secondary" onclick="closeAddSecondGradeCard()">إلغاء</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Card للموبايل - تعديل منتج فرز تاني -->
+<div class="card shadow-sm mb-4" id="editSecondGradeCard" style="display: none;">
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0"><i class="bi bi-pencil me-2"></i>تعديل منتج فرز تاني</h5>
+    </div>
+    <div class="card-body">
+        <form method="POST" id="editSecondGradeForm" data-no-loading="true">
+            <input type="hidden" name="action" value="update_second_grade_product">
+            <input type="hidden" name="product_id" id="editSG_product_id">
+            <div class="mb-3">
+                <label class="form-label">اسم المنتج <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" name="product_name" id="editSG_product_name" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">الصنف</label>
+                <select class="form-control" name="category_id" id="editSG_category_id">
+                    <option value="">اختر الصنف</option>
+                    <?php foreach ($productCategories as $cat): ?>
+                        <option value="<?php echo intval($cat['id']); ?>"><?php echo htmlspecialchars($cat['name']); ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="row">
+                <div class="col-6 mb-3">
+                    <label class="form-label">الكمية</label>
+                    <input type="number" step="0.01" class="form-control" name="quantity" id="editSG_quantity" min="0">
+                </div>
+                <div class="col-6 mb-3">
+                    <label class="form-label">الوحدة</label>
+                    <input type="text" class="form-control" name="unit" id="editSG_unit">
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">سعر الوحدة</label>
+                <input type="number" step="0.01" class="form-control" name="unit_price" id="editSG_unit_price" min="0">
+            </div>
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary-custom">حفظ التغييرات</button>
+                <button type="button" class="btn btn-secondary" onclick="closeEditSecondGradeCard()">إلغاء</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Card للموبايل - حذف منتج فرز تاني -->
+<div class="card shadow-sm mb-4" id="deleteSecondGradeCard" style="display: none;">
+    <div class="card-header bg-danger text-white">
+        <h5 class="mb-0"><i class="bi bi-exclamation-triangle me-2"></i>تأكيد الحذف</h5>
+    </div>
+    <div class="card-body">
+        <form method="POST">
+            <input type="hidden" name="action" value="delete_second_grade_product">
+            <input type="hidden" name="product_id" id="deleteSG_product_id">
+            <p>هل أنت متأكد من حذف المنتج <strong id="deleteSG_product_name"></strong>؟</p>
+            <p class="text-danger mb-3"><small>لا يمكن التراجع عن هذه العملية.</small></p>
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-danger">حذف</button>
+                <button type="button" class="btn btn-secondary" onclick="closeDeleteSecondGradeCard()">إلغاء</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Card للموبايل - إضافة كمية لمنتج فرز تاني -->
+<div class="card shadow-sm mb-4" id="addQtySecondGradeCard" style="display: none;">
+    <div class="card-header bg-secondary text-white">
+        <h5 class="mb-0"><i class="bi bi-plus-circle me-2"></i>إضافة كمية - فرز تاني</h5>
+    </div>
+    <div class="card-body">
+        <form method="POST" id="addQtySGCardForm">
+            <input type="hidden" name="action" value="add_quantity_second_grade_product">
+            <input type="hidden" name="product_id" id="addQtySG_product_id">
+            <div class="mb-3">
+                <label class="form-label">المنتج</label>
+                <input type="text" class="form-control" id="addQtySG_product_name" readonly>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">الكمية الحالية</label>
+                <input type="text" class="form-control" id="addQtySG_current_qty" readonly>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">الكمية المضافة <span class="text-danger">*</span></label>
+                <input type="number" step="0.01" min="0.01" class="form-control" name="quantity_to_add" id="addQtySG_to_add" required placeholder="أدخل الكمية">
+            </div>
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-secondary text-white">إضافة</button>
+                <button type="button" class="btn btn-secondary" onclick="closeAddQtySGCard()">إلغاء</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <!-- Modal تفاصيل التشغيلة -->
 <div class="modal fade d-none d-md-block" id="batchDetailsModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
     <div class="modal-dialog modal-lg modal-dialog-scrollable modal-dialog-centered">
@@ -2302,6 +2709,9 @@ function closeAllForms() {
         'editExternalProductCard',
         'deleteExternalProductCard',
         'addQuantityExternalCard',
+        'editSecondGradeCard',
+        'deleteSecondGradeCard',
+        'addQtySecondGradeCard',
         'batchDetailsCard',
         'printBarcodesCard'
     ];
@@ -2412,6 +2822,210 @@ function closeAddQuantityExternalCard() {
         if (form) form.reset();
     }
 }
+
+// ===== دوال الفرز التاني =====
+
+function showAddSecondGradeModal() {
+    closeAllForms();
+    const card = document.getElementById('addSecondGradeCard');
+    if (card) { card.style.display = 'block'; setTimeout(function() { scrollToElement(card); }, 50); }
+}
+function closeAddSecondGradeCard() {
+    const card = document.getElementById('addSecondGradeCard');
+    if (card) { card.style.display = 'none'; const f = card.querySelector('form'); if (f) f.reset(); }
+}
+function closeEditSecondGradeCard() {
+    const card = document.getElementById('editSecondGradeCard');
+    if (card) { card.style.display = 'none'; const f = card.querySelector('form'); if (f) f.reset(); }
+}
+function closeDeleteSecondGradeCard() {
+    const card = document.getElementById('deleteSecondGradeCard');
+    if (card) { card.style.display = 'none'; const f = card.querySelector('form'); if (f) f.reset(); }
+}
+function closeAddQtySGCard() {
+    const card = document.getElementById('addQtySecondGradeCard');
+    if (card) { card.style.display = 'none'; const f = card.querySelector('form'); if (f) f.reset(); }
+}
+
+function initSecondGradeButtons() {
+    document.querySelectorAll('.js-edit-second-grade').forEach(btn => {
+        btn.addEventListener('click', function() {
+            closeAllForms();
+            const card = document.getElementById('editSecondGradeCard');
+            if (!card) return;
+            document.getElementById('editSG_product_id').value = this.dataset.id;
+            document.getElementById('editSG_product_name').value = this.dataset.name;
+            document.getElementById('editSG_quantity').value = this.dataset.quantity;
+            document.getElementById('editSG_unit').value = this.dataset.unit;
+            document.getElementById('editSG_unit_price').value = this.dataset.price;
+            const sel = document.getElementById('editSG_category_id');
+            const cat = this.dataset.category || '';
+            if (sel && cat) {
+                for (let i = 0; i < sel.options.length; i++) {
+                    if (sel.options[i].textContent.trim() === cat.trim()) { sel.selectedIndex = i; break; }
+                }
+            }
+            card.style.display = 'block';
+            setTimeout(function() { scrollToElement(card); }, 50);
+        });
+    });
+
+    document.querySelectorAll('.js-delete-second-grade').forEach(btn => {
+        btn.addEventListener('click', function() {
+            closeAllForms();
+            const card = document.getElementById('deleteSecondGradeCard');
+            if (!card) return;
+            document.getElementById('deleteSG_product_id').value = this.dataset.id;
+            document.getElementById('deleteSG_product_name').textContent = this.dataset.name;
+            card.style.display = 'block';
+            setTimeout(function() { scrollToElement(card); }, 50);
+        });
+    });
+
+    document.querySelectorAll('.js-add-qty-second-grade').forEach(btn => {
+        btn.addEventListener('click', function() {
+            closeAllForms();
+            const card = document.getElementById('addQtySecondGradeCard');
+            if (!card) return;
+            document.getElementById('addQtySG_product_id').value = this.dataset.productId;
+            document.getElementById('addQtySG_product_name').value = this.dataset.productName;
+            document.getElementById('addQtySG_current_qty').value = this.dataset.quantity;
+            document.getElementById('addQtySG_to_add').value = '';
+            card.style.display = 'block';
+            setTimeout(function() { scrollToElement(card); }, 50);
+        });
+    });
+}
+
+// AJAX edit second grade
+(function() {
+    const form = document.getElementById('editSecondGradeForm');
+    if (!form) return;
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const submitBtn = form.querySelector('button[type="submit"]');
+        const origText = submitBtn.innerHTML;
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>جاري الحفظ...';
+        try {
+            const formData = new FormData(form);
+            const response = await fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: formData });
+            const data = await response.json();
+            if (data.success) {
+                updateSecondGradeCard(data.product);
+                closeEditSecondGradeCard();
+                showInlineToast(data.message, 'success');
+            } else {
+                showInlineToast(data.message || 'حدث خطأ غير متوقع.', 'danger');
+            }
+        } catch (err) {
+            showInlineToast('تعذر الاتصال بالخادم.', 'danger');
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = origText;
+            if (typeof window.resetPageLoading === 'function') window.resetPageLoading();
+        }
+    });
+
+    function updateSecondGradeCard(product) {
+        const fmt = (n) => parseFloat(n).toLocaleString('ar-EG', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' ج.م';
+        const qty = parseFloat(product.quantity).toFixed(2);
+        const unit = product.unit || 'قطعة';
+        const category = product.category || '—';
+        const total = parseFloat(product.total_value || 0);
+        document.querySelectorAll(`.js-edit-second-grade[data-id="${product.id}"]`).forEach(btn => {
+            btn.dataset.name = product.name; btn.dataset.quantity = product.quantity;
+            btn.dataset.unit = unit; btn.dataset.price = product.unit_price; btn.dataset.category = category;
+        });
+        document.querySelectorAll(`.js-add-qty-second-grade[data-product-id="${product.id}"]`).forEach(btn => {
+            btn.dataset.productName = product.name; btn.dataset.quantity = product.quantity;
+        });
+        document.querySelectorAll(`.js-delete-second-grade[data-id="${product.id}"]`).forEach(btn => { btn.dataset.name = product.name; });
+        document.querySelectorAll(`.js-edit-second-grade[data-id="${product.id}"]`).forEach(btn => {
+            const card = btn.closest('.product-card');
+            if (!card) return;
+            const nameEl = card.querySelector('.product-name');
+            if (nameEl) nameEl.textContent = product.name;
+            card.querySelectorAll('.product-detail-row').forEach(row => {
+                const label = row.querySelector('span:first-child');
+                const val = row.querySelector('span:last-child');
+                if (!label || !val) return;
+                const text = label.textContent.trim();
+                if (text === 'الصنف:') val.textContent = category;
+                else if (text === 'الكمية:') val.innerHTML = `<strong>${qty} ${unit}</strong>`;
+                else if (text === 'سعر الوحدة:') val.textContent = fmt(product.unit_price);
+                else if (text === 'الإجمالي:') val.innerHTML = `<strong class="text-success">${fmt(total)}</strong>`;
+            });
+        });
+    }
+})();
+
+// فلترة وترتيب الفرز التاني
+(function() {
+    const sgData = <?php echo json_encode(array_values($secondGradeProducts)); ?>;
+    const container = document.getElementById('secondGradeProductsGrid');
+    const searchInput = document.getElementById('sgSearchInput');
+    const qtyFilter = document.getElementById('sgQuantityFilter');
+    const sortOrder = document.getElementById('sgSortOrder');
+    const canEdit = <?php echo json_encode($currentUser['role'] !== 'accountant' && !$isProductionRole); ?>;
+
+    if (!container || !searchInput) return;
+
+    function renderSG(list) {
+        if (!list.length) {
+            container.innerHTML = '<div style="padding:25px"><div class="alert alert-info mb-0"><i class="bi bi-info-circle me-2"></i>لا توجد منتجات تطابق البحث</div></div>';
+            return;
+        }
+        const fmt = (n) => parseFloat(n).toLocaleString('ar-EG', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' ج.م';
+        container.innerHTML = list.map(p => {
+            const qty = parseFloat(p.quantity || 0).toFixed(2);
+            const unit = p.unit || 'قطعة';
+            const cat = p.category || '—';
+            const total = parseFloat(p.total_value || 0);
+            const editBtn = canEdit ? `
+                <button type="button" class="btn btn-outline-primary js-edit-second-grade" style="flex:1;min-width:calc(50% - 5px);border-radius:10px;padding:10px 16px;font-weight:bold;font-size:13px;" data-id="${p.id}" data-name="${escapeHtml(p.name)}" data-quantity="${p.quantity}" data-unit="${escapeHtml(unit)}" data-price="${p.unit_price}" data-category="${escapeHtml(cat)}"><i class="bi bi-pencil me-1"></i>تعديل</button>
+                <button type="button" class="btn btn-outline-danger js-delete-second-grade" style="flex:1;min-width:calc(50% - 5px);border-radius:10px;padding:10px 16px;font-weight:bold;font-size:13px;" data-id="${p.id}" data-name="${escapeHtml(p.name)}"><i class="bi bi-trash me-1"></i>حذف</button>` : '';
+            return `<div class="product-card">
+                <div class="product-name">${escapeHtml(p.name)}</div>
+                <div style="color:#94a3b8;font-size:13px;margin-bottom:10px;">فرز تاني</div>
+                <div class="product-detail-row"><span>الصنف:</span> <span>${escapeHtml(cat)}</span></div>
+                <div class="product-detail-row"><span>الكمية:</span> <span><strong>${qty} ${escapeHtml(unit)}</strong></span></div>
+                <div class="product-detail-row"><span>سعر الوحدة:</span> <span>${fmt(p.unit_price)}</span></div>
+                <div class="product-detail-row"><span>الإجمالي:</span> <span><strong class="text-success">${fmt(total)}</strong></span></div>
+                <div class="product-actions" style="display:flex;gap:10px;margin-top:15px;flex-wrap:wrap;">
+                    ${editBtn}
+                    <button type="button" class="btn btn-outline-secondary js-add-qty-second-grade" style="flex:1;min-width:calc(50% - 5px);border-radius:10px;padding:10px 16px;font-weight:bold;font-size:13px;" data-product-id="${p.id}" data-product-name="${escapeHtml(p.name)}" data-quantity="${p.quantity}"><i class="bi bi-plus-circle me-1"></i>إضافة كمية</button>
+                </div>
+            </div>`;
+        }).join('');
+        initSecondGradeButtons();
+    }
+
+    function filterAndRender() {
+        const term = searchInput.value.trim().toLowerCase();
+        const qf = qtyFilter.value;
+        const so = sortOrder.value;
+        let list = sgData.filter(p => {
+            if (term && !(p.name || '').toLowerCase().includes(term)) return false;
+            if (qf === 'available' && parseFloat(p.quantity || 0) <= 0) return false;
+            if (qf === 'unavailable' && parseFloat(p.quantity || 0) > 0) return false;
+            return true;
+        });
+        list.sort((a, b) => {
+            if (so === 'name_asc') return (a.name || '').localeCompare(b.name || '', 'ar');
+            if (so === 'name_desc') return (b.name || '').localeCompare(a.name || '', 'ar');
+            if (so === 'quantity_desc') return parseFloat(b.quantity || 0) - parseFloat(a.quantity || 0);
+            if (so === 'quantity_asc') return parseFloat(a.quantity || 0) - parseFloat(b.quantity || 0);
+            if (so === 'price_desc') return parseFloat(b.unit_price || 0) - parseFloat(a.unit_price || 0);
+            if (so === 'price_asc') return parseFloat(a.unit_price || 0) - parseFloat(b.unit_price || 0);
+            return 0;
+        });
+        renderSG(list);
+    }
+
+    [searchInput, qtyFilter, sortOrder].forEach(el => el.addEventListener('input', filterAndRender));
+    initSecondGradeButtons();
+})();
 
 // ===== دوال موجودة - تعديلها لدعم الموبايل =====
 
@@ -4387,6 +5001,8 @@ window.printExternalInventory = printExternalInventory;
         } finally {
             submitBtn.disabled = false;
             submitBtn.innerHTML = origText;
+            if (typeof window.resetPageLoading === 'function') window.resetPageLoading();
+            if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
         }
     });
 
