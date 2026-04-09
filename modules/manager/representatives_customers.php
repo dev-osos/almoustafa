@@ -7558,5 +7558,34 @@ function closeEditRepCustomerCard() {
     // جعل دالة loadRepCustomers متاحة عالمياً للاستخدام من Pagination
     window.loadRepCustomers = loadRepCustomers;
 })();
+
+// إلحاق قوائم الـ dropdown بـ body لتجاوز overflow في الجدول
+document.addEventListener('show.bs.dropdown', function(e) {
+    const toggle = e.target;
+    if (!toggle.closest('.dashboard-table-wrapper')) return;
+
+    const menu = toggle.nextElementSibling;
+    if (!menu || !menu.classList.contains('dropdown-menu')) return;
+
+    const rect = toggle.getBoundingClientRect();
+    menu._originalParent = menu.parentNode;
+    menu.style.position = 'fixed';
+    menu.style.top = (rect.bottom + 2) + 'px';
+    menu.style.right = (window.innerWidth - rect.right) + 'px';
+    menu.style.left = 'auto';
+    menu.style.margin = '0';
+    menu.style.zIndex = '9999';
+    document.body.appendChild(menu);
+});
+
+document.addEventListener('hide.bs.dropdown', function(e) {
+    const toggle = e.target;
+    const menu = document.body.querySelector('.dropdown-menu.show');
+    if (menu && menu._originalParent) {
+        menu._originalParent.appendChild(menu);
+        menu.removeAttribute('style');
+        delete menu._originalParent;
+    }
+});
 </script>
 
