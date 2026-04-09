@@ -1779,7 +1779,10 @@ foreach ($factoryProducts as $product) {
 
 <div class="company-products-page">
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2" style="width: 100%; max-width: 100%;">
-        <h2 class="mb-0" style="word-wrap: break-word; width: 100%; max-width: 100%;"><i class="bi bi-box-seam me-2 text-primary"></i>منتجات الشركة</h2>
+        <h2 class="mb-0" style="word-wrap: break-word;"><i class="bi bi-box-seam me-2 text-primary"></i>منتجات الشركة</h2>
+        <button type="button" class="btn btn-warning" onclick="showStagnantProductsReport()">
+            <i class="bi bi-hourglass-split me-1"></i>المنتجات الراكدة
+        </button>
     </div>
 
     <?php if ($error): ?>
@@ -5107,5 +5110,170 @@ window.printExternalInventory = printExternalInventory;
         });
     });
 })();
+</script>
+
+<!-- Modal المنتجات الراكدة -->
+<div class="modal fade" id="stagnantProductsModal" tabindex="-1" aria-labelledby="stagnantProductsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title" id="stagnantProductsModalLabel">
+                    <i class="bi bi-hourglass-split me-2"></i>المنتجات الراكدة (لم يتم الخصم منها خلال 21 يوم)
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div id="stagnantLoadingSpinner" class="text-center py-5">
+                    <div class="spinner-border text-warning" role="status"></div>
+                    <div class="mt-2 text-muted">جاري تحميل التقرير...</div>
+                </div>
+                <div id="stagnantContent" style="display:none;">
+                    <div id="stagnantSummary" class="p-3 bg-light border-bottom d-flex gap-3 flex-wrap align-items-center">
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0" style="font-size:14px;">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>#</th>
+                                    <th>اسم المنتج</th>
+                                    <th>القسم</th>
+                                    <th>الصنف</th>
+                                    <th>الكمية المتبقية</th>
+                                    <th>السعر</th>
+                                    <th>رقم التشغيلة</th>
+                                    <th>آخر خصم</th>
+                                    <th>أيام الركود</th>
+                                </tr>
+                            </thead>
+                            <tbody id="stagnantTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div id="stagnantEmpty" class="text-center py-5" style="display:none;">
+                    <i class="bi bi-check-circle text-success" style="font-size:3rem;"></i>
+                    <div class="mt-3 text-success fw-bold">لا توجد منتجات راكدة — جميع المنتجات تم الخصم منها خلال الـ 21 يوم الماضية</div>
+                </div>
+                <div id="stagnantError" class="alert alert-danger m-3" style="display:none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إغلاق</button>
+                <button type="button" class="btn btn-outline-dark" onclick="printStagnantReport()">
+                    <i class="bi bi-printer me-1"></i>طباعة
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+async function showStagnantProductsReport() {
+    const modal = new bootstrap.Modal(document.getElementById('stagnantProductsModal'));
+    modal.show();
+
+    document.getElementById('stagnantLoadingSpinner').style.display = '';
+    document.getElementById('stagnantContent').style.display = 'none';
+    document.getElementById('stagnantEmpty').style.display = 'none';
+    document.getElementById('stagnantError').style.display = 'none';
+
+    try {
+        const url = window.location.href.split('?')[0] + '?page=company_products&action=stagnant_products_report';
+        const response = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+        const json = await response.json();
+
+        document.getElementById('stagnantLoadingSpinner').style.display = 'none';
+
+        if (!json.success) {
+            document.getElementById('stagnantError').style.display = '';
+            document.getElementById('stagnantError').textContent = 'خطأ: ' + (json.message || 'حدث خطأ غير متوقع');
+            return;
+        }
+
+        const data = json.data || [];
+        if (data.length === 0) {
+            document.getElementById('stagnantEmpty').style.display = '';
+            return;
+        }
+
+        // Summary
+        const typeLabels = { factory: 'منتجات المصنع', external: 'منتجات خارجية', second_grade: 'درجة ثانية' };
+        const counts = {};
+        data.forEach(r => { counts[r.product_type] = (counts[r.product_type] || 0) + 1; });
+        let summaryHtml = `<span class="badge bg-warning text-dark fs-6">${data.length} منتج راكد إجمالاً</span>`;
+        Object.entries(counts).forEach(([type, cnt]) => {
+            summaryHtml += ` <span class="badge bg-secondary">${typeLabels[type] || type}: ${cnt}</span>`;
+        });
+        document.getElementById('stagnantSummary').innerHTML = summaryHtml;
+
+        // Table rows
+        const now = new Date();
+        const tbody = document.getElementById('stagnantTableBody');
+        tbody.innerHTML = '';
+        data.forEach((row, idx) => {
+            let daysSince = '—';
+            let daysNum = Infinity;
+            if (row.last_deduction_at) {
+                const lastDate = new Date(row.last_deduction_at);
+                daysNum = Math.floor((now - lastDate) / 86400000);
+                daysSince = daysNum + ' يوم';
+            } else {
+                daysSince = 'لم يُخصم قط';
+            }
+
+            const badgeColor = daysNum >= 60 ? 'danger' : daysNum >= 30 ? 'warning' : 'secondary';
+            const typeLabel = typeLabels[row.product_type] || row.product_type;
+            const qty = parseFloat(row.quantity || 0).toLocaleString('ar-EG', { maximumFractionDigits: 2 });
+            const price = parseFloat(row.unit_price || 0).toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const lastDate = row.last_deduction_at ? row.last_deduction_at.substring(0, 10) : '—';
+
+            tbody.insertAdjacentHTML('beforeend', `
+                <tr>
+                    <td>${idx + 1}</td>
+                    <td><strong>${escapeHtml(row.name || '')}</strong></td>
+                    <td><span class="badge bg-primary">${typeLabel}</span></td>
+                    <td>${escapeHtml(row.category || '—')}</td>
+                    <td>${qty}</td>
+                    <td>${price} ج.م</td>
+                    <td>${escapeHtml(row.batch_number || '—')}</td>
+                    <td>${lastDate}</td>
+                    <td><span class="badge bg-${badgeColor}">${daysSince}</span></td>
+                </tr>
+            `);
+        });
+
+        document.getElementById('stagnantContent').style.display = '';
+    } catch (e) {
+        document.getElementById('stagnantLoadingSpinner').style.display = 'none';
+        document.getElementById('stagnantError').style.display = '';
+        document.getElementById('stagnantError').textContent = 'فشل تحميل التقرير: ' + e.message;
+    }
+}
+
+function printStagnantReport() {
+    const content = document.getElementById('stagnantContent');
+    if (!content || content.style.display === 'none') return;
+    const win = window.open('', '_blank');
+    win.document.write(`
+        <html><head><meta charset="UTF-8"><title>المنتجات الراكدة</title>
+        <style>
+            body { font-family: Arial, sans-serif; direction: rtl; font-size: 13px; }
+            table { width: 100%; border-collapse: collapse; }
+            th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: right; }
+            th { background: #f5c518; }
+            h2 { text-align: center; }
+        </style></head><body>
+        <h2>تقرير المنتجات الراكدة (لم يُخصم منها خلال 21 يوم)</h2>
+        <p>تاريخ التقرير: ${new Date().toLocaleDateString('ar-EG')}</p>
+        ${document.getElementById('stagnantSummary').innerHTML}
+        <br>
+        ${document.querySelector('#stagnantContent .table-responsive').innerHTML}
+        </body></html>
+    `);
+    win.document.close();
+    win.print();
+}
+
+function escapeHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 </script>
 

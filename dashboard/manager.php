@@ -263,6 +263,69 @@ if ($page === 'user_wallet' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_
     }
 }
 
+// معالجة AJAX لتقرير المنتجات الراكدة في صفحة منتجات الشركة
+if ($page === 'company_products' && isset($_GET['action']) && $_GET['action'] === 'stagnant_products_report') {
+    while (ob_get_level() > 0) ob_end_clean();
+    require_once __DIR__ . '/../includes/config.php';
+    require_once __DIR__ . '/../includes/db.php';
+    require_once __DIR__ . '/../includes/auth.php';
+    requireRole(['manager', 'accountant', 'developer', 'production']);
+    header('Content-Type: application/json; charset=UTF-8');
+    $days = 21;
+    $cutoff = date('Y-m-d H:i:s', strtotime("-{$days} days"));
+    $db = db();
+    $result = [];
+    try {
+        $finishedTableExists = $db->queryOne("SHOW TABLES LIKE 'finished_products'");
+        if (!empty($finishedTableExists)) {
+            $factoryStagnant = $db->query("
+                SELECT
+                    fp.id,
+                    fp.product_name AS name,
+                    COALESCE(fp.product_category, 'غير محدد') AS category,
+                    fp.quantity_produced AS quantity,
+                    fp.unit_price,
+                    fp.batch_number,
+                    fp.production_date,
+                    'factory' AS product_type,
+                    (SELECT MAX(im.created_at)
+                     FROM inventory_movements im
+                     WHERE im.product_id = fp.product_id AND im.type = 'out') AS last_deduction_at
+                FROM finished_products fp
+                WHERE fp.quantity_produced > 0
+                HAVING (last_deduction_at IS NULL OR last_deduction_at < ?)
+                ORDER BY last_deduction_at ASC, fp.product_name ASC
+            ", [$cutoff]);
+            foreach ($factoryStagnant as $row) $result[] = $row;
+        }
+        $externalStagnant = $db->query("
+            SELECT
+                p.id,
+                p.name,
+                COALESCE(p.category, 'غير محدد') AS category,
+                p.quantity,
+                p.unit_price,
+                NULL AS batch_number,
+                NULL AS production_date,
+                p.product_type,
+                (SELECT MAX(im.created_at)
+                 FROM inventory_movements im
+                 WHERE im.product_id = p.id AND im.type = 'out') AS last_deduction_at
+            FROM products p
+            WHERE p.product_type IN ('external', 'second_grade')
+              AND p.status = 'active'
+              AND p.quantity > 0
+            HAVING (last_deduction_at IS NULL OR last_deduction_at < ?)
+            ORDER BY last_deduction_at ASC, p.name ASC
+        ", [$cutoff]);
+        foreach ($externalStagnant as $row) $result[] = $row;
+        echo json_encode(['success' => true, 'days' => $days, 'data' => $result, 'cutoff' => $cutoff]);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    }
+    exit;
+}
+
 // بدء output buffering لضمان عدم وجود محتوى قبل DOCTYPE
 if (!ob_get_level()) {
     ob_start();
