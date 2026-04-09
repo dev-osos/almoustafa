@@ -1,53 +1,60 @@
 #!/bin/bash
 # Script for Git Push (zsh/bash)
+# Usage: ./p.sh [commit message]
 # Pushes to origin (default: https://github.com/dev-osos/almoustafa.git)
 
+YELLOW='\033[33m'
+GREEN='\033[32m'
+RED='\033[31m'
+CYAN='\033[36m'
+RESET='\033[0m'
+
+# Go to almostafa/ directory (its own git repo)
 cd "$(dirname "$0")"
 
-echo "\033[33mAdding files...\033[0m"
+printf "${YELLOW}Adding files...${RESET}\n"
 git add -A
 
 if [ -z "$(git status --porcelain)" ]; then
-    echo "\033[36mNo changes to commit\033[0m"
+    printf "${CYAN}No changes to commit${RESET}\n"
     exit 0
 fi
 
-msg="Update - $(date '+%Y-%m-%d %H:%M')"
-echo "\033[33mCreating commit...\033[0m"
+if [ -n "$1" ]; then
+    msg="$1"
+else
+    msg="Update - $(date '+%Y-%m-%d %H:%M')"
+fi
+
+printf "${YELLOW}Creating commit: $msg${RESET}\n"
 git commit -m "$msg"
 
 if [ $? -ne 0 ]; then
-    echo "\033[31mError creating commit\033[0m"
+    printf "${RED}Error creating commit${RESET}\n"
     exit 1
 fi
 
-echo "\033[33mFetching latest changes from remote...\033[0m"
+printf "${YELLOW}Fetching latest changes from remote...${RESET}\n"
 git fetch origin main
 
 local_commit=$(git rev-parse HEAD)
 remote_commit=$(git rev-parse origin/main 2>/dev/null)
 if [ $? -eq 0 ] && [ "$local_commit" != "$remote_commit" ]; then
-    echo "\033[33mRemote has new changes. Pulling changes...\033[0m"
+    printf "${YELLOW}Remote has new changes. Pulling...${RESET}\n"
     git pull origin main --no-rebase
     if [ $? -ne 0 ]; then
-        echo "\033[31mError during pull. You may need to resolve conflicts manually.\033[0m"
-        echo "\033[33mRun 'git pull origin main' manually to resolve conflicts.\033[0m"
+        printf "${RED}Error during pull. Resolve conflicts manually.${RESET}\n"
         exit 1
     fi
-    echo "\033[32mPull completed successfully!\033[0m"
+    printf "${GREEN}Pull completed successfully!${RESET}\n"
 fi
 
-echo "\033[33mPushing to GitHub...\033[0m"
+printf "${YELLOW}Pushing to GitHub...${RESET}\n"
 git push origin main
 
 if [ $? -eq 0 ]; then
-    echo "\033[32mPush completed successfully!\033[0m"
+    printf "${GREEN}Push completed successfully!${RESET}\n"
 else
-    echo "\033[31mError during push\033[0m"
-    echo "\033[33mPlease check:\033[0m"
-    echo "\033[33m1. Internet connection\033[0m"
-    echo "\033[33m2. Authentication credentials\033[0m"
-    echo "\033[33m3. Push permissions\033[0m"
-    echo "\033[33m4. If conflicts exist, resolve them and try again\033[0m"
+    printf "${RED}Error during push. Check internet, credentials, and permissions.${RESET}\n"
     exit 1
 fi

@@ -267,6 +267,48 @@ function handleGetItems($db) {
             }
             break;
 
+        case 'second_grade':
+            $sgItems = $db->query("SELECT id, name, quantity, unit FROM products WHERE product_type = 'second_grade' AND status = 'active' ORDER BY name");
+            if ($sgItems) {
+                foreach ($sgItems as $item) {
+                    $items[] = [
+                        'id' => $item['id'],
+                        'name' => $item['name'],
+                        'table' => 'products',
+                        'quantity_field' => 'quantity',
+                        'current_quantity' => floatval($item['quantity']),
+                        'unit' => $item['unit'] ?: 'قطعة'
+                    ];
+                }
+            }
+            break;
+
+        case 'product_molds':
+            $moldsItems = $db->query(
+                "SELECT pt.id as template_id, pt.product_name,
+                        COALESCE(SUM(fp.quantity_produced), 0) as available_quantity,
+                        MAX(fp.id) as fp_id
+                 FROM product_templates pt
+                 LEFT JOIN finished_products fp ON fp.product_name = pt.product_name
+                 WHERE pt.status = 'active'
+                 GROUP BY pt.id, pt.product_name
+                 HAVING fp_id IS NOT NULL
+                 ORDER BY pt.product_name"
+            );
+            if ($moldsItems) {
+                foreach ($moldsItems as $item) {
+                    $items[] = [
+                        'id' => $item['fp_id'],
+                        'name' => $item['product_name'],
+                        'table' => 'finished_products',
+                        'quantity_field' => 'quantity_produced',
+                        'current_quantity' => floatval($item['available_quantity']),
+                        'unit' => 'قطعة'
+                    ];
+                }
+            }
+            break;
+
         default:
             returnJson(['success' => false, 'message' => 'قسم غير معروف'], 400);
     }
@@ -334,8 +376,8 @@ function handleSubmitReturn($db, $currentUser) {
         $grandTotal = 0;
         $resultItems = [];
 
-        $allowedTables = ['honey_stock', 'nuts_stock', 'sesame_stock', 'date_stock', 'herbal_stock', 'packaging_materials', 'products'];
-        $allowedFields = ['raw_honey_quantity', 'filtered_honey_quantity', 'quantity', 'converted_to_tahini_quantity'];
+        $allowedTables = ['honey_stock', 'nuts_stock', 'sesame_stock', 'date_stock', 'herbal_stock', 'packaging_materials', 'products', 'finished_products'];
+        $allowedFields = ['raw_honey_quantity', 'filtered_honey_quantity', 'quantity', 'converted_to_tahini_quantity', 'quantity_produced'];
 
         foreach ($rows as $row) {
             $department = $row['department'];
