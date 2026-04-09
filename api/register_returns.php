@@ -286,22 +286,20 @@ function handleGetItems($db) {
         case 'product_molds':
             $moldsItems = $db->query(
                 "SELECT pt.id as template_id, pt.product_name,
-                        COALESCE(SUM(fp.quantity_produced), 0) as available_quantity,
-                        MAX(fp.id) as fp_id
+                        COALESCE(SUM(fp.quantity_produced), 0) as available_quantity
                  FROM product_templates pt
                  LEFT JOIN finished_products fp ON fp.product_name = pt.product_name
                  WHERE pt.status = 'active'
                  GROUP BY pt.id, pt.product_name
-                 HAVING fp_id IS NOT NULL
                  ORDER BY pt.product_name"
             );
             if ($moldsItems) {
                 foreach ($moldsItems as $item) {
                     $items[] = [
-                        'id' => $item['fp_id'],
+                        'id' => $item['template_id'],
                         'name' => $item['product_name'],
-                        'table' => 'finished_products',
-                        'quantity_field' => 'quantity_produced',
+                        'table' => 'product_templates',
+                        'quantity_field' => 'id',
                         'current_quantity' => floatval($item['available_quantity']),
                         'unit' => 'قطعة'
                     ];
