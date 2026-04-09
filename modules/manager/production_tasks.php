@@ -6575,11 +6575,54 @@ document.addEventListener('DOMContentLoaded', function () {
                         });
                     }
                     initAllProductNameDropdowns();
+                    // تحديث خيارات قوالب المنتجات في الـ selectors الموجودة بعد تحميل البيانات
+                    refreshTemplateOptionsInSelectors();
                 }
             })
             .catch(error => {
                 console.error('Error loading template suggestions:', error);
             });
+    }
+
+    // تحديث خيارات قوالب المنتجات في جميع الـ type selectors الموجودة
+    function refreshTemplateOptionsInSelectors() {
+        var tplList = (typeof window.__productTemplatesDetailed !== 'undefined' && Array.isArray(window.__productTemplatesDetailed))
+            ? window.__productTemplatesDetailed.filter(function(d) { return d.type === 'template'; })
+            : [];
+        if (tplList.length === 0) return;
+        document.querySelectorAll('.product-type-selector').forEach(function(sel) {
+            // احتفظ بالقيمة الحالية واسم القالب المختار
+            var currentVal = sel.value;
+            var currentTplName = '';
+            var selOpt = sel.options[sel.selectedIndex];
+            if (selOpt) currentTplName = selOpt.getAttribute('data-template-name') || '';
+            // أزل خيارات template الحالية
+            var toRemove = [];
+            for (var i = 0; i < sel.options.length; i++) {
+                if (sel.options[i].value === 'template') toRemove.push(sel.options[i]);
+            }
+            toRemove.forEach(function(o) { sel.removeChild(o); });
+            // أوجد موضع الإدراج (بعد external)
+            var insertAfter = null;
+            for (var j = 0; j < sel.options.length; j++) {
+                if (sel.options[j].value === 'external') { insertAfter = sel.options[j]; break; }
+            }
+            // أضف خيارات القوالب الجديدة
+            tplList.forEach(function(tpl) {
+                var opt = document.createElement('option');
+                opt.value = 'template';
+                opt.setAttribute('data-template-name', tpl.name || '');
+                var tQty = Math.round(parseFloat(tpl.available_qty || 0));
+                opt.textContent = (tpl.name || '') + ' (' + tQty + ' متاح)';
+                if (currentVal === 'template' && currentTplName === tpl.name) opt.selected = true;
+                if (insertAfter && insertAfter.nextSibling) {
+                    sel.insertBefore(opt, insertAfter.nextSibling);
+                    insertAfter = opt;
+                } else {
+                    sel.appendChild(opt);
+                }
+            });
+        });
     }
 
     // دالة مساعدة: جلب تفاصيل المنتج (id, code, type) بالاسم

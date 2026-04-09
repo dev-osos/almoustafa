@@ -2804,7 +2804,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
     </div>
     <div class="card-body">
-        <?php if (empty($paginatedMaterials)): ?>
+        <?php if (empty($filteredMaterials)): ?>
             <div class="text-center text-muted py-4">لا توجد أدوات تعبئة</div>
         <?php else: ?>
             <!-- عرض الجدول على الشاشات الكبيرة -->
@@ -2820,10 +2820,10 @@ document.addEventListener('DOMContentLoaded', function() {
                         </tr>
                     </thead>
                     <tbody>
-                        <?php foreach ($paginatedMaterials as $index => $material):
+                        <?php foreach ($filteredMaterials as $index => $material):
                             $rowCategory = trim((string)($material['type'] ?? $material['category'] ?? ''));
                         ?>
-                            <tr data-category="<?php echo htmlspecialchars($rowCategory, ENT_QUOTES, 'UTF-8'); ?>">
+                            <tr data-category="<?php echo htmlspecialchars($rowCategory, ENT_QUOTES, 'UTF-8'); ?>" data-row-index="<?php echo $index; ?>">
                                 <td style="padding: 0.4rem 0.25rem; font-size: 0.75rem; color: #0dcaf0; font-weight: 600;"><?php echo htmlspecialchars($material['material_id'] ?? ''); ?></td>
                                 <td style="padding: 0.4rem 0.25rem; line-height: 1.3;">
                                     <div style="font-weight: 600; font-size: 0.875rem;"><?php echo htmlspecialchars($material['name']); ?></div>
@@ -2944,10 +2944,10 @@ document.addEventListener('DOMContentLoaded', function() {
             
             <!-- عرض Cards على الموبايل -->
             <div class="d-md-none">
-                <?php foreach ($paginatedMaterials as $index => $material):
+                <?php foreach ($filteredMaterials as $index => $material):
                     $cardCategory = trim((string)($material['type'] ?? $material['category'] ?? ''));
                 ?>
-                    <div class="card mb-3 shadow-sm packaging-mobile-card" data-category="<?php echo htmlspecialchars($cardCategory, ENT_QUOTES, 'UTF-8'); ?>">
+                    <div class="card mb-3 shadow-sm packaging-mobile-card" data-category="<?php echo htmlspecialchars($cardCategory, ENT_QUOTES, 'UTF-8'); ?>" data-row-index="<?php echo $index; ?>">
                         <div class="card-body">
                             <div class="d-flex justify-content-between align-items-start mb-2">
                                 <div class="flex-grow-1">
@@ -3067,50 +3067,10 @@ document.addEventListener('DOMContentLoaded', function() {
             </div>
         <?php endif; ?>
         
-        <!-- Pagination -->
-        <?php if ($totalPages > 1): ?>
-        <nav aria-label="Page navigation" class="mt-3">
-            <ul class="pagination justify-content-center flex-wrap">
-                <li class="page-item <?php echo $pageNum <= 1 ? 'disabled' : ''; ?>">
-                    <a class="page-link" href="?page=packaging_warehouse&p=<?php echo $pageNum - 1; ?>&<?php echo http_build_query($filters); ?>">
-                        <i class="bi bi-chevron-right"></i>
-                    </a>
-                </li>
-                
-                <?php
-                $startPage = max(1, $pageNum - 2);
-                $endPage = min($totalPages, $pageNum + 2);
-                
-                if ($startPage > 1): ?>
-                    <li class="page-item"><a class="page-link" href="?page=packaging_warehouse&p=1&<?php echo http_build_query($filters); ?>">1</a></li>
-                    <?php if ($startPage > 2): ?>
-                        <li class="page-item disabled"><span class="page-link">...</span></li>
-                    <?php endif; ?>
-                <?php endif; ?>
-                
-                <?php for ($i = $startPage; $i <= $endPage; $i++): ?>
-                    <li class="page-item <?php echo $i == $pageNum ? 'active' : ''; ?>">
-                        <a class="page-link" href="?page=packaging_warehouse&p=<?php echo $i; ?>&<?php echo http_build_query($filters); ?>">
-                            <?php echo $i; ?>
-                        </a>
-                    </li>
-                <?php endfor; ?>
-                
-                <?php if ($endPage < $totalPages): ?>
-                    <?php if ($endPage < $totalPages - 1): ?>
-                        <li class="page-item disabled"><span class="page-link">...</span></li>
-                    <?php endif; ?>
-                    <li class="page-item"><a class="page-link" href="?page=packaging_warehouse&p=<?php echo $totalPages; ?>&<?php echo http_build_query($filters); ?>"><?php echo $totalPages; ?></a></li>
-                <?php endif; ?>
-                
-                <li class="page-item <?php echo $pageNum >= $totalPages ? 'disabled' : ''; ?>">
-                    <a class="page-link" href="?page=packaging_warehouse&p=<?php echo $pageNum + 1; ?>&<?php echo http_build_query($filters); ?>">
-                        <i class="bi bi-chevron-left"></i>
-                    </a>
-                </li>
-            </ul>
+        <!-- Pagination (dynamic - no refresh) -->
+        <nav id="packagingPagination" aria-label="Page navigation" class="mt-3" style="display:none;">
+            <ul class="pagination justify-content-center flex-wrap" id="packagingPaginationList"></ul>
         </nav>
-        <?php endif; ?>
     </div>
 </div>
 
@@ -3819,6 +3779,76 @@ function toggleWeightFields(value) {
 
 const aliasApiUrl = '<?php echo getRelativeUrl('api/update_packaging_alias.php'); ?>';
 const nextCodeApiUrl = '<?php echo getRelativeUrl('production.php?page=packaging_warehouse&ajax=next_code'); ?>';
+
+// Dynamic pagination
+(function () {
+    const PER_PAGE = <?php echo $perPage; ?>;
+    const TOTAL = <?php echo $totalMaterials; ?>;
+    const INIT_PAGE = <?php echo $pageNum; ?>;
+    let currentPage = INIT_PAGE;
+    const totalPages = Math.ceil(TOTAL / PER_PAGE);
+
+    function getRows() {
+        return Array.from(document.querySelectorAll(
+            '.packaging-table tbody tr[data-row-index], .packaging-mobile-card[data-row-index]'
+        ));
+    }
+
+    function showPage(page) {
+        currentPage = Math.max(1, Math.min(page, totalPages));
+        const start = (currentPage - 1) * PER_PAGE;
+        const end = start + PER_PAGE - 1;
+        getRows().forEach(el => {
+            const idx = parseInt(el.getAttribute('data-row-index'), 10);
+            el.style.display = (idx >= start && idx <= end) ? '' : 'none';
+        });
+        renderPagination();
+    }
+
+    function renderPagination() {
+        const nav = document.getElementById('packagingPagination');
+        const list = document.getElementById('packagingPaginationList');
+        if (!nav || !list || totalPages <= 1) {
+            if (nav) nav.style.display = 'none';
+            return;
+        }
+        nav.style.display = '';
+        const startP = Math.max(1, currentPage - 2);
+        const endP = Math.min(totalPages, currentPage + 2);
+        let html = '';
+
+        html += `<li class="page-item ${currentPage <= 1 ? 'disabled' : ''}">
+            <a class="page-link" href="#" data-p="${currentPage - 1}"><i class="bi bi-chevron-right"></i></a></li>`;
+
+        if (startP > 1) {
+            html += `<li class="page-item"><a class="page-link" href="#" data-p="1">1</a></li>`;
+            if (startP > 2) html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+        }
+        for (let i = startP; i <= endP; i++) {
+            html += `<li class="page-item ${i === currentPage ? 'active' : ''}">
+                <a class="page-link" href="#" data-p="${i}">${i}</a></li>`;
+        }
+        if (endP < totalPages) {
+            if (endP < totalPages - 1) html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+            html += `<li class="page-item"><a class="page-link" href="#" data-p="${totalPages}">${totalPages}</a></li>`;
+        }
+        html += `<li class="page-item ${currentPage >= totalPages ? 'disabled' : ''}">
+            <a class="page-link" href="#" data-p="${currentPage + 1}"><i class="bi bi-chevron-left"></i></a></li>`;
+
+        list.innerHTML = html;
+        list.querySelectorAll('a[data-p]').forEach(a => {
+            a.addEventListener('click', function (e) {
+                e.preventDefault();
+                const p = parseInt(this.getAttribute('data-p'), 10);
+                if (p >= 1 && p <= totalPages && p !== currentPage) showPage(p);
+            });
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        showPage(INIT_PAGE);
+    });
+})();
 
 document.addEventListener('DOMContentLoaded', function () {
     const headerPrintButton = document.getElementById('printPackagingWarehouseReportButton');
