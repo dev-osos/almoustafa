@@ -299,7 +299,7 @@ function handleGetItems($db) {
                         'id' => $item['template_id'],
                         'name' => $item['product_name'],
                         'table' => 'product_templates',
-                        'quantity_field' => 'id',
+                        'quantity_field' => 'quantity_produced',
                         'current_quantity' => floatval($item['available_quantity']),
                         'unit' => 'قطعة'
                     ];
@@ -374,7 +374,7 @@ function handleSubmitReturn($db, $currentUser) {
         $grandTotal = 0;
         $resultItems = [];
 
-        $allowedTables = ['honey_stock', 'nuts_stock', 'sesame_stock', 'date_stock', 'herbal_stock', 'packaging_materials', 'products', 'finished_products'];
+        $allowedTables = ['honey_stock', 'nuts_stock', 'sesame_stock', 'date_stock', 'herbal_stock', 'packaging_materials', 'products', 'product_templates'];
         $allowedFields = ['raw_honey_quantity', 'filtered_honey_quantity', 'quantity', 'converted_to_tahini_quantity', 'quantity_produced'];
 
         foreach ($rows as $row) {
@@ -390,20 +390,37 @@ function handleSubmitReturn($db, $currentUser) {
                 throw new Exception("جدول أو حقل غير مسموح به");
             }
 
-            // Get current quantity
-            $currentRecord = $db->queryOne("SELECT `$quantityField` FROM `$table` WHERE id = ?", [$itemId]);
-            if (!$currentRecord) {
-                throw new Exception("العنصر غير موجود: $itemId في $table");
+            if ($table === 'product_templates') {
+                // قوالب المنتجات: الكمية مخزنة في finished_products
+                $template = $db->queryOne("SELECT id, product_name FROM product_templates WHERE id = ?", [$itemId]);
+                if (!$template) throw new Exception("القالب غير موجود: $itemId");
+
+                $productName = $template['product_name'];
+                $beforeQty = floatval($db->queryOne(
+                    "SELECT COALESCE(SUM(quantity_produced), 0) as total FROM finished_products WHERE product_name = ?",
+                    [$productName]
+                )['total'] ?? 0);
+                $afterQty = $beforeQty + $addedQty;
+
+                // أضف سجل مرتجع في finished_products
+                $db->execute(
+                    "INSERT INTO finished_products (batch_id, product_name, batch_number, production_date, quantity_produced) VALUES (0, ?, ?, CURDATE(), ?)",
+                    [$productName, 'RETURN-' . $returnId, intval($addedQty)]
+                );
+            } else {
+                // Get current quantity
+                $currentRecord = $db->queryOne("SELECT `$quantityField` FROM `$table` WHERE id = ?", [$itemId]);
+                if (!$currentRecord) throw new Exception("العنصر غير موجود: $itemId في $table");
+
+                $beforeQty = floatval($currentRecord[$quantityField]);
+                $afterQty = $beforeQty + $addedQty;
+
+                // Update inventory (add returned items back)
+                $db->execute(
+                    "UPDATE `$table` SET `$quantityField` = ? WHERE id = ?",
+                    [$afterQty, $itemId]
+                );
             }
-
-            $beforeQty = floatval($currentRecord[$quantityField]);
-            $afterQty = $beforeQty + $addedQty;
-
-            // Update inventory (add returned items back)
-            $db->execute(
-                "UPDATE `$table` SET `$quantityField` = ? WHERE id = ?",
-                [$afterQty, $itemId]
-            );
 
             // Insert return item
             $db->execute(
