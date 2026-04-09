@@ -35,13 +35,13 @@ if [ $? -ne 0 ]; then
 fi
 
 printf "${YELLOW}Fetching latest changes from remote...${RESET}\n"
-git fetch origin main
+git fetch dev-osos main
 
 local_commit=$(git rev-parse HEAD)
 remote_commit=$(git rev-parse origin/main 2>/dev/null)
 if [ $? -eq 0 ] && [ "$local_commit" != "$remote_commit" ]; then
     printf "${YELLOW}Remote has new changes. Pulling...${RESET}\n"
-    git pull origin main --no-rebase
+    git pull dev-osos main --no-rebase
     if [ $? -ne 0 ]; then
         printf "${RED}Error during pull. Resolve conflicts manually.${RESET}\n"
         exit 1
@@ -50,7 +50,7 @@ if [ $? -eq 0 ] && [ "$local_commit" != "$remote_commit" ]; then
 fi
 
 printf "${YELLOW}Pushing to GitHub...${RESET}\n"
-git push origin main
+git push dev-osos main
 
 if [ $? -eq 0 ]; then
     printf "${GREEN}Push completed successfully!${RESET}\n"
