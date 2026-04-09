@@ -6900,7 +6900,6 @@ document.addEventListener('DOMContentLoaded', function () {
                         <input type="text" class="form-control product-name-input" name="products[${productIndex}][name]" placeholder="اختر من القائمة" autocomplete="off">
                         <div class="product-template-dropdown d-none"></div>
                     </div>
-                    <div class="template-picker d-none mt-2"></div>
                 </div>
                 <div class="col-6 col-md-2">
                     <label class="form-label small">الكمية</label>
