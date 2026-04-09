@@ -214,6 +214,10 @@ null,
         }
     } elseif ($action === 'update_external_product') {
         $isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
+        if ($isAjax) {
+            // تنظيف أي output مخزن مؤقتاً (HTML من الصفحة الرئيسية) قبل إرسال JSON
+            while (ob_get_level() > 0) ob_end_clean();
+        }
         // منع المحاسب وعامل الإنتاج من التعديل على المنتجات الخارجية
         if ($currentUser['role'] === 'accountant' || $currentUser['role'] === 'production') {
             if ($isAjax) {
@@ -2114,7 +2118,7 @@ foreach ($factoryProducts as $product) {
         <h5 class="mb-0"><i class="bi bi-pencil me-2"></i>تعديل منتج خارجي</h5>
     </div>
     <div class="card-body">
-        <form method="POST" id="editExternalProductForm">
+        <form method="POST" id="editExternalProductForm" data-no-loading="true">
             <input type="hidden" name="action" value="update_external_product">
             <input type="hidden" name="product_id" id="editCard_product_id">
             <div class="mb-3">
