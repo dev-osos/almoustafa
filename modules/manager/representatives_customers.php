@@ -7563,28 +7563,46 @@ function closeEditRepCustomerCard() {
 document.addEventListener('show.bs.dropdown', function(e) {
     const toggle = e.target;
     if (!toggle.closest('.dashboard-table-wrapper')) return;
-
     const menu = toggle.nextElementSibling;
     if (!menu || !menu.classList.contains('dropdown-menu')) return;
-
-    const rect = toggle.getBoundingClientRect();
+    menu._ddToggle = toggle;
     menu._originalParent = menu.parentNode;
-    menu.style.position = 'fixed';
-    menu.style.top = (rect.bottom + 2) + 'px';
-    menu.style.right = (window.innerWidth - rect.right) + 'px';
-    menu.style.left = 'auto';
-    menu.style.margin = '0';
-    menu.style.zIndex = '9999';
     document.body.appendChild(menu);
 });
 
-document.addEventListener('hide.bs.dropdown', function(e) {
+document.addEventListener('shown.bs.dropdown', function(e) {
     const toggle = e.target;
+    if (!toggle.closest('.dashboard-table-wrapper')) return;
+    const menu = document.body.querySelector('.dropdown-menu.show');
+    if (!menu || !menu._ddToggle) return;
+
+    const rect = menu._ddToggle.getBoundingClientRect();
+    const menuHeight = menu.offsetHeight;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+
+    menu.style.position = 'fixed';
+    menu.style.zIndex = '9999';
+    menu.style.margin = '0';
+    menu.style.right = (window.innerWidth - rect.right) + 'px';
+    menu.style.left = 'auto';
+
+    if (spaceBelow >= menuHeight || spaceBelow >= spaceAbove) {
+        menu.style.top = (rect.bottom + 2) + 'px';
+        menu.style.bottom = 'auto';
+    } else {
+        menu.style.bottom = (window.innerHeight - rect.top + 2) + 'px';
+        menu.style.top = 'auto';
+    }
+});
+
+document.addEventListener('hide.bs.dropdown', function(e) {
     const menu = document.body.querySelector('.dropdown-menu.show');
     if (menu && menu._originalParent) {
         menu._originalParent.appendChild(menu);
         menu.removeAttribute('style');
         delete menu._originalParent;
+        delete menu._ddToggle;
     }
 });
 </script>
