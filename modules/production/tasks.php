@@ -1895,8 +1895,6 @@ function tasksHtml(string $value): string
 
                                 $statusLabel = [
                                     'pending' => 'معلقة',
-                                    'received' => 'مستلمة',
-                                    'in_progress' => 'قيد التنفيذ',
                                     'completed' => 'مكتملة',
                                     'with_delegate' => 'مع المندوب',
                                     'with_driver' => 'مع السائق',
@@ -2737,8 +2735,6 @@ if ($filterTaskId !== '' && !empty($tasks) && count($tasks) === 1) {
 
     const statusLabelMap = {
         'pending': 'معلقة',
-        'received': 'مستلمة',
-        'in_progress': 'قيد التنفيذ',
         'completed': 'مكتملة',
         'with_delegate': 'مع المندوب',
         'with_driver': 'مع السائق',
@@ -3032,7 +3028,6 @@ if ($filterTaskId !== '' && !empty($tasks) && count($tasks) === 1) {
 
         const statusText = {
             'pending': 'معلقة',
-            'received': 'مستلمة',
             'completed': 'مكتملة',
             'with_delegate': 'مع المندوب',
             'with_driver': 'مع السائق',

@@ -150,7 +150,7 @@ if (!function_exists('managerEnsureTasksStatusEnum')) {
             // العمود ENUM — تحقق إن كانت القيمة الجديدة موجودة
             if (stripos($statusType, 'with_shipping_company') === false) {
                 try {
-                    $db->execute("ALTER TABLE tasks MODIFY COLUMN status ENUM('pending','received','in_progress','completed','with_delegate','with_driver','with_shipping_company','delivered','returned','cancelled') DEFAULT 'pending'");
+                    $db->execute("ALTER TABLE tasks MODIFY COLUMN status ENUM('pending','in_progress','completed','with_delegate','with_driver','with_shipping_company','delivered','returned','cancelled') DEFAULT 'pending'");
                 } catch (Throwable $enumError) {
                     // فشل تعديل ENUM — تحويل إلى VARCHAR يقبل أي قيمة
                     error_log('managerEnsureTasksStatusEnum ENUM alter failed, converting to VARCHAR: ' . $enumError->getMessage());
@@ -1822,7 +1822,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($taskId <= 0) {
             $error = 'معرف المهمة غير صحيح.';
-        } elseif (!in_array($newStatus, ['pending', 'received', 'in_progress', 'completed', 'with_delegate', 'with_shipping_company', 'delivered', 'returned', 'cancelled'], true)) {
+        } elseif (!in_array($newStatus, ['pending', 'completed', 'with_delegate', 'with_shipping_company', 'delivered', 'returned', 'cancelled'], true)) {
             $error = 'حالة المهمة غير صحيحة.';
         } else {
             try {
@@ -2887,8 +2887,6 @@ try {
 $recentTasks = [];
 $statusStyles = [
     'pending' => ['class' => 'warning', 'label' => 'معلقة'],
-    'received' => ['class' => 'info', 'label' => 'مستلمة'],
-    'in_progress' => ['class' => 'primary', 'label' => 'قيد التنفيذ'],
     'completed' => ['class' => 'success', 'label' => 'مكتملة'],
     'with_delegate' => ['class' => 'info', 'label' => 'مع المندوب'],
     'with_driver' => ['class' => 'primary', 'label' => 'مع السائق'],
@@ -4551,10 +4549,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                             'مع_السائق' => 'with_driver',
                                             'مع السائق' => 'with_driver',
                                             'معلقة' => 'pending',
-                                            'مستلمة' => 'received',
-                                            'قيد_التنفيذ' => 'in_progress',
-                                            'قيد التنفيذ' => 'in_progress',
-                                            'مكتملة' => 'completed',
+\                                           'مكتملة' => 'completed',
                                             'تم_التوصيل' => 'delivered',
                                             'تم التوصيل' => 'delivered',
                                             'تم_الارجاع' => 'returned',
@@ -8092,7 +8087,7 @@ window.openChangeStatusModal = function(taskId, currentStatus) {
 
         const statusLabels = {
             'pending': 'معلقة',
-            'received': 'مستلمة',
+            'received': '',
             'completed': 'مكتملة',
             'with_delegate': 'مع المندوب',
             'with_shipping_company': 'مع شركة الشحن',
@@ -8167,7 +8162,6 @@ window.openChangeStatusModal = function(taskId, currentStatus) {
     // عرض الحالة الحالية
     const statusLabels = {
         'pending': 'معلقة',
-        'received': 'مستلمة',
         'completed': 'مكتملة',
         'with_delegate': 'مع المندوب',
         'with_shipping_company': 'مع شركة الشحن',
@@ -8870,8 +8864,6 @@ document.addEventListener('click', function (e) {
 (function () {
     var statusMeta = {
         'pending':               { cls: 'warning',   label: 'معلقة' },
-        'received':              { cls: 'info',       label: 'مستلمة' },
-        'in_progress':           { cls: 'primary',    label: 'قيد التنفيذ' },
         'completed':             { cls: 'success',    label: 'مكتملة' },
         'with_delegate':         { cls: 'info',       label: 'مع المندوب' },
         'with_driver':           { cls: 'primary',    label: 'مع السائق' },
