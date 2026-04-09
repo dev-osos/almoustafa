@@ -330,34 +330,48 @@ if ($page === 'company_products' && isset($_GET['action']) && $_GET['action'] ==
                     COALESCE(pr.category,'غير محدد') AS category,
                     fp.quantity_produced AS quantity, fp.unit_price, fp.batch_number, fp.production_date,
                     'factory' AS product_type,
-                    GREATEST(
-                        COALESCE((SELECT MAX(im.created_at) FROM inventory_movements im WHERE im.product_id = fp.product_id AND im.type = 'out'), '2000-01-01'),
-                        COALESCE(pr.updated_at, '2000-01-01')
-                    ) AS last_deduction_at
+                    (SELECT MAX(im.created_at) FROM inventory_movements im WHERE im.product_id = fp.product_id AND im.type = 'out') AS last_im_out,
+                    pr.updated_at AS pr_updated_at
                 FROM finished_products fp
                 LEFT JOIN products pr ON pr.id = fp.product_id
                 WHERE fp.quantity_produced > 0
-                HAVING last_deduction_at < ?
-                ORDER BY last_deduction_at ASC, name ASC
-            ", [$cutoff]);
+                  AND (pr.updated_at IS NULL OR pr.updated_at < ?)
+                  AND NOT EXISTS (
+                      SELECT 1 FROM inventory_movements im
+                      WHERE im.product_id = fp.product_id AND im.type = 'out' AND im.created_at >= ?
+                  )
+                ORDER BY pr.updated_at ASC, fp.product_name ASC
+            ", [$cutoff, $cutoff]);
             foreach ($factoryStagnant as $row) {
-                if ($row['last_deduction_at'] === '2000-01-01 00:00:00') $row['last_deduction_at'] = null;
+                $im = $row['last_im_out']; $upd = $row['pr_updated_at'];
+                if ($im && $upd) $row['last_deduction_at'] = ($im > $upd ? $im : $upd);
+                elseif ($im) $row['last_deduction_at'] = $im;
+                elseif ($upd) $row['last_deduction_at'] = $upd;
+                else $row['last_deduction_at'] = null;
+                unset($row['last_im_out'], $row['pr_updated_at']);
                 $result[] = $row;
             }
         }
         $externalStagnant = $db->query("
             SELECT p.id, p.name, COALESCE(p.category,'غير محدد') AS category, p.quantity, p.unit_price,
                 NULL AS batch_number, NULL AS production_date, p.product_type,
-                GREATEST(
-                    COALESCE((SELECT MAX(im.created_at) FROM inventory_movements im WHERE im.product_id = p.id AND im.type = 'out'), '2000-01-01'),
-                    COALESCE(p.updated_at, '2000-01-01')
-                ) AS last_deduction_at
+                (SELECT MAX(im.created_at) FROM inventory_movements im WHERE im.product_id = p.id AND im.type = 'out') AS last_im_out,
+                p.updated_at AS pr_updated_at
             FROM products p WHERE p.product_type IN ('external','second_grade') AND p.status = 'active' AND p.quantity > 0
-            HAVING last_deduction_at < ?
-            ORDER BY last_deduction_at ASC, p.name ASC
-        ", [$cutoff]);
+              AND (p.updated_at IS NULL OR p.updated_at < ?)
+              AND NOT EXISTS (
+                  SELECT 1 FROM inventory_movements im
+                  WHERE im.product_id = p.id AND im.type = 'out' AND im.created_at >= ?
+              )
+            ORDER BY p.updated_at ASC, p.name ASC
+        ", [$cutoff, $cutoff]);
         foreach ($externalStagnant as $row) {
-            if ($row['last_deduction_at'] === '2000-01-01 00:00:00') $row['last_deduction_at'] = null;
+            $im = $row['last_im_out']; $upd = $row['pr_updated_at'];
+            if ($im && $upd) $row['last_deduction_at'] = ($im > $upd ? $im : $upd);
+            elseif ($im) $row['last_deduction_at'] = $im;
+            elseif ($upd) $row['last_deduction_at'] = $upd;
+            else $row['last_deduction_at'] = null;
+            unset($row['last_im_out'], $row['pr_updated_at']);
             $result[] = $row;
         }
         echo json_encode(['success' => true, 'days' => $days, 'data' => $result, 'cutoff' => $cutoff]);
