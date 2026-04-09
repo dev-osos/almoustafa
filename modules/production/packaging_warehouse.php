@@ -1639,11 +1639,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             throw new Exception('لم يتم العثور على أداة التعبئة المطلوبة.');
                         }
 
+                        $resolvedMaterialCode = $materialCode !== '' ? $materialCode : ($original['material_id'] ?? null);
+
                         $pmUpdateParams = [
                             $name,
                             $typeValue !== '' ? $typeValue : null,
                             $unitValue !== '' ? $unitValue : null,
-                            $materialCode !== '' ? $materialCode : null,
+                            $resolvedMaterialCode,
                             $specificationsValue !== '' ? $specificationsValue : null,
                             $weightValue,
                             $weightUnitValue !== '' ? $weightUnitValue : null,

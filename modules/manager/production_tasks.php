@@ -296,6 +296,48 @@ if (is_readable($quJsonPath)) {
     }
 }
 
+// جلب قوالب المنتجات مع الكميات المتاحة
+$productTemplatesForTask = [];
+try {
+    // محاولة من unified_product_templates أولاً
+    $upt = $db->queryOne("SHOW TABLES LIKE 'unified_product_templates'");
+    if (!empty($upt)) {
+        $productTemplatesForTask = $db->query("
+            SELECT upt.id, upt.product_name,
+                   COALESCE(pr.qty, 0) AS available_qty
+            FROM unified_product_templates upt
+            LEFT JOIN (
+                SELECT name, SUM(quantity) AS qty
+                FROM products
+                WHERE status = 'active' AND (product_type = 'internal' OR product_type IS NULL)
+                GROUP BY name
+            ) pr ON pr.name = upt.product_name
+            WHERE upt.status = 'active'
+            ORDER BY upt.product_name ASC
+        ");
+    }
+    if (empty($productTemplatesForTask)) {
+        $pt = $db->queryOne("SHOW TABLES LIKE 'product_templates'");
+        if (!empty($pt)) {
+            $productTemplatesForTask = $db->query("
+                SELECT pt.id, pt.product_name,
+                       COALESCE(pr.qty, 0) AS available_qty
+                FROM product_templates pt
+                LEFT JOIN (
+                    SELECT name, SUM(quantity) AS qty
+                    FROM products
+                    WHERE status = 'active' AND (product_type = 'internal' OR product_type IS NULL)
+                    GROUP BY name
+                ) pr ON pr.name = pt.product_name
+                WHERE pt.status = 'active'
+                ORDER BY pt.product_name ASC
+            ");
+        }
+    }
+} catch (Exception $e) {
+    error_log('Error fetching product templates for task form: ' . $e->getMessage());
+}
+
 // جلب قائمة العملاء المحليين
 $localCustomersForDropdown = [];
 try {
@@ -3879,7 +3921,16 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                             <select class="form-select form-select-sm product-type-selector mb-1" name="products[0][item_type]">
                                                 <option value="">— اختر النوع —</option>
                                                 <option value="external">منتجات خارجية</option>
-                                                <option value="template">منتجات المصنع</option>
+                                                <?php if (!empty($productTemplatesForTask)): ?>
+                                                    <?php foreach ($productTemplatesForTask as $tpl): ?>
+                                                    <option value="template" data-template-name="<?php echo htmlspecialchars($tpl['product_name'], ENT_QUOTES, 'UTF-8'); ?>">
+                                                        <?php echo htmlspecialchars($tpl['product_name'], ENT_QUOTES, 'UTF-8'); ?>
+                                                        (<?php echo number_format((float)$tpl['available_qty'], 0); ?> متاح)
+                                                    </option>
+                                                    <?php endforeach; ?>
+                                                <?php else: ?>
+                                                    <option value="template">منتجات المصنع</option>
+                                                <?php endif; ?>
                                                 <option value="raw_material">خامات</option>
                                                 <option value="packaging">أدوات تعبئة</option>
                                             </select>
@@ -5240,10 +5291,21 @@ function buildEditProductRow(idx, product) {
     var unitOpts = unitList.map(function(u) {
         return '<option value="' + u + '"' + (u === unitVal ? ' selected' : '') + '>' + u + '</option>';
     }).join('');
+    var __tplDetailed = (typeof window.__productTemplatesDetailed !== 'undefined' && Array.isArray(window.__productTemplatesDetailed))
+        ? window.__productTemplatesDetailed.filter(function(d) { return d.type === 'template'; })
+        : [];
+    var templateOpts = __tplDetailed.length > 0
+        ? __tplDetailed.map(function(tpl) {
+            var tName = (tpl.name || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            var tQty = Math.round(parseFloat(tpl.available_qty || 0));
+            var isSelected = (typeSelectorVal === 'template' && nameVal === (tpl.name || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'));
+            return '<option value="template" data-template-name="' + tName + '"' + (isSelected ? ' selected' : '') + '>' + tName + ' (' + tQty + ' متاح)</option>';
+          }).join('')
+        : '<option value="template"' + (typeSelectorVal === 'template' ? ' selected' : '') + '>🏭 منتجات المصنع</option>';
     var typeSelectorOpts =
         '<option value=""' + (typeSelectorVal === '' ? ' selected' : '') + '>— اختر النوع —</option>' +
         '<option value="external"' + (typeSelectorVal === 'external' ? ' selected' : '') + '>📦 منتجات خارجية</option>' +
-        '<option value="template"' + (typeSelectorVal === 'template' ? ' selected' : '') + '>🏭 منتجات المصنع</option>' +
+        templateOpts +
         '<option value="raw_material"' + (typeSelectorVal === 'raw_material' ? ' selected' : '') + '>⚗️ خامات</option>' +
         '<option value="packaging"' + (typeSelectorVal === 'packaging' ? ' selected' : '') + '>🧴 أدوات تعبئة</option>';
     var quCats = (typeof __quCategories !== 'undefined' && Array.isArray(__quCategories)) ? __quCategories : [];
@@ -6745,11 +6807,19 @@ document.addEventListener('DOMContentLoaded', function () {
             var val = selectEl.value;
             // تطبيق قيود الوحدة والحقول حسب النوع
             applyRawMaterialUnitRestriction(row, val);
-            // مسح اسم المنتج وفتح القائمة مفلترة
+            // إذا كان الخيار المحدد قالب محدد، أملأ الاسم تلقائياً
+            var selectedOpt = selectEl.options[selectEl.selectedIndex];
+            var templateName = selectedOpt ? (selectedOpt.getAttribute('data-template-name') || '') : '';
             if (nameInput) {
-                nameInput.value = '';
-                nameInput.focus();
-                nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+                if (templateName) {
+                    nameInput.value = templateName;
+                    nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    if (val === 'template') updateRawMaterialQtyDisplay(row, templateName);
+                } else {
+                    nameInput.value = '';
+                    nameInput.focus();
+                    nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+                }
             }
         });
         selectEl.dataset.typeSelectorInited = '1';
@@ -6779,6 +6849,18 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
     
+    function buildTemplateOptions() {
+        var tplList = (typeof window.__productTemplatesDetailed !== 'undefined' && Array.isArray(window.__productTemplatesDetailed))
+            ? window.__productTemplatesDetailed.filter(function(d) { return d.type === 'template'; })
+            : [];
+        if (tplList.length === 0) return '<option value="template">🏭 منتجات المصنع</option>';
+        return tplList.map(function(tpl) {
+            var tName = (tpl.name || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            var tQty = Math.round(parseFloat(tpl.available_qty || 0));
+            return '<option value="template" data-template-name="' + tName + '">' + tName + ' (' + tQty + ' متاح)</option>';
+        }).join('');
+    }
+
     function addProductRow() {
         const quCats = (typeof __quCategories !== 'undefined' && Array.isArray(__quCategories)) ? __quCategories : [];
         const categoryOptions = quCats.map(function(qc) {
@@ -6795,7 +6877,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     <select class="form-select form-select-sm product-type-selector mb-1" name="products[${productIndex}][item_type]">
                         <option value="">— اختر النوع —</option>
                         <option value="external">📦 منتجات خارجية</option>
-                        <option value="template">🏭 منتجات المصنع</option>
+                        ${buildTemplateOptions()}
                         <option value="raw_material">⚗️ خامات</option>
                         <option value="packaging">🧴 أدوات تعبئة</option>
                     </select>
