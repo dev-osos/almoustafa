@@ -143,7 +143,9 @@ $apiUrl = getRelativeUrl('api/register_returns.php');
     const departmentOptions = [
         { value: 'raw_materials', label: 'خامات', qtyLabel: 'الكمية / الوزن' },
         { value: 'packaging', label: 'أدوات تعبئة', qtyLabel: 'الكمية' },
-        { value: 'external_products', label: 'منتجات خارجية', qtyLabel: 'الكمية' }
+        { value: 'external_products', label: 'منتجات خارجية', qtyLabel: 'الكمية' },
+        { value: 'second_grade', label: 'الفرز التاني', qtyLabel: 'الكمية' },
+        { value: 'product_molds', label: 'قوالب المنتجات', qtyLabel: 'الكمية' }
     ];
 
     const returnRows = document.getElementById('returnRows');
