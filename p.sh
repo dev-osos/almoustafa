@@ -38,7 +38,7 @@ printf "${YELLOW}Fetching latest changes from remote...${RESET}\n"
 git fetch dev-osos main
 
 local_commit=$(git rev-parse HEAD)
-remote_commit=$(git rev-parse origin/main 2>/dev/null)
+remote_commit=$(git rev-parse dev-osos/main 2>/dev/null)
 if [ $? -eq 0 ] && [ "$local_commit" != "$remote_commit" ]; then
     printf "${YELLOW}Remote has new changes. Pulling...${RESET}\n"
     git pull dev-osos main --no-rebase
