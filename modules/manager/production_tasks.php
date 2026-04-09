@@ -4549,7 +4549,6 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                             'with_shipping_company___' => 'with_shipping_company',
                                             'with_shipping_company____' => 'with_shipping_company',
                                             'with_shipping_company_____' => 'with_shipping_company',
-                                            'with_shipping_company______' => 'with_shipping_company',
                                             'with_shipping_company_______' => 'with_shipping_company',
                                             'with shipping company' => 'with_shipping_company',
                                             'مع_المندوب' => 'with_delegate',
