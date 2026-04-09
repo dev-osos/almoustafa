@@ -3921,16 +3921,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                             <select class="form-select form-select-sm product-type-selector mb-1" name="products[0][item_type]">
                                                 <option value="">— اختر النوع —</option>
                                                 <option value="external">منتجات خارجية</option>
-                                                <?php if (!empty($productTemplatesForTask)): ?>
-                                                    <?php foreach ($productTemplatesForTask as $tpl): ?>
-                                                    <option value="template" data-template-name="<?php echo htmlspecialchars($tpl['product_name'], ENT_QUOTES, 'UTF-8'); ?>">
-                                                        <?php echo htmlspecialchars($tpl['product_name'], ENT_QUOTES, 'UTF-8'); ?>
-                                                        (<?php echo number_format((float)$tpl['available_qty'], 0); ?> متاح)
-                                                    </option>
-                                                    <?php endforeach; ?>
-                                                <?php else: ?>
-                                                    <option value="template">منتجات المصنع</option>
-                                                <?php endif; ?>
+                                                <option value="template">🏭 منتجات المصنع</option>
                                                 <option value="raw_material">خامات</option>
                                                 <option value="packaging">أدوات تعبئة</option>
                                             </select>
@@ -3938,6 +3929,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                                 <input type="text" class="form-control product-name-input" name="products[0][name]" placeholder="اختر من القائمة" autocomplete="off" required>
                                                 <div class="product-template-dropdown d-none"></div>
                                             </div>
+                                            <div class="template-picker d-none mt-2"></div>
                                         </div>
                                         <div class="col-6 col-md-2">
                                             <label class="form-label small">الكمية</label>
@@ -5196,6 +5188,13 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
 .product-template-dropdown .product-template-item { padding: 0.5rem 0.75rem; cursor: pointer; border-bottom: 1px solid #f0f0f0; }
 .product-template-dropdown .product-template-item:hover { background: #f8f9fa; }
 .product-template-dropdown .product-template-item:last-child { border-bottom: none; }
+.template-picker { display: flex; flex-wrap: wrap; gap: 0.4rem; padding: 0.5rem; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; max-height: 200px; overflow-y: auto; }
+.template-picker-btn { display: flex; flex-direction: column; align-items: flex-start; gap: 0.1rem; padding: 0.35rem 0.6rem; border: 1px solid #dee2e6; border-radius: 6px; background: #fff; cursor: pointer; font-size: 0.8rem; transition: all 0.15s; text-align: right; }
+.template-picker-btn:hover { border-color: #0d6efd; background: #e9f0ff; }
+.template-picker-btn.selected { border-color: #0d6efd; background: #0d6efd; color: #fff; }
+.template-picker-btn.selected .tpl-qty { color: #cfe2ff !important; }
+.template-picker-btn .tpl-name { font-weight: 600; }
+.template-picker-btn .tpl-qty { font-size: 0.72rem; }
 .task-draft-item {
     padding: 0.75rem 0.9rem;
 }
@@ -5291,21 +5290,10 @@ function buildEditProductRow(idx, product) {
     var unitOpts = unitList.map(function(u) {
         return '<option value="' + u + '"' + (u === unitVal ? ' selected' : '') + '>' + u + '</option>';
     }).join('');
-    var __tplDetailed = (typeof window.__productTemplatesDetailed !== 'undefined' && Array.isArray(window.__productTemplatesDetailed))
-        ? window.__productTemplatesDetailed.filter(function(d) { return d.type === 'template'; })
-        : [];
-    var templateOpts = __tplDetailed.length > 0
-        ? __tplDetailed.map(function(tpl) {
-            var tName = (tpl.name || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-            var tQty = Math.round(parseFloat(tpl.available_qty || 0));
-            var isSelected = (typeSelectorVal === 'template' && nameVal === (tpl.name || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'));
-            return '<option value="template" data-template-name="' + tName + '"' + (isSelected ? ' selected' : '') + '>' + tName + ' (' + tQty + ' متاح)</option>';
-          }).join('')
-        : '<option value="template"' + (typeSelectorVal === 'template' ? ' selected' : '') + '>🏭 منتجات المصنع</option>';
     var typeSelectorOpts =
         '<option value=""' + (typeSelectorVal === '' ? ' selected' : '') + '>— اختر النوع —</option>' +
         '<option value="external"' + (typeSelectorVal === 'external' ? ' selected' : '') + '>📦 منتجات خارجية</option>' +
-        templateOpts +
+        '<option value="template"' + (typeSelectorVal === 'template' ? ' selected' : '') + '>🏭 منتجات المصنع</option>' +
         '<option value="raw_material"' + (typeSelectorVal === 'raw_material' ? ' selected' : '') + '>⚗️ خامات</option>' +
         '<option value="packaging"' + (typeSelectorVal === 'packaging' ? ' selected' : '') + '>🧴 أدوات تعبئة</option>';
     var quCats = (typeof __quCategories !== 'undefined' && Array.isArray(__quCategories)) ? __quCategories : [];
@@ -6575,8 +6563,6 @@ document.addEventListener('DOMContentLoaded', function () {
                         });
                     }
                     initAllProductNameDropdowns();
-                    // تحديث خيارات قوالب المنتجات في الـ selectors الموجودة بعد تحميل البيانات
-                    refreshTemplateOptionsInSelectors();
                 }
             })
             .catch(error => {
@@ -6584,45 +6570,46 @@ document.addEventListener('DOMContentLoaded', function () {
             });
     }
 
-    // تحديث خيارات قوالب المنتجات في جميع الـ type selectors الموجودة
-    function refreshTemplateOptionsInSelectors() {
+    // إظهار منتقي القوالب أسفل حقل الاسم
+    function showTemplatePicker(row) {
+        var picker = row.querySelector('.template-picker');
+        if (!picker) return;
         var tplList = (typeof window.__productTemplatesDetailed !== 'undefined' && Array.isArray(window.__productTemplatesDetailed))
             ? window.__productTemplatesDetailed.filter(function(d) { return d.type === 'template'; })
             : [];
-        if (tplList.length === 0) return;
-        document.querySelectorAll('.product-type-selector').forEach(function(sel) {
-            // احتفظ بالقيمة الحالية واسم القالب المختار
-            var currentVal = sel.value;
-            var currentTplName = '';
-            var selOpt = sel.options[sel.selectedIndex];
-            if (selOpt) currentTplName = selOpt.getAttribute('data-template-name') || '';
-            // أزل خيارات template الحالية
-            var toRemove = [];
-            for (var i = 0; i < sel.options.length; i++) {
-                if (sel.options[i].value === 'template') toRemove.push(sel.options[i]);
-            }
-            toRemove.forEach(function(o) { sel.removeChild(o); });
-            // أوجد موضع الإدراج (بعد external)
-            var insertAfter = null;
-            for (var j = 0; j < sel.options.length; j++) {
-                if (sel.options[j].value === 'external') { insertAfter = sel.options[j]; break; }
-            }
-            // أضف خيارات القوالب الجديدة
+        picker.innerHTML = '';
+        if (tplList.length === 0) {
+            picker.innerHTML = '<div class="text-muted small p-2">لا توجد قوالب متاحة</div>';
+        } else {
             tplList.forEach(function(tpl) {
-                var opt = document.createElement('option');
-                opt.value = 'template';
-                opt.setAttribute('data-template-name', tpl.name || '');
-                var tQty = Math.round(parseFloat(tpl.available_qty || 0));
-                opt.textContent = (tpl.name || '') + ' (' + tQty + ' متاح)';
-                if (currentVal === 'template' && currentTplName === tpl.name) opt.selected = true;
-                if (insertAfter && insertAfter.nextSibling) {
-                    sel.insertBefore(opt, insertAfter.nextSibling);
-                    insertAfter = opt;
-                } else {
-                    sel.appendChild(opt);
-                }
+                var qty = parseFloat(tpl.available_qty || 0);
+                var qtyClass = qty > 0 ? 'text-success' : 'text-danger';
+                var btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'template-picker-btn';
+                btn.innerHTML =
+                    '<span class="tpl-name">' + escHtml(tpl.name || '') + '</span>' +
+                    '<span class="tpl-qty ' + qtyClass + '">' + Math.round(qty).toLocaleString('ar-EG') + ' متاح</span>';
+                btn.addEventListener('click', function() {
+                    var nameInput = row.querySelector('.product-name-input') || row.querySelector('.edit-product-name');
+                    if (nameInput) {
+                        nameInput.value = tpl.name || '';
+                        nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    }
+                    updateRawMaterialQtyDisplay(row, tpl.name || '');
+                    // تمييز الزر المختار
+                    picker.querySelectorAll('.template-picker-btn').forEach(function(b) { b.classList.remove('selected'); });
+                    btn.classList.add('selected');
+                });
+                picker.appendChild(btn);
             });
-        });
+        }
+        picker.classList.remove('d-none');
+    }
+
+    function hideTemplatePicker(row) {
+        var picker = row.querySelector('.template-picker');
+        if (picker) picker.classList.add('d-none');
     }
 
     // دالة مساعدة: جلب تفاصيل المنتج (id, code, type) بالاسم
@@ -6850,15 +6837,12 @@ document.addEventListener('DOMContentLoaded', function () {
             var val = selectEl.value;
             // تطبيق قيود الوحدة والحقول حسب النوع
             applyRawMaterialUnitRestriction(row, val);
-            // إذا كان الخيار المحدد قالب محدد، أملأ الاسم تلقائياً
-            var selectedOpt = selectEl.options[selectEl.selectedIndex];
-            var templateName = selectedOpt ? (selectedOpt.getAttribute('data-template-name') || '') : '';
-            if (nameInput) {
-                if (templateName) {
-                    nameInput.value = templateName;
-                    nameInput.dispatchEvent(new Event('input', { bubbles: true }));
-                    if (val === 'template') updateRawMaterialQtyDisplay(row, templateName);
-                } else {
+            // إظهار/إخفاء منتقي القوالب
+            if (val === 'template') {
+                showTemplatePicker(row);
+            } else {
+                hideTemplatePicker(row);
+                if (nameInput) {
                     nameInput.value = '';
                     nameInput.focus();
                     nameInput.dispatchEvent(new Event('input', { bubbles: true }));
@@ -6892,18 +6876,6 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
     
-    function buildTemplateOptions() {
-        var tplList = (typeof window.__productTemplatesDetailed !== 'undefined' && Array.isArray(window.__productTemplatesDetailed))
-            ? window.__productTemplatesDetailed.filter(function(d) { return d.type === 'template'; })
-            : [];
-        if (tplList.length === 0) return '<option value="template">🏭 منتجات المصنع</option>';
-        return tplList.map(function(tpl) {
-            var tName = (tpl.name || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-            var tQty = Math.round(parseFloat(tpl.available_qty || 0));
-            return '<option value="template" data-template-name="' + tName + '">' + tName + ' (' + tQty + ' متاح)</option>';
-        }).join('');
-    }
-
     function addProductRow() {
         const quCats = (typeof __quCategories !== 'undefined' && Array.isArray(__quCategories)) ? __quCategories : [];
         const categoryOptions = quCats.map(function(qc) {
@@ -6920,7 +6892,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     <select class="form-select form-select-sm product-type-selector mb-1" name="products[${productIndex}][item_type]">
                         <option value="">— اختر النوع —</option>
                         <option value="external">📦 منتجات خارجية</option>
-                        ${buildTemplateOptions()}
+                        <option value="template">🏭 منتجات المصنع</option>
                         <option value="raw_material">⚗️ خامات</option>
                         <option value="packaging">🧴 أدوات تعبئة</option>
                     </select>
@@ -6928,6 +6900,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         <input type="text" class="form-control product-name-input" name="products[${productIndex}][name]" placeholder="اختر من القائمة" autocomplete="off">
                         <div class="product-template-dropdown d-none"></div>
                     </div>
+                    <div class="template-picker d-none mt-2"></div>
                 </div>
                 <div class="col-6 col-md-2">
                     <label class="form-label small">الكمية</label>
