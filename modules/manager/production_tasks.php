@@ -1860,6 +1860,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 // إذا كان الطلب AJAX، أعد JSON مباشرةً
                 if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+                    while (ob_get_level() > 0) ob_end_clean();
                     header('Content-Type: application/json; charset=utf-8');
                     echo json_encode(['success' => true, 'status' => $newStatus], JSON_UNESCAPED_UNICODE);
                     exit;
@@ -1874,6 +1875,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } catch (Exception $updateError) {
                 $db->rollBack();
                 if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+                    while (ob_get_level() > 0) ob_end_clean();
                     header('Content-Type: application/json; charset=utf-8');
                     echo json_encode(['success' => false, 'error' => $updateError->getMessage()], JSON_UNESCAPED_UNICODE);
                     exit;
