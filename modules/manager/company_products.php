@@ -213,17 +213,16 @@ null,
             }
         }
     } elseif ($action === 'update_external_product') {
+        $isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
         // منع المحاسب وعامل الإنتاج من التعديل على المنتجات الخارجية
         if ($currentUser['role'] === 'accountant' || $currentUser['role'] === 'production') {
+            if ($isAjax) {
+                header('Content-Type: application/json; charset=UTF-8');
+                echo json_encode(['success' => false, 'message' => 'ليس لديك صلاحية لتعديل المنتجات الخارجية.']);
+                exit;
+            }
             $error = 'ليس لديك صلاحية لتعديل المنتجات الخارجية.';
-            // في حالة عدم وجود صلاحية، إعادة التوجيه مع رسالة الخطأ
-            preventDuplicateSubmission(
-                null,
-                ['page' => 'company_products'],
-                null,
-                $redirectRole,
-                $error
-            );
+            preventDuplicateSubmission(null, ['page' => 'company_products'], null, $redirectRole, $error);
         } else {
             $productId = intval($_POST['product_id'] ?? 0);
             $name = trim($_POST['product_name'] ?? '');
@@ -232,17 +231,15 @@ null,
             $unit = trim($_POST['unit'] ?? 'قطعة');
             $categoryId = intval($_POST['category_id'] ?? 0);
             $customCategory = trim($_POST['custom_category'] ?? '');
-            
+
             if ($productId <= 0 || $name === '') {
+                if ($isAjax) {
+                    header('Content-Type: application/json; charset=UTF-8');
+                    echo json_encode(['success' => false, 'message' => 'بيانات غير صحيحة.']);
+                    exit;
+                }
                 $error = 'بيانات غير صحيحة.';
-                // في حالة وجود خطأ في التحقق، إعادة التوجيه مع رسالة الخطأ
-                preventDuplicateSubmission(
-                    null,
-                    ['page' => 'company_products'],
-                null,
-                $redirectRole,
-                    $error
-                );
+                preventDuplicateSubmission(null, ['page' => 'company_products'], null, $redirectRole, $error);
             } else {
                 try {
                     // معالجة الصنف
@@ -253,56 +250,60 @@ null,
                             $categoryName = $category['name'];
                         }
                     } elseif (!empty($customCategory)) {
-                        // حفظ الصنف المخصص في جدول الأصناف
                         try {
-                            $db->execute(
-                                "INSERT INTO product_categories (name, is_default) VALUES (?, 0)",
-                                [$customCategory]
-                            );
+                            $db->execute("INSERT INTO product_categories (name, is_default) VALUES (?, 0)", [$customCategory]);
                             $categoryName = $customCategory;
                         } catch (Exception $e) {
-                            // الصنف موجود بالفعل
                             $categoryName = $customCategory;
                         }
                     }
-                    
-                    if ($categoryName !== null) {
-                        $db->execute(
-                            "UPDATE products SET name = ?, category = ?, quantity = ?, unit = ?, unit_price = ?, updated_at = NOW()
-                             WHERE id = ? AND product_type = 'external'",
-                            [$name, $categoryName, $quantity, $unit, $unitPrice, $productId]
-                        );
-                    } else {
-                        $db->execute(
-                            "UPDATE products SET name = ?, quantity = ?, unit = ?, unit_price = ?, updated_at = NOW()
-                             WHERE id = ? AND product_type = 'external'",
-                            [$name, $quantity, $unit, $unitPrice, $productId]
-                        );
+
+                    // قراءة الصنف الحالي إذا لم يتغير
+                    if ($categoryName === null) {
+                        $existing = $db->queryOne("SELECT category FROM products WHERE id = ?", [$productId]);
+                        $categoryName = $existing['category'] ?? null;
                     }
-                    
+
+                    $db->execute(
+                        "UPDATE products SET name = ?, category = ?, quantity = ?, unit = ?, unit_price = ?, updated_at = NOW()
+                         WHERE id = ? AND product_type = 'external'",
+                        [$name, $categoryName, $quantity, $unit, $unitPrice, $productId]
+                    );
+
                     logAudit($currentUser['id'], 'update_external_product', 'product', $productId, null, [
                         'name' => $name,
                         'quantity' => $quantity,
                         'unit_price' => $unitPrice,
                         'category' => $categoryName
                     ]);
-                    
-                    // منع التكرار باستخدام redirect
-                    preventDuplicateSubmission(
-                        'تم تحديث المنتج الخارجي بنجاح.',
-                        ['page' => 'company_products'],
-null,
-                $redirectRole
-            );
+
+                    if ($isAjax) {
+                        header('Content-Type: application/json; charset=UTF-8');
+                        echo json_encode([
+                            'success' => true,
+                            'message' => 'تم تحديث المنتج الخارجي بنجاح.',
+                            'product' => [
+                                'id'         => $productId,
+                                'name'       => $name,
+                                'quantity'   => $quantity,
+                                'unit'       => $unit,
+                                'unit_price' => $unitPrice,
+                                'category'   => $categoryName,
+                                'total_value'=> $quantity * $unitPrice,
+                            ]
+                        ]);
+                        exit;
+                    }
+
+                    preventDuplicateSubmission('تم تحديث المنتج الخارجي بنجاح.', ['page' => 'company_products'], null, $redirectRole);
                 } catch (Exception $e) {
                     error_log('update_external_product error: ' . $e->getMessage());
-                    preventDuplicateSubmission(
-                        null,
-                        ['page' => 'company_products'],
-                null,
-                $redirectRole,
-                        'تعذر تحديث المنتج الخارجي. يرجى المحاولة لاحقاً.'
-                    );
+                    if ($isAjax) {
+                        header('Content-Type: application/json; charset=UTF-8');
+                        echo json_encode(['success' => false, 'message' => 'تعذر تحديث المنتج الخارجي. يرجى المحاولة لاحقاً.']);
+                        exit;
+                    }
+                    preventDuplicateSubmission(null, ['page' => 'company_products'], null, $redirectRole, 'تعذر تحديث المنتج الخارجي. يرجى المحاولة لاحقاً.');
                 }
             }
         }
@@ -933,6 +934,28 @@ foreach ($factoryProducts as $product) {
     max-width: 100%;
     flex-wrap: wrap;
     gap: 1rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+.section-header .collapse-arrow {
+    transition: transform 0.25s ease;
+    font-size: 1.1rem;
+    opacity: 0.85;
+    margin-inline-start: 0.5rem;
+    flex-shrink: 0;
+}
+
+.section-header.collapsed .collapse-arrow {
+    transform: rotate(-90deg);
+}
+
+.section-collapse-body {
+    transition: none;
+}
+
+.section-collapse-body.collapsing-hide {
+    display: none;
 }
 
 .section-header h5 {
@@ -1609,14 +1632,17 @@ foreach ($factoryProducts as $product) {
 
     <!-- قسم قوالب المنتجات -->
     <div class="card company-card mb-4" id="productTemplatesSection">
-        <div class="section-header">
+        <div class="section-header" data-section="productTemplates">
             <h5>
                 <i class="bi bi-diagram-3"></i>
                  قوالب المنتجات
             </h5>
-            <span class="badge" id="templateProductsCount"><?php echo $totalProductTemplates; ?> قالب</span>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge" id="templateProductsCount"><?php echo $totalProductTemplates; ?> قالب</span>
+                <i class="bi bi-chevron-down collapse-arrow"></i>
+            </div>
         </div>
-        <div class="card-body">
+        <div class="card-body section-collapse-body" id="productTemplatesBody">
             <!-- شريط البحث والفلترة لقوالب المنتجات -->
             <div class="mb-3 p-3 bg-light rounded" style="border: 1px solid #dee2e6;">
                 <div class="row g-3">
@@ -1687,22 +1713,23 @@ foreach ($factoryProducts as $product) {
 
     <!-- قسم المنتجات الخارجية -->
     <div class="card company-card" id="externalProductsSection">
-        <div class="section-header">
+        <div class="section-header" data-section="externalProducts">
             <h5>
                 <i class="bi bi-cart4"></i>
                 المنتجات الخارجية
             </h5>
             <div class="d-flex gap-2 align-items-center">
                 <span class="badge" id="externalProductsCount"><?php echo $totalExternalProducts; ?> منتج</span>
-                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="printExternalInventory()" title="طباعة جرد المنتجات الظاهرة">
+                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="event.stopPropagation(); printExternalInventory()" title="طباعة جرد المنتجات الظاهرة">
                     <i class="bi bi-printer me-1"></i>طباعة الجرد
                 </button>
-                <button type="button" class="btn btn-success-custom btn-sm" onclick="showAddExternalProductModal()">
+                <button type="button" class="btn btn-success-custom btn-sm" onclick="event.stopPropagation(); showAddExternalProductModal()">
                     <i class="bi bi-plus-circle me-1"></i>إضافة منتج خارجي
                 </button>
+                <i class="bi bi-chevron-down collapse-arrow"></i>
             </div>
         </div>
-        <div class="card-body">
+        <div class="card-body section-collapse-body" id="externalProductsBody">
             <!-- شريط البحث والفلترة للمنتجات الخارجية -->
             <div class="mb-3 p-3 bg-light rounded" style="border: 1px solid #dee2e6;">
                 <div class="row g-3">
@@ -2087,7 +2114,7 @@ foreach ($factoryProducts as $product) {
         <h5 class="mb-0"><i class="bi bi-pencil me-2"></i>تعديل منتج خارجي</h5>
     </div>
     <div class="card-body">
-        <form method="POST">
+        <form method="POST" id="editExternalProductForm">
             <input type="hidden" name="action" value="update_external_product">
             <input type="hidden" name="product_id" id="editCard_product_id">
             <div class="mb-3">
@@ -4321,5 +4348,144 @@ function printExternalInventory() {
 }
 
 window.printExternalInventory = printExternalInventory;
+
+// ===== AJAX Edit External Product =====
+(function() {
+    const form = document.getElementById('editExternalProductForm');
+    if (!form) return;
+
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        const submitBtn = form.querySelector('button[type="submit"]');
+        const origText = submitBtn.innerHTML;
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>جاري الحفظ...';
+
+        try {
+            const formData = new FormData(form);
+            const response = await fetch(window.location.href, {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                body: formData
+            });
+            const data = await response.json();
+
+            if (data.success) {
+                updateExternalProductCard(data.product);
+                closeEditExternalProductCard();
+                showInlineToast(data.message, 'success');
+            } else {
+                showInlineToast(data.message || 'حدث خطأ غير متوقع.', 'danger');
+            }
+        } catch (err) {
+            showInlineToast('تعذر الاتصال بالخادم.', 'danger');
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = origText;
+        }
+    });
+
+    function updateExternalProductCard(product) {
+        const fmt = (n) => parseFloat(n).toLocaleString('ar-EG', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' ج.م';
+        const qty = parseFloat(product.quantity).toFixed(2);
+        const unit = product.unit || 'قطعة';
+        const category = product.category || '—';
+        const total = parseFloat(product.total_value || 0);
+
+        // تحديث بيانات الزر في كل البطاقات والجدول
+        document.querySelectorAll(`.js-edit-external[data-id="${product.id}"]`).forEach(btn => {
+            btn.dataset.name = product.name;
+            btn.dataset.quantity = product.quantity;
+            btn.dataset.unit = unit;
+            btn.dataset.price = product.unit_price;
+            btn.dataset.category = category;
+        });
+        document.querySelectorAll(`.js-add-quantity-external[data-product-id="${product.id}"]`).forEach(btn => {
+            btn.dataset.productName = product.name;
+            btn.dataset.quantity = product.quantity;
+        });
+        document.querySelectorAll(`.js-delete-external[data-id="${product.id}"]`).forEach(btn => {
+            btn.dataset.name = product.name;
+        });
+
+        // تحديث بطاقة المنتج في الشبكة
+        document.querySelectorAll(`.js-edit-external[data-id="${product.id}"]`).forEach(btn => {
+            const card = btn.closest('.product-card');
+            if (!card) return;
+            const rows = card.querySelectorAll('.product-detail-row');
+            const nameEl = card.querySelector('.product-name');
+            if (nameEl) nameEl.textContent = product.name;
+            rows.forEach(row => {
+                const label = row.querySelector('span:first-child');
+                const val   = row.querySelector('span:last-child');
+                if (!label || !val) return;
+                const text = label.textContent.trim();
+                if (text === 'الصنف:') val.textContent = category;
+                else if (text === 'الكمية:') val.innerHTML = `<strong>${qty} ${unit}</strong>`;
+                else if (text === 'سعر الوحدة:') val.textContent = fmt(product.unit_price);
+                else if (text === 'الإجمالي:') val.innerHTML = `<strong class="text-success">${fmt(total)}</strong>`;
+            });
+        });
+    }
+
+    function showInlineToast(message, type) {
+        let container = document.getElementById('ajaxToastContainer');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'ajaxToastContainer';
+            container.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:9999;min-width:280px;';
+            document.body.appendChild(container);
+        }
+        const toast = document.createElement('div');
+        toast.className = `alert alert-${type} shadow d-flex align-items-center gap-2 mb-2`;
+        toast.style.cssText = 'animation:fadeInDown .3s ease;';
+        toast.innerHTML = `<i class="bi bi-${type === 'success' ? 'check-circle-fill' : 'exclamation-triangle-fill'}"></i> ${message}`;
+        container.appendChild(toast);
+        setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = 'opacity .4s'; setTimeout(() => toast.remove(), 400); }, 3000);
+    }
+})();
+
+// ===== Section Collapse with localStorage =====
+(function() {
+    const PREF_KEY = 'companyProductsSections';
+
+    function getPrefs() {
+        try { return JSON.parse(localStorage.getItem(PREF_KEY)) || {}; } catch { return {}; }
+    }
+    function savePrefs(prefs) {
+        localStorage.setItem(PREF_KEY, JSON.stringify(prefs));
+    }
+
+    function applyState(header, body, collapsed, animate) {
+        if (collapsed) {
+            header.classList.add('collapsed');
+            body.style.display = 'none';
+        } else {
+            header.classList.remove('collapsed');
+            body.style.display = '';
+        }
+    }
+
+    document.querySelectorAll('.section-header[data-section]').forEach(function(header) {
+        const sectionKey = header.dataset.section;
+        const card = header.closest('.card');
+        const body = card ? card.querySelector('.section-collapse-body') : null;
+        if (!body) return;
+
+        const prefs = getPrefs();
+        const collapsed = prefs[sectionKey] === true;
+        applyState(header, body, collapsed, false);
+
+        header.addEventListener('click', function() {
+            const isCollapsed = header.classList.contains('collapsed');
+            const newCollapsed = !isCollapsed;
+            applyState(header, body, newCollapsed, true);
+            const p = getPrefs();
+            p[sectionKey] = newCollapsed;
+            savePrefs(p);
+        });
+    });
+})();
 </script>
 
