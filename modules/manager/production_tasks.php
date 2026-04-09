@@ -3937,7 +3937,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                             <small class="product-effective-qty-hint text-muted d-none" id="product-effective-qty-hint-0"></small>
                                         </div>
                                         <div class="col-6 col-md-2">
-                                            <div class="category-wrap">
+                                            <div class="category-wrap d-none">
                                                 <label class="form-label small">التصنيف</label>
                                                 <select class="form-select form-select-sm product-category-input" name="products[0][category]" id="product-category-0">
                                                     <option value="">— اختر التصنيف —</option>
@@ -3946,7 +3946,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                                     <?php endforeach; ?>
                                                 </select>
                                             </div>
-                                            <div class="raw-qty-wrap d-none">
+                                            <div class="raw-qty-wrap">
                                                 <label class="form-label small text-info">الكمية المتاحة</label>
                                                 <div class="raw-material-qty-value fw-semibold text-info">—</div>
                                             </div>
@@ -6695,17 +6695,9 @@ document.addEventListener('DOMContentLoaded', function () {
     function toggleCategoryAndQtyDisplay(row, type) {
         var categoryWrap = row.querySelector('.category-wrap');
         var rawQtyWrap = row.querySelector('.raw-qty-wrap');
-        if (type === 'raw_material' || type === 'packaging' || type === 'template') {
-            if (categoryWrap) { categoryWrap.classList.add('d-none'); }
-            if (rawQtyWrap) { rawQtyWrap.classList.remove('d-none'); rawQtyWrap.style.display = ''; }
-        } else {
-            if (categoryWrap) { categoryWrap.classList.remove('d-none'); categoryWrap.style.display = ''; }
-            if (rawQtyWrap) {
-                rawQtyWrap.classList.add('d-none');
-                var qtyEl = rawQtyWrap.querySelector('.raw-material-qty-value');
-                if (qtyEl) { qtyEl.textContent = '—'; qtyEl.className = 'raw-material-qty-value fw-semibold text-info'; }
-            }
-        }
+        // إخفاء التصنيف دائماً وإظهار الكمية المتاحة لجميع الأنواع
+        if (categoryWrap) { categoryWrap.classList.add('d-none'); }
+        if (rawQtyWrap) { rawQtyWrap.classList.remove('d-none'); rawQtyWrap.style.display = ''; }
     }
 
     // دروب داون اسم المنتج: يفلتر حسب المدخلات ويسمح بالإدخال اليدوي أو الاختيار من القائمة
@@ -6907,14 +6899,14 @@ document.addEventListener('DOMContentLoaded', function () {
                     <small class="product-effective-qty-hint text-muted d-none" id="product-effective-qty-hint-${productIndex}"></small>
                 </div>
                 <div class="col-6 col-md-2">
-                    <div class="category-wrap">
+                    <div class="category-wrap d-none">
                         <label class="form-label small">التصنيف</label>
                         <select class="form-select form-select-sm product-category-input" name="products[${productIndex}][category]" id="product-category-${productIndex}">
                             <option value="">— اختر التصنيف —</option>
                             ${categoryOptions}
                         </select>
                     </div>
-                    <div class="raw-qty-wrap d-none">
+                    <div class="raw-qty-wrap">
                         <label class="form-label small text-info">الكمية المتاحة</label>
                         <div class="raw-material-qty-value fw-semibold text-info">—</div>
                     </div>
@@ -6922,12 +6914,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 <div class="col-6 col-md-2">
                     <label class="form-label small">الوحدة</label>
                     <select class="form-select form-select-sm product-unit-input" name="products[${productIndex}][unit]" id="product-unit-${productIndex}" onchange="updateQuantityStep(${productIndex})">
-                        <option value="كرتونة">كرتونة</option>
-                        <option value="عبوة">عبوة</option>
-                        <option value="كيلو">كيلو</option>
-                        <option value="جرام">جرام</option>
-                        <option value="شرينك">شرينك</option>
-                        <option value="دسته">دسته</option>
                         <option value="قطعة" selected>قطعة</option>
                     </select>
                 </div>
