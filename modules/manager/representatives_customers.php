@@ -1419,77 +1419,96 @@ try {
                                     $displayBalanceForButton = $customerBalance < 0 ? abs($customerBalance) : $customerBalance;
                                     $formattedBalance = formatCurrency($displayBalanceForButton);
                                     $rawBalance = number_format($customerBalance, 2, '.', '');
+                                    $dropdownId = 'actions-' . (int)$customer['id'];
                                     ?>
-                                    <div class="d-flex flex-wrap align-items-center gap-2">
-                                        <?php if (in_array($currentRole, ['manager', 'developer', 'accountant', 'sales'], true)): ?>
-                                        <button
-                                            type="button"
-                                            class="btn btn-sm btn-outline-warning edit-rep-customer-btn"
-                                            data-customer-id="<?php echo (int)$customer['id']; ?>"
-                                            data-customer-name="<?php echo htmlspecialchars($customer['name']); ?>"
-                                            data-customer-phone="<?php echo htmlspecialchars($customer['phone'] ?? ''); ?>"
-                                            data-customer-address="<?php echo htmlspecialchars($customer['address'] ?? ''); ?>"
-                                            data-customer-region-id="<?php echo (int)($customer['region_id'] ?? 0); ?>"
-                                            data-customer-balance="<?php echo $rawBalance; ?>"
-                                        >
-                                            <i class="bi bi-pencil me-1"></i>تعديل
+                                    <div class="dropdown">
+                                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                            <i class="bi bi-three-dots-vertical"></i>
                                         </button>
-                                        <?php endif; ?>
-                                        <?php if ($currentRole === 'manager'): ?>
-                                        <button
-                                            type="button"
-                                            class="btn btn-sm btn-outline-info set-credit-limit-btn"
-                                            data-customer-id="<?php echo (int)$customer['id']; ?>"
-                                            data-customer-name="<?php echo htmlspecialchars($customer['name']); ?>"
-                                            data-customer-balance="<?php echo $rawBalance; ?>"
-                                            data-credit-limit="<?php echo htmlspecialchars(number_format((float)($customer['credit_limit'] ?? 0), 2, '.', '')); ?>"
-                                        >
-                                            <i class="bi bi-credit-card me-1"></i>الحد الائتماني
-                                        </button>
-                                        <?php endif; ?>
-                                        <button
-                                            type="button"
-                                            class="btn btn-sm <?php echo $customerBalance > 0 ? 'btn-success' : 'btn-outline-secondary'; ?> all-customers-collect-btn"
-                                            onclick="showAllCustomersCollectPaymentModal(this)"
-                                            data-customer-id="<?php echo (int)$customer['id']; ?>"
-                                            data-customer-name="<?php echo htmlspecialchars($customer['name']); ?>"
-                                            data-customer-balance="<?php echo $rawBalance; ?>"
-                                            data-customer-balance-formatted="<?php echo htmlspecialchars($formattedBalance); ?>"
-                                            <?php echo $customerBalance > 0 ? '' : 'disabled'; ?>
-                                        >
-                                            <i class="bi bi-cash-coin me-1"></i>تحصيل
-                                        </button>
-                                        <button
-                                            type="button"
-                                            class="btn btn-sm btn-outline-info js-all-customers-purchase-history"
-                                            data-customer-id="<?php echo (int)$customer['id']; ?>"
-                                            data-customer-name="<?php echo htmlspecialchars($customer['name']); ?>"
-                                            data-customer-phone="<?php echo htmlspecialchars($customer['phone'] ?? ''); ?>"
-                                            data-customer-address="<?php echo htmlspecialchars($customer['address'] ?? ''); ?>"
-                                        >
-                                            <i class="bi bi-receipt me-1"></i>سجل 
-                                        </button>
-                                        <button
-                                            type="button"
-                                            class="btn btn-sm btn-outline-warning js-all-customers-return-products"
-                                            data-customer-id="<?php echo (int)$customer['id']; ?>"
-                                            data-customer-name="<?php echo htmlspecialchars($customer['name']); ?>"
-                                        >
-                                            <i class="bi bi-arrow-return-left me-1"></i>مرتجع
-                                        </button>
-                                        <?php if ($currentRole === 'manager' || $currentRole === 'developer'): ?>
-                                        <button
-                                            type="button"
-                                            class="btn btn-sm btn-outline-primary change-sales-rep-btn"
-                                            onclick="openChangeSalesRepModal(this)"
-                                            data-customer-id="<?php echo (int)$customer['id']; ?>"
-                                            data-customer-name="<?php echo htmlspecialchars($customer['name']); ?>"
-                                            data-current-rep-id="<?php echo (int)($customer['rep_id'] ?? $customer['created_by'] ?? 0); ?>"
-                                            data-current-rep-name="<?php echo htmlspecialchars($customer['rep_name'] ?? 'غير محدد'); ?>"
-                                        >
-                                            <i class="bi bi-arrow-left-right me-1"></i>نقل لمندوب آخر
-                                        </button>
-                                        <?php endif; ?>
+                                        <ul class="dropdown-menu dropdown-menu-end">
+                                            <?php if (in_array($currentRole, ['manager', 'developer', 'accountant', 'sales'], true)): ?>
+                                            <li>
+                                                <button
+                                                    type="button"
+                                                    class="dropdown-item edit-rep-customer-btn"
+                                                    data-customer-id="<?php echo (int)$customer['id']; ?>"
+                                                    data-customer-name="<?php echo htmlspecialchars($customer['name']); ?>"
+                                                    data-customer-phone="<?php echo htmlspecialchars($customer['phone'] ?? ''); ?>"
+                                                    data-customer-address="<?php echo htmlspecialchars($customer['address'] ?? ''); ?>"
+                                                    data-customer-region-id="<?php echo (int)($customer['region_id'] ?? 0); ?>"
+                                                    data-customer-balance="<?php echo $rawBalance; ?>"
+                                                >
+                                                    <i class="bi bi-pencil me-2 text-warning"></i>تعديل
+                                                </button>
+                                            </li>
+                                            <?php endif; ?>
+                                            <?php if ($currentRole === 'manager' || $currentRole === 'developer'): ?>
+                                            <li>
+                                                <button
+                                                    type="button"
+                                                    class="dropdown-item set-credit-limit-btn"
+                                                    data-customer-id="<?php echo (int)$customer['id']; ?>"
+                                                    data-customer-name="<?php echo htmlspecialchars($customer['name']); ?>"
+                                                    data-customer-balance="<?php echo $rawBalance; ?>"
+                                                    data-credit-limit="<?php echo htmlspecialchars(number_format((float)($customer['credit_limit'] ?? 0), 2, '.', '')); ?>"
+                                                >
+                                                    <i class="bi bi-credit-card me-2 text-info"></i>الحد الائتماني
+                                                </button>
+                                            </li>
+                                            <?php endif; ?>
+                                            <li>
+                                                <button
+                                                    type="button"
+                                                    class="dropdown-item all-customers-collect-btn <?php echo $customerBalance <= 0 ? 'disabled' : ''; ?>"
+                                                    onclick="showAllCustomersCollectPaymentModal(this)"
+                                                    data-customer-id="<?php echo (int)$customer['id']; ?>"
+                                                    data-customer-name="<?php echo htmlspecialchars($customer['name']); ?>"
+                                                    data-customer-balance="<?php echo $rawBalance; ?>"
+                                                    data-customer-balance-formatted="<?php echo htmlspecialchars($formattedBalance); ?>"
+                                                    <?php echo $customerBalance > 0 ? '' : 'disabled'; ?>
+                                                >
+                                                    <i class="bi bi-cash-coin me-2 text-success"></i>تحصيل
+                                                </button>
+                                            </li>
+                                            <li>
+                                                <button
+                                                    type="button"
+                                                    class="dropdown-item js-all-customers-purchase-history"
+                                                    data-customer-id="<?php echo (int)$customer['id']; ?>"
+                                                    data-customer-name="<?php echo htmlspecialchars($customer['name']); ?>"
+                                                    data-customer-phone="<?php echo htmlspecialchars($customer['phone'] ?? ''); ?>"
+                                                    data-customer-address="<?php echo htmlspecialchars($customer['address'] ?? ''); ?>"
+                                                >
+                                                    <i class="bi bi-receipt me-2 text-info"></i>سجل المشتريات
+                                                </button>
+                                            </li>
+                                            <li>
+                                                <button
+                                                    type="button"
+                                                    class="dropdown-item js-all-customers-return-products"
+                                                    data-customer-id="<?php echo (int)$customer['id']; ?>"
+                                                    data-customer-name="<?php echo htmlspecialchars($customer['name']); ?>"
+                                                >
+                                                    <i class="bi bi-arrow-return-left me-2 text-warning"></i>مرتجع
+                                                </button>
+                                            </li>
+                                            <?php if ($currentRole === 'manager' || $currentRole === 'developer'): ?>
+                                            <li><hr class="dropdown-divider"></li>
+                                            <li>
+                                                <button
+                                                    type="button"
+                                                    class="dropdown-item change-sales-rep-btn"
+                                                    onclick="openChangeSalesRepModal(this)"
+                                                    data-customer-id="<?php echo (int)$customer['id']; ?>"
+                                                    data-customer-name="<?php echo htmlspecialchars($customer['name']); ?>"
+                                                    data-current-rep-id="<?php echo (int)($customer['rep_id'] ?? $customer['created_by'] ?? 0); ?>"
+                                                    data-current-rep-name="<?php echo htmlspecialchars($customer['rep_name'] ?? 'غير محدد'); ?>"
+                                                >
+                                                    <i class="bi bi-arrow-left-right me-2 text-primary"></i>نقل لمندوب آخر
+                                                </button>
+                                            </li>
+                                            <?php endif; ?>
+                                        </ul>
                                     </div>
                                 </td>
                             </tr>
