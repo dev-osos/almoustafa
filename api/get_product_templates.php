@@ -136,7 +136,7 @@ try {
         $hasProductType = $db->queryOne("SHOW COLUMNS FROM products LIKE 'product_type'");
         if (!empty($hasProductType)) {
             $externalProducts = $db->query("
-                SELECT id, name
+                SELECT id, name, COALESCE(quantity, 0) AS available_qty
                 FROM products
                 WHERE product_type = 'external' AND status = 'active' AND name IS NOT NULL AND name != ''
                 ORDER BY name ASC
@@ -147,10 +147,11 @@ try {
                     $seenNames[$name] = true;
                     $templates[] = $name;
                     $templatesDetailed[] = [
-                        'id'   => (int)$row['id'],
-                        'name' => $name,
-                        'code' => null,
-                        'type' => 'external',
+                        'id'            => (int)$row['id'],
+                        'name'          => $name,
+                        'code'          => null,
+                        'type'          => 'external',
+                        'available_qty' => round((float)($row['available_qty'] ?? 0), 2),
                     ];
                 }
             }
