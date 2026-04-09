@@ -1998,7 +1998,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         } else {
                             $db->beginTransaction();
                             $taskNotesRow = $db->queryOne("SELECT notes FROM tasks WHERE id = ? LIMIT 1", [$taskId]);
-                            deductTaskProductsFromStock($db, $taskNotesRow['notes'] ?? '');
+                            $taskNotes = $taskNotesRow['notes'] ?? '';
+                            deductTaskProductsFromStock($db, $taskNotes);
                             $taskNumber = '#' . $taskId;
                             $taskDate = date('Y-m-d', strtotime($task['created_at'] ?? 'now'));
                             $db->execute(
@@ -2022,8 +2023,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 null,
                                 ['local_customer_id' => $custId, 'total_amount' => $totalAmount]
                             );
+
+                            // استخراج المدفوع مقدماً من notes
+                            $advancePaid = 0.0;
+                            if (preg_match('/\[ADVANCE_PAYMENT\]:\s*([0-9.]+)/', $taskNotes, $advM)) {
+                                $advancePaid = (float)$advM[1];
+                            }
+
                             $userRole = ($currentUser['role'] ?? '') === 'accountant' ? 'accountant' : 'manager';
-                            preventDuplicateSubmission('تم اعتماد الفاتورة: تمت إضافة الأوردر لسجل مشتريات العميل وإضافة المبلغ لرصيده المدين.', ['page' => 'production_tasks'], null, $userRole);
+
+                            if ($advancePaid > 0) {
+                                // جلب بيانات العميل وبيانات العميل المحدثة
+                                $custRow = $db->queryOne("SELECT name, phone, balance FROM local_customers WHERE id = ?", [$custId]);
+                                $custName  = $custRow['name'] ?? ($task['customer_name'] ?? '');
+                                $custPhone = $custRow['phone'] ?? ($task['customer_phone'] ?? '');
+                                $newBalance = (float)($custRow['balance'] ?? $totalAmount);
+                                $remaining  = max(0, $totalAmount - $advancePaid);
+
+                                $collectionInfo = json_encode([
+                                    'customer_name'  => $custName,
+                                    'customer_phone' => $custPhone,
+                                    'order_number'   => $taskId,
+                                    'total_amount'   => $totalAmount,
+                                    'advance_paid'   => $advancePaid,
+                                    'remaining'      => $remaining,
+                                    'new_balance'    => $newBalance,
+                                ], JSON_UNESCAPED_UNICODE);
+
+                                preventDuplicateSubmission(
+                                    'تم اعتماد الفاتورة بنجاح.',
+                                    ['page' => 'production_tasks', 'collection_info' => urlencode(base64_encode($collectionInfo))],
+                                    null,
+                                    $userRole
+                                );
+                            } else {
+                                preventDuplicateSubmission('تم اعتماد الفاتورة: تمت إضافة الأوردر لسجل مشتريات العميل وإضافة المبلغ لرصيده المدين.', ['page' => 'production_tasks'], null, $userRole);
+                            }
                             exit;
                         }
                     }
@@ -2729,6 +2764,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
 
 // قراءة رسائل النجاح/الخطأ من session بعد redirect
 applyPRGPattern($error, $success);
+
+// قراءة بيانات التحصيل المدفوع مقدماً (إن وجدت)
+$collectionNotice = null;
+if (!empty($_GET['collection_info'])) {
+    try {
+        $decoded = json_decode(base64_decode(urldecode($_GET['collection_info'])), true);
+        if (is_array($decoded) && isset($decoded['advance_paid']) && $decoded['advance_paid'] > 0) {
+            $collectionNotice = $decoded;
+        }
+    } catch (Exception $e) {}
+}
 
 /**
  * إحصائيات سريعة للمهام التي أنشأها المدير والمحاسب
@@ -3560,6 +3606,43 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
             <i class="bi bi-check-circle me-2"></i><?php echo htmlspecialchars($success); ?>
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
+    <?php endif; ?>
+
+    <?php if ($collectionNotice): ?>
+    <div class="card border-success mb-3 shadow-sm collection-notice-card" id="collectionNoticeCard">
+        <div class="card-header d-flex justify-content-between align-items-center py-2" style="background: linear-gradient(135deg,#16a34a,#22c55e); color:#fff;">
+            <span class="fw-bold"><i class="bi bi-cash-coin me-2"></i>تم التحصيل بنجاح</span>
+            <button type="button" class="btn-close btn-close-white btn-sm" onclick="document.getElementById('collectionNoticeCard').remove()"></button>
+        </div>
+        <div class="card-body py-3">
+            <div class="row g-2">
+                <div class="col-6 col-md-3">
+                    <div class="text-muted small mb-1"><i class="bi bi-person me-1"></i>العميل</div>
+                    <div class="fw-bold"><?php echo htmlspecialchars($collectionNotice['customer_name'] ?? '—'); ?></div>
+                    <?php if (!empty($collectionNotice['customer_phone'])): ?>
+                    <div class="text-muted small"><?php echo htmlspecialchars($collectionNotice['customer_phone']); ?></div>
+                    <?php endif; ?>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="text-muted small mb-1"><i class="bi bi-hash me-1"></i>رقم الأوردر</div>
+                    <div class="fw-bold">#<?php echo intval($collectionNotice['order_number']); ?></div>
+                    <div class="text-muted small">إجمالي: <?php echo number_format((float)($collectionNotice['total_amount'] ?? 0), 2); ?> ج.م</div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="text-muted small mb-1"><i class="bi bi-wallet2 me-1"></i>المدفوع مقدماً</div>
+                    <div class="fw-bold text-success"><?php echo number_format((float)($collectionNotice['advance_paid'] ?? 0), 2); ?> ج.م</div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="text-muted small mb-1"><i class="bi bi-hourglass-split me-1"></i>المتبقي للتحصيل</div>
+                    <?php $rem = (float)($collectionNotice['remaining'] ?? 0); ?>
+                    <div class="fw-bold <?php echo $rem > 0 ? 'text-danger' : 'text-success'; ?>">
+                        <?php echo number_format($rem, 2); ?> ج.م
+                    </div>
+                    <div class="text-muted small">رصيد العميل الكلي: <?php echo number_format((float)($collectionNotice['new_balance'] ?? 0), 2); ?> ج.م</div>
+                </div>
+            </div>
+        </div>
+    </div>
     <?php endif; ?>
 
     <div class="row g-2 mb-3" id="statusFilterCards">
