@@ -9052,4 +9052,48 @@ document.addEventListener('click', function (e) {
         });
     });
 })();
+
+// إلحاق قوائم الـ dropdown بـ body لتجاوز overflow في الجدول
+(function() {
+    document.addEventListener('show.bs.dropdown', function(e) {
+        var toggle = e.target;
+        if (!toggle.closest('.dashboard-table-wrapper')) return;
+        var menu = toggle.nextElementSibling;
+        if (!menu || !menu.classList.contains('dropdown-menu')) return;
+        menu._ddToggle = toggle;
+        menu._originalParent = menu.parentNode;
+        document.body.appendChild(menu);
+    });
+
+    document.addEventListener('shown.bs.dropdown', function() {
+        var menu = document.body.querySelector('.dropdown-menu.show');
+        if (!menu || !menu._ddToggle) return;
+        var rect = menu._ddToggle.getBoundingClientRect();
+        var menuHeight = menu.offsetHeight;
+        var spaceBelow = window.innerHeight - rect.bottom;
+        var spaceAbove = rect.top;
+        menu.style.position = 'fixed';
+        menu.style.zIndex = '9999';
+        menu.style.margin = '0';
+        menu.style.left = 'auto';
+        menu.style.right = (window.innerWidth - rect.right) + 'px';
+        if (spaceBelow >= menuHeight || spaceBelow >= spaceAbove) {
+            menu.style.top = (rect.bottom + 2) + 'px';
+            menu.style.bottom = 'auto';
+        } else {
+            menu.style.bottom = (window.innerHeight - rect.top + 2) + 'px';
+            menu.style.top = 'auto';
+        }
+    });
+
+    document.addEventListener('hide.bs.dropdown', function() {
+        var menu = document.body.querySelector('.dropdown-menu.show');
+        if (menu && menu._originalParent) {
+            menu._originalParent.appendChild(menu);
+            menu.removeAttribute('style');
+            delete menu._originalParent;
+            delete menu._ddToggle;
+        }
+    });
+})();
 </script>
