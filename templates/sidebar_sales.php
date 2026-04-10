@@ -103,24 +103,7 @@ $baseUrl = getDashboardUrl();
             <div class="sidebar-section">
                 <div class="sidebar-section-title">Sales</div>
                 
-                <li class="nav-item">
-                    <a class="nav-link <?php echo (isset($_GET['page']) && $_GET['page'] === 'orders') ? 'active' : ''; ?>" 
-                       href="<?php echo $baseUrl; ?>sales.php?page=orders">
-                        <i class="bi bi-cart-check"></i>
-                        <span>طلبات العملاء</span>
-                        <?php
-                        if (isset($currentUser) && $currentUser['role'] === 'sales') {
-                            require_once __DIR__ . '/../includes/notifications.php';
-                            $newOrdersCount = getNewOrdersCount($currentUser['id']);
-                            if ($newOrdersCount > 0):
-                        ?>
-                            <span class="badge bg-danger ms-2" id="newOrdersBadge"><?php echo $newOrdersCount; ?></span>
-                        <?php
-                            endif;
-                        }
-                        ?>
-                    </a>
-                </li>
+              
                 
                 <li class="nav-item">
                     <a class="nav-link <?php echo (isset($_GET['page']) && $_GET['page'] === 'payment_schedules') ? 'active' : ''; ?>" 
