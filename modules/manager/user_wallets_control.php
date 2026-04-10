@@ -604,7 +604,7 @@ if ($selectedUserId > 0) {
             FROM user_wallet_transactions
             WHERE user_id = ?
               AND type = 'deposit'
-              AND created_at >= DATE_FORMAT(DATE_SUB(NOW(), INTERVAL 5 MONTH), '%Y-%m-01')
+              AND created_at >= DATE_FORMAT(DATE_SUB(NOW(), INTERVAL 3 MONTH), '%Y-%m-01')
             GROUP BY month_key, month_label
             ORDER BY month_key ASC
         ", [$selectedUserId]) ?: [];
@@ -775,7 +775,7 @@ $roleLabels = ['driver' => 'سائق', 'production' => 'عامل إنتاج', 's
                     <?php if (!empty($sixMonthsData)): ?>
                     <div class="px-3 pt-3 pb-2 border-bottom">
                         <div class="d-flex align-items-center justify-content-between mb-2">
-                            <span class="small fw-semibold text-muted"><i class="bi bi-bar-chart-line me-1"></i>الإيداعات — آخر 6 أشهر</span>
+                            <span class="small fw-semibold text-muted"><i class="bi bi-bar-chart-line me-1"></i>الإيداعات — آخر 4 أشهر</span>
                             <span class="small text-muted">الأعلى: <strong><?php echo formatCurrency($maxDeposit); ?></strong></span>
                         </div>
                         <div class="d-flex flex-column gap-1">
