@@ -610,7 +610,7 @@ $statsMonth = isset($_GET['stats_month']) && preg_match('/^\d{4}-\d{2}$/', $_GET
     : date('Y-m');
 $statsMonthStart = $statsMonth . '-01';
 $statsMonthEnd   = date('Y-m-t', strtotime($statsMonthStart));
-$statsMonthLabel = strftime('%B %Y', strtotime($statsMonthStart));
+$statsMonthLabel = date('Y-m', strtotime($statsMonthStart));
 
 $monthlyDepositStats = null;
 if ($selectedUserId > 0 && $selectedUser) {
