@@ -4727,6 +4727,24 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                         ?>
                                     </td>
                                     <td>
+                                        <?php if ($isSales): ?>
+                                            <?php if (($task['status'] ?? '') === 'with_delegate'): ?>
+                                            <div class="dropdown">
+                                                <button type="button" class="btn btn-outline-secondary btn-sm dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="إجراءات">
+                                                    <i class="bi bi-three-dots-vertical"></i> إجراءات
+                                                </button>
+                                                <ul class="dropdown-menu dropdown-menu-end">
+                                                    <li>
+                                                        <button type="button" class="dropdown-item status-quick-change" href="#"
+                                                               data-task-id="<?php echo (int)$task['id']; ?>"
+                                                               data-status="delivered">
+                                                            <i class="bi bi-check2-circle me-1 text-success"></i>تم التوصيل
+                                                        </button>
+                                                    </li>
+                                                </ul>
+                                            </div>
+                                            <?php endif; ?>
+                                        <?php else: ?>
                                         <div class="dropdown">
                                             <button type="button" class="btn btn-outline-secondary btn-sm dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="إجراءات">
                                                 <i class="bi bi-three-dots-vertical"></i> إجراءات
@@ -4750,7 +4768,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                                     </a>
                                                 </li>
                                                 <?php endif; ?>
-                                                <?php if ($isAccountant || $isManager || $isSales): ?>
+                                                <?php if ($isAccountant || $isManager): ?>
                                                 <li>
                                                     <button type="button" class="dropdown-item" onclick="openChangeStatusModal(<?php echo (int)$task['id']; ?>, '<?php echo htmlspecialchars($task['status'], ENT_QUOTES, 'UTF-8'); ?>')">
                                                         <i class="bi bi-gear me-1"></i>تغيير حالة الطلب
@@ -4790,6 +4808,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                                 <?php endif; ?>
                                             </ul>
                                         </div>
+                                        <?php endif; ?>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
