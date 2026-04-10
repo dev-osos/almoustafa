@@ -180,7 +180,7 @@ $isAccountant = ($currentUser['role'] ?? '') === 'accountant';
 $isManager = ($currentUser['role'] ?? '') === 'manager';
 $isDeveloper = ($currentUser['role'] ?? '') === 'developer';
 $isSales = ($currentUser['role'] ?? '') === 'sales';
-$canPrintTasks = $isAccountant || $isManager || $isDeveloper;
+$canPrintTasks = $isAccountant || $isManager || $isDeveloper || $isSales;
 
 // جلب سجل الأسعار السابقة لمنتج معين لعميل معين (API endpoint)
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['action'] === 'get_customer_price_history' && ($isAccountant || $isManager || $isDeveloper)) {
@@ -4431,7 +4431,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                 <button type="button" class="btn btn-outline-primary btn-sm" id="printSelectedReceiptsBtn" title="طباعة إيصالات الأوردرات المحددة" disabled>
                     <i class="bi bi-printer me-1"></i>طباعة المحدد (<span id="selectedCount">0</span>)
                 </button>
-                <?php if ($isAccountant || $isManager): ?>
+                <?php if ($isAccountant || $isManager || $isSales): ?>
                 <button type="button" class="btn btn-outline-success btn-sm" id="approveSelectedBtn" title="اعتماد الفواتير المحددة" disabled onclick="openBulkApproveCard()">
                     <i class="bi bi-check2-circle me-1"></i>اعتماد المحدد (<span id="approveSelectedCount">0</span>)
                 </button>
@@ -4598,7 +4598,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                     ?></td>
                                     <td class="text-wrap" data-wrap="true" style="min-width: 180px;">                                        <?php 
                                         // عرض منشئ المهمة إذا كان المحاسب أو المدير
-                                        if (isset($task['creator_name']) && ($isAccountant || $isManager)) {
+                                        if (isset($task['creator_name']) && ($isAccountant || $isManager || $isSales)) {
                                             $creatorRoleLabel = '';
                                             if (isset($task['creator_role'])) {
                                                 $creatorRoleLabel = ($task['creator_role'] ?? '') === 'accountant' ? 'المحاسب' : 'المدير';
@@ -4673,7 +4673,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                             'label' => ($rawStatusKey !== '' ? $rawStatusKey : 'غير معروفة')
                                         ];
                                         ?>
-                                        <?php if ($isManager || $isAccountant): ?>
+                                        <?php if ($isManager || $isAccountant || $isSales): ?>
                                         <div class="dropdown">
                                             <span class="badge bg-<?php echo htmlspecialchars($statusMeta['class']); ?> status-badge-dropdown"
                                                   role="button"
@@ -4696,30 +4696,6 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                                     </a>
                                                 </li>
                                                 <?php endforeach; ?>
-                                            </ul>
-                                        </div>
-                                        <?php elseif ($isSales && $statusKey === 'with_delegate'): ?>
-                                        <!-- المندوب يمكنه تغيير with_delegate → delivered فقط -->
-                                        <div class="dropdown">
-                                            <span class="badge bg-<?php echo htmlspecialchars($statusMeta['class']); ?> status-badge-dropdown"
-                                                  role="button"
-                                                  data-bs-toggle="dropdown"
-                                                  aria-expanded="false"
-                                                  data-task-id="<?php echo (int)$task['id']; ?>"
-                                                  data-current-status="<?php echo htmlspecialchars($statusKey); ?>"
-                                                  style="cursor:pointer;">
-                                                <?php echo htmlspecialchars($statusMeta['label']); ?> <i class="bi bi-chevron-down" style="font-size:0.65em;"></i>
-                                            </span>
-                                            <ul class="dropdown-menu dropdown-menu-end">
-                                                <li>
-                                                    <a class="dropdown-item status-quick-change"
-                                                       href="#"
-                                                       data-task-id="<?php echo (int)$task['id']; ?>"
-                                                       data-status="delivered">
-                                                        <span class="badge bg-success me-1">&nbsp;</span>
-                                                        تم التوصيل
-                                                    </a>
-                                                </li>
                                             </ul>
                                         </div>
                                         <?php else: ?>
@@ -4771,7 +4747,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                                     </a>
                                                 </li>
                                                 <?php endif; ?>
-                                                <?php if ($isAccountant || $isManager): ?>
+                                                <?php if ($isAccountant || $isManager || $isSales): ?>
                                                 <li>
                                                     <button type="button" class="dropdown-item" onclick="openChangeStatusModal(<?php echo (int)$task['id']; ?>, '<?php echo htmlspecialchars($task['status'], ENT_QUOTES, 'UTF-8'); ?>')">
                                                         <i class="bi bi-gear me-1"></i>تغيير حالة الطلب
