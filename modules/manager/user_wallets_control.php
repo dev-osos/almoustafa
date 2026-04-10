@@ -19,7 +19,7 @@ requireRole(['manager', 'accountant', 'developer']);
 $currentUser = getCurrentUser();
 $db = db();
 
-// منع الكاش عند التبديل بين حسابات "المستخدمون ذوو المحافظ" لضمان عرض بيانات محدثة
+// منع الكاش عند التبديل بين حسابات "" لضمان عرض بيانات محدثة
 if (!headers_sent()) {
     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
     header('Cache-Control: post-check=0, pre-check=0', false);
@@ -757,7 +757,7 @@ $isCurrentMonth = ($statsMonth === date('Y-m'));
         <div class="col-12 col-lg-4 mb-4">
             <div class="card shadow-sm">
                 <div class="card-header bg-light fw-bold">
-                    <i class="bi bi-people me-2"></i>المستخدمون ذوو المحافظ
+                    <i class="bi bi-people me-2"></i>
                 </div>
                 <div class="card-body p-0">
                     <div class="list-group list-group-flush">
