@@ -386,6 +386,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     }
 }
 
+// معالجة POST لصفحة production_tasks قبل أي HTML output
+if (($_GET['page'] ?? '') === 'production_tasks' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    require_once __DIR__ . '/../includes/config.php';
+    require_once __DIR__ . '/../includes/db.php';
+    require_once __DIR__ . '/../includes/auth.php';
+    require_once __DIR__ . '/../includes/audit_log.php';
+    require_once __DIR__ . '/../includes/path_helper.php';
+    $modulePath = __DIR__ . '/../modules/manager/production_tasks.php';
+    if (file_exists($modulePath)) {
+        include $modulePath;
+        exit;
+    }
+}
+
+// معالجة GET AJAX لصفحة production_tasks (مثل get_task_for_edit، update_task_status...)
+if (($_GET['page'] ?? '') === 'production_tasks' && $_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
+    require_once __DIR__ . '/../includes/config.php';
+    require_once __DIR__ . '/../includes/db.php';
+    require_once __DIR__ . '/../includes/auth.php';
+    require_once __DIR__ . '/../includes/audit_log.php';
+    require_once __DIR__ . '/../includes/path_helper.php';
+    $modulePath = __DIR__ . '/../modules/manager/production_tasks.php';
+    if (file_exists($modulePath)) {
+        include $modulePath;
+        exit;
+    }
+}
+
 // التحقق من طلب AJAX لصفحة cash_register
 $isAjaxRequest = !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
 $pageParam = $_GET['page'] ?? 'dashboard';
