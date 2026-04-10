@@ -763,28 +763,6 @@ $roleLabels = ['driver' => 'سائق', 'production' => 'عامل إنتاج', 's
                                     <div class="text-muted" style="font-size:.75rem"><?php echo (int)($monthlyStats['deposit_count'] ?? 0); ?> عملية</div>
                                 </div>
                             </div>
-                            <div class="col-6 col-md-3">
-                                <div class="border rounded p-2 bg-danger bg-opacity-10">
-                                    <div class="small text-muted">سحوبات الشهر</div>
-                                    <div class="fw-bold text-danger"><?php echo formatCurrency($monthlyStats['total_out'] ?? 0); ?></div>
-                                    <div class="text-muted" style="font-size:.75rem"><?php echo (int)($monthlyStats['withdrawal_count'] ?? 0); ?> عملية</div>
-                                </div>
-                            </div>
-                            <div class="col-6 col-md-3">
-                                <div class="border rounded p-2 bg-info bg-opacity-10">
-                                    <div class="small text-muted">صافي الشهر</div>
-                                    <?php $monthlyNet = ($monthlyStats['total_in'] ?? 0) - ($monthlyStats['total_out'] ?? 0); ?>
-                                    <div class="fw-bold <?php echo $monthlyNet >= 0 ? 'text-success' : 'text-danger'; ?>"><?php echo formatCurrency(abs($monthlyNet)); ?></div>
-                                    <div class="text-muted" style="font-size:.75rem"><?php echo $monthlyNet >= 0 ? 'رصيد إضافي' : 'رصيد ناقص'; ?></div>
-                                </div>
-                            </div>
-                            <div class="col-6 col-md-3">
-                                <div class="border rounded p-2 bg-primary bg-opacity-10">
-                                    <div class="small text-muted">الرصيد الكلي</div>
-                                    <div class="fw-bold text-primary"><?php echo formatCurrency($userBalances[$selectedUser['id']] ?? 0); ?></div>
-                                    <div class="text-muted" style="font-size:.75rem"><?php echo date('F Y'); ?></div>
-                                </div>
-                            </div>
                         </div>
                     </div>
                     <?php endif; ?>
