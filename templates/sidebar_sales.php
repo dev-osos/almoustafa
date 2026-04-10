@@ -103,7 +103,7 @@ $baseUrl = getDashboardUrl();
             <div class="sidebar-section">
                 <div class="sidebar-section-title">Sales</div>
                 
-              
+    
                 
                 <li class="nav-item">
                     <a class="nav-link <?php echo (isset($_GET['page']) && $_GET['page'] === 'payment_schedules') ? 'active' : ''; ?>" 

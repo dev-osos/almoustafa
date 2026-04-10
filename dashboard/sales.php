@@ -2550,14 +2550,7 @@ if ($isAjaxNavigation) {
 })();
 </script>
                 
-            <?php elseif ($page === 'orders'): ?>
-                <!-- صفحة طلبات العملاء -->
-                <?php 
-                $modulePath = __DIR__ . '/../modules/sales/customer_orders.php';
-                if (file_exists($modulePath)) {
-                    include $modulePath;
-                }
-                ?>
+            
                 
             <?php elseif ($page === 'payment_schedules'): ?>
                 <!-- صفحة الجداول الزمنية للتحصيل -->

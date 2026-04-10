@@ -107,13 +107,7 @@ switch ($role) {
                 'active' => ($currentPage === 'manager.php' && $currentPageParam === 'shipping_orders'),
                 'badge' => null
             ],
-            [
-                'title' => 'تسجيل طلبات العملاء',
-                'icon' => 'bi-bag-check',
-                'url' => $baseUrl . 'manager.php?page=orders',
-                'active' => ($currentPage === 'manager.php' && $currentPageParam === 'orders'),
-                'badge' => null
-            ],
+            
             [
                 'title' => 'نقطة البيع',
                 'icon' => 'bi-cart4',
@@ -462,13 +456,7 @@ switch ($role) {
                 'active' => ($currentPage === 'accountant.php' && $currentPageParam === 'shipping_orders'),
                 'badge' => null
             ],
-            [
-                'title' => 'تسجيل طلبات العملاء',
-                'icon' => 'bi-bag-check',
-                'url' => $baseUrl . 'accountant.php?page=orders',
-                'active' => ($currentPage === 'accountant.php' && $currentPageParam === 'orders'),
-                'badge' => null
-            ],
+            
             [
                 'title' => 'نقطة البيع',
                 'icon' => 'bi-cart4',
@@ -702,13 +690,7 @@ switch ($role) {
                 'badge' => null
             ],
 
-            [
-                'title' => isset($lang['customer_orders']) ? $lang['customer_orders'] : 'طلبات العملاء',
-                'icon' => 'bi-clipboard-check',
-                'url' => $baseUrl . 'sales.php?page=orders',
-                'active' => ($currentPage === 'sales.php' && $currentPageParam === 'orders'),
-                'badge' => (isset($currentUser) && $currentUser['role'] === 'sales' && function_exists('getNewOrdersCount')) ? getNewOrdersCount($currentUser['id']) : null
-            ],
+           
             [
                 'title' => isset($lang['payment_schedules']) ? $lang['payment_schedules'] : 'جداول التحصيل',
                 'icon' => 'bi-calendar-event',
@@ -1024,13 +1006,7 @@ if (empty($menuItems)) {
                 'active' => ($currentPage === 'sales.php' && $currentPageParam === 'customers'),
                 'badge' => null
             ],
-            [
-                'title' => isset($lang['customer_orders']) ? $lang['customer_orders'] : 'طلبات العملاء',
-                'icon' => 'bi-clipboard-check',
-                'url' => $baseUrl . 'sales.php?page=orders',
-                'active' => ($currentPage === 'sales.php' && $currentPageParam === 'orders'),
-                'badge' => (isset($currentUser) && $currentUser['role'] === 'sales' && function_exists('getNewOrdersCount')) ? getNewOrdersCount($currentUser['id']) : null
-            ],
+            
             [
                 'title' => 'سجلات المندوب',
                 'icon' => 'bi-journal-text',

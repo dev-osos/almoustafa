@@ -208,13 +208,7 @@ switch ($role) {
                 'active' => (isset($_GET['page']) && $_GET['page'] === 'my_records'),
                 'badge' => null
             ],
-            [
-                'title' => 'طلبات العملاء',
-                'icon' => 'bi-cart-check',
-                'url' => $baseUrl . 'sales.php?page=orders',
-                'active' => (isset($_GET['page']) && $_GET['page'] === 'orders'),
-                'badge' => null
-            ],
+            
             [
                 'title' => 'جداول التحصيل',
                 'icon' => 'bi-calendar-check',
