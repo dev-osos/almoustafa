@@ -684,7 +684,7 @@ switch ($role) {
             ],
             [
                 'title' => 'الأوردرات',
-                'icon' => 'bi-box-seam',
+                'icon' => 'bi-cart-check',
                 'url' => $baseUrl . 'sales.php?page=production_tasks',
                 'active' => ($currentPage === 'sales.php' && $currentPageParam === 'production_tasks'),
                 'badge' => null
