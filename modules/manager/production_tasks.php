@@ -180,7 +180,7 @@ $isAccountant = ($currentUser['role'] ?? '') === 'accountant';
 $isManager = ($currentUser['role'] ?? '') === 'manager';
 $isDeveloper = ($currentUser['role'] ?? '') === 'developer';
 $isSales = ($currentUser['role'] ?? '') === 'sales';
-$canPrintTasks = $isAccountant || $isManager || $isDeveloper || $isSales;
+$canPrintTasks = $isAccountant || $isManager || $isDeveloper;
 
 // جلب سجل الأسعار السابقة لمنتج معين لعميل معين (API endpoint)
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['action'] === 'get_customer_price_history' && ($isAccountant || $isManager || $isDeveloper)) {
@@ -3169,8 +3169,11 @@ try {
                t.quantity, t.unit, t.customer_name, t.customer_phone, t.notes, t.product_id, t.related_type, t.related_id, t.task_type,
                t.local_customer_id, t.total_amount,
                COALESCE(t.receipt_print_count, 0) AS receipt_print_count,
-               u.full_name AS assigned_name, t.assigned_to";
-        $joins = "LEFT JOIN users u ON t.assigned_to = u.id";
+               u.full_name AS assigned_name, t.assigned_to,
+               uCreator.full_name AS creator_name, t.created_by,
+               uCreator.role AS creator_role";
+        $joins = "LEFT JOIN users u ON t.assigned_to = u.id
+               LEFT JOIN users uCreator ON t.created_by = uCreator.id";
         if ($hasStatusChangedBy) {
             $selectFields .= ", uStatus.full_name AS status_changed_by_name, t.status_changed_by";
             $joins .= " LEFT JOIN users uStatus ON t.status_changed_by = uStatus.id";
@@ -4431,7 +4434,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                 <button type="button" class="btn btn-outline-primary btn-sm" id="printSelectedReceiptsBtn" title="طباعة إيصالات الأوردرات المحددة" disabled>
                     <i class="bi bi-printer me-1"></i>طباعة المحدد (<span id="selectedCount">0</span>)
                 </button>
-                <?php if ($isAccountant || $isManager || $isSales): ?>
+                <?php if ($isAccountant || $isManager): ?>
                 <button type="button" class="btn btn-outline-success btn-sm" id="approveSelectedBtn" title="اعتماد الفواتير المحددة" disabled onclick="openBulkApproveCard()">
                     <i class="bi bi-check2-circle me-1"></i>اعتماد المحدد (<span id="approveSelectedCount">0</span>)
                 </button>
