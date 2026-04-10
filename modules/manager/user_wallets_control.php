@@ -19,7 +19,7 @@ requireRole(['manager', 'accountant', 'developer']);
 $currentUser = getCurrentUser();
 $db = db();
 
-// منع الكاش عند التبديل بين حسابات "" لضمان عرض بيانات محدثة
+// منع الكاش عند التبديل بين حسابات "المستخدمون ذوو المحافظ" لضمان عرض بيانات محدثة
 if (!headers_sent()) {
     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
     header('Cache-Control: post-check=0, pre-check=0', false);
@@ -82,7 +82,7 @@ if ($isWalletControlAjax) {
         } elseif ($amount <= 0) {
             $ajaxError = 'يرجى إدخال مبلغ صحيح أكبر من الصفر.';
         } else {
-            $targetUser = $db->queryOne("SELECT id, full_name, username, role FROM users WHERE id = ? AND role IN ('driver', 'production') AND status = 'active'", [$targetUserId]);
+            $targetUser = $db->queryOne("SELECT id, full_name, username, role FROM users WHERE id = ? AND role IN ('driver', 'production', 'sales') AND status = 'active'", [$targetUserId]);
             if (empty($targetUser)) {
                 $ajaxError = 'المستخدم غير موجود أو غير مسموح له بالمحفظة.';
             } else {
@@ -267,7 +267,7 @@ if ($isWalletControlAjax) {
         $ajaxError = 'إجراء غير صحيح.';
     }
 
-    $walletUsersAjax = $db->query("SELECT u.id, u.full_name, u.username, u.role FROM users u WHERE u.status = 'active' AND u.role IN ('driver', 'production') ORDER BY u.role, u.full_name ASC, u.username ASC") ?: [];
+    $walletUsersAjax = $db->query("SELECT u.id, u.full_name, u.username, u.role FROM users u WHERE u.status = 'active' AND u.role IN ('driver', 'production', 'sales') ORDER BY u.role, u.full_name ASC, u.username ASC") ?: [];
     $userBalancesAjax = [];
     foreach ($walletUsersAjax as $u) {
         $userBalancesAjax[$u['id']] = getWalletBalanceForControl($db, $u['id']);
@@ -384,7 +384,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     } elseif ($amount <= 0) {
         $error = 'يرجى إدخال مبلغ صحيح أكبر من الصفر.';
     } else {
-        $targetUser = $db->queryOne("SELECT id, full_name, username, role FROM users WHERE id = ? AND role IN ('driver', 'production') AND status = 'active'", [$targetUserId]);
+        $targetUser = $db->queryOne("SELECT id, full_name, username, role FROM users WHERE id = ? AND role IN ('driver', 'production', 'sales') AND status = 'active'", [$targetUserId]);
         if (empty($targetUser)) {
             $error = 'المستخدم غير موجود أو غير مسموح له بالمحفظة.';
         } else {
@@ -551,7 +551,7 @@ if (!empty($pendingLocalCollectionRequests)) {
 
 // جلب قائمة المستخدمين (سائق، عامل إنتاج) مع أرصدتهم
 $walletUsers = $db->query(
-    "SELECT u.id, u.full_name, u.username, u.role FROM users u WHERE u.status = 'active' AND u.role IN ('driver', 'production') ORDER BY u.role, u.full_name ASC, u.username ASC"
+    "SELECT u.id, u.full_name, u.username, u.role FROM users u WHERE u.status = 'active' AND u.role IN ('driver', 'production', 'sales') ORDER BY u.role, u.full_name ASC, u.username ASC"
 ) ?: [];
 
 $userBalances = [];
@@ -574,7 +574,7 @@ $filterAmountFrom = isset($_GET['filter_amount_from']) && $_GET['filter_amount_f
 $filterAmountTo = isset($_GET['filter_amount_to']) && $_GET['filter_amount_to'] !== '' ? (float)$_GET['filter_amount_to'] : null;
 
 if ($selectedUserId > 0) {
-    $selectedUser = $db->queryOne("SELECT id, full_name, username, role FROM users WHERE id = ? AND role IN ('driver', 'production')", [$selectedUserId]);
+    $selectedUser = $db->queryOne("SELECT id, full_name, username, role FROM users WHERE id = ? AND role IN ('driver', 'production', 'sales')", [$selectedUserId]);
     if ($selectedUser) {
         $txWhere = "WHERE t.user_id = ?";
         $txParams = [$selectedUserId];
@@ -602,47 +602,7 @@ $typeLabels = [
     'custody_add' => 'عهدة',
     'custody_retrieve' => 'استرجاع عهدة'
 ];
-$roleLabels = ['driver' => 'سائق', 'production' => 'عامل إنتاج'];
-
-// إحصائيات الإيداعات الشهرية للمستخدم المختار
-$statsMonth = isset($_GET['stats_month']) && preg_match('/^\d{4}-\d{2}$/', $_GET['stats_month'])
-    ? $_GET['stats_month']
-    : date('Y-m');
-$statsMonthStart = $statsMonth . '-01';
-$statsMonthEnd   = date('Y-m-t', strtotime($statsMonthStart));
-$statsMonthLabel = date('Y-m', strtotime($statsMonthStart));
-
-$monthlyDepositStats = null;
-if ($selectedUserId > 0 && $selectedUser) {
-    $monthlyDepositStats = $db->queryOne(
-        "SELECT
-            COUNT(*) AS count,
-            COALESCE(SUM(amount), 0) AS total
-         FROM user_wallet_transactions
-         WHERE user_id = ?
-           AND type = 'deposit'
-           AND DATE(created_at) BETWEEN ? AND ?",
-        [$selectedUserId, $statsMonthStart, $statsMonthEnd]
-    );
-    // آخر 6 أشهر للمقارنة
-    $monthlyDepositHistory = $db->query(
-        "SELECT
-            DATE_FORMAT(created_at, '%Y-%m') AS month,
-            COUNT(*) AS count,
-            COALESCE(SUM(amount), 0) AS total
-         FROM user_wallet_transactions
-         WHERE user_id = ?
-           AND type = 'deposit'
-           AND created_at >= DATE_SUB(?, INTERVAL 5 MONTH)
-         GROUP BY DATE_FORMAT(created_at, '%Y-%m')
-         ORDER BY month ASC",
-        [$selectedUserId, $statsMonthStart . '-01']
-    ) ?: [];
-}
-
-$prevMonth = date('Y-m', strtotime($statsMonth . '-01 -1 month'));
-$nextMonth = date('Y-m', strtotime($statsMonth . '-01 +1 month'));
-$isCurrentMonth = ($statsMonth === date('Y-m'));
+$roleLabels = ['driver' => 'سائق', 'production' => 'عامل إنتاج', 'sales' => 'مندوب مبيعات'];
 ?>
 <div class="container-fluid">
     <div class="page-header mb-4">
@@ -757,7 +717,7 @@ $isCurrentMonth = ($statsMonth === date('Y-m'));
         <div class="col-12 col-lg-4 mb-4">
             <div class="card shadow-sm">
                 <div class="card-header bg-light fw-bold">
-                    <i class="bi bi-people me-2"></i>
+                    <i class="bi bi-people me-2"></i>المستخدمون ذوو المحافظ
                 </div>
                 <div class="card-body p-0">
                     <div class="list-group list-group-flush">
@@ -809,70 +769,6 @@ $isCurrentMonth = ($statsMonth === date('Y-m'));
                         <small class="text-muted">ملاحظة: المبلغ المسحوب لا يُضاف إلى خزنة الشركة</small>
                     </div>
                 </div>
-                <!-- إحصائيات الإيداعات الشهرية -->
-                <?php if ($monthlyDepositStats !== null): ?>
-                <div class="card shadow-sm mb-4">
-                    <div class="card-header bg-light fw-bold d-flex flex-wrap align-items-center justify-content-between gap-2">
-                        <span><i class="bi bi-bar-chart-line me-2"></i>إحصائيات الإيداعات الشهرية</span>
-                        <div class="d-flex align-items-center gap-1">
-                            <a href="?<?php echo http_build_query(array_merge($_GET, ['stats_month' => $prevMonth])); ?>"
-                               class="btn btn-outline-secondary btn-sm" title="الشهر السابق">
-                                <i class="bi bi-chevron-right"></i>
-                            </a>
-                            <span class="badge bg-primary px-3 py-2 fs-6"><?php
-                                $monthNames = ['01'=>'يناير','02'=>'فبراير','03'=>'مارس','04'=>'أبريل','05'=>'مايو','06'=>'يونيو','07'=>'يوليو','08'=>'أغسطس','09'=>'سبتمبر','10'=>'أكتوبر','11'=>'نوفمبر','12'=>'ديسمبر'];
-                                [$y, $m] = explode('-', $statsMonth);
-                                echo ($monthNames[$m] ?? $m) . ' ' . $y;
-                            ?></span>
-                            <a href="?<?php echo http_build_query(array_merge($_GET, ['stats_month' => $nextMonth])); ?>"
-                               class="btn btn-outline-secondary btn-sm <?php echo $isCurrentMonth ? 'disabled' : ''; ?>" title="الشهر التالي">
-                                <i class="bi bi-chevron-left"></i>
-                            </a>
-                        </div>
-                    </div>
-                    <div class="card-body">
-                        <div class="row g-3 text-center mb-3">
-                            <div class="col-6">
-                                <div class="p-3 bg-success bg-opacity-10 rounded-3">
-                                    <div class="fs-2 fw-bold text-success"><?php echo formatCurrency((float)($monthlyDepositStats['total'] ?? 0)); ?></div>
-                                    <div class="text-muted small mt-1">إجمالي الإيداعات</div>
-                                </div>
-                            </div>
-                            <div class="col-6">
-                                <div class="p-3 bg-info bg-opacity-10 rounded-3">
-                                    <div class="fs-2 fw-bold text-info"><?php echo (int)($monthlyDepositStats['count'] ?? 0); ?></div>
-                                    <div class="text-muted small mt-1">عدد العمليات</div>
-                                </div>
-                            </div>
-                        </div>
-                        <?php if (!empty($monthlyDepositHistory)): ?>
-                        <div class="mt-2">
-                            <div class="small text-muted mb-2 fw-semibold">آخر 6 أشهر</div>
-                            <?php
-                            $maxTotal = max(array_map(fn($r) => (float)$r['total'], $monthlyDepositHistory));
-                            foreach ($monthlyDepositHistory as $row):
-                                $pct = $maxTotal > 0 ? round(((float)$row['total'] / $maxTotal) * 100) : 0;
-                                [$ry, $rm] = explode('-', $row['month']);
-                                $label = ($monthNames[$rm] ?? $rm) . ' ' . $ry;
-                                $isSelected = ($row['month'] === $statsMonth);
-                            ?>
-                            <div class="d-flex align-items-center gap-2 mb-1">
-                                <div class="text-muted small" style="width:90px;text-align:end"><?php echo $label; ?></div>
-                                <div class="flex-grow-1">
-                                    <div class="progress" style="height:20px;border-radius:6px">
-                                        <div class="progress-bar <?php echo $isSelected ? 'bg-success' : 'bg-success bg-opacity-50'; ?>"
-                                             style="width:<?php echo $pct; ?>%;min-width:2px" title="<?php echo formatCurrency((float)$row['total']); ?>"></div>
-                                    </div>
-                                </div>
-                                <div class="small fw-semibold" style="width:100px;text-align:start"><?php echo formatCurrency((float)$row['total']); ?></div>
-                            </div>
-                            <?php endforeach; ?>
-                        </div>
-                        <?php endif; ?>
-                    </div>
-                </div>
-                <?php endif; ?>
-
                 <div class="card shadow-sm">
                     <div class="card-header bg-light fw-bold">
                         <i class="bi bi-journal-text me-2"></i>سجل معاملات <?php echo htmlspecialchars($selectedUser['full_name'] ?: $selectedUser['username']); ?>

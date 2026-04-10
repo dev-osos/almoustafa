@@ -1829,7 +1829,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($taskId <= 0) {
             $error = 'معرف المهمة غير صحيح.';
-        } elseif (!in_array($newStatus, ['pending', 'completed', 'with_delegate', 'with_shipping_company', 'delivered', 'returned', 'cancelled'], true)) {
+        } elseif (!in_array($newStatus, ['pending', 'completed', 'with_delegate', 'with_driver', 'with_shipping_company', 'delivered', 'returned', 'cancelled'], true)) {
             $error = 'حالة المهمة غير صحيحة.';
         } else {
             try {
