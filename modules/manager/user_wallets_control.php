@@ -593,6 +593,17 @@ if ($selectedUserId > 0) {
             "SELECT t.*, u.full_name as created_by_name FROM user_wallet_transactions t LEFT JOIN users u ON u.id = t.created_by $txWhere ORDER BY t.created_at DESC LIMIT " . (int)$transactionsPerPage . " OFFSET " . (int)$txOffset,
             $txParams
         ) ?: [];
+
+        // إحصائيات الشهر الحالي
+        $monthlyStats = $db->queryOne("
+            SELECT
+                COALESCE(SUM(CASE WHEN type IN ('deposit','custody_add') THEN amount ELSE 0 END), 0) AS total_in,
+                COALESCE(SUM(CASE WHEN type IN ('withdrawal','custody_retrieve') THEN amount ELSE 0 END), 0) AS total_out,
+                COUNT(CASE WHEN type = 'deposit' THEN 1 END) AS deposit_count,
+                COUNT(CASE WHEN type = 'withdrawal' THEN 1 END) AS withdrawal_count
+            FROM user_wallet_transactions
+            WHERE user_id = ? AND YEAR(created_at) = YEAR(NOW()) AND MONTH(created_at) = MONTH(NOW())
+        ", [$selectedUserId]) ?: [];
     }
 }
 
@@ -741,10 +752,42 @@ $roleLabels = ['driver' => 'سائق', 'production' => 'عامل إنتاج', 's
                     <div class="card-header bg-light fw-bold d-flex flex-wrap align-items-center justify-content-between gap-2">
                         <span><i class="bi bi-cash-stack me-2"></i>سحب من محفظة <?php echo htmlspecialchars($selectedUser['full_name'] ?: $selectedUser['username']); ?>
                         <span class="badge bg-primary ms-2" id="wallets-control-selected-balance">الرصيد: <?php echo formatCurrency($userBalances[$selectedUser['id']] ?? 0); ?></span></span>
-                        <a href="?<?php echo http_build_query(array_merge($_GET, ['page' => 'user_wallet', 'user_id' => $selectedUser['id']])); ?>" class="btn btn-outline-primary btn-sm">
-                            <i class="bi bi-wallet2 me-1"></i>عرض محفظة المستخدم
-                        </a>
                     </div>
+                    <?php if (!empty($monthlyStats)): ?>
+                    <div class="px-3 pt-3 pb-1">
+                        <div class="row g-2 text-center">
+                            <div class="col-6 col-md-3">
+                                <div class="border rounded p-2 bg-success bg-opacity-10">
+                                    <div class="small text-muted">إيداعات الشهر</div>
+                                    <div class="fw-bold text-success"><?php echo formatCurrency($monthlyStats['total_in'] ?? 0); ?></div>
+                                    <div class="text-muted" style="font-size:.75rem"><?php echo (int)($monthlyStats['deposit_count'] ?? 0); ?> عملية</div>
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="border rounded p-2 bg-danger bg-opacity-10">
+                                    <div class="small text-muted">سحوبات الشهر</div>
+                                    <div class="fw-bold text-danger"><?php echo formatCurrency($monthlyStats['total_out'] ?? 0); ?></div>
+                                    <div class="text-muted" style="font-size:.75rem"><?php echo (int)($monthlyStats['withdrawal_count'] ?? 0); ?> عملية</div>
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="border rounded p-2 bg-info bg-opacity-10">
+                                    <div class="small text-muted">صافي الشهر</div>
+                                    <?php $monthlyNet = ($monthlyStats['total_in'] ?? 0) - ($monthlyStats['total_out'] ?? 0); ?>
+                                    <div class="fw-bold <?php echo $monthlyNet >= 0 ? 'text-success' : 'text-danger'; ?>"><?php echo formatCurrency(abs($monthlyNet)); ?></div>
+                                    <div class="text-muted" style="font-size:.75rem"><?php echo $monthlyNet >= 0 ? 'رصيد إضافي' : 'رصيد ناقص'; ?></div>
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="border rounded p-2 bg-primary bg-opacity-10">
+                                    <div class="small text-muted">الرصيد الكلي</div>
+                                    <div class="fw-bold text-primary"><?php echo formatCurrency($userBalances[$selectedUser['id']] ?? 0); ?></div>
+                                    <div class="text-muted" style="font-size:.75rem"><?php echo date('F Y'); ?></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <?php endif; ?>
                     <div class="card-body">
                         <form method="POST" class="row g-3" id="wallets-control-withdraw-form" data-wallets-control-ajax>
                             <input type="hidden" name="action" value="withdraw">
