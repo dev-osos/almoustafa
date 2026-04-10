@@ -594,16 +594,35 @@ if ($selectedUserId > 0) {
             $txParams
         ) ?: [];
 
-        // إحصائيات الشهر الحالي
-        $monthlyStats = $db->queryOne("
+        // إحصائيات الإيداعات لآخر 6 أشهر (deposit فقط بدون custody_add)
+        $sixMonthsDeposits = $db->query("
             SELECT
-                COALESCE(SUM(CASE WHEN type IN ('deposit','custody_add') THEN amount ELSE 0 END), 0) AS total_in,
-                COALESCE(SUM(CASE WHEN type IN ('withdrawal','custody_retrieve') THEN amount ELSE 0 END), 0) AS total_out,
-                COUNT(CASE WHEN type = 'deposit' THEN 1 END) AS deposit_count,
-                COUNT(CASE WHEN type = 'withdrawal' THEN 1 END) AS withdrawal_count
+                DATE_FORMAT(created_at, '%Y-%m') AS month_key,
+                DATE_FORMAT(created_at, '%m/%Y')  AS month_label,
+                COALESCE(SUM(amount), 0)           AS total_deposits,
+                COUNT(*)                            AS deposit_count
             FROM user_wallet_transactions
-            WHERE user_id = ? AND YEAR(created_at) = YEAR(NOW()) AND MONTH(created_at) = MONTH(NOW())
+            WHERE user_id = ?
+              AND type = 'deposit'
+              AND created_at >= DATE_FORMAT(DATE_SUB(NOW(), INTERVAL 5 MONTH), '%Y-%m-01')
+            GROUP BY month_key, month_label
+            ORDER BY month_key ASC
         ", [$selectedUserId]) ?: [];
+
+        // تأكد من وجود جميع الأشهر الـ6 حتى لو كانت فارغة
+        $sixMonthsData = [];
+        for ($i = 5; $i >= 0; $i--) {
+            $ts  = strtotime("-$i months");
+            $key = date('Y-m', $ts);
+            $sixMonthsData[$key] = ['month_key' => $key, 'month_label' => date('m/Y', $ts), 'total_deposits' => 0, 'deposit_count' => 0];
+        }
+        foreach ($sixMonthsDeposits as $row) {
+            if (isset($sixMonthsData[$row['month_key']])) {
+                $sixMonthsData[$row['month_key']] = $row;
+            }
+        }
+        $sixMonthsData = array_values($sixMonthsData);
+        $maxDeposit = max(array_column($sixMonthsData, 'total_deposits') ?: [1]);
     }
 }
 
@@ -753,16 +772,29 @@ $roleLabels = ['driver' => 'سائق', 'production' => 'عامل إنتاج', 's
                         <span><i class="bi bi-cash-stack me-2"></i>سحب من محفظة <?php echo htmlspecialchars($selectedUser['full_name'] ?: $selectedUser['username']); ?>
                         <span class="badge bg-primary ms-2" id="wallets-control-selected-balance">الرصيد: <?php echo formatCurrency($userBalances[$selectedUser['id']] ?? 0); ?></span></span>
                     </div>
-                    <?php if (!empty($monthlyStats)): ?>
-                    <div class="px-3 pt-3 pb-1">
-                        <div class="row g-2 text-center">
-                            <div class="col-6 col-md-3">
-                                <div class="border rounded p-2 bg-success bg-opacity-10">
-                                    <div class="small text-muted">إيداعات الشهر</div>
-                                    <div class="fw-bold text-success"><?php echo formatCurrency($monthlyStats['total_in'] ?? 0); ?></div>
-                                    <div class="text-muted" style="font-size:.75rem"><?php echo (int)($monthlyStats['deposit_count'] ?? 0); ?> عملية</div>
+                    <?php if (!empty($sixMonthsData)): ?>
+                    <div class="px-3 pt-3 pb-2 border-bottom">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <span class="small fw-semibold text-muted"><i class="bi bi-bar-chart-line me-1"></i>الإيداعات — آخر 6 أشهر</span>
+                            <span class="small text-muted">الأعلى: <strong><?php echo formatCurrency($maxDeposit); ?></strong></span>
+                        </div>
+                        <div class="d-flex flex-column gap-1">
+                        <?php foreach ($sixMonthsData as $m):
+                            $pct = $maxDeposit > 0 ? round(($m['total_deposits'] / $maxDeposit) * 100) : 0;
+                            $isCurrentMonth = ($m['month_key'] === date('Y-m'));
+                            $barColor = $isCurrentMonth ? 'bg-success' : 'bg-primary bg-opacity-50';
+                        ?>
+                            <div class="d-flex align-items-center gap-2" style="min-height:26px">
+                                <span class="text-end <?php echo $isCurrentMonth ? 'fw-bold text-success' : 'text-muted'; ?>" style="width:58px;font-size:.78rem;flex-shrink:0"><?php echo $m['month_label']; ?></span>
+                                <div class="flex-grow-1 rounded" style="background:#eee;height:16px;overflow:hidden">
+                                    <div class="<?php echo $barColor; ?> h-100 rounded" style="width:<?php echo max($pct, $m['total_deposits'] > 0 ? 2 : 0); ?>%;transition:width .4s"></div>
                                 </div>
+                                <span class="text-end <?php echo $isCurrentMonth ? 'fw-bold text-success' : 'text-muted'; ?>" style="width:95px;font-size:.78rem;flex-shrink:0;white-space:nowrap">
+                                    <?php echo $m['total_deposits'] > 0 ? formatCurrency($m['total_deposits']) : '—'; ?>
+                                    <?php if ($m['deposit_count'] > 0): ?><span style="font-size:.7rem;opacity:.7"> (<?php echo $m['deposit_count']; ?>)</span><?php endif; ?>
+                                </span>
                             </div>
+                        <?php endforeach; ?>
                         </div>
                     </div>
                     <?php endif; ?>
