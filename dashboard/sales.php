@@ -2683,6 +2683,21 @@ if ($isAjaxNavigation) {
                 }
                 ?>
                 
+            <?php elseif ($page === 'production_tasks'): ?>
+                <?php
+                $modulePath = __DIR__ . '/../modules/manager/production_tasks.php';
+                if (file_exists($modulePath)) {
+                    try {
+                        include $modulePath;
+                    } catch (Throwable $e) {
+                        error_log('Error loading production_tasks.php for sales: ' . $e->getMessage());
+                        echo '<div class="alert alert-danger m-3">حدث خطأ في تحميل الصفحة.</div>';
+                    }
+                } else {
+                    echo '<div class="alert alert-warning m-3">الصفحة غير متوفرة.</div>';
+                }
+                ?>
+
             <?php elseif ($page === 'batch_reader'): ?>
                 <!-- صفحة قارئ أرقام التشغيلات -->
                 <div class="container-fluid p-0" style="height: 100vh; overflow: hidden;">

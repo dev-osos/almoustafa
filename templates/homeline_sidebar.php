@@ -694,6 +694,13 @@ switch ($role) {
                 'active' => ($currentPage === 'sales.php' && $currentPageParam === 'customers'),
                 'badge' => null
             ],
+            [
+                'title' => 'الأوردرات',
+                'icon' => 'bi-box-seam',
+                'url' => $baseUrl . 'sales.php?page=production_tasks',
+                'active' => ($currentPage === 'sales.php' && $currentPageParam === 'production_tasks'),
+                'badge' => null
+            ],
 
             [
                 'title' => isset($lang['customer_orders']) ? $lang['customer_orders'] : 'طلبات العملاء',

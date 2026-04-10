@@ -167,7 +167,7 @@ if (!function_exists('managerEnsureTasksStatusEnum')) {
     }
 }
 
-requireRole(['manager', 'accountant', 'developer']);
+requireRole(['manager', 'accountant', 'developer', 'sales']);
 
 $db = db();
 $currentUser = getCurrentUser();
@@ -179,6 +179,7 @@ $tasksRetentionLimit = getTasksRetentionLimit();
 $isAccountant = ($currentUser['role'] ?? '') === 'accountant';
 $isManager = ($currentUser['role'] ?? '') === 'manager';
 $isDeveloper = ($currentUser['role'] ?? '') === 'developer';
+$isSales = ($currentUser['role'] ?? '') === 'sales';
 $canPrintTasks = $isAccountant || $isManager || $isDeveloper;
 
 // جلب سجل الأسعار السابقة لمنتج معين لعميل معين (API endpoint)
@@ -379,18 +380,31 @@ try {
 // قائمة عملاء المندوبين (مثل صفحة الأسعار المخصصة)
 $repCustomersForTask = [];
 try {
-    $repCustomersForTask = $db->query("
-        SELECT c.id, c.name, c.phone,
-               COALESCE(rep1.full_name, rep2.full_name) AS rep_name
-        FROM customers c
-        LEFT JOIN users rep1 ON c.rep_id = rep1.id AND rep1.role = 'sales'
-        LEFT JOIN users rep2 ON c.created_by = rep2.id AND rep2.role = 'sales'
-        WHERE c.status = 'active'
-          AND ((c.rep_id IS NOT NULL AND c.rep_id IN (SELECT id FROM users WHERE role = 'sales'))
-               OR (c.created_by IS NOT NULL AND c.created_by IN (SELECT id FROM users WHERE role = 'sales')))
-        ORDER BY c.name ASC
-        LIMIT 500
-    ");
+    if ($isSales) {
+        // المندوب يرى عملاءه فقط
+        $repCustomersForTask = $db->query("
+            SELECT c.id, c.name, c.phone,
+                   ? AS rep_name
+            FROM customers c
+            WHERE c.status = 'active'
+              AND (c.rep_id = ? OR c.created_by = ?)
+            ORDER BY c.name ASC
+            LIMIT 500
+        ", [$currentUser['full_name'] ?? '', $currentUser['id'], $currentUser['id']]);
+    } else {
+        $repCustomersForTask = $db->query("
+            SELECT c.id, c.name, c.phone,
+                   COALESCE(rep1.full_name, rep2.full_name) AS rep_name
+            FROM customers c
+            LEFT JOIN users rep1 ON c.rep_id = rep1.id AND rep1.role = 'sales'
+            LEFT JOIN users rep2 ON c.created_by = rep2.id AND rep2.role = 'sales'
+            WHERE c.status = 'active'
+              AND ((c.rep_id IS NOT NULL AND c.rep_id IN (SELECT id FROM users WHERE role = 'sales'))
+                   OR (c.created_by IS NOT NULL AND c.created_by IN (SELECT id FROM users WHERE role = 'sales')))
+            ORDER BY c.name ASC
+            LIMIT 500
+        ");
+    }
     $repCustomersForTask = array_map(function ($r) {
         return [
             'id' => (int)$r['id'],
@@ -906,6 +920,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($localCustomerIdForTask <= 0) {
             $localCustomerIdForTask = null;
         }
+        $repCustomerIdForTask = isset($_POST['rep_customer_id']) ? (int)$_POST['rep_customer_id'] : 0;
+        if ($repCustomerIdForTask <= 0) {
+            $repCustomerIdForTask = null;
+        }
         $assignees = $_POST['assigned_to'] ?? [];
         $shippingFees = 0;
         if ($taskType !== 'telegraph' && isset($_POST['shipping_fees']) && $_POST['shipping_fees'] !== '') {
@@ -1178,6 +1196,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             // عميل موجود لكن ليس telegraph: فقط اربط task بالعميل
                             $localCustomerIdForTask = (int)($existingLocal['id'] ?? 0);
                         }
+                    }
+                }
+
+                // إذا كان المندوب وأدخل اسم عميل غير موجود في قائمة عملائه → حفظه في customers
+                if ($isSales && $customerName !== '' && $repCustomerIdForTask === null) {
+                    $existingRepCustomer = $db->queryOne(
+                        "SELECT id FROM customers WHERE name = ? AND (rep_id = ? OR created_by = ?) LIMIT 1",
+                        [$customerName, $currentUser['id'], $currentUser['id']]
+                    );
+                    if (empty($existingRepCustomer)) {
+                        $db->execute(
+                            "INSERT INTO customers (name, phone, rep_id, created_by, status) VALUES (?, ?, ?, ?, 'active')",
+                            [
+                                $customerName,
+                                $customerPhone !== '' ? $customerPhone : null,
+                                $currentUser['id'],
+                                $currentUser['id'],
+                            ]
+                        );
+                        $repCustomerIdForTask = (int)$db->getLastInsertId();
+                    } else {
+                        $repCustomerIdForTask = (int)$existingRepCustomer['id'];
                     }
                 }
 
@@ -1835,14 +1875,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
                 $db->beginTransaction();
 
-                // السماح للمحاسب والمدير بتغيير حالة أي مهمة
+                // السماح للمحاسب والمدير بتغيير حالة أي مهمة، والمندوب فقط مهام with_delegate → delivered
                 $isAccountant = ($currentUser['role'] ?? '') === 'accountant';
                 $isManager = ($currentUser['role'] ?? '') === 'manager';
-                
-                if (!$isAccountant && !$isManager) {
+                $isSalesUser = ($currentUser['role'] ?? '') === 'sales';
+
+                if (!$isAccountant && !$isManager && !$isSalesUser) {
                     throw new Exception('غير مصرح لك بتغيير حالة المهام.');
                 }
-                
+
                 // التحقق من وجود المهمة
                 $task = $db->queryOne(
                     "SELECT id, title, status FROM tasks WHERE id = ? LIMIT 1",
@@ -1851,6 +1892,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 if (!$task) {
                     throw new Exception('المهمة غير موجودة.');
+                }
+
+                // المندوب: يسمح فقط بتغيير with_delegate → delivered
+                if ($isSalesUser) {
+                    if (($task['status'] ?? '') !== 'with_delegate') {
+                        throw new Exception('لا يمكنك تغيير حالة هذه المهمة.');
+                    }
+                    if ($newStatus !== 'delivered') {
+                        throw new Exception('يمكنك فقط تغيير الحالة إلى "تم التوصيل".');
+                    }
                 }
 
                 // تحديث الحالة
@@ -2862,6 +2913,14 @@ try {
         } else {
             $counts = [];
         }
+    } elseif ($isSales) {
+        $counts = $db->query("
+            SELECT status, COUNT(*) as total
+            FROM tasks
+            WHERE (created_by = ? OR status = 'with_delegate')
+            AND status != 'cancelled'
+            GROUP BY status
+        ", [$currentUser['id']]);
     } else {
         $counts = $db->query("
             SELECT status, COUNT(*) as total
@@ -3049,6 +3108,13 @@ try {
             ", $countParams);
             $totalRecentTasks = isset($totalRow['total']) ? (int)$totalRow['total'] : 0;
         }
+    } elseif ($isSales) {
+        $countParams = array_merge([$currentUser['id']], $statusParams, $searchParams);
+        $totalRow = $db->queryOne("
+            SELECT COUNT(*) AS total FROM tasks t
+            WHERE (t.created_by = ? OR t.status = 'with_delegate') AND t.status != 'cancelled' $statusCondition $searchConditions
+        ", $countParams);
+        $totalRecentTasks = isset($totalRow['total']) ? (int)$totalRow['total'] : 0;
     } else {
         $countParams = array_merge([$currentUser['id']], $statusParams, $searchParams);
         $totalRow = $db->queryOne("
@@ -3095,10 +3161,36 @@ try {
         } else {
             $recentTasks = [];
         }
+    } elseif ($isSales) {
+        // المندوب: أوردراته هو + أي أوردر حالته with_delegate
+        $queryParams = array_merge([$currentUser['id']], $statusParams, $searchParams, [$tasksPerPage, $tasksOffset]);
+
+        $selectFields = "t.id, t.title, t.status, t.priority, t.due_date, t.created_at,
+               t.quantity, t.unit, t.customer_name, t.customer_phone, t.notes, t.product_id, t.related_type, t.related_id, t.task_type,
+               t.local_customer_id, t.total_amount,
+               COALESCE(t.receipt_print_count, 0) AS receipt_print_count,
+               u.full_name AS assigned_name, t.assigned_to";
+        $joins = "LEFT JOIN users u ON t.assigned_to = u.id";
+        if ($hasStatusChangedBy) {
+            $selectFields .= ", uStatus.full_name AS status_changed_by_name, t.status_changed_by";
+            $joins .= " LEFT JOIN users uStatus ON t.status_changed_by = uStatus.id";
+        }
+
+        $recentTasks = $db->query("
+            SELECT $selectFields
+            FROM tasks t
+            $joins
+            WHERE (t.created_by = ? OR t.status = 'with_delegate')
+            AND t.status != 'cancelled'
+            $statusCondition
+            $searchConditions
+            ORDER BY t.created_at DESC, t.id DESC
+            LIMIT ? OFFSET ?
+        ", $queryParams);
     } else {
         // للمستخدمين الآخرين، عرض المهام التي أنشأوها فقط
         $queryParams = array_merge([$currentUser['id']], $statusParams, $searchParams, [$tasksPerPage, $tasksOffset]);
-        
+
         $selectFields = "t.id, t.title, t.status, t.priority, t.due_date, t.created_at,
                t.quantity, t.unit, t.customer_name, t.customer_phone, t.notes, t.product_id, t.related_type, t.related_id, t.task_type,
                t.local_customer_id, t.total_amount,
@@ -4604,6 +4696,30 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                                     </a>
                                                 </li>
                                                 <?php endforeach; ?>
+                                            </ul>
+                                        </div>
+                                        <?php elseif ($isSales && $statusKey === 'with_delegate'): ?>
+                                        <!-- المندوب يمكنه تغيير with_delegate → delivered فقط -->
+                                        <div class="dropdown">
+                                            <span class="badge bg-<?php echo htmlspecialchars($statusMeta['class']); ?> status-badge-dropdown"
+                                                  role="button"
+                                                  data-bs-toggle="dropdown"
+                                                  aria-expanded="false"
+                                                  data-task-id="<?php echo (int)$task['id']; ?>"
+                                                  data-current-status="<?php echo htmlspecialchars($statusKey); ?>"
+                                                  style="cursor:pointer;">
+                                                <?php echo htmlspecialchars($statusMeta['label']); ?> <i class="bi bi-chevron-down" style="font-size:0.65em;"></i>
+                                            </span>
+                                            <ul class="dropdown-menu dropdown-menu-end">
+                                                <li>
+                                                    <a class="dropdown-item status-quick-change"
+                                                       href="#"
+                                                       data-task-id="<?php echo (int)$task['id']; ?>"
+                                                       data-status="delivered">
+                                                        <span class="badge bg-success me-1">&nbsp;</span>
+                                                        تم التوصيل
+                                                    </a>
+                                                </li>
                                             </ul>
                                         </div>
                                         <?php else: ?>
