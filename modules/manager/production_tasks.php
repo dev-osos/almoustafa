@@ -1200,24 +1200,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 // إذا كان المندوب وأدخل اسم عميل غير موجود في قائمة عملائه → حفظه في customers
+                // لكن فقط إذا لم يكن العميل مسجلاً مسبقاً كعميل محلي (local_customer)
                 if ($isSales && $customerName !== '' && $repCustomerIdForTask === null) {
-                    $existingRepCustomer = $db->queryOne(
-                        "SELECT id FROM customers WHERE name = ? AND (rep_id = ? OR created_by = ?) LIMIT 1",
-                        [$customerName, $currentUser['id'], $currentUser['id']]
+                    // تحقق أولاً إذا كان العميل موجوداً في local_customers
+                    $isLocalCustomer = $db->queryOne(
+                        "SELECT id FROM local_customers WHERE name = ? LIMIT 1",
+                        [$customerName]
                     );
-                    if (empty($existingRepCustomer)) {
-                        $db->execute(
-                            "INSERT INTO customers (name, phone, rep_id, created_by, status) VALUES (?, ?, ?, ?, 'active')",
-                            [
-                                $customerName,
-                                $customerPhone !== '' ? $customerPhone : null,
-                                $currentUser['id'],
-                                $currentUser['id'],
-                            ]
+                    if (empty($isLocalCustomer)) {
+                        $existingRepCustomer = $db->queryOne(
+                            "SELECT id FROM customers WHERE name = ? AND (rep_id = ? OR created_by = ?) LIMIT 1",
+                            [$customerName, $currentUser['id'], $currentUser['id']]
                         );
-                        $repCustomerIdForTask = (int)$db->getLastInsertId();
-                    } else {
-                        $repCustomerIdForTask = (int)$existingRepCustomer['id'];
+                        if (empty($existingRepCustomer)) {
+                            $db->execute(
+                                "INSERT INTO customers (name, phone, rep_id, created_by, status) VALUES (?, ?, ?, ?, 'active')",
+                                [
+                                    $customerName,
+                                    $customerPhone !== '' ? $customerPhone : null,
+                                    $currentUser['id'],
+                                    $currentUser['id'],
+                                ]
+                            );
+                            $repCustomerIdForTask = (int)$db->getLastInsertId();
+                        } else {
+                            $repCustomerIdForTask = (int)$existingRepCustomer['id'];
+                        }
                     }
                 }
 
