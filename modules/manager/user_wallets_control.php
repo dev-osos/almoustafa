@@ -594,7 +594,7 @@ if ($selectedUserId > 0) {
             $txParams
         ) ?: [];
 
-        // إحصائيات الإيداعات لآخر 6 أشهر (deposit فقط بدون custody_add)
+        // إحصائيات الإيداعات لآخر 4 أشهر (deposit فقط بدون custody_add)
         $sixMonthsDeposits = $db->query("
             SELECT
                 DATE_FORMAT(created_at, '%Y-%m') AS month_key,
@@ -609,9 +609,9 @@ if ($selectedUserId > 0) {
             ORDER BY month_key ASC
         ", [$selectedUserId]) ?: [];
 
-        // تأكد من وجود جميع الأشهر الـ6 حتى لو كانت فارغة
+        // تأكد من وجود جميع الأشهر الـ4 حتى لو كانت فارغة
         $sixMonthsData = [];
-        for ($i = 5; $i >= 0; $i--) {
+        for ($i = 3; $i >= 0; $i--) {
             $ts  = strtotime("-$i months");
             $key = date('Y-m', $ts);
             $sixMonthsData[$key] = ['month_key' => $key, 'month_label' => date('m/Y', $ts), 'total_deposits' => 0, 'deposit_count' => 0];
