@@ -5293,7 +5293,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
     </div>
 </div>
 
-<div class="modal fade" id="receiptIframeModal" tabindex="-1" aria-labelledby="receiptIframeModalLabel" aria-hidden="true" data-no-loading="true">
+<div class="modal fade" id="receiptIframeModal" tabindex="-1" aria-labelledby="receiptIframeModalLabel" aria-hidden="true" data-no-loading="true" data-bs-backdrop="false">
     <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header py-2 bg-light border-bottom">
@@ -5306,6 +5306,36 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
         </div>
     </div>
 </div>
+<style>
+@media (max-width: 767.98px) {
+    #receiptIframeModal .modal-dialog {
+        margin: 0;
+        max-width: 100%;
+        width: 100%;
+        height: 100%;
+    }
+    #receiptIframeModal .modal-content {
+        height: 100%;
+        border: none;
+        border-radius: 0;
+        box-shadow: none;
+    }
+    #receiptIframeModal #receiptIframeEl {
+        height: calc(100vh - 49px);
+    }
+    #receiptIframeModal.modal {
+        padding: 0 !important;
+    }
+    /* انتقال سلس من الأسفل للأعلى */
+    #receiptIframeModal .modal-dialog {
+        transform: translateY(100%);
+        transition: transform 0.3s ease-out;
+    }
+    #receiptIframeModal.show .modal-dialog {
+        transform: translateY(0);
+    }
+}
+</style>
 
 <style>
 .search-wrap.position-relative { position: relative; }
@@ -5895,7 +5925,7 @@ window.openReceiptIframeModal = function(url) {
     var iframe = document.getElementById('receiptIframeEl');
     if (!modalEl || !iframe) return;
     iframe.src = url;
-    bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    bootstrap.Modal.getOrCreateInstance(modalEl, { backdrop: false, keyboard: true }).show();
     modalEl.addEventListener('hidden.bs.modal', function handler() {
         iframe.src = '';
         modalEl.removeEventListener('hidden.bs.modal', handler);

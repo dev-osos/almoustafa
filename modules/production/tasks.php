@@ -2006,7 +2006,7 @@ function tasksHtml(string $value): string
                                             </button>
                                             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="taskActionsDropdown<?php echo $taskIdInt; ?>">
                                                 <?php if ($isManager || $isProduction || $isDriver): ?>
-                                                    <li><a class="dropdown-item" href="<?php echo getRelativeUrl('print_task_receipt.php?id=' . $taskIdInt); ?>" target="_blank"><i class="bi bi-printer me-2"></i>طباعة إيصال</a></li>
+                                                    <li><a class="dropdown-item" href="<?php echo getRelativeUrl('print_task_receipt.php?id=' . $taskIdInt . '&print=1'); ?>" target="_blank" rel="noopener"><i class="bi bi-printer me-2"></i>طباعة إيصال</a></li>
                                                     <li><hr class="dropdown-divider"></li>
                                                 <?php endif; ?>
                                                 <?php if ($isProduction && in_array($task['status'], ['pending', 'received', 'in_progress'])): ?>
