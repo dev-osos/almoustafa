@@ -4771,11 +4771,6 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                                 <?php endif; ?>
                                                 <?php if ($canPrintTasks): ?>
                                                 <li>
-                                                    <button type="button" class="dropdown-item" onclick="openReceiptIframeModal('<?php echo htmlspecialchars(getRelativeUrl('print_task_receipt.php?id=' . (int) $task['id']), ENT_QUOTES, 'UTF-8'); ?>')">
-                                                        <i class="bi bi-eye me-1"></i>عرض ايصال الاوردر
-                                                    </button>
-                                                </li>
-                                                <li>
                                                     <button type="button" class="dropdown-item" onclick="window.open('<?php echo htmlspecialchars(getRelativeUrl('print_task_receipt.php?id=' . (int) $task['id'] . '&print=1'), ENT_QUOTES, 'UTF-8'); ?>', '_blank', 'noopener')">
                                                         <i class="bi bi-printer me-1"></i>طباعة الاوردر
                                                     </button>
