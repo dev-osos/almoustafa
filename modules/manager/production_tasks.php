@@ -5298,7 +5298,9 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
         <div class="modal-content">
             <div class="modal-header py-2 bg-light border-bottom">
                 <h6 class="modal-title" id="receiptIframeModalLabel"><i class="bi bi-file-text me-1"></i>إيصال الطلب</h6>
-                <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal" aria-label="إغلاق"></button>
+                <button type="button" class="btn btn-sm btn-outline-secondary border-0 px-2" onclick="bootstrap.Modal.getInstance(document.getElementById('receiptIframeModal')).hide()" aria-label="إغلاق">
+                    <i class="bi bi-x-lg"></i>
+                </button>
             </div>
             <div class="modal-body p-0">
                 <iframe id="receiptIframeEl" src="" style="width:100%;height:75vh;border:none;" loading="lazy"></iframe>
