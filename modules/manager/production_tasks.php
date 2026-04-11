@@ -9123,16 +9123,30 @@ document.addEventListener('click', function (e) {
         }
     });
 
-    // إغلاق الـ dropdown عند الضغط على أي عنصر بداخله (روابط _blank أو أزرار تفتح مودال)
-    document.addEventListener('click', function(e) {
-        var item = e.target.closest('.dropdown-menu a[target="_blank"], .dropdown-menu button.dropdown-item');
+    // إغلاق فوري وصريح لأي dropdown عند اختيار أي عنصر بداخله
+    // نستخدم pointerdown ليعمل قبل أن يتنقل المتصفح لرابط target="_blank"
+    function forceCloseDropdownFromItem(e) {
+        var item = e.target.closest('.dropdown-menu .dropdown-item');
         if (!item) return;
         var menu = item.closest('.dropdown-menu');
-        // القائمة قد تكون منقولة إلى body، نستخدم _ddToggle المخزن عليها
-        var toggle = menu && (menu._ddToggle || menu.closest('.dropdown')?.querySelector('[data-bs-toggle="dropdown"]'));
-        if (toggle) {
-            bootstrap.Dropdown.getOrCreateInstance(toggle).hide();
+        if (!menu) return;
+
+        // تنظيف صريح: إزالة show وإرجاع القائمة لمكانها الأصلي فوراً
+        menu.classList.remove('show');
+        var toggle = menu._ddToggle;
+        if (menu._originalParent) {
+            menu._originalParent.appendChild(menu);
+            menu.removeAttribute('style');
+            delete menu._originalParent;
+            delete menu._ddToggle;
         }
-    });
+        if (toggle) {
+            toggle.setAttribute('aria-expanded', 'false');
+            var inst = bootstrap.Dropdown.getInstance(toggle);
+            if (inst) { try { inst.hide(); } catch (_) {} }
+        }
+    }
+    document.addEventListener('pointerdown', forceCloseDropdownFromItem, true);
+    document.addEventListener('click', forceCloseDropdownFromItem, true);
 })();
 </script>
