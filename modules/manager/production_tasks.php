@@ -9123,30 +9123,29 @@ document.addEventListener('click', function (e) {
         }
     });
 
-    // إغلاق فوري وصريح لأي dropdown عند اختيار أي عنصر بداخله
-    // نستخدم pointerdown ليعمل قبل أن يتنقل المتصفح لرابط target="_blank"
-    function forceCloseDropdownFromItem(e) {
+    // إغلاق أي dropdown بعد اختيار عنصر بداخله
+    // نستخدم click ثم setTimeout لضمان أن الرابط/الزر نُفّذ أولاً قبل نقل القائمة
+    document.addEventListener('click', function(e) {
         var item = e.target.closest('.dropdown-menu .dropdown-item');
         if (!item) return;
         var menu = item.closest('.dropdown-menu');
         if (!menu) return;
-
-        // تنظيف صريح: إزالة show وإرجاع القائمة لمكانها الأصلي فوراً
-        menu.classList.remove('show');
         var toggle = menu._ddToggle;
-        if (menu._originalParent) {
-            menu._originalParent.appendChild(menu);
-            menu.removeAttribute('style');
-            delete menu._originalParent;
-            delete menu._ddToggle;
-        }
-        if (toggle) {
-            toggle.setAttribute('aria-expanded', 'false');
-            var inst = bootstrap.Dropdown.getInstance(toggle);
-            if (inst) { try { inst.hide(); } catch (_) {} }
-        }
-    }
-    document.addEventListener('pointerdown', forceCloseDropdownFromItem, true);
-    document.addEventListener('click', forceCloseDropdownFromItem, true);
+
+        setTimeout(function() {
+            menu.classList.remove('show');
+            if (menu._originalParent) {
+                menu._originalParent.appendChild(menu);
+                menu.removeAttribute('style');
+                delete menu._originalParent;
+                delete menu._ddToggle;
+            }
+            if (toggle) {
+                toggle.setAttribute('aria-expanded', 'false');
+                var inst = bootstrap.Dropdown.getInstance(toggle);
+                if (inst) { try { inst.hide(); } catch (_) {} }
+            }
+        }, 0);
+    });
 })();
 </script>
