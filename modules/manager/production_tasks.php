@@ -9123,29 +9123,42 @@ document.addEventListener('click', function (e) {
         }
     });
 
+    // دالة تنظيف القائمة وإرجاعها لمكانها الأصلي
+    function cleanupOrphanedMenu(menu) {
+        if (!menu) return;
+        var toggle = menu._ddToggle;
+        menu.classList.remove('show');
+        if (menu._originalParent) {
+            menu._originalParent.appendChild(menu);
+            menu.removeAttribute('style');
+            delete menu._originalParent;
+            delete menu._ddToggle;
+        }
+        if (toggle) {
+            toggle.setAttribute('aria-expanded', 'false');
+            var inst = bootstrap.Dropdown.getInstance(toggle);
+            if (inst) { try { inst.hide(); } catch (_) {} }
+        }
+    }
+
     // إغلاق أي dropdown بعد اختيار عنصر بداخله
-    // نستخدم click ثم setTimeout لضمان أن الرابط/الزر نُفّذ أولاً قبل نقل القائمة
     document.addEventListener('click', function(e) {
         var item = e.target.closest('.dropdown-menu .dropdown-item');
         if (!item) return;
         var menu = item.closest('.dropdown-menu');
         if (!menu) return;
-        var toggle = menu._ddToggle;
 
-        setTimeout(function() {
-            menu.classList.remove('show');
-            if (menu._originalParent) {
-                menu._originalParent.appendChild(menu);
-                menu.removeAttribute('style');
-                delete menu._originalParent;
-                delete menu._ddToggle;
-            }
-            if (toggle) {
-                toggle.setAttribute('aria-expanded', 'false');
-                var inst = bootstrap.Dropdown.getInstance(toggle);
-                if (inst) { try { inst.hide(); } catch (_) {} }
-            }
-        }, 0);
+        // روابط target="_blank": نفتحها يدوياً ثم نُنظّف فوراً (متزامن)
+        // لأن setTimeout قد يتأخر بسبب تغيّر التركيز إلى التاب الجديد
+        if (item.tagName === 'A' && item.getAttribute('target') === '_blank' && item.href) {
+            e.preventDefault();
+            window.open(item.href, '_blank', 'noopener');
+            cleanupOrphanedMenu(menu);
+            return;
+        }
+
+        // باقي العناصر (أزرار بـ onclick): setTimeout للسماح للحدث بالانتهاء أولاً
+        setTimeout(function() { cleanupOrphanedMenu(menu); }, 0);
     });
 })();
 </script>
