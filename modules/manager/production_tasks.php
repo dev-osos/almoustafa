@@ -9127,10 +9127,11 @@ document.addEventListener('click', function (e) {
     document.addEventListener('click', function(e) {
         var item = e.target.closest('.dropdown-menu a[target="_blank"], .dropdown-menu button.dropdown-item');
         if (!item) return;
-        var toggle = item.closest('.dropdown')?.querySelector('[data-bs-toggle="dropdown"]');
+        var menu = item.closest('.dropdown-menu');
+        // القائمة قد تكون منقولة إلى body، نستخدم _ddToggle المخزن عليها
+        var toggle = menu && (menu._ddToggle || menu.closest('.dropdown')?.querySelector('[data-bs-toggle="dropdown"]'));
         if (toggle) {
-            var instance = bootstrap.Dropdown.getOrCreateInstance(toggle);
-            instance.hide();
+            bootstrap.Dropdown.getOrCreateInstance(toggle).hide();
         }
     });
 })();
