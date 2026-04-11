@@ -5298,7 +5298,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
         <div class="modal-content">
             <div class="modal-header py-2 bg-light border-bottom">
                 <h6 class="modal-title" id="receiptIframeModalLabel"><i class="bi bi-file-text me-1"></i>إيصال الطلب</h6>
-                <button type="button" class="btn btn-sm btn-outline-secondary border-0 px-2" style="touch-action:manipulation" onpointerdown="bootstrap.Modal.getInstance(document.getElementById('receiptIframeModal'))?.hide()" aria-label="إغلاق">
+                <button type="button" class="btn btn-sm btn-outline-secondary border-0 px-2" style="touch-action:manipulation" onpointerdown="closeReceiptIframeModal()" aria-label="إغلاق">
                     <i class="bi bi-x-lg"></i>
                 </button>
             </div>
@@ -5340,6 +5340,13 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
     #receiptIframeModal.fade {
         transition: opacity 0.15s linear;
     }
+}
+/* إغلاق فوري بدون أي انتقال — يُطبَّق عند الضغط على زر الإغلاق */
+#receiptIframeModal.instant-close,
+#receiptIframeModal.instant-close .modal-dialog,
+#receiptIframeModal.instant-close .modal-content {
+    transition: none !important;
+    animation: none !important;
 }
 </style>
 
@@ -5930,12 +5937,22 @@ window.openReceiptIframeModal = function(url) {
     var modalEl = document.getElementById('receiptIframeModal');
     var iframe = document.getElementById('receiptIframeEl');
     if (!modalEl || !iframe) return;
+    modalEl.classList.remove('instant-close');
     iframe.src = url;
     bootstrap.Modal.getOrCreateInstance(modalEl, { backdrop: false, keyboard: true }).show();
-    modalEl.addEventListener('hidden.bs.modal', function handler() {
-        iframe.src = '';
-        modalEl.removeEventListener('hidden.bs.modal', handler);
-    });
+};
+
+window.closeReceiptIframeModal = function() {
+    var modalEl = document.getElementById('receiptIframeModal');
+    var iframe = document.getElementById('receiptIframeEl');
+    if (!modalEl) return;
+    // 1. تفريغ iframe فوراً لتحرير موارد العرض ومنع أي عمل جارٍ
+    if (iframe) iframe.src = 'about:blank';
+    // 2. تعطيل جميع الانتقالات → الإغلاق يصبح فورياً
+    modalEl.classList.add('instant-close');
+    // 3. استدعاء hide() — لا انتظار لـ transitionend لأن transition معطّلة
+    var inst = bootstrap.Modal.getInstance(modalEl);
+    if (inst) inst.hide();
 };
 
 window.openTaskReceiptModal = function(taskId) {
