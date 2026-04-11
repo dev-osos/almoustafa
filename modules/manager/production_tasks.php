@@ -4771,9 +4771,9 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                                 <?php endif; ?>
                                                 <?php if ($canPrintTasks): ?>
                                                 <li>
-                                                    <a class="dropdown-item" href="<?php echo getRelativeUrl('print_task_receipt.php?id=' . (int) $task['id']); ?>" target="_blank">
+                                                    <button type="button" class="dropdown-item" onclick="window.open('<?php echo htmlspecialchars(getRelativeUrl('print_task_receipt.php?id=' . (int) $task['id']), ENT_QUOTES, 'UTF-8'); ?>', '_blank', 'noopener')">
                                                         <i class="bi bi-printer me-1"></i>طباعة الاوردر
-                                                    </a>
+                                                    </button>
                                                 </li>
                                                 <?php endif; ?>
                                                 <?php if ($isAccountant || $isManager): ?>
@@ -9123,42 +9123,5 @@ document.addEventListener('click', function (e) {
         }
     });
 
-    // دالة تنظيف القائمة وإرجاعها لمكانها الأصلي
-    function cleanupOrphanedMenu(menu) {
-        if (!menu) return;
-        var toggle = menu._ddToggle;
-        menu.classList.remove('show');
-        if (menu._originalParent) {
-            menu._originalParent.appendChild(menu);
-            menu.removeAttribute('style');
-            delete menu._originalParent;
-            delete menu._ddToggle;
-        }
-        if (toggle) {
-            toggle.setAttribute('aria-expanded', 'false');
-            var inst = bootstrap.Dropdown.getInstance(toggle);
-            if (inst) { try { inst.hide(); } catch (_) {} }
-        }
-    }
-
-    // إغلاق أي dropdown بعد اختيار عنصر بداخله
-    document.addEventListener('click', function(e) {
-        var item = e.target.closest('.dropdown-menu .dropdown-item');
-        if (!item) return;
-        var menu = item.closest('.dropdown-menu');
-        if (!menu) return;
-
-        // روابط target="_blank": نفتحها يدوياً ثم نُنظّف فوراً (متزامن)
-        // لأن setTimeout قد يتأخر بسبب تغيّر التركيز إلى التاب الجديد
-        if (item.tagName === 'A' && item.getAttribute('target') === '_blank' && item.href) {
-            e.preventDefault();
-            window.open(item.href, '_blank', 'noopener');
-            cleanupOrphanedMenu(menu);
-            return;
-        }
-
-        // باقي العناصر (أزرار بـ onclick): setTimeout للسماح للحدث بالانتهاء أولاً
-        setTimeout(function() { cleanupOrphanedMenu(menu); }, 0);
-    });
 })();
 </script>
