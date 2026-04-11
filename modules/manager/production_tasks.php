@@ -5938,19 +5938,20 @@ window.openReceiptIframeModal = function(url) {
     var iframe = document.getElementById('receiptIframeEl');
     if (!modalEl || !iframe) return;
     modalEl.classList.remove('instant-close');
-    iframe.src = url;
+    // كاش: لا نُعيد تحميل iframe إذا كان يعرض نفس الإيصال بالفعل
+    if (iframe.getAttribute('data-current-url') !== url) {
+        iframe.src = url;
+        iframe.setAttribute('data-current-url', url);
+    }
     bootstrap.Modal.getOrCreateInstance(modalEl, { backdrop: false, keyboard: true }).show();
 };
 
 window.closeReceiptIframeModal = function() {
     var modalEl = document.getElementById('receiptIframeModal');
-    var iframe = document.getElementById('receiptIframeEl');
     if (!modalEl) return;
-    // 1. تفريغ iframe فوراً لتحرير موارد العرض ومنع أي عمل جارٍ
-    if (iframe) iframe.src = 'about:blank';
-    // 2. تعطيل جميع الانتقالات → الإغلاق يصبح فورياً
+    // تعطيل الانتقالات → إغلاق فوري
+    // لا نلمس iframe إطلاقاً لتجنّب أي navigation ثقيل
     modalEl.classList.add('instant-close');
-    // 3. استدعاء hide() — لا انتظار لـ transitionend لأن transition معطّلة
     var inst = bootstrap.Modal.getInstance(modalEl);
     if (inst) inst.hide();
 };
