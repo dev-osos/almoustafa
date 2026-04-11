@@ -9123,11 +9123,11 @@ document.addEventListener('click', function (e) {
         }
     });
 
-    // إغلاق الـ dropdown عند الضغط على أي رابط target="_blank" بداخله
+    // إغلاق الـ dropdown عند الضغط على أي عنصر بداخله (روابط _blank أو أزرار تفتح مودال)
     document.addEventListener('click', function(e) {
-        var link = e.target.closest('.dropdown-menu a[target="_blank"]');
-        if (!link) return;
-        var toggle = link.closest('.dropdown')?.querySelector('[data-bs-toggle="dropdown"]');
+        var item = e.target.closest('.dropdown-menu a[target="_blank"], .dropdown-menu button.dropdown-item');
+        if (!item) return;
+        var toggle = item.closest('.dropdown')?.querySelector('[data-bs-toggle="dropdown"]');
         if (toggle) {
             var instance = bootstrap.Dropdown.getOrCreateInstance(toggle);
             instance.hide();
