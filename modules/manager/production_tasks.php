@@ -5303,7 +5303,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                 </button>
             </div>
             <div class="modal-body p-0">
-                <iframe id="receiptIframeEl" src="" style="width:100%;height:75vh;border:none;" loading="lazy"></iframe>
+                <iframe id="receiptIframeEl" src="about:blank" style="width:100%;height:75vh;border:none;"></iframe>
             </div>
         </div>
     </div>
@@ -5380,9 +5380,19 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
     border: none;
     border-radius: 0;
     box-shadow: none;
+    display: flex;
+    flex-direction: column;
+}
+#receiptIframeModal.card-mode .modal-body {
+    flex: 1 1 0;
+    overflow: hidden;
+    padding: 0;
 }
 #receiptIframeModal.card-mode #receiptIframeEl {
-    height: calc(100vh - 49px);
+    width: 100%;
+    height: 100%;
+    border: none;
+    display: block;
 }
 </style>
 
@@ -5978,9 +5988,10 @@ window.openReceiptIframeModal = function(url) {
     var iframe = document.getElementById('receiptIframeEl');
     if (!el || !iframe) return;
     // كاش: لا نُعيد تحميل iframe إذا كان يعرض نفس الإيصال
-    if (iframe.getAttribute('data-current-url') !== url) {
-        iframe.src = url;
+    var currentUrl = iframe.getAttribute('data-current-url') || '';
+    if (currentUrl !== url) {
         iframe.setAttribute('data-current-url', url);
+        iframe.src = url;
     }
     if (isMobileViewport()) {
         // الهاتف: بطاقة بدون Bootstrap modal
