@@ -4771,7 +4771,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                                 <?php endif; ?>
                                                 <?php if ($canPrintTasks): ?>
                                                 <li>
-                                                    <a class="dropdown-item" href="<?php echo getRelativeUrl('print_task_receipt.php?id=' . (int) $task['id']); ?>" target="_blank" onclick="var _t=this.closest('.dropdown').querySelector('[data-bs-toggle=dropdown]');setTimeout(function(){document.dispatchEvent(new MouseEvent('click'))},50)">
+                                                    <a class="dropdown-item" href="<?php echo getRelativeUrl('print_task_receipt.php?id=' . (int) $task['id']); ?>" target="_blank">
                                                         <i class="bi bi-printer me-1"></i>طباعة الاوردر
                                                     </a>
                                                 </li>
@@ -9120,6 +9120,17 @@ document.addEventListener('click', function (e) {
             menu.removeAttribute('style');
             delete menu._originalParent;
             delete menu._ddToggle;
+        }
+    });
+
+    // إغلاق الـ dropdown عند الضغط على أي رابط target="_blank" بداخله
+    document.addEventListener('click', function(e) {
+        var link = e.target.closest('.dropdown-menu a[target="_blank"]');
+        if (!link) return;
+        var toggle = link.closest('.dropdown')?.querySelector('[data-bs-toggle="dropdown"]');
+        if (toggle) {
+            var instance = bootstrap.Dropdown.getOrCreateInstance(toggle);
+            instance.hide();
         }
     });
 })();
