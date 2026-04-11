@@ -1125,11 +1125,11 @@ $singleReceipt = count($receipts) === 1;
             });
         });
 
-        window.onload = function() {
+        window.addEventListener('load', function() {
             if (window.location.search.includes('print=1')) {
-                setTimeout(function() { window.print(); }, 500);
+                setTimeout(function() { window.print(); }, 800);
             }
-        };
+        });
     </script>
 </body>
 </html>

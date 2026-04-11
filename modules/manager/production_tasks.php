@@ -4771,7 +4771,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                                 <?php endif; ?>
                                                 <?php if ($canPrintTasks): ?>
                                                 <li>
-                                                    <button type="button" class="dropdown-item" onclick="window.open('<?php echo htmlspecialchars(getRelativeUrl('print_task_receipt.php?id=' . (int) $task['id']), ENT_QUOTES, 'UTF-8'); ?>', '_blank', 'noopener')">
+                                                    <button type="button" class="dropdown-item" onclick="openReceiptIframeModal('<?php echo htmlspecialchars(getRelativeUrl('print_task_receipt.php?id=' . (int) $task['id']), ENT_QUOTES, 'UTF-8'); ?>')">
                                                         <i class="bi bi-eye me-1"></i>عرض ايصال الاوردر
                                                     </button>
                                                 </li>
@@ -5293,6 +5293,19 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
     </div>
 </div>
 
+<div class="modal fade" id="receiptIframeModal" tabindex="-1" aria-labelledby="receiptIframeModalLabel" aria-hidden="true" data-no-loading="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header py-2 bg-light border-bottom">
+                <h6 class="modal-title" id="receiptIframeModalLabel"><i class="bi bi-file-text me-1"></i>إيصال الطلب</h6>
+                <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal" aria-label="إغلاق"></button>
+            </div>
+            <div class="modal-body p-0">
+                <iframe id="receiptIframeEl" src="" style="width:100%;height:75vh;border:none;" loading="lazy"></iframe>
+            </div>
+        </div>
+    </div>
+</div>
 
 <style>
 .search-wrap.position-relative { position: relative; }
@@ -5875,6 +5888,18 @@ window.openOrderReceiptModal = function(orderId) {
             bodyEl.innerHTML = '<p class="text-danger mb-0">حدث خطأ أثناء تحميل تفاصيل الأوردر.</p>';
             bodyEl.style.display = 'block';
         });
+};
+
+window.openReceiptIframeModal = function(url) {
+    var modalEl = document.getElementById('receiptIframeModal');
+    var iframe = document.getElementById('receiptIframeEl');
+    if (!modalEl || !iframe) return;
+    iframe.src = url;
+    bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    modalEl.addEventListener('hidden.bs.modal', function handler() {
+        iframe.src = '';
+        modalEl.removeEventListener('hidden.bs.modal', handler);
+    });
 };
 
 window.openTaskReceiptModal = function(taskId) {
