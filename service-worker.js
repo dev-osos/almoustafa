@@ -3,7 +3,7 @@
 // ============================================
 // Configuration
 // ============================================
-const CACHE_VERSION = 'v2.4.0'; // إصلاح مشكلة redirect في PWA عند إعادة الفتح
+const CACHE_VERSION = 'v2.5.0'; // إصلاح مشكلة redirect في PWA عند إعادة الفتح
 const PRECACHE_NAME = `albarakah-precache-${CACHE_VERSION}`;
 const STATIC_CACHE_NAME = `albarakah-static-${CACHE_VERSION}`;
 const CDN_CACHE_NAME = `albarakah-cdn-${CACHE_VERSION}`;
