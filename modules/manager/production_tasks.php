@@ -5298,7 +5298,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
         <div class="modal-content">
             <div class="modal-header py-2 bg-light border-bottom">
                 <h6 class="modal-title" id="receiptIframeModalLabel"><i class="bi bi-file-text me-1"></i>إيصال الطلب</h6>
-                <button type="button" class="btn btn-sm btn-outline-secondary border-0 px-2" onclick="bootstrap.Modal.getInstance(document.getElementById('receiptIframeModal')).hide()" aria-label="إغلاق">
+                <button type="button" class="btn btn-sm btn-outline-secondary border-0 px-2" style="touch-action:manipulation" onclick="bootstrap.Modal.getInstance(document.getElementById('receiptIframeModal')).hide()" aria-label="إغلاق">
                     <i class="bi bi-x-lg"></i>
                 </button>
             </div>
@@ -5331,10 +5331,14 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
     /* انتقال سلس من الأسفل للأعلى */
     #receiptIframeModal .modal-dialog {
         transform: translateY(100%);
-        transition: transform 0.3s ease-out;
+        transition: transform 0.2s ease-out;
     }
     #receiptIframeModal.show .modal-dialog {
         transform: translateY(0);
+    }
+    /* تسريع أنيميشن الإغلاق */
+    #receiptIframeModal.fade {
+        transition: opacity 0.15s linear;
     }
 }
 </style>
