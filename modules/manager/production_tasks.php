@@ -5348,6 +5348,42 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
     transition: none !important;
     animation: none !important;
 }
+
+/* وضع البطاقة على الهاتف — بدون Bootstrap modal */
+#receiptIframeModal.card-mode {
+    display: block !important;
+    position: fixed;
+    inset: 0;
+    z-index: 1055;
+    background: #fff;
+    opacity: 0;
+    transform: translateY(100%);
+    transition: transform 0.2s ease-out, opacity 0.2s ease-out;
+    padding: 0 !important;
+    overflow: hidden;
+}
+#receiptIframeModal.card-mode.card-show {
+    opacity: 1;
+    transform: translateY(0);
+}
+#receiptIframeModal.card-mode .modal-dialog {
+    margin: 0;
+    max-width: 100%;
+    width: 100%;
+    height: 100%;
+    transform: none !important;
+    transition: none !important;
+    pointer-events: auto;
+}
+#receiptIframeModal.card-mode .modal-content {
+    height: 100%;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+}
+#receiptIframeModal.card-mode #receiptIframeEl {
+    height: calc(100vh - 49px);
+}
 </style>
 
 <style>
@@ -5933,27 +5969,47 @@ window.openOrderReceiptModal = function(orderId) {
         });
 };
 
+function isMobileViewport() {
+    return window.matchMedia('(max-width: 767.98px)').matches;
+}
+
 window.openReceiptIframeModal = function(url) {
-    var modalEl = document.getElementById('receiptIframeModal');
+    var el = document.getElementById('receiptIframeModal');
     var iframe = document.getElementById('receiptIframeEl');
-    if (!modalEl || !iframe) return;
-    modalEl.classList.remove('instant-close');
-    // كاش: لا نُعيد تحميل iframe إذا كان يعرض نفس الإيصال بالفعل
+    if (!el || !iframe) return;
+    // كاش: لا نُعيد تحميل iframe إذا كان يعرض نفس الإيصال
     if (iframe.getAttribute('data-current-url') !== url) {
         iframe.src = url;
         iframe.setAttribute('data-current-url', url);
     }
-    bootstrap.Modal.getOrCreateInstance(modalEl, { backdrop: false, keyboard: true }).show();
+    if (isMobileViewport()) {
+        // الهاتف: بطاقة بدون Bootstrap modal
+        el.classList.remove('instant-close');
+        el.classList.add('card-mode');
+        requestAnimationFrame(function() {
+            el.classList.add('card-show');
+        });
+        document.body.style.overflow = 'hidden';
+    } else {
+        // سطح المكتب: Bootstrap modal عادي
+        el.classList.remove('instant-close');
+        bootstrap.Modal.getOrCreateInstance(el, { backdrop: false, keyboard: true }).show();
+    }
 };
 
 window.closeReceiptIframeModal = function() {
-    var modalEl = document.getElementById('receiptIframeModal');
-    if (!modalEl) return;
-    // تعطيل الانتقالات → إغلاق فوري
-    // لا نلمس iframe إطلاقاً لتجنّب أي navigation ثقيل
-    modalEl.classList.add('instant-close');
-    var inst = bootstrap.Modal.getInstance(modalEl);
-    if (inst) inst.hide();
+    var el = document.getElementById('receiptIframeModal');
+    if (!el) return;
+    if (el.classList.contains('card-mode')) {
+        // الهاتف: toggle class فقط، بلا Bootstrap
+        el.classList.remove('card-show');
+        document.body.style.overflow = '';
+        setTimeout(function() { el.classList.remove('card-mode'); }, 200);
+    } else {
+        el.classList.add('instant-close');
+        var inst = bootstrap.Modal.getInstance(el);
+        if (inst) inst.hide();
+    }
 };
 
 window.openTaskReceiptModal = function(taskId) {
