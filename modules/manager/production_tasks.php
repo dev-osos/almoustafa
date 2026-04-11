@@ -4771,7 +4771,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                                 <?php endif; ?>
                                                 <?php if ($canPrintTasks): ?>
                                                 <li>
-                                                    <a class="dropdown-item" href="<?php echo getRelativeUrl('print_task_receipt.php?id=' . (int) $task['id']); ?>" target="_blank" onclick="this.closest('.dropdown').querySelector('.dropdown-toggle') && bootstrap.Dropdown.getInstance(this.closest('.dropdown').querySelector('.dropdown-toggle'))?.hide()">
+                                                    <a class="dropdown-item" href="<?php echo getRelativeUrl('print_task_receipt.php?id=' . (int) $task['id']); ?>" target="_blank" onclick="var _t=this.closest('.dropdown').querySelector('[data-bs-toggle=dropdown]');setTimeout(function(){document.dispatchEvent(new MouseEvent('click'))},50)">
                                                         <i class="bi bi-printer me-1"></i>طباعة الاوردر
                                                     </a>
                                                 </li>
