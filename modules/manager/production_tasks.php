@@ -5715,16 +5715,16 @@ label[for="ct_task_manual"], .form-check:has(#ct_task_manual) { display: none !i
 
 /* Compact filter cards */
 #statusFilterCards .card-body {
-    padding: 0.5rem 0.75rem !important;
+    padding: 0.35rem 0.5rem !important;
 }
 
 #statusFilterCards .card-body .small {
-    font-size: 0.7rem !important;
-    margin-bottom: 0.25rem !important;
+    font-size: 0.6rem !important;
+    margin-bottom: 0.15rem !important;
 }
 
 #statusFilterCards .card-body .fs-5 {
-    font-size: 0.9rem !important;
+    font-size: 0.75rem !important;
     font-weight: 600 !important;
 }
 
