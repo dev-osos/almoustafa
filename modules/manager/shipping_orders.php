@@ -5419,60 +5419,6 @@ function copyShippingCollectionResult(btn) {
         </form>
     </div>
 </div>
-
-<!-- بطاقة تسجيل مرتجع -->
-<div class="card shadow-sm mb-4" id="registerReturnCard" style="display: none;">
-    <div class="card-header bg-danger text-white">
-        <h5 class="mb-0"><i class="bi bi-arrow-return-right me-2"></i>تسجيل مرتجع</h5>
-    </div>
-    <div class="card-body">
-        <form id="registerReturnFormCard" data-no-loading="true">
-            <input type="hidden" name="action" value="register_shipping_return">
-            <input type="hidden" name="company_id" id="returnCardCompanyId">
-            <input type="hidden" name="order_id" id="returnCardOrderId">
-            <input type="hidden" name="paper_invoice_id" id="returnCardPaperInvoiceId">
-            <div class="mb-3">
-                <div class="fw-semibold text-muted small">شركة الشحن</div>
-                <div class="fs-6 fw-bold" id="returnCardCompanyName">-</div>
-            </div>
-            <div class="mb-3">
-                <label class="form-label" for="returnCardOrderNumber">رقم الطلب <span class="text-danger">*</span></label>
-                <input type="text" class="form-control" id="returnCardOrderNumber" name="order_number" placeholder="أدخل رقم الطلب" required>
-                <div class="text-danger small mt-1 d-none" id="returnCardOrderError"></div>
-            </div>
-            <div class="mb-3">
-                <label class="form-label">الإجمالي النهائي للطلب</label>
-                <div class="input-group">
-                    <input type="number" class="form-control" id="returnCardTotalAmount" step="0.01" placeholder="أدخل الإجمالي النهائي للطلب">
-                    <span class="input-group-text">ج.م</span>
-                </div>
-            </div>
-            <div class="mb-3 d-none" id="returnCardProductsSection">
-                <label class="form-label fw-semibold"><i class="bi bi-box-seam me-1"></i>المنتجات في الفاتورة</label>
-                <div id="returnCardProductsList" class="border rounded p-2 bg-light small"></div>
-            </div>
-            <div class="mb-3">
-                <label class="form-label" for="returnCardReturnFees">رسوم الإرجاع</label>
-                <div class="input-group">
-                    <input type="number" class="form-control" id="returnCardReturnFees" name="return_fees" step="0.01" min="0" value="0" placeholder="0.00">
-                    <span class="input-group-text">ج.م</span>
-                </div>
-            </div>
-            <div id="returnCardSummary" class="alert alert-warning d-none">
-                <i class="bi bi-info-circle me-1"></i>
-                إجمالي الخصم: <strong id="returnCardTotalDeduction">0</strong> ج.م
-            </div>
-            <div id="returnCardAlert" class="alert d-none"></div>
-            <div class="d-flex gap-2">
-                <button type="submit" class="btn btn-danger" id="returnCardSubmitBtn" disabled>
-                    <i class="bi bi-arrow-return-right me-1"></i>تسجيل المرتجع
-                </button>
-                <button type="button" class="btn btn-secondary" onclick="closeRegisterReturnCard()">إلغاء</button>
-            </div>
-        </form>
-    </div>
-</div>
-
 <!-- Card للموبايل - إضافة شركة شحن -->
 <div class="card shadow-sm mb-4 d-md-none" id="addShippingCompanyCard" style="display: none;">
     <div class="card-header bg-primary text-white">
@@ -5872,44 +5818,17 @@ function closeDeductFromShippingCard() {
 
 function showRegisterReturnByIdName(companyId, companyName, balance) {
     closeAllForms();
-    if (isMobile()) {
-        var card = document.getElementById('registerReturnCard');
-        if (!card) return;
-        document.getElementById('returnCardCompanyId').value = companyId;
-        document.getElementById('returnCardCompanyName').textContent = companyName || '-';
-        document.getElementById('returnCardOrderId').value = '';
-        document.getElementById('returnCardOrderNumber').value = '';
-        document.getElementById('returnCardTotalAmount').value = '';
-        document.getElementById('returnCardReturnFees').value = '0';
-        var piEl = document.getElementById('returnCardPaperInvoiceId');
-        if (piEl) piEl.value = '';
-        var prodSec = document.getElementById('returnCardProductsSection');
-        if (prodSec) prodSec.classList.add('d-none');
-        var prodList = document.getElementById('returnCardProductsList');
-        if (prodList) prodList.innerHTML = '';
-        var submitBtnEl = document.getElementById('returnCardSubmitBtn');
-        if (submitBtnEl) submitBtnEl.disabled = true;
-        var summaryEl = document.getElementById('returnCardSummary');
-        if (summaryEl) summaryEl.classList.add('d-none');
-        var alertEl = document.getElementById('returnCardAlert');
-        if (alertEl) { alertEl.className = 'alert d-none'; alertEl.textContent = ''; }
-        var errEl = document.getElementById('returnCardOrderError');
-        if (errEl) { errEl.className = 'text-danger small mt-1 d-none'; errEl.textContent = ''; }
-        card.style.display = '';
-        setTimeout(function() { scrollToElement(card); }, 50);
-    } else {
-        var modal = document.getElementById('registerReturnModal');
-        if (!modal) return;
-        document.getElementById('returnModalCompanyId').value = companyId;
-        document.getElementById('returnModalCompanyName').textContent = companyName || '-';
-        document.getElementById('returnModalOrderNumber').value = '';
-        document.getElementById('returnModalTotalAmount').value = '';
-        document.getElementById('returnModalReturnFees').value = '0';
-        var alertEl = document.getElementById('returnModalAlert');
-        if (alertEl) { alertEl.className = 'alert d-none'; alertEl.textContent = ''; }
-        var modalInstance = new bootstrap.Modal(modal);
-        modalInstance.show();
-    }
+    var modal = document.getElementById('registerReturnModal');
+    if (!modal) return;
+    document.getElementById('returnModalCompanyId').value = companyId;
+    document.getElementById('returnModalCompanyName').textContent = companyName || '-';
+    document.getElementById('returnModalOrderNumber').value = '';
+    document.getElementById('returnModalTotalAmount').value = '';
+    document.getElementById('returnModalReturnFees').value = '0';
+    var alertEl = document.getElementById('returnModalAlert');
+    if (alertEl) { alertEl.className = 'alert d-none'; alertEl.textContent = ''; }
+    var modalInstance = new bootstrap.Modal(modal);
+    modalInstance.show();
 }
 
 function closeRegisterReturnCard() {
