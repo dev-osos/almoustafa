@@ -5801,13 +5801,13 @@ label[for="ct_task_manual"], .form-check:has(#ct_task_manual) { display: none !i
 </style>
 <script>
 console.log('[DEBUG-SCRIPT] production_tasks script START');
-var __localCustomersForTask = <?php echo json_encode($localCustomersForDropdown); ?>;
-var __repCustomersForTask = <?php echo json_encode($repCustomersForTask); ?>;
+var __localCustomersForTask = <?php echo json_encode($localCustomersForDropdown, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?: '[]'; ?>;
+var __repCustomersForTask = <?php echo json_encode($repCustomersForTask, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?: '[]'; ?>;
 console.log('[DEBUG-SCRIPT] localCustomers:', __localCustomersForTask ? __localCustomersForTask.length : 'NULL');
 console.log('[DEBUG-SCRIPT] repCustomers:', __repCustomersForTask ? __repCustomersForTask.length : 'NULL');
-var __shippingCompaniesForTask = <?php echo json_encode($shippingCompaniesForDropdown); ?>;
-var __quCategories = <?php echo json_encode($quCategoriesForTask, JSON_UNESCAPED_UNICODE); ?>;
-var __quData = <?php echo json_encode($quDataForTask, JSON_UNESCAPED_UNICODE); ?>;
+var __shippingCompaniesForTask = <?php echo json_encode($shippingCompaniesForDropdown, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?: '[]'; ?>;
+var __quCategories = <?php echo json_encode($quCategoriesForTask, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?: '[]'; ?>;
+var __quData = <?php echo json_encode($quDataForTask, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?: '{}'; ?>;
 
 function makeIdBadge(id) {
     if (!id && id !== 0) return '';
