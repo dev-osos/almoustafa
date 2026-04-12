@@ -764,6 +764,36 @@ function deductTaskProductsFromStock($db, $notes)
             continue;
         }
 
+        // ====== 0. خصم من قوالب المنتجات (finished_products) ======
+        try {
+            $hasFP = !empty($db->queryOne("SHOW TABLES LIKE 'finished_products'"));
+            $hasPT = !empty($db->queryOne("SHOW TABLES LIKE 'product_templates'"));
+            if ($hasFP && $hasPT) {
+                $tpl = $db->queryOne(
+                    "SELECT id FROM product_templates WHERE TRIM(product_name) = ? AND status = 'active' LIMIT 1",
+                    [$name]
+                );
+                if ($tpl !== null) {
+                    _deductFromRowsWaterfall(
+                        $db,
+                        "SELECT fp.id, fp.quantity_produced AS qty
+                         FROM finished_products fp
+                         LEFT JOIN products pr ON fp.product_id = pr.id
+                         WHERE (TRIM(fp.product_name) = ?
+                                OR TRIM(COALESCE(NULLIF(fp.product_name,''), pr.name)) = ?)
+                           AND fp.quantity_produced > 0
+                         ORDER BY fp.quantity_produced DESC",
+                        [$name, $name],
+                        "UPDATE finished_products SET quantity_produced = quantity_produced - ? WHERE id = ?",
+                        $effectiveQty
+                    );
+                    continue;
+                }
+            }
+        } catch (Exception $e) {
+            error_log('deductTaskProductsFromStock finished_products error (' . $name . '): ' . $e->getMessage());
+        }
+
         // ====== 1. خصم من منتجات الشركة ======
         try {
             $row = $db->queryOne(

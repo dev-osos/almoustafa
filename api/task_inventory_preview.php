@@ -121,6 +121,53 @@ function findProductInWarehouses($db, $name)
 {
     $notFound = ['source' => null, 'label' => 'غير موجود في المخزون', 'available' => null];
 
+    // ====== 0. قوالب المنتجات (finished_products) ======
+    try {
+        $fpCheck = $db->queryOne("SHOW TABLES LIKE 'finished_products'");
+        $ptCheck = $db->queryOne("SHOW TABLES LIKE 'product_templates'");
+        if (!empty($fpCheck) && !empty($ptCheck)) {
+            // تحقق من وجود القالب باسمه
+            $tpl = $db->queryOne(
+                "SELECT id FROM product_templates WHERE TRIM(product_name) = ? AND status = 'active' LIMIT 1",
+                [$name]
+            );
+            if ($tpl !== null) {
+                $fpRow = $db->queryOne(
+                    "SELECT COALESCE(SUM(fp.quantity_produced), 0) AS total
+                     FROM finished_products fp
+                     LEFT JOIN products pr ON fp.product_id = pr.id
+                     WHERE (TRIM(fp.product_name) = ?
+                            OR TRIM(COALESCE(NULLIF(fp.product_name,''), pr.name)) = ?)
+                       AND fp.quantity_produced > 0",
+                    [$name, $name]
+                );
+                $available = $fpRow ? (float)$fpRow['total'] : 0.0;
+                return [
+                    'source'    => 'finished_products',
+                    'label'     => 'قوالب المنتجات (المنتجات الجاهزة)',
+                    'available' => $available,
+                ];
+            }
+        } elseif (!empty($ptCheck)) {
+            // لا يوجد finished_products — الكمية في products
+            $tpl = $db->queryOne(
+                "SELECT id FROM product_templates WHERE TRIM(product_name) = ? AND status = 'active' LIMIT 1",
+                [$name]
+            );
+            if ($tpl !== null) {
+                $row = $db->queryOne(
+                    "SELECT COALESCE(SUM(quantity), 0) AS total FROM products WHERE name = ? AND status = 'active'",
+                    [$name]
+                );
+                return [
+                    'source'    => 'finished_products',
+                    'label'     => 'قوالب المنتجات',
+                    'available' => $row ? (float)$row['total'] : 0.0,
+                ];
+            }
+        }
+    } catch (Exception $e) { /* skip */ }
+
     // ====== 1. منتجات الشركة ======
     try {
         $row = $db->queryOne(
