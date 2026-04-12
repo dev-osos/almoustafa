@@ -3599,6 +3599,34 @@ try {
             // حساب مبدئي من notes بدون HTTP call - التحديث الدقيق يتم عبر AJAX
             $task['receipt_total'] = getTaskReceiptTotalFromNotes($task['notes'] ?? '');
             $task['_needs_telegraph_calc'] = true;
+            // استخراج بيانات إضافية للتليجراف لحساب الإجمالي الصحيح في نموذج الاعتماد
+            $tNotes = $task['notes'] ?? '';
+            $tgGrandTotal = 0.0;
+            if (preg_match('/(?:\[PRODUCTS_JSON\]|المنتجات)\s*:\s*(\[.+?\])(?=\s*\n|\[ASSIGNED_WORKERS_IDS\]|$)/su', $tNotes, $tgPm)) {
+                $tgProds = json_decode(trim($tgPm[1]), true);
+                if (is_array($tgProds)) {
+                    foreach ($tgProds as $tgP) {
+                        if (isset($tgP['line_total']) && is_numeric($tgP['line_total'])) {
+                            $tgGrandTotal += (float)$tgP['line_total'];
+                        } elseif (isset($tgP['quantity']) && isset($tgP['price']) && is_numeric($tgP['price'])) {
+                            $tgGrandTotal += round((float)$tgP['quantity'] * (float)$tgP['price'], 2);
+                        }
+                    }
+                }
+            }
+            $tgDiscount = 0.0;
+            if (preg_match('/\[DISCOUNT\]:\s*([0-9.]+)/', $tNotes, $tgDm)) $tgDiscount = (float)$tgDm[1];
+            $tgAdvance = 0.0;
+            if (preg_match('/\[ADVANCE_PAYMENT\]:\s*([0-9.]+)/', $tNotes, $tgAm)) $tgAdvance = (float)$tgAm[1];
+            $tgWeight = 1.0;
+            if (preg_match('/\[TG_WEIGHT\]\s*:\s*([^\n]+)/', $tNotes, $tgWm) || preg_match('/الوزن\s*:\s*([^\n]+)/u', $tNotes, $tgWm)) {
+                $w = (float)trim((string)($tgWm[1] ?? 0));
+                if ($w > 0) $tgWeight = $w;
+            }
+            $task['_tg_grand_total'] = round($tgGrandTotal, 2);
+            $task['_tg_discount']    = round($tgDiscount, 2);
+            $task['_tg_advance']     = round($tgAdvance, 2);
+            $task['_tg_weight']      = $tgWeight;
         } else {
             $task['receipt_total'] = getTaskReceiptTotalFromNotes($task['notes'] ?? '');
         }
@@ -3932,40 +3960,68 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
     <?php endif; ?>
 
     <?php if ($collectionNotice): ?>
+    <?php
+        $cn = $collectionNotice;
+        $rem = (float)($cn['remaining'] ?? 0);
+        $copyMsg  = " تم التحصيل بنجاح\n";
+        $copyMsg .= " العميل: " . ($cn['customer_name'] ?? '—');
+        if (!empty($cn['customer_phone'])) $copyMsg .= " | 📞 " . $cn['customer_phone'];
+        $copyMsg .= "\n#️⃣ رقم الأوردر: #" . intval($cn['order_number']);
+        $copyMsg .= " |  الإجمالي: " . number_format((float)($cn['total_amount'] ?? 0), 2) . " ج.م\n";
+        $copyMsg .= " المدفوع مقدماً: " . number_format((float)($cn['advance_paid'] ?? 0), 2) . " ج.م\n";
+        $copyMsg .= " المتبقي: " . number_format($rem, 2) . " ج.م";
+        $copyMsg .= " |  رصيد العميل الكلي: " . number_format((float)($cn['new_balance'] ?? 0), 2) . " ج.م";
+    ?>
     <div class="card border-success mb-3 shadow-sm collection-notice-card" id="collectionNoticeCard">
         <div class="card-header d-flex justify-content-between align-items-center py-2" style="background: linear-gradient(135deg,#16a34a,#22c55e); color:#fff;">
             <span class="fw-bold"><i class="bi bi-cash-coin me-2"></i>تم التحصيل بنجاح</span>
-            <button type="button" class="btn-close btn-close-white btn-sm" onclick="document.getElementById('collectionNoticeCard').remove()"></button>
+            <div class="d-flex gap-2 align-items-center">
+                <button type="button" class="btn btn-sm btn-light text-success fw-bold px-2 py-1" style="font-size:.75rem;" onclick="copyCollectionNotice(this)" title="نسخ كرسالة">
+                    <i class="bi bi-clipboard me-1"></i>نسخ
+                </button>
+                <button type="button" class="btn-close btn-close-white btn-sm" onclick="document.getElementById('collectionNoticeCard').remove()"></button>
+            </div>
         </div>
         <div class="card-body py-3">
             <div class="row g-2">
                 <div class="col-6 col-md-3">
                     <div class="text-muted small mb-1"><i class="bi bi-person me-1"></i>العميل</div>
-                    <div class="fw-bold"><?php echo htmlspecialchars($collectionNotice['customer_name'] ?? '—'); ?></div>
-                    <?php if (!empty($collectionNotice['customer_phone'])): ?>
-                    <div class="text-muted small"><?php echo htmlspecialchars($collectionNotice['customer_phone']); ?></div>
+                    <div class="fw-bold"><?php echo htmlspecialchars($cn['customer_name'] ?? '—'); ?></div>
+                    <?php if (!empty($cn['customer_phone'])): ?>
+                    <div class="text-muted small"><?php echo htmlspecialchars($cn['customer_phone']); ?></div>
                     <?php endif; ?>
                 </div>
                 <div class="col-6 col-md-3">
                     <div class="text-muted small mb-1"><i class="bi bi-hash me-1"></i>رقم الأوردر</div>
-                    <div class="fw-bold">#<?php echo intval($collectionNotice['order_number']); ?></div>
-                    <div class="text-muted small">إجمالي: <?php echo number_format((float)($collectionNotice['total_amount'] ?? 0), 2); ?> ج.م</div>
+                    <div class="fw-bold">#<?php echo intval($cn['order_number']); ?></div>
+                    <div class="text-muted small">إجمالي: <?php echo number_format((float)($cn['total_amount'] ?? 0), 2); ?> ج.م</div>
                 </div>
                 <div class="col-6 col-md-3">
                     <div class="text-muted small mb-1"><i class="bi bi-wallet2 me-1"></i>المدفوع مقدماً</div>
-                    <div class="fw-bold text-success"><?php echo number_format((float)($collectionNotice['advance_paid'] ?? 0), 2); ?> ج.م</div>
+                    <div class="fw-bold text-success"><?php echo number_format((float)($cn['advance_paid'] ?? 0), 2); ?> ج.م</div>
                 </div>
                 <div class="col-6 col-md-3">
                     <div class="text-muted small mb-1"><i class="bi bi-hourglass-split me-1"></i>المتبقي للتحصيل</div>
-                    <?php $rem = (float)($collectionNotice['remaining'] ?? 0); ?>
                     <div class="fw-bold <?php echo $rem > 0 ? 'text-danger' : 'text-success'; ?>">
                         <?php echo number_format($rem, 2); ?> ج.م
                     </div>
-                    <div class="text-muted small">رصيد العميل الكلي: <?php echo number_format((float)($collectionNotice['new_balance'] ?? 0), 2); ?> ج.م</div>
+                    <div class="text-muted small">رصيد العميل الكلي: <?php echo number_format((float)($cn['new_balance'] ?? 0), 2); ?> ج.م</div>
                 </div>
             </div>
         </div>
     </div>
+    <script>
+    var collectionNoticeText = <?php echo json_encode($copyMsg, JSON_UNESCAPED_UNICODE); ?>;
+    function copyCollectionNotice(btn) {
+        navigator.clipboard.writeText(collectionNoticeText).then(function() {
+            var orig = btn.innerHTML;
+            btn.innerHTML = '<i class="bi bi-check2 me-1"></i>تم النسخ';
+            btn.classList.replace('btn-light','btn-success');
+            btn.classList.replace('text-success','text-white');
+            setTimeout(function(){ btn.innerHTML = orig; btn.classList.replace('btn-success','btn-light'); btn.classList.replace('text-white','text-success'); }, 2000);
+        });
+    }
+    </script>
     <?php endif; ?>
 
     <div class="card mb-3 border-0 shadow-sm" id="statusFilterWrapper">
@@ -5049,7 +5105,19 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                                 if ($canShowApproveBtn):
                                                 ?>
                                                 <li>
-                                                    <button type="button" class="dropdown-item text-success approve-invoice-btn" data-task-id="<?php echo (int)$task['id']; ?>" data-customer-name="<?php echo htmlspecialchars(trim((string)($task['customer_name'] ?? '')), ENT_QUOTES, 'UTF-8'); ?>" data-receipt-total="<?php echo (float)$receiptTotal; ?>" data-order-type="<?php echo htmlspecialchars($displayType ?? '', ENT_QUOTES, 'UTF-8'); ?>" onclick="openApproveInvoiceCardFromBtn(this)">
+                                                    <button type="button" class="dropdown-item text-success approve-invoice-btn"
+                                                        data-task-id="<?php echo (int)$task['id']; ?>"
+                                                        data-customer-name="<?php echo htmlspecialchars(trim((string)($task['customer_name'] ?? '')), ENT_QUOTES, 'UTF-8'); ?>"
+                                                        data-receipt-total="<?php echo (float)$receiptTotal; ?>"
+                                                        data-order-type="<?php echo htmlspecialchars($displayType ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                                        data-local-customer-id="<?php echo (int)($task['local_customer_id'] ?? 0); ?>"
+                                                        <?php if ($displayType === 'telegraph'): ?>
+                                                        data-tg-grand-total="<?php echo (float)($task['_tg_grand_total'] ?? 0); ?>"
+                                                        data-tg-discount="<?php echo (float)($task['_tg_discount'] ?? 0); ?>"
+                                                        data-tg-advance="<?php echo (float)($task['_tg_advance'] ?? 0); ?>"
+                                                        data-tg-weight="<?php echo (float)($task['_tg_weight'] ?? 1); ?>"
+                                                        <?php endif; ?>
+                                                        onclick="openApproveInvoiceCardFromBtn(this)">
                                                         <i class="bi bi-check2-circle me-1"></i>اعتماد الفاتورة
                                                     </button>
                                                 </li>
@@ -8328,9 +8396,19 @@ window.openApproveInvoiceCardFromBtn = function(btn) {
     var customerName = btn.getAttribute('data-customer-name') || '';
     var receiptTotal = parseFloat(btn.getAttribute('data-receipt-total')) || 0;
     var orderType = (btn.getAttribute('data-order-type') || '').trim();
-    openApproveInvoiceCard(taskId, customerName, receiptTotal, orderType);
+    var tgExtra = null;
+    if (orderType === 'telegraph') {
+        tgExtra = {
+            grandTotal:      parseFloat(btn.getAttribute('data-tg-grand-total')) || 0,
+            discount:        parseFloat(btn.getAttribute('data-tg-discount'))    || 0,
+            advance:         parseFloat(btn.getAttribute('data-tg-advance'))     || 0,
+            weight:          parseFloat(btn.getAttribute('data-tg-weight'))      || 1,
+            localCustomerId: parseInt(btn.getAttribute('data-local-customer-id'), 10) || 0
+        };
+    }
+    openApproveInvoiceCard(taskId, customerName, receiptTotal, orderType, tgExtra);
 };
-window.openApproveInvoiceCard = function(taskId, customerName, receiptTotal, orderType) {
+window.openApproveInvoiceCard = function(taskId, customerName, receiptTotal, orderType, tgExtra) {
     if (!ensureApproveInvoiceCardExists()) return;
     var collapse = document.getElementById('approveInvoiceCardCollapse');
     var taskIdInput = collapse && collapse.querySelector('#approveInvoiceCardTaskId');
@@ -8344,14 +8422,68 @@ window.openApproveInvoiceCard = function(taskId, customerName, receiptTotal, ord
     var netPriceInput = collapse && collapse.querySelector('#approveInvoiceCardNetParcelPrice');
     var isShippingMode = (orderType === 'telegraph' || orderType === 'shipping_company');
     if (taskIdInput) taskIdInput.value = taskId || '';
-    if (totalInput) totalInput.value = (receiptTotal != null) ? String(receiptTotal) : '';
-    if (totalDisplay) totalDisplay.textContent = (receiptTotal != null) ? parseFloat(receiptTotal).toFixed(2) + ' ج.م' : '—';
     if (forShippingInput) forShippingInput.value = isShippingMode ? '1' : '0';
     if (customerBlock) customerBlock.style.display = isShippingMode ? 'none' : 'block';
     if (shippingBlock) shippingBlock.style.display = isShippingMode ? 'block' : 'none';
     if (nameEl) nameEl.textContent = (customerName != null && String(customerName).trim() !== '') ? customerName : '—';
     if (shippingSelect) { shippingSelect.value = ''; shippingSelect.removeAttribute('required'); if (isShippingMode) shippingSelect.setAttribute('required', 'required'); }
     if (netPriceInput) { netPriceInput.value = ''; netPriceInput.removeAttribute('required'); if (isShippingMode) netPriceInput.setAttribute('required', 'required'); }
+
+    // للتليجراف: احسب الإجمالي الصحيح بجلب تكلفة التوصيل من TelegraphEx API
+    if (orderType === 'telegraph' && tgExtra && tgExtra.grandTotal > 0) {
+        // عرض مبدئي بينما يتم جلب التكلفة
+        if (totalInput) totalInput.value = String(receiptTotal);
+        if (totalDisplay) totalDisplay.textContent = 'جاري الحساب...';
+
+        // البحث عن بيانات المحافظة والمدينة من قائمة العملاء
+        var localCustomers = (typeof __localCustomersForTask !== 'undefined' && Array.isArray(__localCustomersForTask)) ? __localCustomersForTask : [];
+        var tgGovId = 0, tgCityId = 0;
+        for (var ci = 0; ci < localCustomers.length; ci++) {
+            if (localCustomers[ci].id == tgExtra.localCustomerId) {
+                tgGovId  = parseInt(localCustomers[ci].tg_gov_id)  || 0;
+                tgCityId = parseInt(localCustomers[ci].tg_city_id) || 0;
+                break;
+            }
+        }
+
+        if (tgGovId > 0 && tgCityId > 0) {
+            var priceForFees = Math.max(0, tgExtra.grandTotal - tgExtra.discount);
+            // بناء مسار API
+            var _tgPathParts = (window.location.pathname || '/').split('/').filter(Boolean);
+            var _tgStop = ['dashboard', 'modules', 'api', 'assets', 'includes'];
+            var _tgBase = [];
+            for (var _pi = 0; _pi < _tgPathParts.length; _pi++) {
+                if (_tgStop.indexOf(_tgPathParts[_pi]) !== -1 || _tgPathParts[_pi].indexOf('.php') !== -1) break;
+                _tgBase.push(_tgPathParts[_pi]);
+            }
+            var _tgApiBase = (_tgBase.length ? '/' + _tgBase.join('/') : '') + '/api/tg_calc_fees.php';
+            _tgApiBase = _tgApiBase.replace(/\/+/g, '/');
+            var tgApiUrl = _tgApiBase + '?price=' + priceForFees + '&recipientZoneId=' + tgGovId + '&recipientSubzoneId=' + tgCityId + '&weight=' + tgExtra.weight;
+            fetch(tgApiUrl)
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var fees = data && data.data && data.data.calculateShipmentFees;
+                    var deliveryCost = fees ? ((parseFloat(fees.delivery) || 0) + (parseFloat(fees.weight) || 0) + (parseFloat(fees.collection) || 0)) : 0;
+                    var finalTotal = Math.round((tgExtra.grandTotal - deliveryCost) * 100) / 100;
+                    var displayedTotal = Math.round((finalTotal - tgExtra.advance) * 100) / 100;
+                    if (totalInput) totalInput.value = String(displayedTotal);
+                    if (totalDisplay) totalDisplay.textContent = displayedTotal.toFixed(2) + ' ج.م';
+                })
+                .catch(function() {
+                    // عند الفشل نستخدم الإجمالي المبدئي
+                    if (totalInput) totalInput.value = String(receiptTotal);
+                    if (totalDisplay) totalDisplay.textContent = parseFloat(receiptTotal).toFixed(2) + ' ج.م';
+                });
+        } else {
+            // لا توجد بيانات محافظة/مدينة — استخدم الإجمالي المبدئي
+            if (totalInput) totalInput.value = String(receiptTotal);
+            if (totalDisplay) totalDisplay.textContent = parseFloat(receiptTotal).toFixed(2) + ' ج.م';
+        }
+    } else {
+        if (totalInput) totalInput.value = (receiptTotal != null) ? String(receiptTotal) : '';
+        if (totalDisplay) totalDisplay.textContent = (receiptTotal != null) ? parseFloat(receiptTotal).toFixed(2) + ' ج.م' : '—';
+    }
+
     // جلب ملخص خصم المخزون
     if (taskId) { loadInventoryPreview(taskId); }
     if (collapse && typeof bootstrap !== 'undefined') {
