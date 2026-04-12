@@ -396,8 +396,8 @@ if (!$mainWarehouse) {
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
-    // مسؤول تليجراف: لا يُسمح له بأي إجراء POST
-    if ($isTelegraphUser) {
+    // مسؤول تليجراف: يُسمح له فقط بـ AJAX actions الخاصة بعرض شحنات TelegraphEx
+    if ($isTelegraphUser && !in_array($action, ['tg_shipments', 'tg_search'], true)) {
         http_response_code(403);
         exit('غير مصرح.');
     }

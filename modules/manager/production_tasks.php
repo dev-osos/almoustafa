@@ -3297,7 +3297,15 @@ if ($filterSearchText !== '') {
 
 try {
     // جلب عدد المهام الإجمالي (للتقسيم) - يستخدم adminIds المحسوبة مسبقاً
-    if ($isAccountant || $isManager) {
+    if ($isTelegraph) {
+        // مسؤول تليجراف يرى جميع أوردرات تليجراف بغض النظر عن المنشئ
+        $countParams = array_merge($statusParams, $searchParams);
+        $totalRow = $db->queryOne("
+            SELECT COUNT(*) AS total FROM tasks t
+            WHERE t.status != 'cancelled' $statusCondition $searchConditions
+        ", $countParams);
+        $totalRecentTasks = isset($totalRow['total']) ? (int)$totalRow['total'] : 0;
+    } elseif ($isAccountant || $isManager) {
         if (!empty($adminIds)) {
             $countParams = array_merge($adminIds, $statusParams, $searchParams);
 
@@ -3328,7 +3336,30 @@ try {
     $tasksOffset = ($tasksPageNum - 1) * $tasksPerPage;
 
     // جلب المهام المحدثة مع التقسيم - يستخدم adminIds المحسوبة مسبقاً
-    if ($isAccountant || $isManager) {
+    if ($isTelegraph) {
+        // مسؤول تليجراف يرى جميع أوردرات تليجراف بغض النظر عن المنشئ
+        $queryParams = array_merge($statusParams, $searchParams, [$tasksPerPage, $tasksOffset]);
+        $selectFields = "t.id, t.title, t.status, t.priority, t.due_date, t.created_at,
+               t.quantity, t.unit, t.customer_name, t.customer_phone, t.notes, t.product_id, t.related_type, t.related_id, t.task_type,
+               t.local_customer_id, t.total_amount,
+               COALESCE(t.receipt_print_count, 0) AS receipt_print_count,
+               u.full_name AS assigned_name, t.assigned_to";
+        $joins = "LEFT JOIN users u ON t.assigned_to = u.id";
+        if ($hasStatusChangedBy) {
+            $selectFields .= ", uStatus.full_name AS status_changed_by_name, t.status_changed_by";
+            $joins .= " LEFT JOIN users uStatus ON t.status_changed_by = uStatus.id";
+        }
+        $recentTasks = $db->query("
+            SELECT $selectFields
+            FROM tasks t
+            $joins
+            WHERE t.status != 'cancelled'
+            $statusCondition
+            $searchConditions
+            ORDER BY t.created_at DESC, t.id DESC
+            LIMIT ? OFFSET ?
+        ", $queryParams);
+    } elseif ($isAccountant || $isManager) {
         if (!empty($adminIds)) {
             $queryParams = array_merge($adminIds, $statusParams, $searchParams, [$tasksPerPage, $tasksOffset]);
 
