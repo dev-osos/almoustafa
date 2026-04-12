@@ -5279,29 +5279,31 @@ function copyShippingCollectionResult(btn) {
             </div>
             <form id="registerReturnFormModal" data-no-loading="true">
                 <div class="modal-body">
-                    <input type="hidden" name="action" value="register_shipping_return">
                     <input type="hidden" name="company_id" id="returnModalCompanyId">
                     <div class="mb-3">
                         <div class="fw-semibold text-muted small">شركة الشحن</div>
                         <div class="fs-6 fw-bold" id="returnModalCompanyName">-</div>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label" for="returnModalOrderNumber">رقم الطلب <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="returnModalOrderNumber" name="order_number" placeholder="أدخل رقم الطلب" required>
+                        <label class="form-label" for="returnModalOrderNumber">رقم الطلب / مرجع</label>
+                        <input type="text" class="form-control" id="returnModalOrderNumber" placeholder="اختياري — للملاحظة فقط">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label" for="returnModalTotalAmount">المبلغ الصافي</label>
+                        <label class="form-label" for="returnModalTotalAmount">المبلغ الصافي <span class="text-danger">*</span></label>
                         <div class="input-group">
-                            <input type="number" class="form-control" id="returnModalTotalAmount" name="total_amount" step="0.01" min="0" placeholder="0.00">
+                            <input type="number" class="form-control" id="returnModalTotalAmount" step="0.01" min="0" placeholder="0.00" required>
                             <span class="input-group-text">ج.م</span>
                         </div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="returnModalReturnFees">رسوم الإرجاع</label>
                         <div class="input-group">
-                            <input type="number" class="form-control" id="returnModalReturnFees" name="return_fees" step="0.01" min="0" value="0" placeholder="0.00">
+                            <input type="number" class="form-control" id="returnModalReturnFees" step="0.01" min="0" value="0" placeholder="0.00">
                             <span class="input-group-text">ج.م</span>
                         </div>
+                    </div>
+                    <div class="alert alert-warning py-2 small d-none" id="returnModalSummary">
+                        إجمالي الخصم: <strong id="returnModalTotal">0.00</strong> ج.م
                     </div>
                     <div id="returnModalAlert" class="alert d-none"></div>
                 </div>
@@ -7590,57 +7592,57 @@ document.addEventListener('DOMContentLoaded', function() {
     // معالجة تسجيل مرتجع - Modal
     var registerReturnFormModal = document.getElementById('registerReturnFormModal');
     if (registerReturnFormModal) {
+        var _rmNet  = document.getElementById('returnModalTotalAmount');
+        var _rmFees = document.getElementById('returnModalReturnFees');
+        var _rmSum  = document.getElementById('returnModalSummary');
+        var _rmTot  = document.getElementById('returnModalTotal');
+        function updateReturnModalSummary() {
+            var net  = parseFloat(_rmNet  ? _rmNet.value  : 0) || 0;
+            var fees = parseFloat(_rmFees ? _rmFees.value : 0) || 0;
+            var total = net + fees;
+            if (_rmTot) _rmTot.textContent = total.toFixed(2);
+            if (_rmSum) _rmSum.classList.toggle('d-none', total <= 0);
+        }
+        if (_rmNet)  _rmNet.addEventListener('input', updateReturnModalSummary);
+        if (_rmFees) _rmFees.addEventListener('input', updateReturnModalSummary);
+
         registerReturnFormModal.addEventListener('submit', function(e) {
             e.preventDefault();
-            var orderIdVal = (document.getElementById('returnModalOrderNumber').value || '').trim();
-            if (!orderIdVal) {
-                showShippingToast('يرجى إدخال رقم الطلب.', 'danger');
+            var companyId = document.getElementById('returnModalCompanyId').value;
+            var netVal    = parseFloat((_rmNet  ? _rmNet.value  : '0') || '0') || 0;
+            var feesVal   = parseFloat((_rmFees ? _rmFees.value : '0') || '0') || 0;
+            var total     = netVal + feesVal;
+            var refNum    = (document.getElementById('returnModalOrderNumber').value || '').trim();
+            var alertEl   = document.getElementById('returnModalAlert');
+            if (total <= 0) {
+                if (alertEl) { alertEl.className = 'alert alert-danger'; alertEl.textContent = 'يجب إدخال مبلغ أكبر من صفر.'; alertEl.classList.remove('d-none'); }
                 return false;
             }
+            var notes = 'مرتجع — مبلغ صافي: ' + netVal.toFixed(2) + ' ج.م، رسوم إرجاع: ' + feesVal.toFixed(2) + ' ج.م';
+            if (refNum) notes += ' — مرجع: ' + refNum;
             var formData = new FormData();
-            formData.append('action', 'register_shipping_return');
-            formData.append('company_id', document.getElementById('returnModalCompanyId').value);
-            // إذا كانت القيمة رقم صحيح نُرسلها كـ order_id، وإلا كـ order_number
-            if (/^\d+$/.test(orderIdVal)) {
-                formData.append('order_id', orderIdVal);
-            } else {
-                formData.append('order_number', orderIdVal);
-            }
-            formData.append('return_fees', document.getElementById('returnModalReturnFees').value || '0');
-            var rModalTotal = document.getElementById('returnModalTotalAmount').value;
-            if(rModalTotal !== '') formData.append('total_amount', rModalTotal);
+            formData.append('action', 'deduct_from_shipping_company');
+            formData.append('company_id', companyId);
+            formData.append('amount', total.toFixed(2));
+            formData.append('notes', notes);
             var submitBtn = document.getElementById('returnModalSubmitBtn');
             if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>جاري التسجيل...'; }
-            var alertEl = document.getElementById('returnModalAlert');
-            console.log('[RETURN-DEBUG] posting to:', window.location.href, 'company_id:', document.getElementById('returnModalCompanyId').value, 'order:', orderIdVal);
+            if (alertEl) alertEl.className = 'alert d-none';
             fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: formData, credentials: 'same-origin' })
-                .then(function(r) {
-                    console.log('[RETURN-DEBUG] status:', r.status, 'content-type:', r.headers.get('content-type'));
-                    return r.text();
-                })
-                .then(function(text) {
-                    console.log('[RETURN-DEBUG] raw response (first 600):', text.substring(0, 600));
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
                     if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = '<i class="bi bi-arrow-return-right me-1"></i>تسجيل المرتجع'; }
-                    var data;
-                    try { data = JSON.parse(text); } catch(ex) {
-                        if (alertEl) { alertEl.className = 'alert alert-danger'; alertEl.textContent = 'استجابة غير صالحة من الخادم.'; alertEl.classList.remove('d-none'); }
-                        return;
-                    }
                     if (data.success) {
-                        showShippingToast(data.message || 'تم تسجيل المرتجع بنجاح.', 'success');
+                        showShippingToast('تم تسجيل المرتجع بنجاح. الرصيد الجديد: ' + (data.new_balance !== undefined ? data.new_balance : '') + ' ج.م', 'success');
                         if (typeof showShippingCollectionResultMessage === 'function') showShippingCollectionResultMessage(data.message || '');
                         if (data.company_id != null && data.new_balance != null && typeof updateShippingCompanyBalanceInTable === 'function') updateShippingCompanyBalanceInTable(data.company_id, data.new_balance);
                         var modalEl = document.getElementById('registerReturnModal');
-                        if (typeof bootstrap !== 'undefined' && bootstrap.Modal && modalEl) {
-                            var m = bootstrap.Modal.getInstance(modalEl);
-                            if (m) m.hide();
-                        }
+                        if (typeof bootstrap !== 'undefined' && bootstrap.Modal && modalEl) { var m = bootstrap.Modal.getInstance(modalEl); if (m) m.hide(); }
                     } else {
                         if (alertEl) { alertEl.className = 'alert alert-danger'; alertEl.textContent = data.error || 'حدث خطأ.'; alertEl.classList.remove('d-none'); }
                     }
                 })
-                .catch(function(err) {
-                    console.log('[RETURN-DEBUG] fetch error:', err);
+                .catch(function() {
                     if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = '<i class="bi bi-arrow-return-right me-1"></i>تسجيل المرتجع'; }
                     showShippingToast('حدث خطأ في الاتصال.', 'danger');
                 });
