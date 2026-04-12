@@ -7612,10 +7612,20 @@ document.addEventListener('DOMContentLoaded', function() {
             var submitBtn = document.getElementById('returnModalSubmitBtn');
             if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>جاري التسجيل...'; }
             var alertEl = document.getElementById('returnModalAlert');
+            console.log('[RETURN-DEBUG] posting to:', window.location.href, 'company_id:', document.getElementById('returnModalCompanyId').value, 'order:', orderIdVal);
             fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: formData, credentials: 'same-origin' })
-                .then(function(r) { return r.json(); })
-                .then(function(data) {
+                .then(function(r) {
+                    console.log('[RETURN-DEBUG] status:', r.status, 'content-type:', r.headers.get('content-type'));
+                    return r.text();
+                })
+                .then(function(text) {
+                    console.log('[RETURN-DEBUG] raw response (first 600):', text.substring(0, 600));
                     if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = '<i class="bi bi-arrow-return-right me-1"></i>تسجيل المرتجع'; }
+                    var data;
+                    try { data = JSON.parse(text); } catch(ex) {
+                        if (alertEl) { alertEl.className = 'alert alert-danger'; alertEl.textContent = 'استجابة غير صالحة من الخادم.'; alertEl.classList.remove('d-none'); }
+                        return;
+                    }
                     if (data.success) {
                         showShippingToast(data.message || 'تم تسجيل المرتجع بنجاح.', 'success');
                         if (typeof showShippingCollectionResultMessage === 'function') showShippingCollectionResultMessage(data.message || '');
@@ -7626,11 +7636,11 @@ document.addEventListener('DOMContentLoaded', function() {
                             if (m) m.hide();
                         }
                     } else {
-                        if (alertEl) { alertEl.className = 'alert alert-danger'; alertEl.textContent = data.error || 'حدث خطأ.'; }
-                        if (submitBtn) submitBtn.disabled = false;
+                        if (alertEl) { alertEl.className = 'alert alert-danger'; alertEl.textContent = data.error || 'حدث خطأ.'; alertEl.classList.remove('d-none'); }
                     }
                 })
-                .catch(function() {
+                .catch(function(err) {
+                    console.log('[RETURN-DEBUG] fetch error:', err);
                     if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = '<i class="bi bi-arrow-return-right me-1"></i>تسجيل المرتجع'; }
                     showShippingToast('حدث خطأ في الاتصال.', 'danger');
                 });
