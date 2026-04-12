@@ -6498,7 +6498,8 @@ document.addEventListener('DOMContentLoaded', function () {
                     submitName.value = this.dataset.name || '';
                     if (this.dataset.phone) submitPhone.value = this.dataset.phone;
                     dropEl.classList.add('d-none');
-                    inputEl.dispatchEvent(new Event('input'));
+                    // تحديث حالة زر الإرسال بدون مسح ID العميل أو إعادة فتح القائمة
+                    updateCreateSubmitBtnState();
                     // ملء بيانات التليجراف تلقائياً إذا كان نوع الأوردر تليجراف
                     var typeEl = document.getElementById('taskTypeSelect');
                     if (typeEl && typeEl.value === 'telegraph') {
