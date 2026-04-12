@@ -5730,7 +5730,7 @@ label[for="ct_task_manual"], .form-check:has(#ct_task_manual) { display: none !i
 
 #statusFilterCards .card {
     border-radius: 0.375rem !important;
-    aspect-ratio: 1 / 1 !important;
+    min-height: 4rem !important;
 }
 
 #statusFilterCards .card-body {
@@ -5739,6 +5739,19 @@ label[for="ct_task_manual"], .form-check:has(#ct_task_manual) { display: none !i
     justify-content: center !important;
     align-items: center !important;
     height: 100% !important;
+}
+
+#statusFilterCards .card-body .small {
+    font-size: 0.65rem !important;
+    margin-bottom: 0.2rem !important;
+    font-weight: 500 !important;
+    line-height: 1.2 !important;
+}
+
+#statusFilterCards .card-body .fs-5 {
+    font-size: 0.85rem !important;
+    font-weight: 700 !important;
+    line-height: 1.1 !important;
 }
 
 /* Smooth card header styling */
