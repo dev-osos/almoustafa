@@ -295,7 +295,7 @@ if ($editOfferId > 0) {
                     <label class="form-label fw-semibold">اسم العرض <span class="text-danger">*</span></label>
                     <input type="text" class="form-control" name="offer_name"
                            value="<?php echo htmlspecialchars($editOffer['name'] ?? ''); ?>"
-                           placeholder="مثال: عرض رمضان الخاص" required>
+                           placeholder="مثال: عرض رمضان " required>
                 </div>
                 <div class="col-md-3">
                     <label class="form-label fw-semibold">سعر العرض (ج.م) <span class="text-danger">*</span></label>
@@ -324,11 +324,36 @@ if ($editOfferId > 0) {
             </div>
 
             <!-- جدول المنتجات -->
+            <style>
+            .offer-product-wrapper { position: relative; }
+            .offer-search-dropdown {
+                position: absolute; top: 100%; right: 0; left: 0; z-index: 1055;
+                background: #fff; border: 1px solid #ced4da; border-top: none;
+                border-radius: 0 0 .375rem .375rem;
+                max-height: 220px; overflow-y: auto;
+                box-shadow: 0 4px 12px rgba(0,0,0,.12);
+                display: none;
+            }
+            .offer-search-dropdown .osd-item {
+                padding: .45rem .75rem; cursor: pointer; font-size: .875rem;
+                border-bottom: 1px solid #f0f0f0;
+            }
+            .offer-search-dropdown .osd-item:last-child { border-bottom: none; }
+            .offer-search-dropdown .osd-item:hover,
+            .offer-search-dropdown .osd-item.active { background: #e9f0ff; color: #1a56db; }
+            .offer-search-dropdown .osd-cat {
+                font-size: .75rem; color: #6c757d; display: block;
+            }
+            .offer-search-dropdown .osd-empty {
+                padding: .5rem .75rem; color: #6c757d; font-size: .875rem;
+            }
+            .offer-search-input.has-value { border-color: #198754; }
+            </style>
             <div class="table-responsive mb-3">
                 <table class="table table-sm align-middle" id="offerItemsTable">
                     <thead class="table-light">
                         <tr>
-                            <th style="min-width:260px;">المنتج <span class="text-danger">*</span></th>
+                            <th style="min-width:280px;">المنتج <span class="text-danger">*</span></th>
                             <th style="width:90px;">الوحدة</th>
                             <th style="width:130px;">الكمية <span class="text-danger">*</span></th>
                             <th style="width:150px;">سعر الوحدة</th>
@@ -340,17 +365,20 @@ if ($editOfferId > 0) {
                             <?php foreach ($editItems as $idx => $ei): ?>
                             <tr>
                                 <td>
-                                    <select class="form-select offer-product-select" name="items[<?php echo $idx; ?>][product_id]" required>
-                                        <option value="">اختر المنتج</option>
-                                        <?php foreach ($allProducts as $p): ?>
-                                        <option value="<?php echo (int)$p['id']; ?>"
-                                                data-unit="<?php echo htmlspecialchars($p['unit'] ?? 'وحدة'); ?>"
-                                                data-unit-price="<?php echo number_format((float)($p['unit_price'] ?? 0), 2, '.', ''); ?>"
-                                                <?php echo ($p['id'] == $ei['product_id']) ? 'selected' : ''; ?>>
-                                            <?php echo htmlspecialchars($p['category'] . ' - ' . $p['name']); ?>
-                                        </option>
-                                        <?php endforeach; ?>
-                                    </select>
+                                    <div class="offer-product-wrapper">
+                                        <input type="text" class="form-control form-control-sm offer-search-input<?php echo $ei['product_id'] ? ' has-value' : ''; ?>"
+                                               placeholder="ابحث عن منتج..." autocomplete="off"
+                                               value="<?php echo htmlspecialchars($ei['category'] . ' - ' . $ei['product_name']); ?>">
+                                        <select class="offer-product-select visually-hidden"
+                                                name="items[<?php echo $idx; ?>][product_id]" required
+                                                data-unit="<?php echo htmlspecialchars($ei['unit'] ?? 'وحدة'); ?>"
+                                                data-unit-price="<?php echo number_format((float)($ei['unit_price'] ?? 0), 2, '.', ''); ?>">
+                                            <option value="<?php echo (int)$ei['product_id']; ?>" selected>
+                                                <?php echo htmlspecialchars($ei['product_name']); ?>
+                                            </option>
+                                        </select>
+                                        <div class="offer-search-dropdown"></div>
+                                    </div>
                                 </td>
                                 <td class="text-muted small">
                                     <span class="offer-unit-label"><?php echo htmlspecialchars($ei['unit'] ?? '-'); ?></span>
@@ -526,27 +554,6 @@ if ($editOfferId > 0) {
     const addBtn    = document.getElementById('addOfferItemBtn');
     const calcTotal = document.getElementById('offerCalcTotal');
 
-    const buildOptions = (selectedId) => {
-        let html = '<option value="">اختر المنتج</option>';
-        let lastCat = '';
-        allProducts.forEach(p => {
-            const cat = p.category || 'أخرى';
-            if (cat !== lastCat) {
-                if (lastCat) html += '</optgroup>';
-                html += `<optgroup label="${escHtml(cat)}">`;
-                lastCat = cat;
-            }
-            const sel = (selectedId && parseInt(selectedId) === p.id) ? ' selected' : '';
-            html += `<option value="${p.id}"
-                        data-unit="${escHtml(p.unit || 'وحدة')}"
-                        data-unit-price="${parseFloat(p.unit_price || 0).toFixed(2)}"${sel}>
-                        ${escHtml(p.name)}
-                     </option>`;
-        });
-        if (lastCat) html += '</optgroup>';
-        return html;
-    };
-
     const escHtml = v => String(v || '').replace(/[&<>"']/g, c =>
         ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
@@ -560,24 +567,111 @@ if ($editOfferId > 0) {
         if (calcTotal) calcTotal.textContent = total.toLocaleString('ar-EG', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' ج.م';
     };
 
-    const attachRowEvents = (row) => {
-        const sel = row.querySelector('.offer-product-select');
-        const qty = row.querySelector('.offer-qty-input');
-        const up  = row.querySelector('.offer-up-input');
-        const del = row.querySelector('.remove-offer-item');
-        const unitLabel = row.querySelector('.offer-unit-label');
+    // ——— منطق البحث في المنتجات ———
+    const filterProducts = (q) => {
+        if (!q) return allProducts;
+        const lower = q.toLowerCase();
+        return allProducts.filter(p =>
+            (p.name || '').toLowerCase().includes(lower) ||
+            (p.category || '').toLowerCase().includes(lower)
+        );
+    };
 
-        sel?.addEventListener('change', () => {
-            const opt = sel.selectedOptions?.[0];
-            if (unitLabel) unitLabel.textContent = opt?.dataset?.unit || '-';
-            if (up && (!up.value || parseFloat(up.value) <= 0)) {
-                const defPrice = parseFloat(opt?.dataset?.unitPrice || 0);
-                if (defPrice > 0) up.value = defPrice.toFixed(2);
-            }
-            recalc();
+    const selectProduct = (row, product) => {
+        const searchInput = row.querySelector('.offer-search-input');
+        const hiddenSel   = row.querySelector('.offer-product-select');
+        const dropdown    = row.querySelector('.offer-search-dropdown');
+        const unitLabel   = row.querySelector('.offer-unit-label');
+        const upInput     = row.querySelector('.offer-up-input');
+
+        // تحديث الـ hidden select
+        hiddenSel.innerHTML = `<option value="${product.id}" selected
+            data-unit="${escHtml(product.unit || 'وحدة')}"
+            data-unit-price="${parseFloat(product.unit_price || 0).toFixed(2)}">
+            ${escHtml(product.name)}
+        </option>`;
+
+        // تحديث نص الـ input
+        searchInput.value = (product.category ? product.category + ' - ' : '') + product.name;
+        searchInput.classList.add('has-value');
+
+        // تحديث الوحدة وسعر الوحدة
+        if (unitLabel) unitLabel.textContent = product.unit || '-';
+        if (upInput && (!upInput.value || parseFloat(upInput.value) <= 0)) {
+            const defPrice = parseFloat(product.unit_price || 0);
+            if (defPrice > 0) upInput.value = defPrice.toFixed(2);
+        }
+
+        // إغلاق الـ dropdown
+        dropdown.style.display = 'none';
+        recalc();
+    };
+
+    const showDropdown = (row, results) => {
+        const dropdown = row.querySelector('.offer-search-dropdown');
+        if (!results.length) {
+            dropdown.innerHTML = '<div class="osd-empty">لا توجد نتائج</div>';
+        } else {
+            dropdown.innerHTML = results.map(p => `
+                <div class="osd-item" data-id="${p.id}">
+                    ${escHtml(p.name)}
+                    ${p.category ? `<span class="osd-cat">${escHtml(p.category)}</span>` : ''}
+                </div>
+            `).join('');
+            // ربط أحداث النقر
+            dropdown.querySelectorAll('.osd-item').forEach(item => {
+                item.addEventListener('mousedown', (e) => {
+                    e.preventDefault(); // منع blur قبل النقر
+                    const pid = parseInt(item.dataset.id);
+                    const product = allProducts.find(p => p.id === pid);
+                    if (product) selectProduct(row, product);
+                });
+            });
+        }
+        dropdown.style.display = 'block';
+    };
+
+    const attachSearchEvents = (row) => {
+        const searchInput = row.querySelector('.offer-search-input');
+        const hiddenSel   = row.querySelector('.offer-product-select');
+        const dropdown    = row.querySelector('.offer-search-dropdown');
+        const qty         = row.querySelector('.offer-qty-input');
+        const up          = row.querySelector('.offer-up-input');
+        const del         = row.querySelector('.remove-offer-item');
+
+        searchInput?.addEventListener('focus', () => {
+            const q = searchInput.value.trim();
+            // إذا كان النص هو اسم المنتج المختار، ابدأ بالنتائج الكاملة
+            const results = filterProducts(hiddenSel?.value ? '' : q);
+            showDropdown(row, results.slice(0, 60));
         });
+
+        searchInput?.addEventListener('input', () => {
+            const q = searchInput.value.trim();
+            // مسح الاختيار الحالي عند الكتابة
+            if (hiddenSel) {
+                hiddenSel.innerHTML = '<option value="" selected></option>';
+                searchInput.classList.remove('has-value');
+            }
+            const results = filterProducts(q);
+            showDropdown(row, results.slice(0, 60));
+        });
+
+        searchInput?.addEventListener('blur', () => {
+            // تأخير صغير لإتاحة حدث mousedown على الـ dropdown
+            setTimeout(() => {
+                dropdown.style.display = 'none';
+                // إذا مُسح الاختيار ولم يُختر شيء → أعد النص الفارغ
+                if (!hiddenSel?.value) {
+                    searchInput.value = '';
+                    searchInput.classList.remove('has-value');
+                }
+            }, 150);
+        });
+
         qty?.addEventListener('input', recalc);
         up?.addEventListener('input', recalc);
+
         del?.addEventListener('click', () => {
             if (itemsBody.children.length > 1) {
                 row.remove();
@@ -591,9 +685,15 @@ if ($editOfferId > 0) {
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td>
-                <select class="form-select offer-product-select" name="items[${idx}][product_id]" required>
-                    ${buildOptions(pid)}
-                </select>
+                <div class="offer-product-wrapper">
+                    <input type="text" class="form-control form-control-sm offer-search-input"
+                           placeholder="ابحث عن منتج..." autocomplete="off">
+                    <select class="offer-product-select visually-hidden"
+                            name="items[${idx}][product_id]" required>
+                        <option value=""></option>
+                    </select>
+                    <div class="offer-search-dropdown"></div>
+                </div>
             </td>
             <td class="text-muted small"><span class="offer-unit-label">-</span></td>
             <td>
@@ -614,15 +714,19 @@ if ($editOfferId > 0) {
             </td>
         `;
         itemsBody.appendChild(tr);
-        attachRowEvents(tr);
-        // تحديث وحدة المنتج المختار
-        const sel = tr.querySelector('.offer-product-select');
-        if (sel?.value) sel.dispatchEvent(new Event('change'));
+        attachSearchEvents(tr);
+
+        // إذا تم تمرير product_id (مثلاً عند تحميل عرض) → اختره تلقائياً
+        if (pid) {
+            const product = allProducts.find(p => p.id === parseInt(pid));
+            if (product) selectProduct(tr, product);
+        }
+
         recalc();
     };
 
     // ربط أحداث الصفوف الموجودة (عند التعديل)
-    itemsBody.querySelectorAll('tr').forEach(attachRowEvents);
+    itemsBody.querySelectorAll('tr').forEach(attachSearchEvents);
 
     // إضافة صف أول تلقائياً إذا لم يكن هناك صفوف
     if (itemsBody.children.length === 0) {

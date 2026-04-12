@@ -181,7 +181,7 @@ $isManager = ($currentUser['role'] ?? '') === 'manager';
 $isDeveloper = ($currentUser['role'] ?? '') === 'developer';
 $isSales = ($currentUser['role'] ?? '') === 'sales';
 $isTelegraph = ($currentUser['role'] ?? '') === 'telegraph';
-$canPrintTasks = $isAccountant || $isManager || $isDeveloper || $isTelegraph;
+$canPrintTasks = $isAccountant || $isManager || $isDeveloper;
 
 // جلب سجل الأسعار السابقة لمنتج معين لعميل معين (API endpoint)
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['action'] === 'get_customer_price_history' && ($isAccountant || $isManager || $isDeveloper)) {
