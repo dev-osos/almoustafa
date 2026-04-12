@@ -187,6 +187,13 @@ switch ($role) {
                 'badge' => null
             ],
             [
+                'title' => 'العروض',
+                'icon' => 'bi-tags',
+                'url' => $baseUrl . 'manager.php?page=offers',
+                'active' => ($currentPage === 'manager.php' && $currentPageParam === 'offers'),
+                'badge' => null
+            ],
+            [
                 'title' => 'مخزن الخامات',
                 'icon' => 'bi-box-seam',
                 'url' => $baseUrl . 'manager.php?page=raw_materials_warehouse',
@@ -995,6 +1002,13 @@ switch ($role) {
                 'icon' => 'bi-truck',
                 'url' => $baseUrl . 'telegraph.php?page=shipping_orders',
                 'active' => ($currentPage === 'telegraph.php' && $currentPageParam === 'shipping_orders'),
+                'badge' => null
+            ],
+            [
+                'title' => 'العروض',
+                'icon' => 'bi-tags',
+                'url' => $baseUrl . 'telegraph.php?page=offers',
+                'active' => ($currentPage === 'telegraph.php' && $currentPageParam === 'offers'),
                 'badge' => null
             ],
         ];
