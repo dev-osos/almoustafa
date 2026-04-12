@@ -2292,6 +2292,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'register_shipping_return') {
         $orderId       = isset($_POST['order_id']) ? (int)$_POST['order_id'] : 0;
+        $orderNumber   = isset($_POST['order_number']) ? trim((string)$_POST['order_number']) : '';
         $paperInvId    = isset($_POST['paper_invoice_id']) ? (int)$_POST['paper_invoice_id'] : 0;
         $companyId     = isset($_POST['company_id']) ? (int)$_POST['company_id'] : 0;
         $returnFees    = isset($_POST['return_fees']) ? cleanFinancialValue($_POST['return_fees'], true) : 0;
@@ -2386,10 +2387,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             // --- وضع أوردر الشحن (الطريقة القديمة) ---
             } else {
-                $returnOrder = $db->queryOne(
-                    "SELECT id, order_number, shipping_company_id, total_amount, status FROM shipping_company_orders WHERE id = ? AND shipping_company_id = ? FOR UPDATE",
-                    [$orderId, $companyId]
-                );
+                if ($orderId > 0) {
+                    $returnOrder = $db->queryOne(
+                        "SELECT id, order_number, shipping_company_id, total_amount, status FROM shipping_company_orders WHERE id = ? AND shipping_company_id = ? FOR UPDATE",
+                        [$orderId, $companyId]
+                    );
+                } else if (!empty($orderNumber)) {
+                    $returnOrder = $db->queryOne(
+                        "SELECT id, order_number, shipping_company_id, total_amount, status FROM shipping_company_orders WHERE order_number = ? AND shipping_company_id = ? FOR UPDATE",
+                        [$orderNumber, $companyId]
+                    );
+                    if ($returnOrder) $orderId = (int)$returnOrder['id'];
+                } else {
+                    throw new InvalidArgumentException('يجب تحديد رقم الطلب.');
+                }
+                
                 if (!$returnOrder) throw new InvalidArgumentException('طلب الشحن غير موجود.');
                 if ($returnOrder['status'] === 'cancelled') throw new InvalidArgumentException('لا يمكن تسجيل مرتجع لطلب ملغي.');
 
@@ -5276,12 +5288,7 @@ function copyShippingCollectionResult(btn) {
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="returnModalOrderNumber">رقم الطلب <span class="text-danger">*</span></label>
-                        <div class="input-group">
-                            <input type="text" class="form-control" id="returnModalOrderNumber" placeholder="أدخل رقم الطلب" required>
-                            <button type="button" class="btn btn-outline-secondary" onclick="lookupOrderForReturn('modal')">
-                                <i class="bi bi-search"></i> بحث
-                            </button>
-                        </div>
+                        <input type="text" class="form-control" id="returnModalOrderNumber" name="order_number" placeholder="أدخل رقم الطلب" required>
                         <div class="text-danger small mt-1 d-none" id="returnModalOrderError"></div>
                     </div>
                     <div class="mb-3">
@@ -5437,12 +5444,7 @@ function copyShippingCollectionResult(btn) {
             </div>
             <div class="mb-3">
                 <label class="form-label" for="returnCardOrderNumber">رقم الطلب <span class="text-danger">*</span></label>
-                <div class="input-group">
-                    <input type="number" class="form-control" id="returnCardOrderNumber" placeholder="أدخل رقم الطلب (مثال: 480)" min="1" required>
-                    <button type="button" class="btn btn-outline-secondary" onclick="lookupOrderForReturn('card')">
-                        <i class="bi bi-search"></i>
-                    </button>
-                </div>
+                <input type="text" class="form-control" id="returnCardOrderNumber" name="order_number" placeholder="أدخل رقم الطلب" required>
                 <div class="text-danger small mt-1 d-none" id="returnCardOrderError"></div>
             </div>
             <div class="mb-3">
@@ -5876,30 +5878,52 @@ function closeDeductFromShippingCard() {
 }
 
 function showRegisterReturnByIdName(companyId, companyName, balance) {
-    var card = document.getElementById('registerReturnCard');
-    if (!card) return;
-    document.getElementById('returnCardCompanyId').value = companyId;
-    document.getElementById('returnCardCompanyName').textContent = companyName || '-';
-    document.getElementById('returnCardOrderId').value = '';
-    document.getElementById('returnCardOrderNumber').value = '';
-    document.getElementById('returnCardTotalAmount').value = '';
-    document.getElementById('returnCardReturnFees').value = '0';
-    var piEl = document.getElementById('returnCardPaperInvoiceId');
-    if (piEl) piEl.value = '';
-    var prodSec = document.getElementById('returnCardProductsSection');
-    if (prodSec) prodSec.classList.add('d-none');
-    var prodList = document.getElementById('returnCardProductsList');
-    if (prodList) prodList.innerHTML = '';
-    var submitBtnEl = document.getElementById('returnCardSubmitBtn');
-    if (submitBtnEl) submitBtnEl.disabled = true;
-    var summaryEl = document.getElementById('returnCardSummary');
-    if (summaryEl) summaryEl.classList.add('d-none');
-    var alertEl = document.getElementById('returnCardAlert');
-    if (alertEl) { alertEl.className = 'alert d-none'; alertEl.textContent = ''; }
-    var errEl = document.getElementById('returnCardOrderError');
-    if (errEl) { errEl.className = 'text-danger small mt-1 d-none'; errEl.textContent = ''; }
-    card.style.display = '';
-    setTimeout(function() { scrollToElement(card); }, 50);
+    closeAllForms();
+    if (isMobile()) {
+        var card = document.getElementById('registerReturnCard');
+        if (!card) return;
+        document.getElementById('returnCardCompanyId').value = companyId;
+        document.getElementById('returnCardCompanyName').textContent = companyName || '-';
+        document.getElementById('returnCardOrderId').value = '';
+        document.getElementById('returnCardOrderNumber').value = '';
+        document.getElementById('returnCardTotalAmount').value = '';
+        document.getElementById('returnCardReturnFees').value = '0';
+        var piEl = document.getElementById('returnCardPaperInvoiceId');
+        if (piEl) piEl.value = '';
+        var prodSec = document.getElementById('returnCardProductsSection');
+        if (prodSec) prodSec.classList.add('d-none');
+        var prodList = document.getElementById('returnCardProductsList');
+        if (prodList) prodList.innerHTML = '';
+        var submitBtnEl = document.getElementById('returnCardSubmitBtn');
+        if (submitBtnEl) submitBtnEl.disabled = true;
+        var summaryEl = document.getElementById('returnCardSummary');
+        if (summaryEl) summaryEl.classList.add('d-none');
+        var alertEl = document.getElementById('returnCardAlert');
+        if (alertEl) { alertEl.className = 'alert d-none'; alertEl.textContent = ''; }
+        var errEl = document.getElementById('returnCardOrderError');
+        if (errEl) { errEl.className = 'text-danger small mt-1 d-none'; errEl.textContent = ''; }
+        card.style.display = '';
+        setTimeout(function() { scrollToElement(card); }, 50);
+    } else {
+        var modal = document.getElementById('registerReturnModal');
+        if (!modal) return;
+        document.getElementById('returnModalCompanyId').value = companyId;
+        document.getElementById('returnModalCompanyName').textContent = companyName || '-';
+        document.getElementById('returnModalOrderId').value = '';
+        document.getElementById('returnModalOrderNumber').value = '';
+        document.getElementById('returnModalTotalAmount').value = '';
+        document.getElementById('returnModalReturnFees').value = '0';
+        var submitBtnEl = document.getElementById('returnModalSubmitBtn');
+        if (submitBtnEl) submitBtnEl.disabled = true;
+        var summaryEl = document.getElementById('returnModalSummary');
+        if (summaryEl) summaryEl.classList.add('d-none');
+        var alertEl = document.getElementById('returnModalAlert');
+        if (alertEl) { alertEl.className = 'alert d-none'; alertEl.textContent = ''; }
+        var errEl = document.getElementById('returnModalOrderError');
+        if (errEl) { errEl.className = 'text-danger small mt-1 d-none'; errEl.textContent = ''; }
+        var modalInstance = new bootstrap.Modal(modal);
+        modalInstance.show();
+    }
 }
 
 function closeRegisterReturnCard() {
@@ -7662,20 +7686,30 @@ document.addEventListener('DOMContentLoaded', function() {
     if (registerReturnFormModal) {
         // تحديث الملخص عند تغيير رسوم الإرجاع
         var returnModalFees = document.getElementById('returnModalReturnFees');
-        if (returnModalFees) {
-            returnModalFees.addEventListener('input', function() { updateReturnSummary('modal'); });
+        var returnModalTotal = document.getElementById('returnModalTotalAmount');
+        var returnModalOrderNum = document.getElementById('returnModalOrderNumber');
+        var returnModalBtn = document.getElementById('returnModalSubmitBtn');
+
+        if (returnModalFees) returnModalFees.addEventListener('input', function() { updateReturnSummary('modal'); });
+        if (returnModalTotal) returnModalTotal.addEventListener('input', function() { updateReturnSummary('modal'); });
+        if (returnModalOrderNum && returnModalBtn) {
+            returnModalOrderNum.addEventListener('input', function() {
+                returnModalBtn.disabled = this.value.trim() === '';
+            });
         }
         registerReturnFormModal.addEventListener('submit', function(e) {
             e.preventDefault();
             var orderIdVal = document.getElementById('returnModalOrderId').value;
-            if (!orderIdVal) {
-                showShippingToast('يرجى البحث عن الطلب أولاً.', 'danger');
+            var orderNumVal = document.getElementById('returnModalOrderNumber').value.trim();
+            if (!orderIdVal && !orderNumVal) {
+                showShippingToast('يرجى إدخال رقم الطلب.', 'danger');
                 return false;
             }
             var formData = new FormData();
             formData.append('action', 'register_shipping_return');
             formData.append('company_id', document.getElementById('returnModalCompanyId').value);
-            formData.append('order_id', orderIdVal);
+            if (orderIdVal) formData.append('order_id', orderIdVal);
+            if (orderNumVal) formData.append('order_number', orderNumVal);
             formData.append('return_fees', document.getElementById('returnModalReturnFees').value || '0');
             var rModalTotal = document.getElementById('returnModalTotalAmount').value;
             if(rModalTotal !== '') formData.append('total_amount', rModalTotal);
@@ -7712,15 +7746,24 @@ document.addEventListener('DOMContentLoaded', function() {
     var registerReturnFormCard = document.getElementById('registerReturnFormCard');
     if (registerReturnFormCard) {
         var returnCardFees = document.getElementById('returnCardReturnFees');
-        if (returnCardFees) {
-            returnCardFees.addEventListener('input', function() { updateReturnSummary('card'); });
+        var returnCardTotal = document.getElementById('returnCardTotalAmount');
+        var returnCardOrderNum = document.getElementById('returnCardOrderNumber');
+        var returnCardBtn = document.getElementById('returnCardSubmitBtn');
+
+        if (returnCardFees) returnCardFees.addEventListener('input', function() { updateReturnSummary('card'); });
+        if (returnCardTotal) returnCardTotal.addEventListener('input', function() { updateReturnSummary('card'); });
+        if (returnCardOrderNum && returnCardBtn) {
+            returnCardOrderNum.addEventListener('input', function() {
+                returnCardBtn.disabled = this.value.trim() === '';
+            });
         }
         registerReturnFormCard.addEventListener('submit', function(e) {
             e.preventDefault();
             var orderIdVal   = document.getElementById('returnCardOrderId').value;
+            var orderNumVal  = document.getElementById('returnCardOrderNumber').value.trim();
             var paperInvVal  = document.getElementById('returnCardPaperInvoiceId') ? document.getElementById('returnCardPaperInvoiceId').value : '';
-            if (!orderIdVal && !paperInvVal) {
-                showShippingToast('يرجى البحث عن الفاتورة أولاً.', 'danger');
+            if (!orderIdVal && !paperInvVal && !orderNumVal) {
+                showShippingToast('يرجى إدخال رقم الطلب أو الفاتورة.', 'danger');
                 return false;
             }
             var formData = new FormData();
@@ -7728,6 +7771,7 @@ document.addEventListener('DOMContentLoaded', function() {
             formData.append('company_id', document.getElementById('returnCardCompanyId').value);
             if (paperInvVal) formData.append('paper_invoice_id', paperInvVal);
             if (orderIdVal)  formData.append('order_id', orderIdVal);
+            if (orderNumVal) formData.append('order_number', orderNumVal);
             formData.append('return_fees', document.getElementById('returnCardReturnFees').value || '0');
             var rCardTotal = document.getElementById('returnCardTotalAmount').value;
             if(rCardTotal !== '') formData.append('total_amount', rCardTotal);
