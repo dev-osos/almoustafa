@@ -10,7 +10,7 @@ require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/path_helper.php';
 
-requireRole(['production', 'accountant', 'manager', 'driver']);
+requireRole(['production', 'accountant', 'manager', 'driver', 'telegraph']);
 
 // منع الكاش عند التبديل بين الصفحات لضمان عدم رجوع أي كاش قديم
 if (!headers_sent()) {

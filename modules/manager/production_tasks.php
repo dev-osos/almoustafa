@@ -1979,7 +1979,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ? 'تم إرسال المهمة بنجاح إلى ' . count($assignees) . ' من عمال الإنتاج.'
                     : 'تم إرسال المهمة بنجاح.';
                 $successMessage .= $tgShipmentMsg . $autoApproveMsg;
-                $userRole = in_array($currentUser['role'] ?? '', ['accountant', 'sales'], true) ? ($currentUser['role'] ?? 'manager') : 'manager';
+                $userRole = in_array($currentUser['role'] ?? '', ['accountant', 'sales', 'telegraph'], true) ? ($currentUser['role'] ?? 'manager') : 'manager';
                 preventDuplicateSubmission($successMessage, ['page' => 'production_tasks'], null, $userRole);
                 exit; // منع تنفيذ باقي الكود بعد إعادة التوجيه
             } catch (Exception $e) {
@@ -2153,7 +2153,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // استخدام preventDuplicateSubmission لإعادة التوجيه مع cache-busting
                 $successMessage = 'تم تحديث حالة المهمة بنجاح.';
                 // تحديد role بناءً على المستخدم الحالي
-                $userRole = in_array($currentUser['role'] ?? '', ['accountant', 'sales'], true) ? ($currentUser['role'] ?? 'manager') : 'manager';
+                $userRole = in_array($currentUser['role'] ?? '', ['accountant', 'sales', 'telegraph'], true) ? ($currentUser['role'] ?? 'manager') : 'manager';
                 preventDuplicateSubmission($successMessage, ['page' => 'production_tasks'], null, $userRole);
                 exit; // منع تنفيذ باقي الكود بعد إعادة التوجيه
             } catch (Exception $updateError) {
@@ -2237,7 +2237,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                         $db->execute("UPDATE tasks SET total_amount = ? WHERE id = ?", [$totalAmount, $taskId]);
                                         $db->commit();
                                         logAudit($currentUser['id'], 'approve_task_invoice_shipping', 'tasks', $taskId, null, ['shipping_company_id' => $shippingCompanyId, 'net_parcel_price' => $netParcelPrice]);
-                                        $userRole = in_array($currentUser['role'] ?? '', ['accountant', 'sales'], true) ? ($currentUser['role'] ?? 'manager') : 'manager';
+                                        $userRole = in_array($currentUser['role'] ?? '', ['accountant', 'sales', 'telegraph'], true) ? ($currentUser['role'] ?? 'manager') : 'manager';
                                         preventDuplicateSubmission('تم اعتماد الفاتورة: تمت إضافة الأوردر لسجل الفواتير الورقية لشركة الشحن وإضافة صافي سعر الطرد لديونها.', ['page' => 'production_tasks'], null, $userRole);
                                         exit;
                                     }
@@ -2314,7 +2314,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 $advancePaid = (float)$advM[1];
                             }
 
-                            $userRole = in_array($currentUser['role'] ?? '', ['accountant', 'sales'], true) ? ($currentUser['role'] ?? 'manager') : 'manager';
+                            $userRole = in_array($currentUser['role'] ?? '', ['accountant', 'sales', 'telegraph'], true) ? ($currentUser['role'] ?? 'manager') : 'manager';
 
                             if ($advancePaid > 0) {
                                 // جلب بيانات العميل وبيانات العميل المحدثة
@@ -2427,7 +2427,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $msg = "تم اعتماد {$successCount} فاتورة بنجاح.";
             if ($skippedShipping > 0) $msg .= " ({$skippedShipping} أوردر شحن يتطلب اعتماداً فردياً).";
             if (!empty($errors)) $msg .= ' ملاحظات: ' . implode(' | ', $errors);
-            $userRole = in_array($currentUser['role'] ?? '', ['accountant', 'sales'], true) ? ($currentUser['role'] ?? 'manager') : 'manager';
+            $userRole = in_array($currentUser['role'] ?? '', ['accountant', 'sales', 'telegraph'], true) ? ($currentUser['role'] ?? 'manager') : 'manager';
             preventDuplicateSubmission($msg, ['page' => 'production_tasks'], null, $userRole);
             exit;
         }
@@ -2492,7 +2492,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // استخدام preventDuplicateSubmission لإعادة التوجيه مع cache-busting
                 $successMessage = 'تم حذف المهمة بنجاح.';
                 // تحديد role بناءً على المستخدم الحالي
-                $userRole = in_array($currentUser['role'] ?? '', ['accountant', 'sales'], true) ? ($currentUser['role'] ?? 'manager') : 'manager';
+                $userRole = in_array($currentUser['role'] ?? '', ['accountant', 'sales', 'telegraph'], true) ? ($currentUser['role'] ?? 'manager') : 'manager';
                 preventDuplicateSubmission($successMessage, ['page' => 'production_tasks'], null, $userRole);
                 exit; // منع تنفيذ باقي الكود بعد إعادة التوجيه
             } catch (Exception $cancelError) {
@@ -2698,7 +2698,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
                     }
                     $successMessage = 'تم تعديل الأوردر بنجاح.';
-                    $userRole = in_array($currentUser['role'] ?? '', ['accountant', 'sales'], true) ? ($currentUser['role'] ?? 'manager') : 'manager';
+                    $userRole = in_array($currentUser['role'] ?? '', ['accountant', 'sales', 'telegraph'], true) ? ($currentUser['role'] ?? 'manager') : 'manager';
                     preventDuplicateSubmission($successMessage, ['page' => 'production_tasks', '_refresh' => time()], null, $userRole);
                     exit;
                 }
@@ -3071,7 +3071,7 @@ $adminPlaceholders = '';
 if ($isAccountant || $isManager) {
     $adminUsers = $db->query("
         SELECT id FROM users
-        WHERE role IN ('manager', 'accountant', 'sales') AND status = 'active'
+        WHERE role IN ('manager', 'accountant', 'sales', 'telegraph') AND status = 'active'
     ");
     $adminIds = array_map(function($user) {
         return (int)$user['id'];
