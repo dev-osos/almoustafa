@@ -2300,7 +2300,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $transactionStarted = false;
 
         try {
-            if (($orderId <= 0 && $paperInvId <= 0) || $companyId <= 0) {
+            if (($orderId <= 0 && $paperInvId <= 0 && $orderNumber === '') || $companyId <= 0) {
                 throw new InvalidArgumentException('بيانات الطلب غير صالحة.');
             }
 
@@ -5287,7 +5287,7 @@ function copyShippingCollectionResult(btn) {
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="returnModalOrderNumber">رقم الطلب <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="returnModalOrderNumber" name="order_id" placeholder="أدخل رقم الطلب" required>
+                        <input type="text" class="form-control" id="returnModalOrderNumber" name="order_number" placeholder="أدخل رقم الطلب" required>
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="returnModalTotalAmount">المبلغ الصافي</label>
@@ -7599,7 +7599,12 @@ document.addEventListener('DOMContentLoaded', function() {
             var formData = new FormData();
             formData.append('action', 'register_shipping_return');
             formData.append('company_id', document.getElementById('returnModalCompanyId').value);
-            formData.append('order_id', orderIdVal);
+            // إذا كانت القيمة رقم صحيح نُرسلها كـ order_id، وإلا كـ order_number
+            if (/^\d+$/.test(orderIdVal)) {
+                formData.append('order_id', orderIdVal);
+            } else {
+                formData.append('order_number', orderIdVal);
+            }
             formData.append('return_fees', document.getElementById('returnModalReturnFees').value || '0');
             var rModalTotal = document.getElementById('returnModalTotalAmount').value;
             if(rModalTotal !== '') formData.append('total_amount', rModalTotal);
