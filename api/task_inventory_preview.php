@@ -126,9 +126,9 @@ function extractRawType(string $name): string
     // أزل رقم # من النهاية: " #5"
     $clean = preg_replace('/\s*#\d+\s*$/', '', $clean);
     $clean = trim($clean);
-    // إذا كان النمط "بادئة - نوع"، خذ الجزء الأخير بعد " - "
+    // الصيغة دائماً "نوع - مورد"، فالنوع هو الجزء الأول قبل " - "
     $parts = explode(' - ', $clean, 2);
-    return trim(end($parts));
+    return trim($parts[0]);
 }
 
 /**

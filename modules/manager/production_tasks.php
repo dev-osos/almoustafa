@@ -826,12 +826,13 @@ function deductTaskProductsFromStock($db, $notes)
         }
 
         // ====== 3. مخزن الخامات — بحث بالاسم المركب والنوع المستخرج ======
-        // الأسماء تأتي بصيغة: "عسل خام - سدر (مورد)" أو "جوز - محمد" — نستخرج النوع الفعلي
+        // الأسماء تأتي بصيغة: "نوع - مورد" مثل "كمون - محمد" أو "جوز #5"
+        // نأخذ الجزء الأول قبل " - " لأنه النوع الفعلي
         $rawNameClean = preg_replace('/\s*\([^)]*\)\s*$/u', '', $name); // أزل قوس المورد
         $rawNameClean = preg_replace('/\s*#\d+\s*$/u', '', $rawNameClean); // أزل رقم #
         $rawNameClean = trim($rawNameClean);
         $rawTypeParts = explode(' - ', $rawNameClean, 2);
-        $rawType = trim(end($rawTypeParts)); // الجزء الأخير بعد " - "
+        $rawType = trim($rawTypeParts[0]); // الجزء الأول = النوع الفعلي
 
         // عسل خام
         try {
