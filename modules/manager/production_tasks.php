@@ -3932,7 +3932,16 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
     <?php endif; ?>
 
     <?php if ($collectionNotice): ?>
-    <div class="card border-success mb-3 shadow-sm collection-notice-card" id="collectionNoticeCard">
+    <!-- Collapsible Collection Notice Card -->
+    <div class="card shadow-sm mb-3">
+        <div class="card-header bg-success text-white d-flex justify-content-between align-items-center py-2">
+            <h6 class="mb-0 fw-semibold"><i class="bi bi-cash-coin me-2"></i>Collection Success</h6>
+            <button type="button" class="btn btn-sm btn-outline-light toggle-cards-btn" data-target="collectionNoticeCard" data-bs-toggle="tooltip" title="Toggle card">
+                <i class="bi bi-chevron-up toggle-icon"></i>
+            </button>
+        </div>
+        <div class="card-body p-0 collapse show" id="collectionNoticeCardCollapse">
+            <div class="card border-0 mb-0 collection-notice-card" id="collectionNoticeCard">
         <div class="card-header d-flex justify-content-between align-items-center py-2" style="background: linear-gradient(135deg,#16a34a,#22c55e); color:#fff;">
             <span class="fw-bold"><i class="bi bi-cash-coin me-2"></i>تم التحصيل بنجاح</span>
             <button type="button" class="btn-close btn-close-white btn-sm" onclick="document.getElementById('collectionNoticeCard').remove()"></button>
@@ -3961,14 +3970,26 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                     <div class="fw-bold <?php echo $rem > 0 ? 'text-danger' : 'text-success'; ?>">
                         <?php echo number_format($rem, 2); ?> ج.م
                     </div>
-                    <div class="text-muted small">رصيد العميل الكلي: <?php echo number_format((float)($collectionNotice['new_balance'] ?? 0), 2); ?> ج.م</div>
+                    <div class="text-muted small">rpn: <?php echo number_format((float)($collectionNotice['new_balance'] ?? 0), 2); ?> .</div>
                 </div>
             </div>
         </div>
     </div>
+    </div>
+    </div>
+    </div>
     <?php endif; ?>
 
-    <div class="row g-2 mb-3" id="statusFilterCards">
+    <!-- Collapsible Status Filter Cards -->
+    <div class="card shadow-sm mb-3">
+        <div class="card-header bg-light d-flex justify-content-between align-items-center py-2">
+            <h6 class="mb-0 fw-semibold"><i class="bi bi-funnel me-2"></i> Filters</h6>
+            <button type="button" class="btn btn-sm btn-outline-secondary toggle-cards-btn" data-target="statusFilterCards" data-bs-toggle="tooltip" title="Toggle cards">
+                <i class="bi bi-chevron-up toggle-icon"></i>
+            </button>
+        </div>
+        <div class="card-body p-0 collapse show" id="statusFilterCardsCollapse">
+            <div class="row g-2 p-3" id="statusFilterCards">
         <div class="col-4 col-sm-4 col-md-2">
             <a href="?page=production_tasks" class="text-decoration-none status-filter-card" data-status="all">
                 <div class="card <?php echo $statusFilter === '' || $statusFilter === 'all' ? 'bg-primary text-white' : 'border-primary'; ?> h-100">
@@ -4052,6 +4073,8 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                     </div>
                 </div>
             </a>
+        </div>
+            </div>
         </div>
     </div>
 
@@ -5659,6 +5682,54 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
 #customer_manual_block_task { display: none !important; }
 input[name="customer_type_radio_task"][value="manual"] { display: none !important; }
 label[for="ct_task_manual"], .form-check:has(#ct_task_manual) { display: none !important; }
+
+/* Collapsible Cards Animation */
+.toggle-cards-btn {
+    transition: all 0.2s ease-in-out;
+    border: none !important;
+    background: transparent !important;
+}
+
+.toggle-cards-btn:hover {
+    transform: scale(1.1);
+    background: rgba(0,0,0,0.05) !important;
+}
+
+.toggle-icon {
+    transition: transform 0.3s ease-in-out;
+}
+
+.card-body.p-0 .collapse {
+    transition: height 0.35s ease-in-out, opacity 0.3s ease-in-out;
+}
+
+.card-body.p-0 .collapse.show {
+    opacity: 1;
+}
+
+.card-body.p-0 .collapse:not(.show) {
+    opacity: 0;
+    height: 0 !important;
+}
+
+/* Smooth card header styling */
+.card-header .toggle-cards-btn {
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+}
+
+.card-header .toggle-cards-btn:hover {
+    background: rgba(255,255,255,0.2) !important;
+}
+
+.card.bg-success .card-header .toggle-cards-btn:hover,
+.card-header.bg-success .toggle-cards-btn:hover {
+    background: rgba(255,255,255,0.3) !important;
+}
+
+.card.bg-light .card-header .toggle-cards-btn:hover {
+    background: rgba(0,0,0,0.1) !important;
+}
 </style>
 <script>
 var __localCustomersForTask = <?php echo json_encode($localCustomersForDropdown); ?>;
@@ -9454,5 +9525,121 @@ document.addEventListener('click', function (e) {
         }
     });
 
+})();
+</script>
+
+<!-- Collapsible Cards with User Preferences -->
+<script>
+(function() {
+    'use strict';
+    
+    // User preference storage key
+    const CARD_STATES_KEY = 'production_tasks_card_states';
+    
+    // Initialize card states from localStorage
+    function getCardStates() {
+        try {
+            const saved = localStorage.getItem(CARD_STATES_KEY);
+            return saved ? JSON.parse(saved) : {};
+        } catch (e) {
+            return {};
+        }
+    }
+    
+    // Save card states to localStorage
+    function saveCardStates(states) {
+        try {
+            localStorage.setItem(CARD_STATES_KEY, JSON.stringify(states));
+        } catch (e) {
+            console.warn('Could not save card states:', e);
+        }
+    }
+    
+    // Toggle card collapse state
+    function toggleCardCollapse(button) {
+        const targetId = button.getAttribute('data-target');
+        const collapseId = targetId + 'Collapse';
+        const collapseElement = document.getElementById(collapseId);
+        const icon = button.querySelector('.toggle-icon');
+        
+        if (!collapseElement || !icon) return;
+        
+        const isExpanded = collapseElement.classList.contains('show');
+        const cardStates = getCardStates();
+        
+        // Update UI
+        if (isExpanded) {
+            bootstrap.Collapse.getInstance(collapseElement)?.hide();
+            icon.classList.remove('bi-chevron-up');
+            icon.classList.add('bi-chevron-down');
+            cardStates[targetId] = false;
+        } else {
+            bootstrap.Collapse.getInstance(collapseElement)?.show();
+            icon.classList.remove('bi-chevron-down');
+            icon.classList.add('bi-chevron-up');
+            cardStates[targetId] = true;
+        }
+        
+        // Save preference
+        saveCardStates(cardStates);
+    }
+    
+    // Initialize collapsible cards
+    function initCollapsibleCards() {
+        const toggleButtons = document.querySelectorAll('.toggle-cards-btn');
+        const cardStates = getCardStates();
+        
+        toggleButtons.forEach(button => {
+            const targetId = button.getAttribute('data-target');
+            const collapseId = targetId + 'Collapse';
+            const collapseElement = document.getElementById(collapseId);
+            const icon = button.querySelector('.toggle-icon');
+            
+            if (!collapseElement || !icon) return;
+            
+            // Set initial state based on saved preference
+            const isExpanded = cardStates[targetId] !== false; // Default to expanded
+            
+            if (isExpanded) {
+                collapseElement.classList.add('show');
+                icon.classList.remove('bi-chevron-down');
+                icon.classList.add('bi-chevron-up');
+            } else {
+                collapseElement.classList.remove('show');
+                icon.classList.remove('bi-chevron-up');
+                icon.classList.add('bi-chevron-down');
+            }
+            
+            // Initialize Bootstrap collapse
+            new bootstrap.Collapse(collapseElement, {
+                toggle: false
+            });
+            
+            // Add click handler
+            button.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                toggleCardCollapse(button);
+            });
+        });
+        
+        // Initialize tooltips
+        const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+    }
+    
+    // Initialize when DOM is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initCollapsibleCards);
+    } else {
+        initCollapsibleCards();
+    }
+    
+    // Make functions globally accessible
+    window.toggleCardCollapse = toggleCardCollapse;
+    window.initCollapsibleCards = initCollapsibleCards;
+    
 })();
 </script>

@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Collapsible Cards</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        
+        /* Collapsible Cards Animation */
+        .toggle-cards-btn {
+            transition: all 0.2s ease-in-out;
+            border: none !important;
+            background: transparent !important;
+        }
+
+        .toggle-cards-btn:hover {
+            transform: scale(1.1);
+            background: rgba(0,0,0,0.05) !important;
+        }
+
+        .toggle-icon {
+            transition: transform 0.3s ease-in-out;
+        }
+
+        .card-body.p-0 .collapse {
+            transition: height 0.35s ease-in-out, opacity 0.3s ease-in-out;
+        }
+
+        .card-body.p-0 .collapse.show {
+            opacity: 1;
+        }
+
+        .card-body.p-0 .collapse:not(.show) {
+            opacity: 0;
+            height: 0 !important;
+        }
+
+        /* Smooth card header styling */
+        .card-header .toggle-cards-btn {
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+        }
+
+        .card-header .toggle-cards-btn:hover {
+            background: rgba(255,255,255,0.2) !important;
+        }
+
+        .card.bg-success .card-header .toggle-cards-btn:hover,
+        .card-header.bg-success .toggle-cards-btn:hover {
+            background: rgba(255,255,255,0.3) !important;
+        }
+
+        .card.bg-light .card-header .toggle-cards-btn:hover {
+            background: rgba(0,0,0,0.1) !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <h2 class="mb-4">Test Collapsible Cards System</h2>
+        
+        <!-- Collapsible Status Filter Cards -->
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center py-2">
+                <h6 class="mb-0 fw-semibold"><i class="bi bi-funnel me-2"></i> Filters</h6>
+                <button type="button" class="btn btn-sm btn-outline-secondary toggle-cards-btn" data-target="statusFilterCards" data-bs-toggle="tooltip" title="Toggle cards">
+                    <i class="bi bi-chevron-up toggle-icon"></i>
+                </button>
+            </div>
+            <div class="card-body p-0 collapse show" id="statusFilterCardsCollapse">
+                <div class="row g-2 p-3" id="statusFilterCards">
+                    <div class="col-4 col-sm-4 col-md-2">
+                        <div class="card bg-primary text-white h-100">
+                            <div class="card-body text-center py-2 px-2">
+                                <div class="text-white-50 small mb-1">Total Orders</div>
+                                <div class="fs-5 text-white fw-semibold">150</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-4 col-sm-4 col-md-2">
+                        <div class="card border-warning h-100">
+                            <div class="card-body text-center py-2 px-2">
+                                <div class="text-muted small mb-1">Pending</div>
+                                <div class="fs-5 text-warning fw-semibold">25</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-4 col-sm-4 col-md-2">
+                        <div class="card border-success h-100">
+                            <div class="card-body text-center py-2 px-2">
+                                <div class="text-muted small mb-1">Completed</div>
+                                <div class="fs-5 text-success fw-semibold">100</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Collapsible Collection Notice Card -->
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center py-2">
+                <h6 class="mb-0 fw-semibold"><i class="bi bi-cash-coin me-2"></i>Collection Success</h6>
+                <button type="button" class="btn btn-sm btn-outline-light toggle-cards-btn" data-target="collectionNoticeCard" data-bs-toggle="tooltip" title="Toggle card">
+                    <i class="bi bi-chevron-up toggle-icon"></i>
+                </button>
+            </div>
+            <div class="card-body p-0 collapse show" id="collectionNoticeCardCollapse">
+                <div class="card border-0 mb-0 collection-notice-card" id="collectionNoticeCard">
+                    <div class="card-body py-3">
+                        <div class="row g-2">
+                            <div class="col-6 col-md-3">
+                                <div class="text-muted small mb-1"><i class="bi bi-person me-1"></i>Customer</div>
+                                <div class="fw-bold">Test Customer</div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="text-muted small mb-1"><i class="bi bi-cash me-1"></i>Amount</div>
+                                <div class="fw-bold text-success">500.00 .</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-4">
+            <button class="btn btn-info" onclick="clearPreferences()">Clear Saved Preferences</button>
+            <button class="btn btn-secondary ms-2" onclick="showPreferences()">Show Current Preferences</button>
+        </div>
+        
+        <div id="preferencesOutput" class="mt-3"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // User preference storage key
+        const CARD_STATES_KEY = 'production_tasks_card_states';
+        
+        // Initialize card states from localStorage
+        function getCardStates() {
+            try {
+                const saved = localStorage.getItem(CARD_STATES_KEY);
+                return saved ? JSON.parse(saved) : {};
+            } catch (e) {
+                return {};
+            }
+        }
+        
+        // Save card states to localStorage
+        function saveCardStates(states) {
+            try {
+                localStorage.setItem(CARD_STATES_KEY, JSON.stringify(states));
+                console.log('Card states saved:', states);
+            } catch (e) {
+                console.warn('Could not save card states:', e);
+            }
+        }
+        
+        // Toggle card collapse state
+        function toggleCardCollapse(button) {
+            const targetId = button.getAttribute('data-target');
+            const collapseId = targetId + 'Collapse';
+            const collapseElement = document.getElementById(collapseId);
+            const icon = button.querySelector('.toggle-icon');
+            
+            if (!collapseElement || !icon) return;
+            
+            const isExpanded = collapseElement.classList.contains('show');
+            const cardStates = getCardStates();
+            
+            // Update UI
+            if (isExpanded) {
+                bootstrap.Collapse.getInstance(collapseElement)?.hide();
+                icon.classList.remove('bi-chevron-up');
+                icon.classList.add('bi-chevron-down');
+                cardStates[targetId] = false;
+            } else {
+                bootstrap.Collapse.getInstance(collapseElement)?.show();
+                icon.classList.remove('bi-chevron-down');
+                icon.classList.add('bi-chevron-up');
+                cardStates[targetId] = true;
+            }
+            
+            // Save preference
+            saveCardStates(cardStates);
+        }
+        
+        // Initialize collapsible cards
+        function initCollapsibleCards() {
+            const toggleButtons = document.querySelectorAll('.toggle-cards-btn');
+            const cardStates = getCardStates();
+            
+            toggleButtons.forEach(button => {
+                const targetId = button.getAttribute('data-target');
+                const collapseId = targetId + 'Collapse';
+                const collapseElement = document.getElementById(collapseId);
+                const icon = button.querySelector('.toggle-icon');
+                
+                if (!collapseElement || !icon) return;
+                
+                // Set initial state based on saved preference
+                const isExpanded = cardStates[targetId] !== false; // Default to expanded
+                
+                if (isExpanded) {
+                    collapseElement.classList.add('show');
+                    icon.classList.remove('bi-chevron-down');
+                    icon.classList.add('bi-chevron-up');
+                } else {
+                    collapseElement.classList.remove('show');
+                    icon.classList.remove('bi-chevron-up');
+                    icon.classList.add('bi-chevron-down');
+                }
+                
+                // Initialize Bootstrap collapse
+                new bootstrap.Collapse(collapseElement, {
+                    toggle: false
+                });
+                
+                // Add click handler
+                button.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    toggleCardCollapse(button);
+                });
+            });
+            
+            // Initialize tooltips
+            const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl);
+            });
+        }
+        
+        // Helper functions for testing
+        function clearPreferences() {
+            localStorage.removeItem(CARD_STATES_KEY);
+            document.getElementById('preferencesOutput').innerHTML = '<div class="alert alert-info">Preferences cleared! Refresh the page to see default behavior.</div>';
+        }
+        
+        function showPreferences() {
+            const states = getCardStates();
+            const output = document.getElementById('preferencesOutput');
+            output.innerHTML = '<div class="alert alert-secondary"><strong>Current Preferences:</strong><pre>' + JSON.stringify(states, null, 2) + '</pre></div>';
+        }
+        
+        // Initialize when DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initCollapsibleCards);
+        } else {
+            initCollapsibleCards();
+        }
+        
+        // Make functions globally accessible
+        window.toggleCardCollapse = toggleCardCollapse;
+        window.initCollapsibleCards = initCollapsibleCards;
+    </script>
+</body>
+</html>
