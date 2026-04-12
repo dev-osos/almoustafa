@@ -4665,7 +4665,14 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
         </div>
         <div class="card-body p-0">
             <!-- بحث وفلترة جدول آخر المهام -->
-            <div class="p-3 border-bottom bg-light">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center py-2">
+                <h6 class="mb-0 fw-semibold"><i class="bi bi-search me-2"></i> البحث والفلترة</h6>
+                <button type="button" class="btn btn-sm btn-outline-secondary toggle-cards-btn" data-target="filterSection" data-bs-toggle="tooltip" title="Toggle filter section">
+                    <i class="bi bi-chevron-up toggle-icon"></i>
+                </button>
+            </div>
+            <div class="card-body p-0 collapse show" id="filterSectionCollapse">
+                <div class="p-3 border-bottom bg-light">
                 <form method="get" action="" id="recentTasksFilterForm" class="recent-tasks-filter-form" data-no-loading="true">
                     <input type="hidden" name="page" value="production_tasks">
                     <?php if ($statusFilter !== ''): ?>
@@ -4721,10 +4728,30 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                     </div>
                 </form>
             </div>
-            <div class="table-responsive dashboard-table-wrapper">
-                <table class="table dashboard-table dashboard-table--no-hover align-middle mb-0">
-                    <thead class="table-light">
+        </div>
+        <div class="table-responsive dashboard-table-wrapper">
+            <table class="table dashboard-table dashboard-table--no-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <?php if ($canPrintTasks): ?>
+                        <th style="width: 40px;">
+                            <input type="checkbox" class="form-check-input" id="selectAllTasks" title="تحديد الكل">
+                        </th>
+                        <?php endif; ?>
+                        <th>رقم الطلب</th>
+                        <th style="min-width: 220px;">اسم العميل</th>
+                        <th style="min-width: 180px;">من</th>
+                        <th>نوع الاوردر</th>
+                        <th>الحاله</th>
+                        <th>التسليم</th>
+                        
+                        <th>إجراءات</th>
+                    </tr>
+                </thead>
+                <tbody id="recentTasksTableBody">
+                    <?php if (empty($recentTasks)): ?>
                         <tr>
+                            <td colspan="<?php echo $canPrintTasks ? 8 : 7; ?>" class="text-center text-muted py-4">لم يتم إنشاء مهام بعد.</td>
                             <?php if ($canPrintTasks): ?>
                             <th style="width: 40px;">
                                 <input type="checkbox" class="form-check-input" id="selectAllTasks" title="تحديد الكل">
@@ -5709,6 +5736,20 @@ label[for="ct_task_manual"], .form-check:has(#ct_task_manual) { display: none !i
 }
 
 .card-body.p-0 .collapse:not(.show) {
+    opacity: 0;
+    height: 0 !important;
+}
+
+/* Filter section collapse animation */
+#filterSectionCollapse {
+    transition: height 0.35s ease-in-out, opacity 0.3s ease-in-out;
+}
+
+#filterSectionCollapse.show {
+    opacity: 1;
+}
+
+#filterSectionCollapse:not(.show) {
     opacity: 0;
     height: 0 !important;
 }
@@ -8221,7 +8262,7 @@ function updateQuantityStep(index) {
         ?>
     }
     <?php endif; ?>
-})();
+?>
 
 // بطاقة اعتماد الفاتورة (عميل محلي أو شركة شحن حسب نوع الأوردر)
 function ensureApproveInvoiceCardExists() {
