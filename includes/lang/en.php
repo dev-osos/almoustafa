@@ -219,6 +219,9 @@ $translations = [
     'role_sales' => 'Sales Representative',
     'role_production' => 'Production Worker',
     'role_manager' => 'Manager',
+    'role_driver' => 'Driver',
+    'role_developer' => 'Developer',
+    'role_telegraph' => 'Telegraph Officer',
     
     // Profile
     'change_password' => 'Change Password',

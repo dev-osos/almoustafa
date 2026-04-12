@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `username` varchar(50) NOT NULL,
   `email` varchar(100) NOT NULL,
   `password_hash` varchar(255) DEFAULT NULL,
-  `role` enum('accountant','sales','production','manager','developer','driver') NOT NULL,
+  `role` enum('accountant','sales','production','manager','developer','driver','telegraph') NOT NULL,
   `webauthn_enabled` tinyint(1) DEFAULT 0,
   `full_name` varchar(100) DEFAULT NULL,
   `phone` varchar(20) DEFAULT NULL,

@@ -83,6 +83,8 @@ if (empty($role)) {
         $role = 'driver';
     } elseif ($currentPage === 'developer.php') {
         $role = 'developer';
+    } elseif ($currentPage === 'telegraph.php') {
+        $role = 'telegraph';
     }
 }
 
@@ -974,6 +976,26 @@ switch ($role) {
                 'icon' => 'bi-calendar2-range',
                 'url' => $baseUrl . 'driver.php?page=daily_collection_my_tables',
                 'active' => ($currentPage === 'driver.php' && $currentPageParam === 'daily_collection_my_tables'),
+                'badge' => null
+            ],
+        ];
+        break;
+
+    case 'telegraph':
+        $menuItems = [
+            ['divider' => true, 'title' => 'القائمة'],
+            [
+                'title' => 'تسجيل الأوردرات',
+                'icon' => 'bi-list-task',
+                'url' => $baseUrl . 'telegraph.php?page=production_tasks',
+                'active' => ($currentPage === 'telegraph.php' && $currentPageParam === 'production_tasks'),
+                'badge' => null
+            ],
+            [
+                'title' => 'طلبات الشحن',
+                'icon' => 'bi-truck',
+                'url' => $baseUrl . 'telegraph.php?page=shipping_orders',
+                'active' => ($currentPage === 'telegraph.php' && $currentPageParam === 'shipping_orders'),
                 'badge' => null
             ],
         ];

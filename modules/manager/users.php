@@ -353,6 +353,7 @@ $users = $db->query($sql, $params);
                     <option value="sales" <?php echo $roleFilter === 'sales' ? 'selected' : ''; ?>>مندوب مبيعات</option>
                     <option value="production" <?php echo $roleFilter === 'production' ? 'selected' : ''; ?>>عامل إنتاج</option>
                     <option value="driver" <?php echo $roleFilter === 'driver' ? 'selected' : ''; ?>>سائق</option>
+                    <option value="telegraph" <?php echo $roleFilter === 'telegraph' ? 'selected' : ''; ?>>مسؤول تليجراف</option>
                 </select>
             </div>
             <div class="col-md-3">
@@ -639,6 +640,7 @@ $users = $db->query($sql, $params);
                                 <option value="sales">مندوب مبيعات</option>
                                 <option value="production">عامل إنتاج</option>
                                 <option value="driver">سائق</option>
+                                <option value="telegraph">مسؤول تليجراف</option>
                             </select>
                             <small class="text-muted">لا يمكن تغيير الدور بعد إنشاء المستخدم</small>
                         </div>
@@ -786,6 +788,7 @@ $users = $db->query($sql, $params);
                         <option value="sales">مندوب مبيعات</option>
                         <option value="production">عامل إنتاج</option>
                         <option value="driver">سائق</option>
+                        <option value="telegraph">مسؤول تليجراف</option>
                     </select>
                     <small class="text-muted">لا يمكن تغيير الدور بعد إنشاء المستخدم</small>
                 </div>

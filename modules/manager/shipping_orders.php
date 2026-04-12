@@ -24,10 +24,11 @@ require_once __DIR__ . '/../../includes/audit_log.php';
 require_once __DIR__ . '/../../includes/path_helper.php';
 require_once __DIR__ . '/../../includes/customer_history.php';
 
-requireRole(['manager', 'accountant', 'developer']);
+requireRole(['manager', 'accountant', 'developer', 'telegraph']);
 
 $currentUser = getCurrentUser();
 $db = db();
+$isTelegraphUser = ($currentUser['role'] ?? '') === 'telegraph';
 
 $sessionErrorKey = 'manager_shipping_orders_error';
 $sessionSuccessKey = 'manager_shipping_orders_success';
@@ -395,6 +396,11 @@ if (!$mainWarehouse) {
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
+    // مسؤول تليجراف: لا يُسمح له بأي إجراء POST
+    if ($isTelegraphUser) {
+        http_response_code(403);
+        exit('غير مصرح.');
+    }
     // عند أي طلب POST آخر (غير التحصيل والخصم)، إخفاء رسالة التحصيل/الخصم السابقة
     if ($action !== 'collect_from_shipping_company' && $action !== 'deduct_from_shipping_company' && isset($_SESSION[$sessionCollectionCopyableKey])) {
         unset($_SESSION[$sessionCollectionCopyableKey]);
@@ -4081,6 +4087,7 @@ $tgError = '';
     </script>
 <?php endif; ?>
 
+<?php if (!$isTelegraphUser): ?>
 <!-- بطاقة إحصائية الشحن الشهري -->
 <div class="card shadow-sm mb-4">
     <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
@@ -4574,10 +4581,7 @@ function copyShippingCollectionResult(btn) {
     </div>
 </div>
 
-<div class="card shadow-sm">
-    
-   
-</div>
+<?php endif; // end !$isTelegraphUser ?>
 
 <!-- ===== جدول شحنات TelegraphEx ===== -->
 <div class="card shadow-sm mb-4" id="tgShipmentsCard">

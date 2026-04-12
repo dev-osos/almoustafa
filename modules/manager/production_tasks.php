@@ -167,7 +167,7 @@ if (!function_exists('managerEnsureTasksStatusEnum')) {
     }
 }
 
-requireRole(['manager', 'accountant', 'developer', 'sales']);
+requireRole(['manager', 'accountant', 'developer', 'sales', 'telegraph']);
 
 $db = db();
 $currentUser = getCurrentUser();
@@ -180,7 +180,8 @@ $isAccountant = ($currentUser['role'] ?? '') === 'accountant';
 $isManager = ($currentUser['role'] ?? '') === 'manager';
 $isDeveloper = ($currentUser['role'] ?? '') === 'developer';
 $isSales = ($currentUser['role'] ?? '') === 'sales';
-$canPrintTasks = $isAccountant || $isManager || $isDeveloper;
+$isTelegraph = ($currentUser['role'] ?? '') === 'telegraph';
+$canPrintTasks = $isAccountant || $isManager || $isDeveloper || $isTelegraph;
 
 // جلب سجل الأسعار السابقة لمنتج معين لعميل معين (API endpoint)
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['action'] === 'get_customer_price_history' && ($isAccountant || $isManager || $isDeveloper)) {
@@ -1085,6 +1086,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'create_production_task') {
         $taskType = $_POST['task_type'] ?? 'shop_order';
         $taskType = in_array($taskType, $allowedTypes, true) ? $taskType : 'shop_order';
+        // مسؤول تليجراف مقيّد بنوع telegraph فقط
+        if ($isTelegraph && $taskType !== 'telegraph') { $taskType = 'telegraph'; }
 
         $title = trim($_POST['title'] ?? '');
         $details = trim($_POST['details'] ?? '');
@@ -3230,6 +3233,8 @@ $filterTaskId = isset($_GET['task_id']) ? trim((string)$_GET['task_id']) : '';
 $filterCustomer = isset($_GET['search_customer']) ? trim((string)$_GET['search_customer']) : '';
 $filterOrderId = isset($_GET['search_order_id']) ? trim((string)$_GET['search_order_id']) : '';
 $filterTaskType = isset($_GET['task_type']) ? trim((string)$_GET['task_type']) : '';
+// مسؤول تليجراف يرى فقط أوردرات نوع "تليجراف"
+if ($isTelegraph) { $filterTaskType = 'telegraph'; }
 $filterDueFrom = isset($_GET['due_date_from']) ? trim((string)$_GET['due_date_from']) : '';
 $filterDueTo = isset($_GET['due_date_to']) ? trim((string)$_GET['due_date_to']) : '';
 $filterOrderDateFrom = isset($_GET['order_date_from']) ? trim((string)$_GET['order_date_from']) : '';
@@ -4186,12 +4191,19 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                     <div class="row g-3">
                         <div class="col-md-4">
                             <label class="form-label">نوع الاوردر</label>
+                            <?php if ($isTelegraph): ?>
+                            <select class="form-select" name="task_type" id="taskTypeSelect" required disabled>
+                                <option value="telegraph" selected>تليجراف</option>
+                            </select>
+                            <input type="hidden" name="task_type" value="telegraph">
+                            <?php else: ?>
                             <select class="form-select" name="task_type" id="taskTypeSelect" required>
                                 <option value="shop_order">اوردر محل</option>
                                 <option value="cash_customer">عميل نقدي</option>
                                 <option value="telegraph">تليجراف</option>
                                 <option value="shipping_company">شركة شحن</option>
                             </select>
+                            <?php endif; ?>
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">الأولوية</label>
@@ -4211,10 +4223,12 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                     <input class="form-check-input" type="radio" name="customer_type_radio_task" id="ct_task_local" value="local" checked>
                                     <label class="form-check-label" for="ct_task_local">عميل محلي</label>
                                 </div>
+                                <?php if (!$isTelegraph): ?>
                                 <div class="form-check">
                                     <input class="form-check-input" type="radio" name="customer_type_radio_task" id="ct_task_rep" value="rep">
                                     <label class="form-check-label" for="ct_task_rep">عميل مندوب</label>
                                 </div>
+                                <?php endif; ?>
                             </div>
                             <input type="hidden" name="customer_name" id="submit_customer_name" value="">
                             <div id="customer_select_local_task" class="customer-select-block mb-2">
@@ -4760,6 +4774,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             <label class="form-label small mb-0">اسم العميل / هاتف</label>
                             <input type="text" name="search_customer" id="recentTasksFilterCustomer" class="form-control form-control-sm recent-tasks-dynamic-filter" placeholder="اسم أو رقم" value="<?php echo htmlspecialchars($filterCustomer, ENT_QUOTES, 'UTF-8'); ?>">
                         </div>
+                        <?php if (!$isTelegraph): ?>
                         <div class="col-6 col-md-4 col-lg-2">
                             <label class="form-label small mb-0">نوع الاوردر</label>
                             <select name="task_type" id="recentTasksFilterTaskType" class="form-select form-select-sm recent-tasks-dynamic-filter">
@@ -4770,6 +4785,9 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                 <option value="shipping_company" <?php echo $filterTaskType === 'shipping_company' ? 'selected' : ''; ?>>شركة شحن</option>
                             </select>
                         </div>
+                        <?php else: ?>
+                        <input type="hidden" name="task_type" value="telegraph">
+                        <?php endif; ?>
                         <div class="col-6 col-md-4 col-lg-2">
                             <label class="form-label small mb-0">تاريخ تسليم من</label>
                             <input type="date" name="due_date_from" id="recentTasksFilterDueFrom" class="form-control form-control-sm recent-tasks-dynamic-filter" value="<?php echo htmlspecialchars($filterDueFrom, ENT_QUOTES, 'UTF-8'); ?>">

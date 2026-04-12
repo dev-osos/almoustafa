@@ -252,6 +252,9 @@ $translations = [
     'role_sales' => 'مندوب مبيعات',
     'role_production' => 'عامل إنتاج',
     'role_manager' => 'مدير',
+    'role_driver' => 'سائق',
+    'role_developer' => 'مطور',
+    'role_telegraph' => 'مسؤول تليجراف',
     
     // البروفايل
     'change_password' => 'تغيير كلمة المرور',
