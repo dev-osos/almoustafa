@@ -5312,6 +5312,7 @@ function copyShippingCollectionResult(btn) {
                     </button>
                 </div>
             </form>
+            
         </div>
     </div>
 </div>
