@@ -3968,92 +3968,125 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
     </div>
     <?php endif; ?>
 
-    <div class="row g-2 mb-3" id="statusFilterCards">
-        <div class="col-4 col-sm-4 col-md-2">
-            <a href="?page=production_tasks" class="text-decoration-none status-filter-card" data-status="all">
-                <div class="card <?php echo $statusFilter === '' || $statusFilter === 'all' ? 'bg-primary text-white' : 'border-primary'; ?> h-100">
-                    <div class="card-body text-center py-2 px-2">
-                        <div class="<?php echo $statusFilter === '' || $statusFilter === 'all' ? 'text-white-50' : 'text-muted'; ?> small mb-1">إجمالي الاوردرات</div>
-                        <div class="fs-5 <?php echo $statusFilter === '' || $statusFilter === 'all' ? 'text-white' : 'text-primary'; ?> fw-semibold" style="min-width: 3em; display: inline-block; overflow: visible;" title="إجمالي: <?php echo (int)$stats['total']; ?>"><?php echo (int)$stats['total']; ?></div>
-                    </div>
-                </div>
-            </a>
+    <div class="card mb-3 border-0 shadow-sm" id="statusFilterWrapper">
+        <div class="card-header d-flex justify-content-between align-items-center py-2 px-3 bg-light" style="cursor:pointer;" id="statusFilterToggle">
+            <span class="fw-semibold small"><i class="bi bi-bar-chart-fill me-1 text-primary"></i>إحصائيات الاوردرات</span>
+            <i class="bi bi-chevron-up transition-icon" id="statusFilterChevron"></i>
         </div>
-        <div class="col-4 col-sm-4 col-md-2">
-            <a href="?page=production_tasks&status=pending" class="text-decoration-none status-filter-card" data-status="pending">
-                <div class="card <?php echo $statusFilter === 'pending' ? 'bg-warning text-dark' : 'border-warning'; ?> h-100">
-                    <div class="card-body text-center py-2 px-2">
-                        <div class="<?php echo $statusFilter === 'pending' ? 'text-dark-50' : 'text-muted'; ?> small mb-1">معلقة</div>
-                        <div class="fs-5 <?php echo $statusFilter === 'pending' ? 'text-dark' : 'text-warning'; ?> fw-semibold"><?php echo $stats['pending']; ?></div>
+        <div class="collapse" id="statusFilterCards">
+            <div class="card-body p-2">
+                <div class="row g-2">
+                    <div class="col-6 col-sm-3 col-md-3">
+                        <a href="?page=production_tasks" class="text-decoration-none status-filter-card" data-status="all">
+                            <div class="card <?php echo $statusFilter === '' || $statusFilter === 'all' ? 'bg-primary text-white' : 'border-primary'; ?> h-100">
+                                <div class="card-body text-center py-2 px-2">
+                                    <div class="<?php echo $statusFilter === '' || $statusFilter === 'all' ? 'text-white-50' : 'text-muted'; ?> small mb-1">إجمالي الاوردرات</div>
+                                    <div class="fs-5 <?php echo $statusFilter === '' || $statusFilter === 'all' ? 'text-white' : 'text-primary'; ?> fw-semibold"><?php echo (int)$stats['total']; ?></div>
+                                </div>
+                            </div>
+                        </a>
+                    </div>
+                    <div class="col-6 col-sm-3 col-md-3">
+                        <a href="?page=production_tasks&status=pending" class="text-decoration-none status-filter-card" data-status="pending">
+                            <div class="card <?php echo $statusFilter === 'pending' ? 'bg-warning text-dark' : 'border-warning'; ?> h-100">
+                                <div class="card-body text-center py-2 px-2">
+                                    <div class="<?php echo $statusFilter === 'pending' ? 'text-dark-50' : 'text-muted'; ?> small mb-1">معلقة</div>
+                                    <div class="fs-5 <?php echo $statusFilter === 'pending' ? 'text-dark' : 'text-warning'; ?> fw-semibold"><?php echo $stats['pending']; ?></div>
+                                </div>
+                            </div>
+                        </a>
+                    </div>
+                    <div class="col-6 col-sm-3 col-md-3">
+                        <a href="?page=production_tasks&status=completed" class="text-decoration-none status-filter-card" data-status="completed">
+                            <div class="card <?php echo $statusFilter === 'completed' ? 'bg-success text-white' : 'border-success'; ?> h-100">
+                                <div class="card-body text-center py-2 px-2">
+                                    <div class="<?php echo $statusFilter === 'completed' ? 'text-white-50' : 'text-muted'; ?> small mb-1">مكتملة</div>
+                                    <div class="fs-5 <?php echo $statusFilter === 'completed' ? 'text-white' : 'text-success'; ?> fw-semibold"><?php echo $stats['completed']; ?></div>
+                                </div>
+                            </div>
+                        </a>
+                    </div>
+                    <div class="col-6 col-sm-3 col-md-3">
+                        <a href="?page=production_tasks&status=with_delegate" class="text-decoration-none status-filter-card" data-status="with_delegate">
+                            <div class="card <?php echo $statusFilter === 'with_delegate' ? 'bg-info text-white' : 'border-info'; ?> h-100">
+                                <div class="card-body text-center py-2 px-2">
+                                    <div class="<?php echo $statusFilter === 'with_delegate' ? 'text-white-50' : 'text-muted'; ?> small mb-1">مع المندوب</div>
+                                    <div class="fs-5 <?php echo $statusFilter === 'with_delegate' ? 'text-white' : 'text-info'; ?> fw-semibold"><?php echo $stats['with_delegate']; ?></div>
+                                </div>
+                            </div>
+                        </a>
+                    </div>
+                    <div class="col-6 col-sm-3 col-md-3">
+                        <a href="?page=production_tasks&status=with_shipping_company" class="text-decoration-none status-filter-card" data-status="with_shipping_company">
+                            <div class="card <?php echo $statusFilter === 'with_shipping_company' ? 'bg-warning text-dark' : 'border-warning'; ?> h-100">
+                                <div class="card-body text-center py-2 px-2">
+                                    <div class="<?php echo $statusFilter === 'with_shipping_company' ? 'text-dark' : 'text-muted'; ?> small mb-1">مع شركة الشحن</div>
+                                    <div class="fs-5 <?php echo $statusFilter === 'with_shipping_company' ? 'text-dark' : 'text-warning'; ?> fw-semibold"><?php echo $stats['with_shipping_company']; ?></div>
+                                </div>
+                            </div>
+                        </a>
+                    </div>
+                    <div class="col-6 col-sm-3 col-md-3">
+                        <a href="?page=production_tasks&status=with_driver" class="text-decoration-none status-filter-card" data-status="with_driver">
+                            <div class="card <?php echo $statusFilter === 'with_driver' ? 'bg-info text-white' : 'border-info'; ?> h-100">
+                                <div class="card-body text-center py-2 px-2">
+                                    <div class="<?php echo $statusFilter === 'with_driver' ? 'text-white-50' : 'text-muted'; ?> small mb-1">مع السائق</div>
+                                    <div class="fs-5 <?php echo $statusFilter === 'with_driver' ? 'text-white' : 'text-info'; ?> fw-semibold"><?php echo $stats['with_driver']; ?></div>
+                                </div>
+                            </div>
+                        </a>
+                    </div>
+                    <div class="col-6 col-sm-3 col-md-3">
+                        <a href="?page=production_tasks&status=delivered" class="text-decoration-none status-filter-card" data-status="delivered">
+                            <div class="card <?php echo $statusFilter === 'delivered' ? 'bg-success text-white' : 'border-success'; ?> h-100">
+                                <div class="card-body text-center py-2 px-2">
+                                    <div class="<?php echo $statusFilter === 'delivered' ? 'text-white-50' : 'text-muted'; ?> small mb-1">تم التوصيل</div>
+                                    <div class="fs-5 <?php echo $statusFilter === 'delivered' ? 'text-white' : 'text-success'; ?> fw-semibold"><?php echo $stats['delivered']; ?></div>
+                                </div>
+                            </div>
+                        </a>
+                    </div>
+                    <div class="col-6 col-sm-3 col-md-3">
+                        <a href="?page=production_tasks&status=returned" class="text-decoration-none status-filter-card" data-status="returned">
+                            <div class="card <?php echo $statusFilter === 'returned' ? 'bg-secondary text-white' : 'border-secondary'; ?> h-100">
+                                <div class="card-body text-center py-2 px-2">
+                                    <div class="<?php echo $statusFilter === 'returned' ? 'text-white-50' : 'text-muted'; ?> small mb-1">تم الارجاع</div>
+                                    <div class="fs-5 <?php echo $statusFilter === 'returned' ? 'text-white' : 'text-secondary'; ?> fw-semibold"><?php echo $stats['returned']; ?></div>
+                                </div>
+                            </div>
+                        </a>
                     </div>
                 </div>
-            </a>
-        </div>
-
-        <div class="col-4 col-sm-4 col-md-2">
-            <a href="?page=production_tasks&status=completed" class="text-decoration-none status-filter-card" data-status="completed">
-                <div class="card <?php echo $statusFilter === 'completed' ? 'bg-success text-white' : 'border-success'; ?> h-100">
-                    <div class="card-body text-center py-2 px-2">
-                        <div class="<?php echo $statusFilter === 'completed' ? 'text-white-50' : 'text-muted'; ?> small mb-1">مكتملة</div>
-                        <div class="fs-5 <?php echo $statusFilter === 'completed' ? 'text-white' : 'text-success'; ?> fw-semibold"><?php echo $stats['completed']; ?></div>
-                    </div>
-                </div>
-            </a>
-        </div>
-        <div class="col-4 col-sm-4 col-md-2">
-            <a href="?page=production_tasks&status=with_delegate" class="text-decoration-none status-filter-card" data-status="with_delegate">
-                <div class="card <?php echo $statusFilter === 'with_delegate' ? 'bg-info text-white' : 'border-info'; ?> h-100">
-                    <div class="card-body text-center py-2 px-2">
-                        <div class="<?php echo $statusFilter === 'with_delegate' ? 'text-white-50' : 'text-muted'; ?> small mb-1">مع المندوب</div>
-                        <div class="fs-5 <?php echo $statusFilter === 'with_delegate' ? 'text-white' : 'text-info'; ?> fw-semibold"><?php echo $stats['with_delegate']; ?></div>
-                    </div>
-                </div>
-            </a>
-        </div>
-
-        <div class="col-4 col-sm-4 col-md-2">
-            <a href="?page=production_tasks&status=with_shipping_company" class="text-decoration-none status-filter-card" data-status="with_shipping_company">
-                <div class="card <?php echo $statusFilter === 'with_shipping_company' ? 'bg-warning text-dark' : 'border-warning'; ?> h-100">
-                    <div class="card-body text-center py-2 px-2">
-                        <div class="<?php echo $statusFilter === 'with_shipping_company' ? 'text-dark' : 'text-muted'; ?> small mb-1">مع شركة الشحن</div>
-                        <div class="fs-5 <?php echo $statusFilter === 'with_shipping_company' ? 'text-dark' : 'text-warning'; ?> fw-semibold"><?php echo $stats['with_shipping_company']; ?></div>
-                    </div>
-                </div>
-            </a>
-        </div>
-
-        <div class="col-4 col-sm-4 col-md-2">
-            <a href="?page=production_tasks&status=with_driver" class="text-decoration-none status-filter-card" data-status="with_driver">
-                <div class="card <?php echo $statusFilter === 'with_driver' ? 'bg-info text-white' : 'border-info'; ?> h-100">
-                    <div class="card-body text-center py-2 px-2">
-                        <div class="<?php echo $statusFilter === 'with_driver' ? 'text-white-50' : 'text-muted'; ?> small mb-1">مع السائق</div>
-                        <div class="fs-5 <?php echo $statusFilter === 'with_driver' ? 'text-white' : 'text-info'; ?> fw-semibold"><?php echo $stats['with_driver']; ?></div>
-                    </div>
-                </div>
-            </a>
-        </div>
-        
-        <div class="col-4 col-sm-4 col-md-2">
-            <a href="?page=production_tasks&status=delivered" class="text-decoration-none status-filter-card" data-status="delivered">
-                <div class="card <?php echo $statusFilter === 'delivered' ? 'bg-success text-white' : 'border-success'; ?> h-100">
-                    <div class="card-body text-center py-2 px-2">
-                        <div class="<?php echo $statusFilter === 'delivered' ? 'text-white-50' : 'text-muted'; ?> small mb-1">تم التوصيل</div>
-                        <div class="fs-5 <?php echo $statusFilter === 'delivered' ? 'text-white' : 'text-success'; ?> fw-semibold"><?php echo $stats['delivered']; ?></div>
-                    </div>
-                </div>
-            </a>
-        </div> 
-        <div class="col-4 col-sm-4 col-md-2">
-            <a href="?page=production_tasks&status=returned" class="text-decoration-none status-filter-card" data-status="returned">
-                <div class="card <?php echo $statusFilter === 'returned' ? 'bg-secondary text-white' : 'border-secondary'; ?> h-100">
-                    <div class="card-body text-center py-2 px-2">
-                        <div class="<?php echo $statusFilter === 'returned' ? 'text-white-50' : 'text-muted'; ?> small mb-1">تم الارجاع</div>
-                        <div class="fs-5 <?php echo $statusFilter === 'returned' ? 'text-white' : 'text-secondary'; ?> fw-semibold"><?php echo $stats['returned']; ?></div>
-                    </div>
-                </div>
-            </a>
+            </div>
         </div>
     </div>
+    <script>
+    (function() {
+        var toggle = document.getElementById('statusFilterToggle');
+        var collapse = document.getElementById('statusFilterCards');
+        var chevron = document.getElementById('statusFilterChevron');
+        var key = 'pt_stats_collapsed';
+        var isCollapsed = localStorage.getItem(key) === '1';
+        if (!isCollapsed) {
+            collapse.classList.add('show');
+            chevron.style.transform = 'rotate(0deg)';
+        } else {
+            chevron.style.transform = 'rotate(180deg)';
+        }
+        toggle.addEventListener('click', function() {
+            var showing = collapse.classList.contains('show');
+            if (showing) {
+                collapse.classList.remove('show');
+                chevron.style.transform = 'rotate(180deg)';
+                localStorage.setItem(key, '1');
+            } else {
+                collapse.classList.add('show');
+                chevron.style.transform = 'rotate(0deg)';
+                localStorage.setItem(key, '0');
+            }
+        });
+    })();
+    </script>
 
     <div class="d-inline-flex gap-2 mb-3">
         <button class="btn btn-primary" type="button" data-bs-toggle="collapse" data-bs-target="#createTaskFormCollapse" aria-expanded="false" aria-controls="createTaskFormCollapse">
