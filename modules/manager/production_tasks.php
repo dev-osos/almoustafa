@@ -3984,7 +3984,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
     <!-- Collapsible Status Filter Cards -->
     <div class="card shadow-sm mb-3">
         <div class="card-header bg-light d-flex justify-content-between align-items-center py-2">
-            <h6 class="mb-0 fw-semibold"><i class="bi bi-funnel me-2"></i> Filters</h6>
+            <h6 class="mb-0 fw-semibold"><i class="bi bi-funnel me-2"></i> الاحصائيات</h6>
             <button type="button" class="btn btn-sm btn-outline-secondary toggle-cards-btn" data-target="statusFilterCards" data-bs-toggle="tooltip" title="Toggle cards">
                 <i class="bi bi-chevron-up toggle-icon"></i>
             </button>
@@ -5711,6 +5711,25 @@ label[for="ct_task_manual"], .form-check:has(#ct_task_manual) { display: none !i
 .card-body.p-0 .collapse:not(.show) {
     opacity: 0;
     height: 0 !important;
+}
+
+/* Compact filter cards */
+#statusFilterCards .card-body {
+    padding: 0.5rem 0.75rem !important;
+}
+
+#statusFilterCards .card-body .small {
+    font-size: 0.7rem !important;
+    margin-bottom: 0.25rem !important;
+}
+
+#statusFilterCards .card-body .fs-5 {
+    font-size: 0.9rem !important;
+    font-weight: 600 !important;
+}
+
+#statusFilterCards .card {
+    border-radius: 0.375rem !important;
 }
 
 /* Smooth card header styling */
