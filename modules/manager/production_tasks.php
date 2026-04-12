@@ -3991,7 +3991,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
         </div>
         <div class="card-body p-0 collapse show" id="statusFilterCardsCollapse">
             <div class="row g-2 p-3" id="statusFilterCards">
-        <div class="col-6 col-sm-6 col-md-3">
+        <div class="col-6 col-sm-4 col-md-2">
             <a href="?page=production_tasks" class="text-decoration-none status-filter-card" data-status="all">
                 <div class="card <?php echo $statusFilter === '' || $statusFilter === 'all' ? 'bg-primary text-white' : 'border-primary'; ?> h-100">
                     <div class="card-body text-center py-2 px-2">
@@ -4001,7 +4001,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                 </div>
             </a>
         </div>
-        <div class="col-6 col-sm-6 col-md-3">
+        <div class="col-6 col-sm-4 col-md-2">
             <a href="?page=production_tasks&status=pending" class="text-decoration-none status-filter-card" data-status="pending">
                 <div class="card <?php echo $statusFilter === 'pending' ? 'bg-warning text-dark' : 'border-warning'; ?> h-100">
                     <div class="card-body text-center py-2 px-2">
@@ -4012,7 +4012,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
             </a>
         </div>
 
-        <div class="col-6 col-sm-6 col-md-3">
+        <div class="col-6 col-sm-4 col-md-2">
             <a href="?page=production_tasks&status=completed" class="text-decoration-none status-filter-card" data-status="completed">
                 <div class="card <?php echo $statusFilter === 'completed' ? 'bg-success text-white' : 'border-success'; ?> h-100">
                     <div class="card-body text-center py-2 px-2">
@@ -4022,7 +4022,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                 </div>
             </a>
         </div>
-        <div class="col-6 col-sm-6 col-md-3">
+        <div class="col-6 col-sm-4 col-md-2">
             <a href="?page=production_tasks&status=with_delegate" class="text-decoration-none status-filter-card" data-status="with_delegate">
                 <div class="card <?php echo $statusFilter === 'with_delegate' ? 'bg-info text-white' : 'border-info'; ?> h-100">
                     <div class="card-body text-center py-2 px-2">
@@ -4033,7 +4033,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
             </a>
         </div>
 
-        <div class="col-6 col-sm-6 col-md-3">
+        <div class="col-6 col-sm-4 col-md-2">
             <a href="?page=production_tasks&status=with_shipping_company" class="text-decoration-none status-filter-card" data-status="with_shipping_company">
                 <div class="card <?php echo $statusFilter === 'with_shipping_company' ? 'bg-warning text-dark' : 'border-warning'; ?> h-100">
                     <div class="card-body text-center py-2 px-2">
@@ -4044,7 +4044,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
             </a>
         </div>
 
-        <div class="col-6 col-sm-6 col-md-3">
+        <div class="col-6 col-sm-4 col-md-2">
             <a href="?page=production_tasks&status=with_driver" class="text-decoration-none status-filter-card" data-status="with_driver">
                 <div class="card <?php echo $statusFilter === 'with_driver' ? 'bg-info text-white' : 'border-info'; ?> h-100">
                     <div class="card-body text-center py-2 px-2">
@@ -4055,7 +4055,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
             </a>
         </div>
         
-        <div class="col-6 col-sm-6 col-md-3">
+        <div class="col-6 col-sm-4 col-md-2">
             <a href="?page=production_tasks&status=delivered" class="text-decoration-none status-filter-card" data-status="delivered">
                 <div class="card <?php echo $statusFilter === 'delivered' ? 'bg-success text-white' : 'border-success'; ?> h-100">
                     <div class="card-body text-center py-2 px-2">
@@ -4065,7 +4065,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                 </div>
             </a>
         </div> 
-        <div class="col-6 col-sm-6 col-md-3">
+        <div class="col-6 col-sm-4 col-md-2">
             <a href="?page=production_tasks&status=returned" class="text-decoration-none status-filter-card" data-status="returned">
                 <div class="card <?php echo $statusFilter === 'returned' ? 'bg-secondary text-white' : 'border-secondary'; ?> h-100">
                     <div class="card-body text-center py-2 px-2">
