@@ -5800,8 +5800,11 @@ label[for="ct_task_manual"], .form-check:has(#ct_task_manual) { display: none !i
 }
 </style>
 <script>
+console.log('[DEBUG-SCRIPT] production_tasks script START');
 var __localCustomersForTask = <?php echo json_encode($localCustomersForDropdown); ?>;
 var __repCustomersForTask = <?php echo json_encode($repCustomersForTask); ?>;
+console.log('[DEBUG-SCRIPT] localCustomers:', __localCustomersForTask ? __localCustomersForTask.length : 'NULL');
+console.log('[DEBUG-SCRIPT] repCustomers:', __repCustomersForTask ? __repCustomersForTask.length : 'NULL');
 var __shippingCompaniesForTask = <?php echo json_encode($shippingCompaniesForDropdown); ?>;
 var __quCategories = <?php echo json_encode($quCategoriesForTask, JSON_UNESCAPED_UNICODE); ?>;
 var __quData = <?php echo json_encode($quDataForTask, JSON_UNESCAPED_UNICODE); ?>;
@@ -6403,7 +6406,9 @@ window.openTaskReceiptModal = function(taskId) {
         });
 };
 
+console.log('[DEBUG-SCRIPT] about to register DOMContentLoaded');
 document.addEventListener('DOMContentLoaded', function () {
+    console.log('[DEBUG-SCRIPT] DOMContentLoaded FIRED');
     const taskTypeSelect = document.getElementById('taskTypeSelect');
     const titleInput = document.querySelector('input[name="title"]');
     const productWrapper = document.getElementById('productFieldWrapper');
