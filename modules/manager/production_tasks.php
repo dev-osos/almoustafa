@@ -4904,6 +4904,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             <th>إجراءات</th>
                         </tr>
                     </thead>
+                    
                     <tbody id="recentTasksTableBody">
                         <?php if (empty($recentTasks)): ?>
                             <tr>
