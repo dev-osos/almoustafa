@@ -5268,25 +5268,18 @@ function copyShippingCollectionResult(btn) {
                 <div class="modal-body">
                     <input type="hidden" name="action" value="register_shipping_return">
                     <input type="hidden" name="company_id" id="returnModalCompanyId">
-                    <input type="hidden" name="order_id" id="returnModalOrderId">
                     <div class="mb-3">
                         <div class="fw-semibold text-muted small">شركة الشحن</div>
                         <div class="fs-6 fw-bold" id="returnModalCompanyName">-</div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="returnModalOrderNumber">رقم الطلب <span class="text-danger">*</span></label>
-                        <div class="input-group">
-                            <input type="text" class="form-control" id="returnModalOrderNumber" placeholder="أدخل رقم الطلب" required>
-                            <button type="button" class="btn btn-outline-secondary" onclick="lookupOrderForReturn('modal')">
-                                <i class="bi bi-search"></i> بحث
-                            </button>
-                        </div>
-                        <div class="text-danger small mt-1 d-none" id="returnModalOrderError"></div>
+                        <input type="text" class="form-control" id="returnModalOrderNumber" name="order_id" placeholder="أدخل رقم الطلب" required>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">الإجمالي النهائي للطلب</label>
+                        <label class="form-label" for="returnModalTotalAmount">الإجمالي النهائي للطلب</label>
                         <div class="input-group">
-                            <input type="number" class="form-control bg-light" id="returnModalTotalAmount" step="0.01" readonly placeholder="سيتم جلبه تلقائياً بعد البحث">
+                            <input type="number" class="form-control" id="returnModalTotalAmount" name="total_amount" step="0.01" min="0" placeholder="0.00">
                             <span class="input-group-text">ج.م</span>
                         </div>
                     </div>
@@ -5296,17 +5289,12 @@ function copyShippingCollectionResult(btn) {
                             <input type="number" class="form-control" id="returnModalReturnFees" name="return_fees" step="0.01" min="0" value="0" placeholder="0.00">
                             <span class="input-group-text">ج.م</span>
                         </div>
-                        <div class="form-text">المبلغ الذي تخصمه شركة الشحن مقابل الإرجاع.</div>
-                    </div>
-                    <div id="returnModalSummary" class="alert alert-warning d-none">
-                        <i class="bi bi-info-circle me-1"></i>
-                        إجمالي الخصم من ديون الشركة: <strong id="returnModalTotalDeduction">0</strong> ج.م
                     </div>
                     <div id="returnModalAlert" class="alert d-none"></div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
-                    <button type="submit" class="btn btn-danger" id="returnModalSubmitBtn" disabled>
+                    <button type="submit" class="btn btn-danger" id="returnModalSubmitBtn">
                         <i class="bi bi-arrow-return-right me-1"></i>تسجيل المرتجع
                     </button>
                 </div>
@@ -7661,16 +7649,11 @@ document.addEventListener('DOMContentLoaded', function() {
     // معالجة تسجيل مرتجع - Modal
     var registerReturnFormModal = document.getElementById('registerReturnFormModal');
     if (registerReturnFormModal) {
-        // تحديث الملخص عند تغيير رسوم الإرجاع
-        var returnModalFees = document.getElementById('returnModalReturnFees');
-        if (returnModalFees) {
-            returnModalFees.addEventListener('input', function() { updateReturnSummary('modal'); });
-        }
         registerReturnFormModal.addEventListener('submit', function(e) {
             e.preventDefault();
-            var orderIdVal = document.getElementById('returnModalOrderId').value;
+            var orderIdVal = (document.getElementById('returnModalOrderNumber').value || '').trim();
             if (!orderIdVal) {
-                showShippingToast('يرجى البحث عن الطلب أولاً.', 'danger');
+                showShippingToast('يرجى إدخال رقم الطلب.', 'danger');
                 return false;
             }
             var formData = new FormData();
