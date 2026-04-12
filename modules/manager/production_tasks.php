@@ -6424,7 +6424,12 @@ document.addEventListener('DOMContentLoaded', function () {
         var repSearch = document.getElementById('rep_customer_search_task');
         var repId = document.getElementById('rep_customer_id_task');
         var repDrop = document.getElementById('rep_customer_dropdown_task');
-        if (!submitName || !submitPhone) return;
+        console.log('[DEBUG-CUSTOMER] initCustomerCardTask called');
+        console.log('[DEBUG-CUSTOMER] localCustomers count:', localCustomers.length);
+        console.log('[DEBUG-CUSTOMER] repCustomers count:', repCustomers.length);
+        console.log('[DEBUG-CUSTOMER] submitName:', submitName, 'submitPhone:', submitPhone);
+        console.log('[DEBUG-CUSTOMER] localSearch:', localSearch, 'localDrop:', localDrop);
+        if (!submitName || !submitPhone) { console.log('[DEBUG-CUSTOMER] EARLY RETURN: submitName or submitPhone missing!'); return; }
 
         // نفس منطق matchSearch في صفحة الأسعار المخصصة: عند الفراغ نعرض الكل، وإلا بحث بسيط (نص يحتوي على الاستعلام)
         function matchSearch(text, q) {
@@ -6493,10 +6498,11 @@ document.addEventListener('DOMContentLoaded', function () {
             dropEl.style.zIndex = '9999';
         }
         function showCustomerDropdown(inputEl, hiddenIdEl, dropEl, list, getLabel, matcher, onSelect) {
-            if (!inputEl || !dropEl) return;
+            if (!inputEl || !dropEl) { console.log('[DEBUG-CUSTOMER] showCustomerDropdown: inputEl or dropEl missing'); return; }
             var q = (inputEl.value || '').trim();
             var filterFn = (typeof matcher === 'function') ? function(c) { return matcher(c, q); } : function(c) { return matchSearch(getLabel(c), q); };
             var filtered = list.filter(filterFn);
+            console.log('[DEBUG-CUSTOMER] showCustomerDropdown: query="' + q + '", list.length=' + list.length + ', filtered.length=' + filtered.length);
             dropEl.innerHTML = '';
             if (filtered.length === 0) {
                 dropEl.classList.add('d-none');
