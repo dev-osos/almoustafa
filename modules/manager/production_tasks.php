@@ -826,13 +826,12 @@ function deductTaskProductsFromStock($db, $notes)
         }
 
         // ====== 3. مخزن الخامات — بحث بالاسم المركب والنوع المستخرج ======
-        // الأسماء تأتي بصيغة: "نوع - مورد" مثل "كمون - محمد" أو "جوز #5"
-        // نأخذ الجزء الأول قبل " - " لأنه النوع الفعلي
+        // الأسماء تأتي بصيغة: "عسل خام - سدر (مورد)" أو "جوز - محمد" — نستخرج النوع الفعلي
         $rawNameClean = preg_replace('/\s*\([^)]*\)\s*$/u', '', $name); // أزل قوس المورد
         $rawNameClean = preg_replace('/\s*#\d+\s*$/u', '', $rawNameClean); // أزل رقم #
         $rawNameClean = trim($rawNameClean);
         $rawTypeParts = explode(' - ', $rawNameClean, 2);
-        $rawType = trim($rawTypeParts[0]); // الجزء الأول = النوع الفعلي
+        $rawType = trim(end($rawTypeParts)); // الجزء الأخير بعد " - "
 
         // عسل خام
         try {
@@ -3933,16 +3932,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
     <?php endif; ?>
 
     <?php if ($collectionNotice): ?>
-    <!-- Collapsible Collection Notice Card -->
-    <div class="card shadow-sm mb-3">
-        <div class="card-header bg-success text-white d-flex justify-content-between align-items-center py-2">
-            <h6 class="mb-0 fw-semibold"><i class="bi bi-cash-coin me-2"></i>Collection Success</h6>
-            <button type="button" class="btn btn-sm btn-outline-light toggle-cards-btn" data-target="collectionNoticeCard" data-bs-toggle="tooltip" title="Toggle card">
-                <i class="bi bi-chevron-up toggle-icon"></i>
-            </button>
-        </div>
-        <div class="card-body p-0 collapse show" id="collectionNoticeCardCollapse">
-            <div class="card border-0 mb-0 collection-notice-card" id="collectionNoticeCard">
+    <div class="card border-success mb-3 shadow-sm collection-notice-card" id="collectionNoticeCard">
         <div class="card-header d-flex justify-content-between align-items-center py-2" style="background: linear-gradient(135deg,#16a34a,#22c55e); color:#fff;">
             <span class="fw-bold"><i class="bi bi-cash-coin me-2"></i>تم التحصيل بنجاح</span>
             <button type="button" class="btn-close btn-close-white btn-sm" onclick="document.getElementById('collectionNoticeCard').remove()"></button>
@@ -3971,27 +3961,15 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                     <div class="fw-bold <?php echo $rem > 0 ? 'text-danger' : 'text-success'; ?>">
                         <?php echo number_format($rem, 2); ?> ج.م
                     </div>
-                    <div class="text-muted small">rpn: <?php echo number_format((float)($collectionNotice['new_balance'] ?? 0), 2); ?> .</div>
+                    <div class="text-muted small">رصيد العميل الكلي: <?php echo number_format((float)($collectionNotice['new_balance'] ?? 0), 2); ?> ج.م</div>
                 </div>
             </div>
         </div>
     </div>
-    </div>
-    </div>
-    </div>
     <?php endif; ?>
 
-    <!-- Collapsible Status Filter Cards -->
-    <div class="card shadow-sm mb-3">
-        <div class="card-header bg-light d-flex justify-content-between align-items-center py-2">
-            <h6 class="mb-0 fw-semibold"><i class="bi bi-funnel me-2"></i> الاحصائيات</h6>
-            <button type="button" class="btn btn-sm btn-outline-secondary toggle-cards-btn" data-target="statusFilterCards" data-bs-toggle="tooltip" title="Toggle cards">
-                <i class="bi bi-chevron-up toggle-icon"></i>
-            </button>
-        </div>
-        <div class="card-body p-0 collapse show" id="statusFilterCardsCollapse">
-            <div class="row g-2 p-3" id="statusFilterCards">
-        <div class="col-6 col-sm-3 col-md-3">
+    <div class="row g-2 mb-3" id="statusFilterCards">
+        <div class="col-4 col-sm-4 col-md-2">
             <a href="?page=production_tasks" class="text-decoration-none status-filter-card" data-status="all">
                 <div class="card <?php echo $statusFilter === '' || $statusFilter === 'all' ? 'bg-primary text-white' : 'border-primary'; ?> h-100">
                     <div class="card-body text-center py-2 px-2">
@@ -4001,7 +3979,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                 </div>
             </a>
         </div>
-        <div class="col-6 col-sm-3 col-md-3">
+        <div class="col-4 col-sm-4 col-md-2">
             <a href="?page=production_tasks&status=pending" class="text-decoration-none status-filter-card" data-status="pending">
                 <div class="card <?php echo $statusFilter === 'pending' ? 'bg-warning text-dark' : 'border-warning'; ?> h-100">
                     <div class="card-body text-center py-2 px-2">
@@ -4012,7 +3990,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
             </a>
         </div>
 
-        <div class="col-6 col-sm-3 col-md-3">
+        <div class="col-4 col-sm-4 col-md-2">
             <a href="?page=production_tasks&status=completed" class="text-decoration-none status-filter-card" data-status="completed">
                 <div class="card <?php echo $statusFilter === 'completed' ? 'bg-success text-white' : 'border-success'; ?> h-100">
                     <div class="card-body text-center py-2 px-2">
@@ -4022,7 +4000,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                 </div>
             </a>
         </div>
-        <div class="col-6 col-sm-3 col-md-3">
+        <div class="col-4 col-sm-4 col-md-2">
             <a href="?page=production_tasks&status=with_delegate" class="text-decoration-none status-filter-card" data-status="with_delegate">
                 <div class="card <?php echo $statusFilter === 'with_delegate' ? 'bg-info text-white' : 'border-info'; ?> h-100">
                     <div class="card-body text-center py-2 px-2">
@@ -4033,7 +4011,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
             </a>
         </div>
 
-        <div class="col-6 col-sm-3 col-md-3">
+        <div class="col-4 col-sm-4 col-md-2">
             <a href="?page=production_tasks&status=with_shipping_company" class="text-decoration-none status-filter-card" data-status="with_shipping_company">
                 <div class="card <?php echo $statusFilter === 'with_shipping_company' ? 'bg-warning text-dark' : 'border-warning'; ?> h-100">
                     <div class="card-body text-center py-2 px-2">
@@ -4044,7 +4022,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
             </a>
         </div>
 
-        <div class="col-6 col-sm-3 col-md-3">
+        <div class="col-4 col-sm-4 col-md-2">
             <a href="?page=production_tasks&status=with_driver" class="text-decoration-none status-filter-card" data-status="with_driver">
                 <div class="card <?php echo $statusFilter === 'with_driver' ? 'bg-info text-white' : 'border-info'; ?> h-100">
                     <div class="card-body text-center py-2 px-2">
@@ -4055,7 +4033,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
             </a>
         </div>
         
-        <div class="col-6 col-sm-3 col-md-3">
+        <div class="col-4 col-sm-4 col-md-2">
             <a href="?page=production_tasks&status=delivered" class="text-decoration-none status-filter-card" data-status="delivered">
                 <div class="card <?php echo $statusFilter === 'delivered' ? 'bg-success text-white' : 'border-success'; ?> h-100">
                     <div class="card-body text-center py-2 px-2">
@@ -4065,7 +4043,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                 </div>
             </a>
         </div> 
-        <div class="col-6 col-sm-3 col-md-3">
+        <div class="col-4 col-sm-4 col-md-2">
             <a href="?page=production_tasks&status=returned" class="text-decoration-none status-filter-card" data-status="returned">
                 <div class="card <?php echo $statusFilter === 'returned' ? 'bg-secondary text-white' : 'border-secondary'; ?> h-100">
                     <div class="card-body text-center py-2 px-2">
@@ -4074,8 +4052,6 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                     </div>
                 </div>
             </a>
-        </div>
-            </div>
         </div>
     </div>
 
@@ -4665,14 +4641,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
         </div>
         <div class="card-body p-0">
             <!-- بحث وفلترة جدول آخر المهام -->
-            <div class="card-header bg-light d-flex justify-content-between align-items-center py-2">
-                <h6 class="mb-0 fw-semibold"><i class="bi bi-search me-2"></i> البحث والفلترة</h6>
-                <button type="button" class="btn btn-sm btn-outline-secondary toggle-cards-btn" data-target="filterSection" data-bs-toggle="tooltip" title="Toggle filter section">
-                    <i class="bi bi-chevron-up toggle-icon"></i>
-                </button>
-            </div>
-            <div class="card-body p-0 collapse show" id="filterSectionCollapse">
-                <div class="p-3 border-bottom bg-light">
+            <div class="p-3 border-bottom bg-light">
                 <form method="get" action="" id="recentTasksFilterForm" class="recent-tasks-filter-form" data-no-loading="true">
                     <input type="hidden" name="page" value="production_tasks">
                     <?php if ($statusFilter !== ''): ?>
@@ -4728,27 +4697,26 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                     </div>
                 </form>
             </div>
-        </div>
-        <div class="table-responsive dashboard-table-wrapper">
-            <table class="table dashboard-table dashboard-table--no-hover align-middle mb-0">
-                <thead class="table-light">
-                    <tr>
-                        <?php if ($canPrintTasks): ?>
-                        <th style="width: 40px;">
-                            <input type="checkbox" class="form-check-input" id="selectAllTasks" title="تحديد الكل">
-                        </th>
-                        <?php endif; ?>
-                        <th>رقم الطلب</th>
-                        <th style="min-width: 220px;">اسم العميل</th>
-                        <th style="min-width: 180px;">من</th>
-                        <th>نوع الاوردر</th>
-                        <th>الحاله</th>
-                        <th>التسليم</th>
-                        
-                        <th>إجراءات</th>
-                    </tr>
-                </thead>
-                <tbody id="recentTasksTableBody">
+            <div class="table-responsive dashboard-table-wrapper">
+                <table class="table dashboard-table dashboard-table--no-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <?php if ($canPrintTasks): ?>
+                            <th style="width: 40px;">
+                                <input type="checkbox" class="form-check-input" id="selectAllTasks" title="تحديد الكل">
+                            </th>
+                            <?php endif; ?>
+                            <th>رقم الطلب</th>
+                            <th style="min-width: 220px;">اسم العميل</th>
+                            <th style="min-width: 180px;">من</th>
+                            <th>نوع الاوردر</th>
+                            <th>الحاله</th>
+                            <th>التسليم</th>
+                            
+                            <th>إجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recentTasksTableBody">
                         <?php if (empty($recentTasks)): ?>
                             <tr>
                                 <td colspan="<?php echo $canPrintTasks ? 8 : 7; ?>" class="text-center text-muted py-4">لم يتم إنشاء مهام بعد.</td>
@@ -5610,11 +5578,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
 
 <style>
 .search-wrap.position-relative { position: relative; }
-.search-dropdown-task { position: absolute; left: 0; right: 0; top: 100%; z-index: 1055; max-height: 220px; overflow-y: auto; background: #fff; border: 1px solid #dee2e6; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin-top: 2px; }
-#createTaskFormCollapse .card-body,
-#createTaskFormCollapse .row { overflow: visible !important; }
-#editTaskFormCollapse .card-body,
-#editTaskFormCollapse .row { overflow: visible !important; }
+.search-dropdown-task { position: absolute; left: 0; right: 0; top: 100%; z-index: 1050; max-height: 220px; overflow-y: auto; background: #fff; border: 1px solid #dee2e6; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin-top: 2px; }
 .search-dropdown-task .search-dropdown-item-task { padding: 0.5rem 0.75rem; cursor: pointer; border-bottom: 1px solid #f0f0f0; }
 .search-dropdown-task .search-dropdown-item-task:hover { background: #f8f9fa; }
 .search-dropdown-task .search-dropdown-item-task:last-child { border-bottom: none; }
@@ -5695,119 +5659,13 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
 #customer_manual_block_task { display: none !important; }
 input[name="customer_type_radio_task"][value="manual"] { display: none !important; }
 label[for="ct_task_manual"], .form-check:has(#ct_task_manual) { display: none !important; }
-
-/* Collapsible Cards Animation */
-.toggle-cards-btn {
-    transition: all 0.2s ease-in-out;
-    border: none !important;
-    background: transparent !important;
-}
-
-.toggle-cards-btn:hover {
-    transform: scale(1.1);
-    background: rgba(0,0,0,0.05) !important;
-}
-
-.toggle-icon {
-    transition: transform 0.3s ease-in-out;
-}
-
-.card-body.p-0 .collapse {
-    transition: height 0.35s ease-in-out, opacity 0.3s ease-in-out;
-}
-
-.card-body.p-0 .collapse.show {
-    opacity: 1;
-}
-
-.card-body.p-0 .collapse:not(.show) {
-    opacity: 0;
-    height: 0 !important;
-}
-
-/* Filter section collapse animation */
-#filterSectionCollapse {
-    transition: height 0.35s ease-in-out, opacity 0.3s ease-in-out;
-}
-
-#filterSectionCollapse.show {
-    opacity: 1;
-}
-
-#filterSectionCollapse:not(.show) {
-    opacity: 0;
-    height: 0 !important;
-}
-
-/* Compact filter cards */
-#statusFilterCards .card-body {
-    padding: 0.35rem 0.5rem !important;
-}
-
-#statusFilterCards .card-body .small {
-    font-size: 0.6rem !important;
-    margin-bottom: 0.15rem !important;
-}
-
-#statusFilterCards .card-body .fs-5 {
-    font-size: 0.75rem !important;
-    font-weight: 600 !important;
-}
-
-#statusFilterCards .card {
-    border-radius: 0.375rem !important;
-    min-height: 4rem !important;
-}
-
-#statusFilterCards .card-body {
-    display: flex !important;
-    flex-direction: column !important;
-    justify-content: center !important;
-    align-items: center !important;
-    height: 100% !important;
-}
-
-#statusFilterCards .card-body .small {
-    font-size: 0.65rem !important;
-    margin-bottom: 0.2rem !important;
-    font-weight: 500 !important;
-    line-height: 1.2 !important;
-}
-
-#statusFilterCards .card-body .fs-5 {
-    font-size: 0.85rem !important;
-    font-weight: 700 !important;
-    line-height: 1.1 !important;
-}
-
-/* Smooth card header styling */
-.card-header .toggle-cards-btn {
-    padding: 0.25rem 0.5rem;
-    border-radius: 0.25rem;
-}
-
-.card-header .toggle-cards-btn:hover {
-    background: rgba(255,255,255,0.2) !important;
-}
-
-.card.bg-success .card-header .toggle-cards-btn:hover,
-.card-header.bg-success .toggle-cards-btn:hover {
-    background: rgba(255,255,255,0.3) !important;
-}
-
-.card.bg-light .card-header .toggle-cards-btn:hover {
-    background: rgba(0,0,0,0.1) !important;
-}
 </style>
 <script>
-console.log('[DEBUG-SCRIPT] production_tasks script START');
-var __localCustomersForTask = <?php echo json_encode($localCustomersForDropdown, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?: '[]'; ?>;
-var __repCustomersForTask = <?php echo json_encode($repCustomersForTask, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?: '[]'; ?>;
-console.log('[DEBUG-SCRIPT] localCustomers:', __localCustomersForTask ? __localCustomersForTask.length : 'NULL');
-console.log('[DEBUG-SCRIPT] repCustomers:', __repCustomersForTask ? __repCustomersForTask.length : 'NULL');
-var __shippingCompaniesForTask = <?php echo json_encode($shippingCompaniesForDropdown, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?: '[]'; ?>;
-var __quCategories = <?php echo json_encode($quCategoriesForTask, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?: '[]'; ?>;
-var __quData = <?php echo json_encode($quDataForTask, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?: '{}'; ?>;
+var __localCustomersForTask = <?php echo json_encode($localCustomersForDropdown); ?>;
+var __repCustomersForTask = <?php echo json_encode($repCustomersForTask); ?>;
+var __shippingCompaniesForTask = <?php echo json_encode($shippingCompaniesForDropdown); ?>;
+var __quCategories = <?php echo json_encode($quCategoriesForTask, JSON_UNESCAPED_UNICODE); ?>;
+var __quData = <?php echo json_encode($quDataForTask, JSON_UNESCAPED_UNICODE); ?>;
 
 function makeIdBadge(id) {
     if (!id && id !== 0) return '';
@@ -6138,15 +5996,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         setEditCustomerBlocks();
 
-        function positionEditDropdown(inputEl, dropEl) {
-            var rect = inputEl.getBoundingClientRect();
-            dropEl.style.position = 'fixed';
-            dropEl.style.top = (rect.bottom + 2) + 'px';
-            dropEl.style.left = rect.left + 'px';
-            dropEl.style.width = rect.width + 'px';
-            dropEl.style.right = 'auto';
-            dropEl.style.zIndex = '9999';
-        }
         function showEditDrop(inputEl, hiddenIdEl, dropEl, list, getLabel, matcher) {
             if (!inputEl || !dropEl) return;
             var q = (inputEl.value || '').trim();
@@ -6204,15 +6053,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
                 dropEl.appendChild(div);
             });
-            positionEditDropdown(inputEl, dropEl);
             dropEl.classList.remove('d-none');
         }
         function initEditSearch(inputEl, hiddenIdEl, dropEl, list, getLabel, matcher) {
             if (!inputEl || !dropEl) return;
             inputEl.addEventListener('input', function() { if (hiddenIdEl) hiddenIdEl.value = ''; showEditDrop(inputEl, hiddenIdEl, dropEl, list, getLabel, matcher); });
             inputEl.addEventListener('focus', function() { showEditDrop(inputEl, hiddenIdEl, dropEl, list, getLabel, matcher); });
-            window.addEventListener('scroll', function() { if (!dropEl.classList.contains('d-none')) positionEditDropdown(inputEl, dropEl); }, true);
-            window.addEventListener('resize', function() { if (!dropEl.classList.contains('d-none')) positionEditDropdown(inputEl, dropEl); });
         }
         initEditSearch(localSearch, localId, localDrop, localCustomers, function(c) { return c.id + ' - ' + c.name + (c.phone ? ' — ' + c.phone : ''); }, matchLocal);
         initEditSearch(repSearch, null, repDrop, repCustomers, function(c) { return c.id + ' - ' + (c.rep_name ? c.name + ' (' + c.rep_name + ')' : c.name); }, matchRep);
@@ -6406,9 +6252,7 @@ window.openTaskReceiptModal = function(taskId) {
         });
 };
 
-console.log('[DEBUG-SCRIPT] about to register DOMContentLoaded');
 document.addEventListener('DOMContentLoaded', function () {
-    console.log('[DEBUG-SCRIPT] DOMContentLoaded FIRED');
     const taskTypeSelect = document.getElementById('taskTypeSelect');
     const titleInput = document.querySelector('input[name="title"]');
     const productWrapper = document.getElementById('productFieldWrapper');
@@ -6429,12 +6273,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var repSearch = document.getElementById('rep_customer_search_task');
         var repId = document.getElementById('rep_customer_id_task');
         var repDrop = document.getElementById('rep_customer_dropdown_task');
-        console.log('[DEBUG-CUSTOMER] initCustomerCardTask called');
-        console.log('[DEBUG-CUSTOMER] localCustomers count:', localCustomers.length);
-        console.log('[DEBUG-CUSTOMER] repCustomers count:', repCustomers.length);
-        console.log('[DEBUG-CUSTOMER] submitName:', submitName, 'submitPhone:', submitPhone);
-        console.log('[DEBUG-CUSTOMER] localSearch:', localSearch, 'localDrop:', localDrop);
-        if (!submitName || !submitPhone) { console.log('[DEBUG-CUSTOMER] EARLY RETURN: submitName or submitPhone missing!'); return; }
+        if (!submitName || !submitPhone) return;
 
         // نفس منطق matchSearch في صفحة الأسعار المخصصة: عند الفراغ نعرض الكل، وإلا بحث بسيط (نص يحتوي على الاستعلام)
         function matchSearch(text, q) {
@@ -6493,21 +6332,11 @@ document.addEventListener('DOMContentLoaded', function () {
             });
         })();
 
-        function positionDropdown(inputEl, dropEl) {
-            var rect = inputEl.getBoundingClientRect();
-            dropEl.style.position = 'fixed';
-            dropEl.style.top = (rect.bottom + 2) + 'px';
-            dropEl.style.left = rect.left + 'px';
-            dropEl.style.width = rect.width + 'px';
-            dropEl.style.right = 'auto';
-            dropEl.style.zIndex = '9999';
-        }
         function showCustomerDropdown(inputEl, hiddenIdEl, dropEl, list, getLabel, matcher, onSelect) {
-            if (!inputEl || !dropEl) { console.log('[DEBUG-CUSTOMER] showCustomerDropdown: inputEl or dropEl missing'); return; }
+            if (!inputEl || !dropEl) return;
             var q = (inputEl.value || '').trim();
             var filterFn = (typeof matcher === 'function') ? function(c) { return matcher(c, q); } : function(c) { return matchSearch(getLabel(c), q); };
             var filtered = list.filter(filterFn);
-            console.log('[DEBUG-CUSTOMER] showCustomerDropdown: query="' + q + '", list.length=' + list.length + ', filtered.length=' + filtered.length);
             dropEl.innerHTML = '';
             if (filtered.length === 0) {
                 dropEl.classList.add('d-none');
@@ -6534,8 +6363,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     submitName.value = this.dataset.name || '';
                     if (this.dataset.phone) submitPhone.value = this.dataset.phone;
                     dropEl.classList.add('d-none');
-                    // تحديث حالة زر الإرسال بدون مسح ID العميل أو إعادة فتح القائمة
-                    updateCreateSubmitBtnState();
+                    inputEl.dispatchEvent(new Event('input'));
                     // ملء بيانات التليجراف تلقائياً إذا كان نوع الأوردر تليجراف
                     var typeEl = document.getElementById('taskTypeSelect');
                     if (typeEl && typeEl.value === 'telegraph') {
@@ -6566,7 +6394,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 });
                 dropEl.appendChild(div);
             });
-            positionDropdown(inputEl, dropEl);
             dropEl.classList.remove('d-none');
         }
 
@@ -6580,9 +6407,6 @@ document.addEventListener('DOMContentLoaded', function () {
             inputEl.addEventListener('focus', function() {
                 show();
             });
-            // تحديث موضع الـ dropdown عند التمرير أو تغيير حجم النافذة
-            window.addEventListener('scroll', function() { if (!dropEl.classList.contains('d-none')) positionDropdown(inputEl, dropEl); }, true);
-            window.addEventListener('resize', function() { if (!dropEl.classList.contains('d-none')) positionDropdown(inputEl, dropEl); });
         }
 
         initCustomerSearch(localSearch, localId, localDrop, localCustomers, function(c) { return c.id + ' - ' + c.name + (c.phone ? ' — ' + c.phone : ''); }, matchLocalCustomer);
@@ -8284,7 +8108,7 @@ function updateQuantityStep(index) {
         ?>
     }
     <?php endif; ?>
-?>
+})();
 
 // بطاقة اعتماد الفاتورة (عميل محلي أو شركة شحن حسب نوع الأوردر)
 function ensureApproveInvoiceCardExists() {
@@ -9630,121 +9454,5 @@ document.addEventListener('click', function (e) {
         }
     });
 
-})();
-</script>
-
-<!-- Collapsible Cards with User Preferences -->
-<script>
-(function() {
-    'use strict';
-    
-    // User preference storage key
-    const CARD_STATES_KEY = 'production_tasks_card_states';
-    
-    // Initialize card states from localStorage
-    function getCardStates() {
-        try {
-            const saved = localStorage.getItem(CARD_STATES_KEY);
-            return saved ? JSON.parse(saved) : {};
-        } catch (e) {
-            return {};
-        }
-    }
-    
-    // Save card states to localStorage
-    function saveCardStates(states) {
-        try {
-            localStorage.setItem(CARD_STATES_KEY, JSON.stringify(states));
-        } catch (e) {
-            console.warn('Could not save card states:', e);
-        }
-    }
-    
-    // Toggle card collapse state
-    function toggleCardCollapse(button) {
-        const targetId = button.getAttribute('data-target');
-        const collapseId = targetId + 'Collapse';
-        const collapseElement = document.getElementById(collapseId);
-        const icon = button.querySelector('.toggle-icon');
-        
-        if (!collapseElement || !icon) return;
-        
-        const isExpanded = collapseElement.classList.contains('show');
-        const cardStates = getCardStates();
-        
-        // Update UI
-        if (isExpanded) {
-            bootstrap.Collapse.getInstance(collapseElement)?.hide();
-            icon.classList.remove('bi-chevron-up');
-            icon.classList.add('bi-chevron-down');
-            cardStates[targetId] = false;
-        } else {
-            bootstrap.Collapse.getInstance(collapseElement)?.show();
-            icon.classList.remove('bi-chevron-down');
-            icon.classList.add('bi-chevron-up');
-            cardStates[targetId] = true;
-        }
-        
-        // Save preference
-        saveCardStates(cardStates);
-    }
-    
-    // Initialize collapsible cards
-    function initCollapsibleCards() {
-        const toggleButtons = document.querySelectorAll('.toggle-cards-btn');
-        const cardStates = getCardStates();
-        
-        toggleButtons.forEach(button => {
-            const targetId = button.getAttribute('data-target');
-            const collapseId = targetId + 'Collapse';
-            const collapseElement = document.getElementById(collapseId);
-            const icon = button.querySelector('.toggle-icon');
-            
-            if (!collapseElement || !icon) return;
-            
-            // Set initial state based on saved preference
-            const isExpanded = cardStates[targetId] !== false; // Default to expanded
-            
-            if (isExpanded) {
-                collapseElement.classList.add('show');
-                icon.classList.remove('bi-chevron-down');
-                icon.classList.add('bi-chevron-up');
-            } else {
-                collapseElement.classList.remove('show');
-                icon.classList.remove('bi-chevron-up');
-                icon.classList.add('bi-chevron-down');
-            }
-            
-            // Initialize Bootstrap collapse
-            new bootstrap.Collapse(collapseElement, {
-                toggle: false
-            });
-            
-            // Add click handler
-            button.addEventListener('click', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                toggleCardCollapse(button);
-            });
-        });
-        
-        // Initialize tooltips
-        const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-        tooltipTriggerList.map(function (tooltipTriggerEl) {
-            return new bootstrap.Tooltip(tooltipTriggerEl);
-        });
-    }
-    
-    // Initialize when DOM is ready
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initCollapsibleCards);
-    } else {
-        initCollapsibleCards();
-    }
-    
-    // Make functions globally accessible
-    window.toggleCardCollapse = toggleCardCollapse;
-    window.initCollapsibleCards = initCollapsibleCards;
-    
 })();
 </script>
