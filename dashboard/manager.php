@@ -2608,6 +2608,16 @@ if ($isAjaxNavigation) {
                 }
                 ?>
                 
+            <?php elseif ($page === 'offers'): ?>
+                <?php
+                $modulePath = __DIR__ . '/../modules/manager/offers.php';
+                if (file_exists($modulePath)) {
+                    include $modulePath;
+                } else {
+                    echo '<div class="alert alert-warning">صفحة العروض غير متاحة حالياً</div>';
+                }
+                ?>
+
             <?php elseif ($page === 'company_supplies'): ?>
                 <?php
                 $modulePath = __DIR__ . '/../modules/manager/company_supplies.php';

@@ -66,6 +66,14 @@ $baseUrl = getDashboardUrl();
                     <span>منتجات الشركة</span>
                 </a>
             </li>
+
+            <li class="nav-item">
+                <a class="nav-link <?php echo (isset($_GET['page']) && $_GET['page'] === 'offers') ? 'active' : ''; ?>"
+                   href="<?php echo $baseUrl; ?>manager.php?page=offers">
+                    <i class="bi bi-tags"></i>
+                    <span>العروض</span>
+                </a>
+            </li>
             
             
             

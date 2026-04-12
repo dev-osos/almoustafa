@@ -4006,6 +4006,19 @@ $statusLabels = [
 $hasProducts = !empty($availableProducts);
 $hasShippingCompanies = !empty($shippingCompanies);
 
+// جلب العروض النشطة لقائمة الاختيار في نموذج الطلب
+$activeOffers = [];
+try {
+    $offersTableExists = $db->queryOne("SHOW TABLES LIKE 'offers'");
+    if (!empty($offersTableExists)) {
+        $activeOffers = $db->query(
+            "SELECT id, name, price FROM offers WHERE status = 'active' ORDER BY name ASC"
+        );
+    }
+} catch (Exception $e) {
+    error_log('shipping_orders: fetch active_offers -> ' . $e->getMessage());
+}
+
 // ===== شحنات TelegraphEx — تُحمَّل عبر AJAX بعد تحميل الصفحة =====
 $tgShipments = [];
 $tgPagination = [];
@@ -4207,6 +4220,41 @@ $tgError = '';
                         </div>
                     </div>
                 </div>
+
+                <?php if (!empty($activeOffers)): ?>
+                <div class="card bg-light border-primary border-opacity-25 mb-3">
+                    <div class="card-body py-2 px-3">
+                        <div class="row g-2 align-items-center">
+                            <div class="col-auto">
+                                <label class="form-label mb-0 fw-semibold text-primary">
+                                    <i class="bi bi-tags me-1"></i>تحميل من عرض
+                                </label>
+                            </div>
+                            <div class="col-md-4">
+                                <select class="form-select form-select-sm" id="offerSelectDropdown">
+                                    <option value="">اختر عرضاً لتحميل منتجاته...</option>
+                                    <?php foreach ($activeOffers as $ofr): ?>
+                                    <option value="<?php echo (int)$ofr['id']; ?>"
+                                            data-name="<?php echo htmlspecialchars($ofr['name']); ?>"
+                                            data-price="<?php echo number_format((float)$ofr['price'], 2, '.', ''); ?>">
+                                        <?php echo htmlspecialchars($ofr['name']); ?>
+                                        (<?php echo number_format((float)$ofr['price'], 2); ?> ج.م)
+                                    </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="col-auto">
+                                <button type="button" class="btn btn-primary btn-sm" id="loadOfferBtn" disabled>
+                                    <i class="bi bi-download me-1"></i>تحميل منتجات العرض
+                                </button>
+                            </div>
+                            <div class="col-auto text-muted small" id="offerLoadNote" style="display:none;">
+                                <i class="bi bi-info-circle me-1"></i>سيتم استبدال المنتجات الحالية بمنتجات العرض
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <?php endif; ?>
 
                 <div class="table-responsive mb-3">
                     <table class="table table-sm align-middle" id="shippingItemsTable">
@@ -6309,6 +6357,119 @@ function closeAddLocalCustomerCard() {
     });
 
     addNewRow();
+
+    // ——— تحميل منتجات العرض ———
+    const offerDropdown = document.getElementById('offerSelectDropdown');
+    const loadOfferBtn  = document.getElementById('loadOfferBtn');
+    const offerLoadNote = document.getElementById('offerLoadNote');
+
+    if (offerDropdown && loadOfferBtn) {
+        offerDropdown.addEventListener('change', () => {
+            const hasVal = !!offerDropdown.value;
+            loadOfferBtn.disabled = !hasVal;
+            if (offerLoadNote) offerLoadNote.style.display = hasVal ? '' : 'none';
+        });
+
+        loadOfferBtn.addEventListener('click', () => {
+            const offerId = offerDropdown.value;
+            if (!offerId) return;
+
+            loadOfferBtn.disabled = true;
+            loadOfferBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>جاري التحميل...';
+
+            fetch(`<?php echo getRelativeUrl('api/get_offer_details.php'); ?>?offer_id=${offerId}`)
+                .then(r => r.json())
+                .then(data => {
+                    loadOfferBtn.disabled = false;
+                    loadOfferBtn.innerHTML = '<i class="bi bi-download me-1"></i>تحميل منتجات العرض';
+
+                    if (!data.success || !data.items || !data.items.length) {
+                        alert(data.message || 'لا توجد منتجات في هذا العرض أو حدث خطأ.');
+                        return;
+                    }
+
+                    // مسح الصفوف الحالية
+                    while (itemsBody.firstChild) {
+                        itemsBody.removeChild(itemsBody.firstChild);
+                    }
+                    rowIndex = 0;
+
+                    // إضافة منتجات العرض
+                    data.items.forEach(item => {
+                        const row = document.createElement('tr');
+                        const productOptions = buildProductOptions();
+
+                        row.innerHTML = `
+                            <td>
+                                <select class="form-select" name="items[${rowIndex}][product_id]" required>
+                                    <option value="">اختر المنتج</option>
+                                    ${productOptions}
+                                </select>
+                                <input type="hidden" name="items[${rowIndex}][batch_id]" class="batch-id-input">
+                                <input type="hidden" name="items[${rowIndex}][product_type]" class="product-type-input">
+                            </td>
+                            <td class="text-muted fw-semibold">
+                                <span class="available-qty d-inline-block">-</span>
+                            </td>
+                            <td class="text-muted small row-unit">
+                                <span class="unit-label">-</span>
+                            </td>
+                            <td>
+                                <input type="number" class="form-control" name="items[${rowIndex}][quantity]" step="any" min="0" value="${parseFloat(item.quantity) || 1}" required>
+                            </td>
+                            <td>
+                                <input type="number" class="form-control" name="items[${rowIndex}][unit_price]" step="0.01" min="0" value="${item.unit_price ? parseFloat(item.unit_price).toFixed(2) : (item.default_unit_price ? parseFloat(item.default_unit_price).toFixed(2) : '')}" required>
+                            </td>
+                            <td>
+                                <div class="input-group input-group-sm">
+                                    <input type="number" class="form-control fw-semibold line-total-input" name="items[${rowIndex}][line_total]" step="0.01" min="0" placeholder="0.00" title="الإجمالي = الكمية × سعر الوحدة (قابل للتعديل)">
+                                    <span class="input-group-text">ج.م</span>
+                                </div>
+                            </td>
+                            <td>
+                                <button type="button" class="btn btn-outline-danger btn-sm remove-item" title="حذف المنتج">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </td>
+                        `;
+
+                        itemsBody.appendChild(row);
+                        attachRowEvents(row);
+
+                        // تحديد المنتج المطابق
+                        const sel = row.querySelector('select[name$="[product_id]"]');
+                        if (sel && item.product_id) {
+                            // البحث بـ product_id في الخيارات
+                            const targetOpt = Array.from(sel.options).find(o => parseInt(o.value) === parseInt(item.product_id));
+                            if (targetOpt) {
+                                sel.value = targetOpt.value;
+                                sel.dispatchEvent(new Event('change'));
+                                // ضبط الكمية بعد تحديد المنتج
+                                const qtyInput = row.querySelector('input[name$="[quantity]"]');
+                                if (qtyInput) qtyInput.value = parseFloat(item.quantity) || 1;
+                            }
+                        }
+
+                        rowIndex++;
+                    });
+
+                    recalculateTotals();
+
+                    // ضبط الإجمالي اليدوي بسعر العرض
+                    const offerPrice = parseFloat(offerDropdown.selectedOptions[0]?.dataset?.price || 0);
+                    const customTotalInput = document.getElementById('customTotalAmount');
+                    if (customTotalInput && offerPrice > 0) {
+                        customTotalInput.value = offerPrice.toFixed(2);
+                        customTotalInput.dataset.manual = '1';
+                    }
+                })
+                .catch(() => {
+                    loadOfferBtn.disabled = false;
+                    loadOfferBtn.innerHTML = '<i class="bi bi-download me-1"></i>تحميل منتجات العرض';
+                    alert('فشل الاتصال بالخادم.');
+                });
+        });
+    }
 
     // إضافة validation للنموذج
     const shippingOrderForm = document.getElementById('shippingOrderForm');
