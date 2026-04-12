@@ -5610,7 +5610,11 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
 
 <style>
 .search-wrap.position-relative { position: relative; }
-.search-dropdown-task { position: absolute; left: 0; right: 0; top: 100%; z-index: 1050; max-height: 220px; overflow-y: auto; background: #fff; border: 1px solid #dee2e6; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin-top: 2px; }
+.search-dropdown-task { position: absolute; left: 0; right: 0; top: 100%; z-index: 1055; max-height: 220px; overflow-y: auto; background: #fff; border: 1px solid #dee2e6; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin-top: 2px; }
+#createTaskFormCollapse .card-body,
+#createTaskFormCollapse .row { overflow: visible !important; }
+#editTaskFormCollapse .card-body,
+#editTaskFormCollapse .row { overflow: visible !important; }
 .search-dropdown-task .search-dropdown-item-task { padding: 0.5rem 0.75rem; cursor: pointer; border-bottom: 1px solid #f0f0f0; }
 .search-dropdown-task .search-dropdown-item-task:hover { background: #f8f9fa; }
 .search-dropdown-task .search-dropdown-item-task:last-child { border-bottom: none; }
@@ -6131,6 +6135,15 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         setEditCustomerBlocks();
 
+        function positionEditDropdown(inputEl, dropEl) {
+            var rect = inputEl.getBoundingClientRect();
+            dropEl.style.position = 'fixed';
+            dropEl.style.top = (rect.bottom + 2) + 'px';
+            dropEl.style.left = rect.left + 'px';
+            dropEl.style.width = rect.width + 'px';
+            dropEl.style.right = 'auto';
+            dropEl.style.zIndex = '9999';
+        }
         function showEditDrop(inputEl, hiddenIdEl, dropEl, list, getLabel, matcher) {
             if (!inputEl || !dropEl) return;
             var q = (inputEl.value || '').trim();
@@ -6188,12 +6201,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
                 dropEl.appendChild(div);
             });
+            positionEditDropdown(inputEl, dropEl);
             dropEl.classList.remove('d-none');
         }
         function initEditSearch(inputEl, hiddenIdEl, dropEl, list, getLabel, matcher) {
             if (!inputEl || !dropEl) return;
             inputEl.addEventListener('input', function() { if (hiddenIdEl) hiddenIdEl.value = ''; showEditDrop(inputEl, hiddenIdEl, dropEl, list, getLabel, matcher); });
             inputEl.addEventListener('focus', function() { showEditDrop(inputEl, hiddenIdEl, dropEl, list, getLabel, matcher); });
+            window.addEventListener('scroll', function() { if (!dropEl.classList.contains('d-none')) positionEditDropdown(inputEl, dropEl); }, true);
+            window.addEventListener('resize', function() { if (!dropEl.classList.contains('d-none')) positionEditDropdown(inputEl, dropEl); });
         }
         initEditSearch(localSearch, localId, localDrop, localCustomers, function(c) { return c.id + ' - ' + c.name + (c.phone ? ' — ' + c.phone : ''); }, matchLocal);
         initEditSearch(repSearch, null, repDrop, repCustomers, function(c) { return c.id + ' - ' + (c.rep_name ? c.name + ' (' + c.rep_name + ')' : c.name); }, matchRep);
@@ -6467,6 +6483,15 @@ document.addEventListener('DOMContentLoaded', function () {
             });
         })();
 
+        function positionDropdown(inputEl, dropEl) {
+            var rect = inputEl.getBoundingClientRect();
+            dropEl.style.position = 'fixed';
+            dropEl.style.top = (rect.bottom + 2) + 'px';
+            dropEl.style.left = rect.left + 'px';
+            dropEl.style.width = rect.width + 'px';
+            dropEl.style.right = 'auto';
+            dropEl.style.zIndex = '9999';
+        }
         function showCustomerDropdown(inputEl, hiddenIdEl, dropEl, list, getLabel, matcher, onSelect) {
             if (!inputEl || !dropEl) return;
             var q = (inputEl.value || '').trim();
@@ -6530,6 +6555,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 });
                 dropEl.appendChild(div);
             });
+            positionDropdown(inputEl, dropEl);
             dropEl.classList.remove('d-none');
         }
 
@@ -6543,6 +6569,9 @@ document.addEventListener('DOMContentLoaded', function () {
             inputEl.addEventListener('focus', function() {
                 show();
             });
+            // تحديث موضع الـ dropdown عند التمرير أو تغيير حجم النافذة
+            window.addEventListener('scroll', function() { if (!dropEl.classList.contains('d-none')) positionDropdown(inputEl, dropEl); }, true);
+            window.addEventListener('resize', function() { if (!dropEl.classList.contains('d-none')) positionDropdown(inputEl, dropEl); });
         }
 
         initCustomerSearch(localSearch, localId, localDrop, localCustomers, function(c) { return c.id + ' - ' + c.name + (c.phone ? ' — ' + c.phone : ''); }, matchLocalCustomer);
