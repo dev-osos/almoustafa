@@ -5738,7 +5738,7 @@ label[for="ct_task_manual"], .form-check:has(#ct_task_manual) { display: none !i
     flex-direction: column !important;
     justify-content: center !important;
     align-items: center !important;
-    height: 100% !important;
+    height: 50% !important;
 }
 
 /* Smooth card header styling */
