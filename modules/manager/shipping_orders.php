@@ -2292,9 +2292,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'register_shipping_return') {
         $orderId       = isset($_POST['order_id']) ? (int)$_POST['order_id'] : 0;
+        $orderNumber   = isset($_POST['order_number']) ? trim((string)$_POST['order_number']) : '';
         $paperInvId    = isset($_POST['paper_invoice_id']) ? (int)$_POST['paper_invoice_id'] : 0;
         $companyId     = isset($_POST['company_id']) ? (int)$_POST['company_id'] : 0;
         $returnFees    = isset($_POST['return_fees']) ? cleanFinancialValue($_POST['return_fees'], true) : 0;
+        $postedTotal   = (isset($_POST['total_amount']) && trim((string)$_POST['total_amount']) !== '') ? cleanFinancialValue($_POST['total_amount'], true) : null;
         $transactionStarted = false;
 
         try {
@@ -2322,7 +2324,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 );
                 if (!$returnCompany) throw new InvalidArgumentException('شركة الشحن غير موجودة.');
 
-                $orderTotal     = (float)$paperInv['total_amount'];
+                $orderTotal     = $postedTotal !== null ? $postedTotal : (float)$paperInv['total_amount'];
                 $returnFees     = (float)($returnFees ?? 0);
                 $totalDeduction = $orderTotal + $returnFees;
                 $currentBalance = (float)($returnCompany['balance'] ?? 0);
@@ -2385,10 +2387,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             // --- وضع أوردر الشحن (الطريقة القديمة) ---
             } else {
-                $returnOrder = $db->queryOne(
-                    "SELECT id, order_number, shipping_company_id, total_amount, status FROM shipping_company_orders WHERE id = ? AND shipping_company_id = ? FOR UPDATE",
-                    [$orderId, $companyId]
-                );
+                if ($orderId > 0) {
+                    $returnOrder = $db->queryOne(
+                        "SELECT id, order_number, shipping_company_id, total_amount, status FROM shipping_company_orders WHERE id = ? AND shipping_company_id = ? FOR UPDATE",
+                        [$orderId, $companyId]
+                    );
+                } else if (!empty($orderNumber)) {
+                    $returnOrder = $db->queryOne(
+                        "SELECT id, order_number, shipping_company_id, total_amount, status FROM shipping_company_orders WHERE order_number = ? AND shipping_company_id = ? FOR UPDATE",
+                        [$orderNumber, $companyId]
+                    );
+                    if ($returnOrder) $orderId = (int)$returnOrder['id'];
+                } else {
+                    throw new InvalidArgumentException('يجب تحديد رقم الطلب.');
+                }
+                
                 if (!$returnOrder) throw new InvalidArgumentException('طلب الشحن غير موجود.');
                 if ($returnOrder['status'] === 'cancelled') throw new InvalidArgumentException('لا يمكن تسجيل مرتجع لطلب ملغي.');
 
@@ -2398,7 +2411,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 );
                 if (!$returnCompany) throw new InvalidArgumentException('شركة الشحن غير موجودة.');
 
-                $orderTotal     = (float)$returnOrder['total_amount'];
+                $orderTotal     = $postedTotal !== null ? $postedTotal : (float)$returnOrder['total_amount'];
                 $returnFees     = (float)($returnFees ?? 0);
                 $totalDeduction = $orderTotal + $returnFees;
                 $currentBalance = (float)($returnCompany['balance'] ?? 0);
@@ -5277,7 +5290,7 @@ function copyShippingCollectionResult(btn) {
                         <input type="text" class="form-control" id="returnModalOrderNumber" name="order_id" placeholder="أدخل رقم الطلب" required>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label" for="returnModalTotalAmount">الإجمالي النهائي للطلب</label>
+                        <label class="form-label" for="returnModalTotalAmount">المبلغ الصافي</label>
                         <div class="input-group">
                             <input type="number" class="form-control" id="returnModalTotalAmount" name="total_amount" step="0.01" min="0" placeholder="0.00">
                             <span class="input-group-text">ج.م</span>
@@ -5424,18 +5437,13 @@ function copyShippingCollectionResult(btn) {
             </div>
             <div class="mb-3">
                 <label class="form-label" for="returnCardOrderNumber">رقم الطلب <span class="text-danger">*</span></label>
-                <div class="input-group">
-                    <input type="number" class="form-control" id="returnCardOrderNumber" placeholder="أدخل رقم الطلب (مثال: 480)" min="1" required>
-                    <button type="button" class="btn btn-outline-secondary" onclick="lookupOrderForReturn('card')">
-                        <i class="bi bi-search"></i>
-                    </button>
-                </div>
+                <input type="text" class="form-control" id="returnCardOrderNumber" name="order_number" placeholder="أدخل رقم الطلب" required>
                 <div class="text-danger small mt-1 d-none" id="returnCardOrderError"></div>
             </div>
             <div class="mb-3">
                 <label class="form-label">الإجمالي النهائي للطلب</label>
                 <div class="input-group">
-                    <input type="number" class="form-control bg-light" id="returnCardTotalAmount" step="0.01" readonly placeholder="سيتم جلبه بعد البحث">
+                    <input type="number" class="form-control" id="returnCardTotalAmount" step="0.01" placeholder="أدخل الإجمالي النهائي للطلب">
                     <span class="input-group-text">ج.م</span>
                 </div>
             </div>
@@ -5863,30 +5871,52 @@ function closeDeductFromShippingCard() {
 }
 
 function showRegisterReturnByIdName(companyId, companyName, balance) {
-    var card = document.getElementById('registerReturnCard');
-    if (!card) return;
-    document.getElementById('returnCardCompanyId').value = companyId;
-    document.getElementById('returnCardCompanyName').textContent = companyName || '-';
-    document.getElementById('returnCardOrderId').value = '';
-    document.getElementById('returnCardOrderNumber').value = '';
-    document.getElementById('returnCardTotalAmount').value = '';
-    document.getElementById('returnCardReturnFees').value = '0';
-    var piEl = document.getElementById('returnCardPaperInvoiceId');
-    if (piEl) piEl.value = '';
-    var prodSec = document.getElementById('returnCardProductsSection');
-    if (prodSec) prodSec.classList.add('d-none');
-    var prodList = document.getElementById('returnCardProductsList');
-    if (prodList) prodList.innerHTML = '';
-    var submitBtnEl = document.getElementById('returnCardSubmitBtn');
-    if (submitBtnEl) submitBtnEl.disabled = true;
-    var summaryEl = document.getElementById('returnCardSummary');
-    if (summaryEl) summaryEl.classList.add('d-none');
-    var alertEl = document.getElementById('returnCardAlert');
-    if (alertEl) { alertEl.className = 'alert d-none'; alertEl.textContent = ''; }
-    var errEl = document.getElementById('returnCardOrderError');
-    if (errEl) { errEl.className = 'text-danger small mt-1 d-none'; errEl.textContent = ''; }
-    card.style.display = '';
-    setTimeout(function() { scrollToElement(card); }, 50);
+    closeAllForms();
+    if (isMobile()) {
+        var card = document.getElementById('registerReturnCard');
+        if (!card) return;
+        document.getElementById('returnCardCompanyId').value = companyId;
+        document.getElementById('returnCardCompanyName').textContent = companyName || '-';
+        document.getElementById('returnCardOrderId').value = '';
+        document.getElementById('returnCardOrderNumber').value = '';
+        document.getElementById('returnCardTotalAmount').value = '';
+        document.getElementById('returnCardReturnFees').value = '0';
+        var piEl = document.getElementById('returnCardPaperInvoiceId');
+        if (piEl) piEl.value = '';
+        var prodSec = document.getElementById('returnCardProductsSection');
+        if (prodSec) prodSec.classList.add('d-none');
+        var prodList = document.getElementById('returnCardProductsList');
+        if (prodList) prodList.innerHTML = '';
+        var submitBtnEl = document.getElementById('returnCardSubmitBtn');
+        if (submitBtnEl) submitBtnEl.disabled = true;
+        var summaryEl = document.getElementById('returnCardSummary');
+        if (summaryEl) summaryEl.classList.add('d-none');
+        var alertEl = document.getElementById('returnCardAlert');
+        if (alertEl) { alertEl.className = 'alert d-none'; alertEl.textContent = ''; }
+        var errEl = document.getElementById('returnCardOrderError');
+        if (errEl) { errEl.className = 'text-danger small mt-1 d-none'; errEl.textContent = ''; }
+        card.style.display = '';
+        setTimeout(function() { scrollToElement(card); }, 50);
+    } else {
+        var modal = document.getElementById('registerReturnModal');
+        if (!modal) return;
+        document.getElementById('returnModalCompanyId').value = companyId;
+        document.getElementById('returnModalCompanyName').textContent = companyName || '-';
+        document.getElementById('returnModalOrderId').value = '';
+        document.getElementById('returnModalOrderNumber').value = '';
+        document.getElementById('returnModalTotalAmount').value = '';
+        document.getElementById('returnModalReturnFees').value = '0';
+        var submitBtnEl = document.getElementById('returnModalSubmitBtn');
+        if (submitBtnEl) submitBtnEl.disabled = true;
+        var summaryEl = document.getElementById('returnModalSummary');
+        if (summaryEl) summaryEl.classList.add('d-none');
+        var alertEl = document.getElementById('returnModalAlert');
+        if (alertEl) { alertEl.className = 'alert d-none'; alertEl.textContent = ''; }
+        var errEl = document.getElementById('returnModalOrderError');
+        if (errEl) { errEl.className = 'text-danger small mt-1 d-none'; errEl.textContent = ''; }
+        var modalInstance = new bootstrap.Modal(modal);
+        modalInstance.show();
+    }
 }
 
 function closeRegisterReturnCard() {
@@ -5916,7 +5946,7 @@ function lookupOrderForReturn(context) {
     fd.append('order_number', orderNumber);
     fd.append('company_id', companyId);
 
-    fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: fd })
+    fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: fd, credentials: 'same-origin' })
         .then(function(r) {
             var clone = r.clone();
             return r.json().catch(function() {
@@ -5928,7 +5958,6 @@ function lookupOrderForReturn(context) {
         .then(function(data) {
             if (!data.success) {
                 if (errorEl) { errorEl.textContent = data.error || 'لم يتم العثور على الطلب.'; errorEl.classList.remove('d-none'); }
-                if (totalEl) totalEl.value = '';
                 if (orderIdEl) orderIdEl.value = '';
                 var piEl2 = document.getElementById(prefix + 'PaperInvoiceId');
                 if (piEl2) piEl2.value = '';
@@ -5938,7 +5967,6 @@ function lookupOrderForReturn(context) {
                 updateReturnSummary(context);
                 return;
             }
-            if (totalEl) totalEl.value = parseFloat(data.total_amount || 0).toFixed(2);
             // paper_invoice_id أو order_id
             if (orderIdEl) orderIdEl.value = data.order_id || '';
             var piEl = document.getElementById(prefix + 'PaperInvoiceId');
@@ -7661,10 +7689,12 @@ document.addEventListener('DOMContentLoaded', function() {
             formData.append('company_id', document.getElementById('returnModalCompanyId').value);
             formData.append('order_id', orderIdVal);
             formData.append('return_fees', document.getElementById('returnModalReturnFees').value || '0');
+            var rModalTotal = document.getElementById('returnModalTotalAmount').value;
+            if(rModalTotal !== '') formData.append('total_amount', rModalTotal);
             var submitBtn = document.getElementById('returnModalSubmitBtn');
             if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>جاري التسجيل...'; }
             var alertEl = document.getElementById('returnModalAlert');
-            fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: formData })
+            fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: formData, credentials: 'same-origin' })
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = '<i class="bi bi-arrow-return-right me-1"></i>تسجيل المرتجع'; }
@@ -7694,15 +7724,24 @@ document.addEventListener('DOMContentLoaded', function() {
     var registerReturnFormCard = document.getElementById('registerReturnFormCard');
     if (registerReturnFormCard) {
         var returnCardFees = document.getElementById('returnCardReturnFees');
-        if (returnCardFees) {
-            returnCardFees.addEventListener('input', function() { updateReturnSummary('card'); });
+        var returnCardTotal = document.getElementById('returnCardTotalAmount');
+        var returnCardOrderNum = document.getElementById('returnCardOrderNumber');
+        var returnCardBtn = document.getElementById('returnCardSubmitBtn');
+
+        if (returnCardFees) returnCardFees.addEventListener('input', function() { updateReturnSummary('card'); });
+        if (returnCardTotal) returnCardTotal.addEventListener('input', function() { updateReturnSummary('card'); });
+        if (returnCardOrderNum && returnCardBtn) {
+            returnCardOrderNum.addEventListener('input', function() {
+                returnCardBtn.disabled = this.value.trim() === '';
+            });
         }
         registerReturnFormCard.addEventListener('submit', function(e) {
             e.preventDefault();
             var orderIdVal   = document.getElementById('returnCardOrderId').value;
+            var orderNumVal  = document.getElementById('returnCardOrderNumber').value.trim();
             var paperInvVal  = document.getElementById('returnCardPaperInvoiceId') ? document.getElementById('returnCardPaperInvoiceId').value : '';
-            if (!orderIdVal && !paperInvVal) {
-                showShippingToast('يرجى البحث عن الفاتورة أولاً.', 'danger');
+            if (!orderIdVal && !paperInvVal && !orderNumVal) {
+                showShippingToast('يرجى إدخال رقم الطلب أو الفاتورة.', 'danger');
                 return false;
             }
             var formData = new FormData();
@@ -7710,11 +7749,14 @@ document.addEventListener('DOMContentLoaded', function() {
             formData.append('company_id', document.getElementById('returnCardCompanyId').value);
             if (paperInvVal) formData.append('paper_invoice_id', paperInvVal);
             if (orderIdVal)  formData.append('order_id', orderIdVal);
+            if (orderNumVal) formData.append('order_number', orderNumVal);
             formData.append('return_fees', document.getElementById('returnCardReturnFees').value || '0');
+            var rCardTotal = document.getElementById('returnCardTotalAmount').value;
+            if(rCardTotal !== '') formData.append('total_amount', rCardTotal);
             var submitBtn = document.getElementById('returnCardSubmitBtn');
             if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>جاري التسجيل...'; }
             var alertEl = document.getElementById('returnCardAlert');
-            fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: formData })
+            fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: formData, credentials: 'same-origin' })
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     if (submitBtn) { submitBtn.disabled = data.success; submitBtn.innerHTML = '<i class="bi bi-arrow-return-right me-1"></i>تسجيل المرتجع'; }
