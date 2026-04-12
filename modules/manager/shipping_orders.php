@@ -5902,18 +5902,11 @@ function showRegisterReturnByIdName(companyId, companyName, balance) {
         if (!modal) return;
         document.getElementById('returnModalCompanyId').value = companyId;
         document.getElementById('returnModalCompanyName').textContent = companyName || '-';
-        document.getElementById('returnModalOrderId').value = '';
         document.getElementById('returnModalOrderNumber').value = '';
         document.getElementById('returnModalTotalAmount').value = '';
         document.getElementById('returnModalReturnFees').value = '0';
-        var submitBtnEl = document.getElementById('returnModalSubmitBtn');
-        if (submitBtnEl) submitBtnEl.disabled = true;
-        var summaryEl = document.getElementById('returnModalSummary');
-        if (summaryEl) summaryEl.classList.add('d-none');
         var alertEl = document.getElementById('returnModalAlert');
         if (alertEl) { alertEl.className = 'alert d-none'; alertEl.textContent = ''; }
-        var errEl = document.getElementById('returnModalOrderError');
-        if (errEl) { errEl.className = 'text-danger small mt-1 d-none'; errEl.textContent = ''; }
         var modalInstance = new bootstrap.Modal(modal);
         modalInstance.show();
     }
