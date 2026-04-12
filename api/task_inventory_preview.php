@@ -114,6 +114,24 @@ function buildInventoryPreview($db, $notes)
 }
 
 /**
+ * يستخرج اسم النوع من اسم الخامة المركب.
+ * مثال: "عسل خام - سدر (مورد)" → "سدر"
+ *        "جوز - محمد"           → "جوز"
+ *        "جوز #5"               → "جوز"
+ */
+function extractRawType(string $name): string
+{
+    // أزل قوس المورد من النهاية: " (المورد)"
+    $clean = preg_replace('/\s*\([^)]*\)\s*$/', '', $name);
+    // أزل رقم # من النهاية: " #5"
+    $clean = preg_replace('/\s*#\d+\s*$/', '', $clean);
+    $clean = trim($clean);
+    // إذا كان النمط "بادئة - نوع"، خذ الجزء الأخير بعد " - "
+    $parts = explode(' - ', $clean, 2);
+    return trim(end($parts));
+}
+
+/**
  * يبحث عن المنتج بالاسم في: products → packaging_materials → honey_stock (بالنوع) → derivatives/nuts
  * يُرجع: ['source'=>..., 'label'=>..., 'available'=>float|null]
  */
@@ -201,86 +219,219 @@ function findProductInWarehouses($db, $name)
         }
     } catch (Exception $e) { /* skip */ }
 
-    // ====== 3. مخزن الخامات (بحث مبسط بالاسم) ======
+    // ====== 3. مخزن الخامات ======
+    // الأسماء المخزَّنة في الأوردر تأتي بصيغة مركبة مثل: "عسل خام - سدر (المورد)" أو "جوز - محمد"
+    // نستخرج النوع الفعلي بتقطيع الاسم
 
-    // عسل — البحث بالنوع في honey_variety
+    $rawType = extractRawType($name);
+
+    // عسل خام
     try {
         $hCheck = $db->queryOne("SHOW TABLES LIKE 'honey_stock'");
         if (!empty($hCheck)) {
-            // بحث في الخام
-            $row = $db->queryOne(
-                "SELECT COALESCE(SUM(raw_honey_quantity), 0) as total FROM honey_stock WHERE honey_variety = ?",
-                [$name]
-            );
-            if ($row && (float)$row['total'] > 0) {
-                return [
-                    'source'    => 'raw',
-                    'label'     => 'مخزن الخامات (عسل خام)',
-                    'available' => (float)$row['total'],
-                ];
+            // الاسم يبدأ بـ "عسل خام" → نبحث في raw_honey_quantity
+            if (mb_strpos($name, 'عسل خام') !== false) {
+                // نستخرج النوع: "عسل خام - سدر (مورد)" → "سدر"
+                $variety = preg_replace('/^عسل خام\s*-\s*/u', '', $name);
+                $variety = preg_replace('/\s*\([^)]*\)\s*$/u', '', $variety);
+                $variety = trim($variety);
+                $row = $db->queryOne(
+                    "SELECT COALESCE(SUM(raw_honey_quantity), 0) as total FROM honey_stock WHERE TRIM(honey_variety) = ?",
+                    [$variety]
+                );
+                if ($row !== null) {
+                    return ['source' => 'raw', 'label' => 'مخزن الخامات (عسل خام)', 'available' => (float)$row['total']];
+                }
             }
-            // بحث في المصفى
+            // عسل مصفى
+            if (mb_strpos($name, 'عسل مصفى') !== false) {
+                $variety = preg_replace('/^عسل مصفى\s*-\s*/u', '', $name);
+                $variety = preg_replace('/\s*\([^)]*\)\s*$/u', '', $variety);
+                $variety = trim($variety);
+                $row = $db->queryOne(
+                    "SELECT COALESCE(SUM(filtered_honey_quantity), 0) as total FROM honey_stock WHERE TRIM(honey_variety) = ?",
+                    [$variety]
+                );
+                if ($row !== null) {
+                    return ['source' => 'raw', 'label' => 'مخزن الخامات (عسل مصفى)', 'available' => (float)$row['total']];
+                }
+            }
+            // بحث عام بالنوع المستخرج في كلا العمودين
             $row = $db->queryOne(
-                "SELECT COALESCE(SUM(filtered_honey_quantity), 0) as total FROM honey_stock WHERE honey_variety = ?",
-                [$name]
+                "SELECT COALESCE(SUM(raw_honey_quantity), 0) as total FROM honey_stock WHERE TRIM(honey_variety) = ?",
+                [$rawType]
             );
             if ($row && (float)$row['total'] > 0) {
-                return [
-                    'source'    => 'raw',
-                    'label'     => 'مخزن الخامات (عسل مصفى)',
-                    'available' => (float)$row['total'],
-                ];
+                return ['source' => 'raw', 'label' => 'مخزن الخامات (عسل خام)', 'available' => (float)$row['total']];
+            }
+            $row = $db->queryOne(
+                "SELECT COALESCE(SUM(filtered_honey_quantity), 0) as total FROM honey_stock WHERE TRIM(honey_variety) = ?",
+                [$rawType]
+            );
+            if ($row && (float)$row['total'] > 0) {
+                return ['source' => 'raw', 'label' => 'مخزن الخامات (عسل مصفى)', 'available' => (float)$row['total']];
             }
         }
     } catch (Exception $e) { /* skip */ }
 
-    // مشتقات — البحث بالنوع
+    // زيت زيتون
+    try {
+        $oCheck = $db->queryOne("SHOW TABLES LIKE 'olive_oil_stock'");
+        if (!empty($oCheck) && (mb_strpos($name, 'زيت') !== false || mb_strpos($name, 'زيتون') !== false)) {
+            $row = $db->queryOne("SELECT COALESCE(SUM(quantity), 0) as total FROM olive_oil_stock");
+            if ($row && (float)$row['total'] > 0) {
+                return ['source' => 'raw', 'label' => 'مخزن الخامات (زيت زيتون)', 'available' => (float)$row['total']];
+            }
+        }
+    } catch (Exception $e) { /* skip */ }
+
+    // شمع العسل
+    try {
+        $bwCheck = $db->queryOne("SHOW TABLES LIKE 'beeswax_stock'");
+        if (!empty($bwCheck) && mb_strpos($name, 'شمع') !== false) {
+            $row = $db->queryOne("SELECT COALESCE(SUM(weight), 0) as total FROM beeswax_stock");
+            if ($row && (float)$row['total'] > 0) {
+                return ['source' => 'raw', 'label' => 'مخزن الخامات (شمع العسل)', 'available' => (float)$row['total']];
+            }
+        }
+    } catch (Exception $e) { /* skip */ }
+
+    // مكسرات — مطابقة بالنوع المستخرج
+    try {
+        $nCheck = $db->queryOne("SHOW TABLES LIKE 'nuts_stock'");
+        if (!empty($nCheck)) {
+            // مطابقة تامة أولاً بالاسم الكامل
+            $row = $db->queryOne(
+                "SELECT COALESCE(SUM(quantity), 0) as total FROM nuts_stock WHERE TRIM(nut_type) = ?",
+                [$name]
+            );
+            if (!$row || (float)$row['total'] == 0) {
+                // مطابقة بالنوع المستخرج
+                $row = $db->queryOne(
+                    "SELECT COALESCE(SUM(quantity), 0) as total FROM nuts_stock WHERE TRIM(nut_type) = ?",
+                    [$rawType]
+                );
+            }
+            if ($row && (float)$row['total'] > 0) {
+                return ['source' => 'raw', 'label' => 'مخزن الخامات (مكسرات)', 'available' => (float)$row['total']];
+            }
+        }
+    } catch (Exception $e) { /* skip */ }
+
+    // خلطات مكسرات
+    try {
+        $mnCheck = $db->queryOne("SHOW TABLES LIKE 'mixed_nuts'");
+        if (!empty($mnCheck) && mb_strpos($name, 'خلطة') !== false) {
+            $row = $db->queryOne("SELECT COALESCE(SUM(total_quantity), 0) as total FROM mixed_nuts");
+            if ($row && (float)$row['total'] > 0) {
+                return ['source' => 'raw', 'label' => 'مخزن الخامات (خلطة مكسرات)', 'available' => (float)$row['total']];
+            }
+        }
+    } catch (Exception $e) { /* skip */ }
+
+    // سمسم
+    try {
+        $ssCheck = $db->queryOne("SHOW TABLES LIKE 'sesame_stock'");
+        if (!empty($ssCheck) && mb_strpos($name, 'سمسم') !== false) {
+            $row = $db->queryOne("SELECT COALESCE(SUM(quantity), 0) as total FROM sesame_stock");
+            if ($row && (float)$row['total'] > 0) {
+                return ['source' => 'raw', 'label' => 'مخزن الخامات (سمسم)', 'available' => (float)$row['total']];
+            }
+        }
+    } catch (Exception $e) { /* skip */ }
+
+    // طحينة
+    try {
+        $thCheck = $db->queryOne("SHOW TABLES LIKE 'tahini_stock'");
+        if (!empty($thCheck) && mb_strpos($name, 'طحينة') !== false) {
+            $row = $db->queryOne("SELECT COALESCE(SUM(quantity), 0) as total FROM tahini_stock");
+            if ($row && (float)$row['total'] > 0) {
+                return ['source' => 'raw', 'label' => 'مخزن الخامات (طحينة)', 'available' => (float)$row['total']];
+            }
+        }
+    } catch (Exception $e) { /* skip */ }
+
+    // بلح
+    try {
+        $dtCheck = $db->queryOne("SHOW TABLES LIKE 'date_stock'");
+        if (!empty($dtCheck)) {
+            $row = $db->queryOne(
+                "SELECT COALESCE(SUM(quantity), 0) as total FROM date_stock WHERE TRIM(date_type) = ?",
+                [$name]
+            );
+            if (!$row || (float)$row['total'] == 0) {
+                $row = $db->queryOne(
+                    "SELECT COALESCE(SUM(quantity), 0) as total FROM date_stock WHERE TRIM(date_type) = ?",
+                    [$rawType]
+                );
+            }
+            if ($row && (float)$row['total'] > 0) {
+                return ['source' => 'raw', 'label' => 'مخزن الخامات (بلح)', 'available' => (float)$row['total']];
+            }
+        }
+    } catch (Exception $e) { /* skip */ }
+
+    // تلبينات
+    try {
+        $turbTable = !empty($db->queryOne("SHOW TABLES LIKE 'turbines_stock'")) ? 'turbines_stock'
+                   : (!empty($db->queryOne("SHOW TABLES LIKE 'turbine_stock'")) ? 'turbine_stock' : '');
+        if ($turbTable !== '') {
+            $typeCol = !empty($db->queryOne("SHOW COLUMNS FROM `{$turbTable}` LIKE 'turbine_type'")) ? 'turbine_type' : 'type';
+            $hasQty  = !empty($db->queryOne("SHOW COLUMNS FROM `{$turbTable}` LIKE 'quantity'"));
+            if ($hasQty) {
+                $row = $db->queryOne(
+                    "SELECT COALESCE(SUM(quantity), 0) as total FROM `{$turbTable}` WHERE TRIM(`{$typeCol}`) = ?",
+                    [$name]
+                );
+                if (!$row || (float)$row['total'] == 0) {
+                    $row = $db->queryOne(
+                        "SELECT COALESCE(SUM(quantity), 0) as total FROM `{$turbTable}` WHERE TRIM(`{$typeCol}`) = ?",
+                        [$rawType]
+                    );
+                }
+                if ($row && (float)$row['total'] > 0) {
+                    return ['source' => 'raw', 'label' => 'مخزن الخامات (تلبينات)', 'available' => (float)$row['total']];
+                }
+            }
+        }
+    } catch (Exception $e) { /* skip */ }
+
+    // عطارة / أعشاب
+    try {
+        $hbCheck = $db->queryOne("SHOW TABLES LIKE 'herbal_stock'");
+        if (!empty($hbCheck)) {
+            $row = $db->queryOne(
+                "SELECT COALESCE(SUM(quantity), 0) as total FROM herbal_stock WHERE TRIM(herbal_type) = ?",
+                [$name]
+            );
+            if (!$row || (float)$row['total'] == 0) {
+                $row = $db->queryOne(
+                    "SELECT COALESCE(SUM(quantity), 0) as total FROM herbal_stock WHERE TRIM(herbal_type) = ?",
+                    [$rawType]
+                );
+            }
+            if ($row && (float)$row['total'] > 0) {
+                return ['source' => 'raw', 'label' => 'مخزن الخامات (عطارة)', 'available' => (float)$row['total']];
+            }
+        }
+    } catch (Exception $e) { /* skip */ }
+
+    // مشتقات
     try {
         $dCheck = $db->queryOne("SHOW TABLES LIKE 'derivatives_stock'");
         if (!empty($dCheck)) {
             $row = $db->queryOne(
-                "SELECT COALESCE(SUM(weight), 0) as total FROM derivatives_stock WHERE derivative_type = ?",
+                "SELECT COALESCE(SUM(weight), 0) as total FROM derivatives_stock WHERE TRIM(derivative_type) = ?",
                 [$name]
             );
-            if ($row && (float)$row['total'] > 0) {
-                return [
-                    'source'    => 'raw',
-                    'label'     => 'مخزن الخامات (مشتقات)',
-                    'available' => (float)$row['total'],
-                ];
+            if (!$row || (float)$row['total'] == 0) {
+                $row = $db->queryOne(
+                    "SELECT COALESCE(SUM(weight), 0) as total FROM derivatives_stock WHERE TRIM(derivative_type) = ?",
+                    [$rawType]
+                );
             }
-        }
-    } catch (Exception $e) { /* skip */ }
-
-    // مكسرات — البحث بالنوع
-    try {
-        $nCheck = $db->queryOne("SHOW TABLES LIKE 'nuts_stock'");
-        if (!empty($nCheck)) {
-            $row = $db->queryOne(
-                "SELECT COALESCE(SUM(quantity), 0) as total FROM nuts_stock WHERE nut_type = ?",
-                [$name]
-            );
             if ($row && (float)$row['total'] > 0) {
-                return [
-                    'source'    => 'raw',
-                    'label'     => 'مخزن الخامات (مكسرات)',
-                    'available' => (float)$row['total'],
-                ];
-            }
-        }
-    } catch (Exception $e) { /* skip */ }
-
-    // زيت زيتون (جدول واحد فقط)
-    try {
-        $oCheck = $db->queryOne("SHOW TABLES LIKE 'olive_oil_stock'");
-        if (!empty($oCheck) && (stripos($name, 'زيت') !== false || stripos($name, 'زيتون') !== false)) {
-            $row = $db->queryOne("SELECT COALESCE(SUM(quantity), 0) as total FROM olive_oil_stock");
-            if ($row && (float)$row['total'] > 0) {
-                return [
-                    'source'    => 'raw',
-                    'label'     => 'مخزن الخامات (زيت زيتون)',
-                    'available' => (float)$row['total'],
-                ];
+                return ['source' => 'raw', 'label' => 'مخزن الخامات (مشتقات)', 'available' => (float)$row['total']];
             }
         }
     } catch (Exception $e) { /* skip */ }

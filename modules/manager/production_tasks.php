@@ -825,18 +825,47 @@ function deductTaskProductsFromStock($db, $notes)
             error_log('deductTaskProductsFromStock packaging error (' . $name . '): ' . $e->getMessage());
         }
 
-        // ====== 3. مخزن الخامات — بحث بالاسم/النوع ======
+        // ====== 3. مخزن الخامات — بحث بالاسم المركب والنوع المستخرج ======
+        // الأسماء تأتي بصيغة: "عسل خام - سدر (مورد)" أو "جوز - محمد" — نستخرج النوع الفعلي
+        $rawNameClean = preg_replace('/\s*\([^)]*\)\s*$/u', '', $name); // أزل قوس المورد
+        $rawNameClean = preg_replace('/\s*#\d+\s*$/u', '', $rawNameClean); // أزل رقم #
+        $rawNameClean = trim($rawNameClean);
+        $rawTypeParts = explode(' - ', $rawNameClean, 2);
+        $rawType = trim(end($rawTypeParts)); // الجزء الأخير بعد " - "
+
+        // عسل خام
         try {
             $hCheck = $db->queryOne("SHOW TABLES LIKE 'honey_stock'");
             if (!empty($hCheck)) {
-                $tot = $db->queryOne("SELECT COALESCE(SUM(raw_honey_quantity),0) as t FROM honey_stock WHERE honey_variety = ?", [$name]);
+                // استخراج النوع من "عسل خام - سدر"
+                if (mb_strpos($name, 'عسل خام') !== false) {
+                    $variety = preg_replace('/^عسل خام\s*-\s*/u', '', $rawNameClean);
+                    $variety = trim($variety);
+                    $tot = $db->queryOne("SELECT COALESCE(SUM(raw_honey_quantity),0) as t FROM honey_stock WHERE TRIM(honey_variety) = ?", [$variety]);
+                    if ($tot && (float)$tot['t'] > 0) {
+                        _deductFromRowsWaterfall($db, "SELECT id, raw_honey_quantity as qty FROM honey_stock WHERE TRIM(honey_variety) = ? AND raw_honey_quantity > 0 ORDER BY raw_honey_quantity DESC", [$variety], "UPDATE honey_stock SET raw_honey_quantity = raw_honey_quantity - ? WHERE id = ?", $effectiveQty);
+                        continue;
+                    }
+                }
+                // عسل مصفى
+                if (mb_strpos($name, 'عسل مصفى') !== false) {
+                    $variety = preg_replace('/^عسل مصفى\s*-\s*/u', '', $rawNameClean);
+                    $variety = trim($variety);
+                    $tot = $db->queryOne("SELECT COALESCE(SUM(filtered_honey_quantity),0) as t FROM honey_stock WHERE TRIM(honey_variety) = ?", [$variety]);
+                    if ($tot && (float)$tot['t'] > 0) {
+                        _deductFromRowsWaterfall($db, "SELECT id, filtered_honey_quantity as qty FROM honey_stock WHERE TRIM(honey_variety) = ? AND filtered_honey_quantity > 0 ORDER BY filtered_honey_quantity DESC", [$variety], "UPDATE honey_stock SET filtered_honey_quantity = filtered_honey_quantity - ? WHERE id = ?", $effectiveQty);
+                        continue;
+                    }
+                }
+                // بحث عام بالنوع المستخرج
+                $tot = $db->queryOne("SELECT COALESCE(SUM(raw_honey_quantity),0) as t FROM honey_stock WHERE TRIM(honey_variety) = ?", [$rawType]);
                 if ($tot && (float)$tot['t'] > 0) {
-                    _deductFromRowsWaterfall($db, "SELECT id, raw_honey_quantity as qty FROM honey_stock WHERE honey_variety = ? AND raw_honey_quantity > 0 ORDER BY raw_honey_quantity DESC", [$name], "UPDATE honey_stock SET raw_honey_quantity = raw_honey_quantity - ? WHERE id = ?", $effectiveQty);
+                    _deductFromRowsWaterfall($db, "SELECT id, raw_honey_quantity as qty FROM honey_stock WHERE TRIM(honey_variety) = ? AND raw_honey_quantity > 0 ORDER BY raw_honey_quantity DESC", [$rawType], "UPDATE honey_stock SET raw_honey_quantity = raw_honey_quantity - ? WHERE id = ?", $effectiveQty);
                     continue;
                 }
-                $tot = $db->queryOne("SELECT COALESCE(SUM(filtered_honey_quantity),0) as t FROM honey_stock WHERE honey_variety = ?", [$name]);
+                $tot = $db->queryOne("SELECT COALESCE(SUM(filtered_honey_quantity),0) as t FROM honey_stock WHERE TRIM(honey_variety) = ?", [$rawType]);
                 if ($tot && (float)$tot['t'] > 0) {
-                    _deductFromRowsWaterfall($db, "SELECT id, filtered_honey_quantity as qty FROM honey_stock WHERE honey_variety = ? AND filtered_honey_quantity > 0 ORDER BY filtered_honey_quantity DESC", [$name], "UPDATE honey_stock SET filtered_honey_quantity = filtered_honey_quantity - ? WHERE id = ?", $effectiveQty);
+                    _deductFromRowsWaterfall($db, "SELECT id, filtered_honey_quantity as qty FROM honey_stock WHERE TRIM(honey_variety) = ? AND filtered_honey_quantity > 0 ORDER BY filtered_honey_quantity DESC", [$rawType], "UPDATE honey_stock SET filtered_honey_quantity = filtered_honey_quantity - ? WHERE id = ?", $effectiveQty);
                     continue;
                 }
             }
@@ -844,35 +873,10 @@ function deductTaskProductsFromStock($db, $notes)
             error_log('deductTaskProductsFromStock honey error (' . $name . '): ' . $e->getMessage());
         }
 
-        try {
-            $dCheck = $db->queryOne("SHOW TABLES LIKE 'derivatives_stock'");
-            if (!empty($dCheck)) {
-                $tot = $db->queryOne("SELECT COALESCE(SUM(weight),0) as t FROM derivatives_stock WHERE derivative_type = ?", [$name]);
-                if ($tot && (float)$tot['t'] > 0) {
-                    _deductFromRowsWaterfall($db, "SELECT id, weight as qty FROM derivatives_stock WHERE derivative_type = ? AND weight > 0 ORDER BY weight DESC", [$name], "UPDATE derivatives_stock SET weight = weight - ? WHERE id = ?", $effectiveQty);
-                    continue;
-                }
-            }
-        } catch (Exception $e) {
-            error_log('deductTaskProductsFromStock derivatives error (' . $name . '): ' . $e->getMessage());
-        }
-
-        try {
-            $nCheck = $db->queryOne("SHOW TABLES LIKE 'nuts_stock'");
-            if (!empty($nCheck)) {
-                $tot = $db->queryOne("SELECT COALESCE(SUM(quantity),0) as t FROM nuts_stock WHERE nut_type = ?", [$name]);
-                if ($tot && (float)$tot['t'] > 0) {
-                    _deductFromRowsWaterfall($db, "SELECT id, quantity as qty FROM nuts_stock WHERE nut_type = ? AND quantity > 0 ORDER BY quantity DESC", [$name], "UPDATE nuts_stock SET quantity = quantity - ? WHERE id = ?", $effectiveQty);
-                    continue;
-                }
-            }
-        } catch (Exception $e) {
-            error_log('deductTaskProductsFromStock nuts error (' . $name . '): ' . $e->getMessage());
-        }
-
+        // زيت زيتون
         try {
             $oCheck = $db->queryOne("SHOW TABLES LIKE 'olive_oil_stock'");
-            if (!empty($oCheck) && (stripos($name, 'زيت') !== false || stripos($name, 'زيتون') !== false)) {
+            if (!empty($oCheck) && (mb_strpos($name, 'زيت') !== false || mb_strpos($name, 'زيتون') !== false)) {
                 $tot = $db->queryOne("SELECT COALESCE(SUM(quantity),0) as t FROM olive_oil_stock");
                 if ($tot && (float)$tot['t'] > 0) {
                     _deductFromRowsWaterfall($db, "SELECT id, quantity as qty FROM olive_oil_stock WHERE quantity > 0 ORDER BY quantity DESC", [], "UPDATE olive_oil_stock SET quantity = quantity - ? WHERE id = ?", $effectiveQty);
@@ -881,6 +885,157 @@ function deductTaskProductsFromStock($db, $notes)
             }
         } catch (Exception $e) {
             error_log('deductTaskProductsFromStock olive_oil error (' . $name . '): ' . $e->getMessage());
+        }
+
+        // شمع العسل
+        try {
+            $bwCheck = $db->queryOne("SHOW TABLES LIKE 'beeswax_stock'");
+            if (!empty($bwCheck) && mb_strpos($name, 'شمع') !== false) {
+                $tot = $db->queryOne("SELECT COALESCE(SUM(weight),0) as t FROM beeswax_stock");
+                if ($tot && (float)$tot['t'] > 0) {
+                    _deductFromRowsWaterfall($db, "SELECT id, weight as qty FROM beeswax_stock WHERE weight > 0 ORDER BY weight DESC", [], "UPDATE beeswax_stock SET weight = weight - ? WHERE id = ?", $effectiveQty);
+                    continue;
+                }
+            }
+        } catch (Exception $e) {
+            error_log('deductTaskProductsFromStock beeswax error (' . $name . '): ' . $e->getMessage());
+        }
+
+        // مكسرات (مطابقة بالاسم الكامل ثم بالنوع المستخرج)
+        try {
+            $nCheck = $db->queryOne("SHOW TABLES LIKE 'nuts_stock'");
+            if (!empty($nCheck)) {
+                $tot = $db->queryOne("SELECT COALESCE(SUM(quantity),0) as t FROM nuts_stock WHERE TRIM(nut_type) = ?", [$name]);
+                if (!$tot || (float)$tot['t'] == 0) {
+                    $tot = $db->queryOne("SELECT COALESCE(SUM(quantity),0) as t FROM nuts_stock WHERE TRIM(nut_type) = ?", [$rawType]);
+                }
+                if ($tot && (float)$tot['t'] > 0) {
+                    $searchType = (float)$db->queryOne("SELECT COALESCE(SUM(quantity),0) as t FROM nuts_stock WHERE TRIM(nut_type) = ?", [$name])['t'] > 0 ? $name : $rawType;
+                    _deductFromRowsWaterfall($db, "SELECT id, quantity as qty FROM nuts_stock WHERE TRIM(nut_type) = ? AND quantity > 0 ORDER BY quantity DESC", [$searchType], "UPDATE nuts_stock SET quantity = quantity - ? WHERE id = ?", $effectiveQty);
+                    continue;
+                }
+            }
+        } catch (Exception $e) {
+            error_log('deductTaskProductsFromStock nuts error (' . $name . '): ' . $e->getMessage());
+        }
+
+        // خلطة مكسرات
+        try {
+            $mnCheck = $db->queryOne("SHOW TABLES LIKE 'mixed_nuts'");
+            if (!empty($mnCheck) && mb_strpos($name, 'خلطة') !== false) {
+                $tot = $db->queryOne("SELECT COALESCE(SUM(total_quantity),0) as t FROM mixed_nuts");
+                if ($tot && (float)$tot['t'] > 0) {
+                    _deductFromRowsWaterfall($db, "SELECT id, total_quantity as qty FROM mixed_nuts WHERE total_quantity > 0 ORDER BY total_quantity DESC", [], "UPDATE mixed_nuts SET total_quantity = total_quantity - ? WHERE id = ?", $effectiveQty);
+                    continue;
+                }
+            }
+        } catch (Exception $e) {
+            error_log('deductTaskProductsFromStock mixed_nuts error (' . $name . '): ' . $e->getMessage());
+        }
+
+        // سمسم
+        try {
+            $ssCheck = $db->queryOne("SHOW TABLES LIKE 'sesame_stock'");
+            if (!empty($ssCheck) && mb_strpos($name, 'سمسم') !== false) {
+                $tot = $db->queryOne("SELECT COALESCE(SUM(quantity),0) as t FROM sesame_stock");
+                if ($tot && (float)$tot['t'] > 0) {
+                    _deductFromRowsWaterfall($db, "SELECT id, quantity as qty FROM sesame_stock WHERE quantity > 0 ORDER BY quantity DESC", [], "UPDATE sesame_stock SET quantity = quantity - ? WHERE id = ?", $effectiveQty);
+                    continue;
+                }
+            }
+        } catch (Exception $e) {
+            error_log('deductTaskProductsFromStock sesame error (' . $name . '): ' . $e->getMessage());
+        }
+
+        // طحينة
+        try {
+            $thCheck = $db->queryOne("SHOW TABLES LIKE 'tahini_stock'");
+            if (!empty($thCheck) && mb_strpos($name, 'طحينة') !== false) {
+                $tot = $db->queryOne("SELECT COALESCE(SUM(quantity),0) as t FROM tahini_stock");
+                if ($tot && (float)$tot['t'] > 0) {
+                    _deductFromRowsWaterfall($db, "SELECT id, quantity as qty FROM tahini_stock WHERE quantity > 0 ORDER BY quantity DESC", [], "UPDATE tahini_stock SET quantity = quantity - ? WHERE id = ?", $effectiveQty);
+                    continue;
+                }
+            }
+        } catch (Exception $e) {
+            error_log('deductTaskProductsFromStock tahini error (' . $name . '): ' . $e->getMessage());
+        }
+
+        // بلح
+        try {
+            $dtCheck = $db->queryOne("SHOW TABLES LIKE 'date_stock'");
+            if (!empty($dtCheck)) {
+                $tot = $db->queryOne("SELECT COALESCE(SUM(quantity),0) as t FROM date_stock WHERE TRIM(date_type) = ?", [$name]);
+                if (!$tot || (float)$tot['t'] == 0) {
+                    $tot = $db->queryOne("SELECT COALESCE(SUM(quantity),0) as t FROM date_stock WHERE TRIM(date_type) = ?", [$rawType]);
+                }
+                if ($tot && (float)$tot['t'] > 0) {
+                    $dtSearch = (float)$db->queryOne("SELECT COALESCE(SUM(quantity),0) as t FROM date_stock WHERE TRIM(date_type) = ?", [$name])['t'] > 0 ? $name : $rawType;
+                    _deductFromRowsWaterfall($db, "SELECT id, quantity as qty FROM date_stock WHERE TRIM(date_type) = ? AND quantity > 0 ORDER BY quantity DESC", [$dtSearch], "UPDATE date_stock SET quantity = quantity - ? WHERE id = ?", $effectiveQty);
+                    continue;
+                }
+            }
+        } catch (Exception $e) {
+            error_log('deductTaskProductsFromStock date error (' . $name . '): ' . $e->getMessage());
+        }
+
+        // تلبينات
+        try {
+            $turbTable = !empty($db->queryOne("SHOW TABLES LIKE 'turbines_stock'")) ? 'turbines_stock'
+                       : (!empty($db->queryOne("SHOW TABLES LIKE 'turbine_stock'")) ? 'turbine_stock' : '');
+            if ($turbTable !== '') {
+                $typeCol = !empty($db->queryOne("SHOW COLUMNS FROM `{$turbTable}` LIKE 'turbine_type'")) ? 'turbine_type' : 'type';
+                $hasQty  = !empty($db->queryOne("SHOW COLUMNS FROM `{$turbTable}` LIKE 'quantity'"));
+                if ($hasQty) {
+                    $tot = $db->queryOne("SELECT COALESCE(SUM(quantity),0) as t FROM `{$turbTable}` WHERE TRIM(`{$typeCol}`) = ?", [$name]);
+                    if (!$tot || (float)$tot['t'] == 0) {
+                        $tot = $db->queryOne("SELECT COALESCE(SUM(quantity),0) as t FROM `{$turbTable}` WHERE TRIM(`{$typeCol}`) = ?", [$rawType]);
+                    }
+                    if ($tot && (float)$tot['t'] > 0) {
+                        $tSearch = (float)$db->queryOne("SELECT COALESCE(SUM(quantity),0) as t FROM `{$turbTable}` WHERE TRIM(`{$typeCol}`) = ?", [$name])['t'] > 0 ? $name : $rawType;
+                        _deductFromRowsWaterfall($db, "SELECT id, quantity as qty FROM `{$turbTable}` WHERE TRIM(`{$typeCol}`) = ? AND quantity > 0 ORDER BY quantity DESC", [$tSearch], "UPDATE `{$turbTable}` SET quantity = quantity - ? WHERE id = ?", $effectiveQty);
+                        continue;
+                    }
+                }
+            }
+        } catch (Exception $e) {
+            error_log('deductTaskProductsFromStock turbine error (' . $name . '): ' . $e->getMessage());
+        }
+
+        // عطارة / أعشاب
+        try {
+            $hbCheck = $db->queryOne("SHOW TABLES LIKE 'herbal_stock'");
+            if (!empty($hbCheck)) {
+                $tot = $db->queryOne("SELECT COALESCE(SUM(quantity),0) as t FROM herbal_stock WHERE TRIM(herbal_type) = ?", [$name]);
+                if (!$tot || (float)$tot['t'] == 0) {
+                    $tot = $db->queryOne("SELECT COALESCE(SUM(quantity),0) as t FROM herbal_stock WHERE TRIM(herbal_type) = ?", [$rawType]);
+                }
+                if ($tot && (float)$tot['t'] > 0) {
+                    $hbSearch = (float)$db->queryOne("SELECT COALESCE(SUM(quantity),0) as t FROM herbal_stock WHERE TRIM(herbal_type) = ?", [$name])['t'] > 0 ? $name : $rawType;
+                    _deductFromRowsWaterfall($db, "SELECT id, quantity as qty FROM herbal_stock WHERE TRIM(herbal_type) = ? AND quantity > 0 ORDER BY quantity DESC", [$hbSearch], "UPDATE herbal_stock SET quantity = quantity - ? WHERE id = ?", $effectiveQty);
+                    continue;
+                }
+            }
+        } catch (Exception $e) {
+            error_log('deductTaskProductsFromStock herbal error (' . $name . '): ' . $e->getMessage());
+        }
+
+        // مشتقات
+        try {
+            $dCheck = $db->queryOne("SHOW TABLES LIKE 'derivatives_stock'");
+            if (!empty($dCheck)) {
+                $tot = $db->queryOne("SELECT COALESCE(SUM(weight),0) as t FROM derivatives_stock WHERE TRIM(derivative_type) = ?", [$name]);
+                if (!$tot || (float)$tot['t'] == 0) {
+                    $tot = $db->queryOne("SELECT COALESCE(SUM(weight),0) as t FROM derivatives_stock WHERE TRIM(derivative_type) = ?", [$rawType]);
+                }
+                if ($tot && (float)$tot['t'] > 0) {
+                    $dvSearch = (float)$db->queryOne("SELECT COALESCE(SUM(weight),0) as t FROM derivatives_stock WHERE TRIM(derivative_type) = ?", [$name])['t'] > 0 ? $name : $rawType;
+                    _deductFromRowsWaterfall($db, "SELECT id, weight as qty FROM derivatives_stock WHERE TRIM(derivative_type) = ? AND weight > 0 ORDER BY weight DESC", [$dvSearch], "UPDATE derivatives_stock SET weight = weight - ? WHERE id = ?", $effectiveQty);
+                    continue;
+                }
+            }
+        } catch (Exception $e) {
+            error_log('deductTaskProductsFromStock derivatives error (' . $name . '): ' . $e->getMessage());
         }
 
         error_log('deductTaskProductsFromStock: المنتج «' . $name . '» غير موجود في أي مخزن');
@@ -2907,13 +3062,13 @@ if (!empty($_GET['collection_info'])) {
  * المحاسب والمدير يرون جميع المهام التي أنشأها أي منهما
  */
 
-// جلب معرفات المديرين والمحاسبين مرة واحدة فقط (تُستخدم لاحقاً في الإحصائيات والقائمة)
+// جلب معرفات المديرين والمحاسبين ومندوبي المبيعات مرة واحدة فقط (تُستخدم لاحقاً في الإحصائيات والقائمة)
 $adminIds = [];
 $adminPlaceholders = '';
 if ($isAccountant || $isManager) {
     $adminUsers = $db->query("
         SELECT id FROM users
-        WHERE role IN ('manager', 'accountant') AND status = 'active'
+        WHERE role IN ('manager', 'accountant', 'sales') AND status = 'active'
     ");
     $adminIds = array_map(function($user) {
         return (int)$user['id'];
