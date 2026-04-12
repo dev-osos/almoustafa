@@ -4613,6 +4613,7 @@ function copyShippingCollectionResult(btn) {
                         <th class="text-nowrap text-end">الصافي</th>
                         <th class="text-nowrap text-end">رسوم الارجاع</th>
                     </tr>
+                    
                 </thead>
                 <tbody id="tgShipmentsBody">
                     <tr><td colspan="9" class="text-center text-muted py-4">
