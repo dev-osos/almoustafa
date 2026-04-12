@@ -5267,7 +5267,7 @@ function copyShippingCollectionResult(btn) {
     </div>
 </div>
 
-<!-- Modal تسجيل مرتجع شركة الشحن -->
+<!-- Modal تسجيل مرتجع شركة الشحن --> 
 <div class="modal fade" id="registerReturnModal" tabindex="-1" aria-labelledby="registerReturnModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
