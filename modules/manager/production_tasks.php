@@ -8276,7 +8276,6 @@ function ensureApproveInvoiceCardExists() {
         '<div id="approveInvoiceCardShippingBlock" class="approve-invoice-block" style="display:none;">' +
         '<p class="text-muted small mb-3">يُضاف الأوردر إلى <strong>سجل الفواتير الورقية لشركة الشحن</strong>. المبلغ الذي يُضاف لديون الشركة هو صافي سعر الطرد (أدناه).</p>' +
         '<div class="mb-3"><label class="form-label fw-bold">شركة الشحن</label><select class="form-select" name="shipping_company_id" id="approveInvoiceCardShippingCompanyId"><option value="">— اختر الشركة —</option>' + opts + '</select></div>' +
-        '<div class="mb-3"><label class="form-label fw-bold">صافي سعر الطرد (ج.م)</label><input type="number" step="0.01" class="form-control" name="net_parcel_price" id="approveInvoiceCardNetParcelPrice" placeholder="موجب أو سالب">' +
         '<small class="form-text text-muted">هذا المبلغ يُضاف لديون شركة الشحن (سالب = يقلل الديون)</small></div>' +
         '</div>' +
         '<!-- ملخص خصم المخزون -->' +
