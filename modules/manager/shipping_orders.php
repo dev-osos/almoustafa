@@ -2295,6 +2295,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $paperInvId    = isset($_POST['paper_invoice_id']) ? (int)$_POST['paper_invoice_id'] : 0;
         $companyId     = isset($_POST['company_id']) ? (int)$_POST['company_id'] : 0;
         $returnFees    = isset($_POST['return_fees']) ? cleanFinancialValue($_POST['return_fees'], true) : 0;
+        $postedTotal   = (isset($_POST['total_amount']) && trim((string)$_POST['total_amount']) !== '') ? cleanFinancialValue($_POST['total_amount'], true) : null;
         $transactionStarted = false;
 
         try {
@@ -2322,7 +2323,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 );
                 if (!$returnCompany) throw new InvalidArgumentException('شركة الشحن غير موجودة.');
 
-                $orderTotal     = (float)$paperInv['total_amount'];
+                $orderTotal     = $postedTotal !== null ? $postedTotal : (float)$paperInv['total_amount'];
                 $returnFees     = (float)($returnFees ?? 0);
                 $totalDeduction = $orderTotal + $returnFees;
                 $currentBalance = (float)($returnCompany['balance'] ?? 0);
@@ -2398,7 +2399,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 );
                 if (!$returnCompany) throw new InvalidArgumentException('شركة الشحن غير موجودة.');
 
-                $orderTotal     = (float)$returnOrder['total_amount'];
+                $orderTotal     = $postedTotal !== null ? $postedTotal : (float)$returnOrder['total_amount'];
                 $returnFees     = (float)($returnFees ?? 0);
                 $totalDeduction = $orderTotal + $returnFees;
                 $currentBalance = (float)($returnCompany['balance'] ?? 0);
@@ -7676,6 +7677,8 @@ document.addEventListener('DOMContentLoaded', function() {
             formData.append('company_id', document.getElementById('returnModalCompanyId').value);
             formData.append('order_id', orderIdVal);
             formData.append('return_fees', document.getElementById('returnModalReturnFees').value || '0');
+            var rModalTotal = document.getElementById('returnModalTotalAmount').value;
+            if(rModalTotal !== '') formData.append('total_amount', rModalTotal);
             var submitBtn = document.getElementById('returnModalSubmitBtn');
             if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>جاري التسجيل...'; }
             var alertEl = document.getElementById('returnModalAlert');
@@ -7726,6 +7729,8 @@ document.addEventListener('DOMContentLoaded', function() {
             if (paperInvVal) formData.append('paper_invoice_id', paperInvVal);
             if (orderIdVal)  formData.append('order_id', orderIdVal);
             formData.append('return_fees', document.getElementById('returnCardReturnFees').value || '0');
+            var rCardTotal = document.getElementById('returnCardTotalAmount').value;
+            if(rCardTotal !== '') formData.append('total_amount', rCardTotal);
             var submitBtn = document.getElementById('returnCardSubmitBtn');
             if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>جاري التسجيل...'; }
             var alertEl = document.getElementById('returnCardAlert');
