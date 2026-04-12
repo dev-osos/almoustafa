@@ -4674,7 +4674,13 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
         </div>
         <div class="card-body p-0">
             <!-- بحث وفلترة جدول آخر المهام -->
-            <div class="p-3 border-bottom bg-light">
+            <div class="border-bottom">
+                <div class="d-flex justify-content-between align-items-center px-3 py-2 bg-light" style="cursor:pointer;" id="tasksFilterToggle">
+                    <span class="small fw-semibold"><i class="bi bi-funnel-fill me-1 text-primary"></i>بحث وفلترة</span>
+                    <i class="bi bi-chevron-up" id="tasksFilterChevron"></i>
+                </div>
+                <div class="collapse" id="tasksFilterCollapse">
+                <div class="p-3 bg-light">
                 <form method="get" action="" id="recentTasksFilterForm" class="recent-tasks-filter-form" data-no-loading="true">
                     <input type="hidden" name="page" value="production_tasks">
                     <?php if ($statusFilter !== ''): ?>
@@ -4729,7 +4735,36 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                         </div>
                     </div>
                 </form>
+                </div>
+                </div>
             </div>
+            <script>
+            (function() {
+                var toggle = document.getElementById('tasksFilterToggle');
+                var collapse = document.getElementById('tasksFilterCollapse');
+                var chevron = document.getElementById('tasksFilterChevron');
+                var key = 'pt_filter_collapsed';
+                var isCollapsed = localStorage.getItem(key) === '1';
+                if (!isCollapsed) {
+                    collapse.classList.add('show');
+                    chevron.style.transform = 'rotate(0deg)';
+                } else {
+                    chevron.style.transform = 'rotate(180deg)';
+                }
+                toggle.addEventListener('click', function() {
+                    var showing = collapse.classList.contains('show');
+                    if (showing) {
+                        collapse.classList.remove('show');
+                        chevron.style.transform = 'rotate(180deg)';
+                        localStorage.setItem(key, '1');
+                    } else {
+                        collapse.classList.add('show');
+                        chevron.style.transform = 'rotate(0deg)';
+                        localStorage.setItem(key, '0');
+                    }
+                });
+            })();
+            </script>
             <div class="table-responsive dashboard-table-wrapper">
                 <table class="table dashboard-table dashboard-table--no-hover align-middle mb-0">
                     <thead class="table-light">
