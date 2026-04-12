@@ -5730,6 +5730,15 @@ label[for="ct_task_manual"], .form-check:has(#ct_task_manual) { display: none !i
 
 #statusFilterCards .card {
     border-radius: 0.375rem !important;
+    aspect-ratio: 1 / 1 !important;
+}
+
+#statusFilterCards .card-body {
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    align-items: center !important;
+    height: 100% !important;
 }
 
 /* Smooth card header styling */
