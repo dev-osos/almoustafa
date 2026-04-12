@@ -983,7 +983,6 @@ switch ($role) {
 
     case 'telegraph':
         $menuItems = [
-            ['divider' => true, 'title' => 'القائمة'],
             [
                 'title' => 'تسجيل الأوردرات',
                 'icon' => 'bi-list-task',
@@ -992,7 +991,7 @@ switch ($role) {
                 'badge' => null
             ],
             [
-                'title' => 'طلبات الشحن',
+                'title' => 'متابعة طلبات الشحن',
                 'icon' => 'bi-truck',
                 'url' => $baseUrl . 'telegraph.php?page=shipping_orders',
                 'active' => ($currentPage === 'telegraph.php' && $currentPageParam === 'shipping_orders'),

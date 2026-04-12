@@ -3097,7 +3097,15 @@ $statsTemplate = [
 
 $stats = $statsTemplate;
 try {
-    if ($isAccountant || $isManager) {
+    if ($isTelegraph) {
+        $counts = $db->query("
+            SELECT status, COUNT(*) as total
+            FROM tasks
+            WHERE task_type = 'telegraph'
+            AND status != 'cancelled'
+            GROUP BY status
+        ", []);
+    } elseif ($isAccountant || $isManager) {
         if (!empty($adminIds)) {
             $counts = $db->query("
                 SELECT status, COUNT(*) as total
@@ -4088,6 +4096,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             </div>
                         </a>
                     </div>
+                    <?php if (!$isTelegraph): ?>
                     <div class="col-6 col-sm-3 col-md-3">
                         <a href="?page=production_tasks&status=completed" class="text-decoration-none status-filter-card" data-status="completed">
                             <div class="card <?php echo $statusFilter === 'completed' ? 'bg-success text-white' : 'border-success'; ?> h-100">
@@ -4108,6 +4117,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             </div>
                         </a>
                     </div>
+                    <?php endif; ?>
                     <div class="col-6 col-sm-3 col-md-3">
                         <a href="?page=production_tasks&status=with_shipping_company" class="text-decoration-none status-filter-card" data-status="with_shipping_company">
                             <div class="card <?php echo $statusFilter === 'with_shipping_company' ? 'bg-warning text-dark' : 'border-warning'; ?> h-100">
@@ -4118,6 +4128,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             </div>
                         </a>
                     </div>
+                    <?php if (!$isTelegraph): ?>
                     <div class="col-6 col-sm-3 col-md-3">
                         <a href="?page=production_tasks&status=with_driver" class="text-decoration-none status-filter-card" data-status="with_driver">
                             <div class="card <?php echo $statusFilter === 'with_driver' ? 'bg-info text-white' : 'border-info'; ?> h-100">
@@ -4128,6 +4139,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             </div>
                         </a>
                     </div>
+                    <?php endif; ?>
                     <div class="col-6 col-sm-3 col-md-3">
                         <a href="?page=production_tasks&status=delivered" class="text-decoration-none status-filter-card" data-status="delivered">
                             <div class="card <?php echo $statusFilter === 'delivered' ? 'bg-success text-white' : 'border-success'; ?> h-100">
@@ -5172,7 +5184,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                                 </li>
                                                 <?php endif; ?>
                                                 <?php endif; ?>
-                                                <?php if (!in_array($task['status'] ?? '', ['completed', 'delivered', 'returned'], true)): ?>
+                                                <?php if (!$isTelegraph && !in_array($task['status'] ?? '', ['completed', 'delivered', 'returned'], true)): ?>
                                                 <li><hr class="dropdown-divider"></li>
                                                 <li>
                                                     <form method="post" class="d-inline" onsubmit="return confirm('هل أنت متأكد من حذف هذه المهمة؟ سيتم حذفها نهائياً ولن تظهر في الجدول.');">
