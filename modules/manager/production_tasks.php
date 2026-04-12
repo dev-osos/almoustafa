@@ -3104,7 +3104,7 @@ try {
             WHERE task_type = 'telegraph'
             AND status != 'cancelled'
             GROUP BY status
-        ", []);
+        ") ?: [];
     } elseif ($isAccountant || $isManager) {
         if (!empty($adminIds)) {
             $counts = $db->query("
@@ -3307,10 +3307,10 @@ try {
     if ($isTelegraph) {
         // مسؤول تليجراف يرى جميع أوردرات تليجراف بغض النظر عن المنشئ
         $countParams = array_merge($statusParams, $searchParams);
-        $totalRow = $db->queryOne("
-            SELECT COUNT(*) AS total FROM tasks t
-            WHERE t.status != 'cancelled' $statusCondition $searchConditions
-        ", $countParams);
+        $totalRow = $db->queryOne(
+            "SELECT COUNT(*) AS total FROM tasks t WHERE t.status != 'cancelled' $statusCondition $searchConditions",
+            $countParams
+        );
         $totalRecentTasks = isset($totalRow['total']) ? (int)$totalRow['total'] : 0;
     } elseif ($isAccountant || $isManager) {
         if (!empty($adminIds)) {
@@ -3350,8 +3350,11 @@ try {
                t.quantity, t.unit, t.customer_name, t.customer_phone, t.notes, t.product_id, t.related_type, t.related_id, t.task_type,
                t.local_customer_id, t.total_amount,
                COALESCE(t.receipt_print_count, 0) AS receipt_print_count,
-               u.full_name AS assigned_name, t.assigned_to";
-        $joins = "LEFT JOIN users u ON t.assigned_to = u.id";
+               u.full_name AS assigned_name, t.assigned_to,
+               uCreator.full_name AS creator_name, t.created_by,
+               uCreator.role AS creator_role";
+        $joins = "LEFT JOIN users u ON t.assigned_to = u.id
+            LEFT JOIN users uCreator ON t.created_by = uCreator.id";
         if ($hasStatusChangedBy) {
             $selectFields .= ", uStatus.full_name AS status_changed_by_name, t.status_changed_by";
             $joins .= " LEFT JOIN users uStatus ON t.status_changed_by = uStatus.id";
@@ -4979,19 +4982,8 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                     ?></td>
                                     <td class="text-wrap" data-wrap="true" style="min-width: 180px;">                                        <?php 
                                         // عرض منشئ المهمة إذا كان المحاسب أو المدير
-                                        if (isset($task['creator_name']) && ($isAccountant || $isManager || $isSales)) {
-                                            $creatorRoleLabel = '';
-                                            if (isset($task['creator_role'])) {
-                                                $creatorRoleLabel = ($task['creator_role'] ?? '') === 'accountant' ? 'المحاسب' : 'المدير';
-                                            } elseif (isset($task['created_by'])) {
-                                                $creatorUser = $db->queryOne("SELECT role FROM users WHERE id = ? LIMIT 1", [$task['created_by']]);
-                                                if ($creatorUser) {
-                                                    $creatorRoleLabel = ($creatorUser['role'] ?? '') === 'accountant' ? 'المحاسب' : 'المدير';
-                                                }
-                                            }
-                                            if ($creatorRoleLabel) {
-                                                echo '<div class="text-muted small"><i class="bi bi-person me-1"></i>' . htmlspecialchars($task['creator_name']) . '</div>';
-                                            }
+                                        if (isset($task['creator_name']) && ($isAccountant || $isManager || $isSales || $isTelegraph)) {
+                                            echo '<div class="text-muted small"><i class="bi bi-person me-1"></i>' . htmlspecialchars($task['creator_name']) . '</div>';
                                         }
                                         ?>
                                         
