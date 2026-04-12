@@ -3244,7 +3244,6 @@ $filterSearchText = isset($_GET['search_text']) ? trim((string)$_GET['search_tex
 $searchConditions = '';
 $searchParams = [];
 
-
 if ($filterTaskId !== '') {
     $taskIdInt = (int) $filterTaskId;
     if ($taskIdInt > 0) {
