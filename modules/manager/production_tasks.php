@@ -4749,25 +4749,6 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                     </tr>
                 </thead>
                 <tbody id="recentTasksTableBody">
-                    <?php if (empty($recentTasks)): ?>
-                        <tr>
-                            <td colspan="<?php echo $canPrintTasks ? 8 : 7; ?>" class="text-center text-muted py-4">لم يتم إنشاء مهام بعد.</td>
-                            <?php if ($canPrintTasks): ?>
-                            <th style="width: 40px;">
-                                <input type="checkbox" class="form-check-input" id="selectAllTasks" title="تحديد الكل">
-                            </th>
-                            <?php endif; ?>
-                            <th>رقم الطلب</th>
-                            <th style="min-width: 220px;">اسم العميل</th>
-                            <th style="min-width: 180px;">من</th>
-                            <th>نوع الاوردر</th>
-                            <th>الحاله</th>
-                            <th>التسليم</th>
-                            
-                            <th>إجراءات</th>
-                        </tr>
-                    </thead>
-                    <tbody id="recentTasksTableBody">
                         <?php if (empty($recentTasks)): ?>
                             <tr>
                                 <td colspan="<?php echo $canPrintTasks ? 8 : 7; ?>" class="text-center text-muted py-4">لم يتم إنشاء مهام بعد.</td>
