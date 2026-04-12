@@ -5953,7 +5953,7 @@ function lookupOrderForReturn(context) {
     fd.append('order_number', orderNumber);
     fd.append('company_id', companyId);
 
-    fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: fd })
+    fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: fd, credentials: 'same-origin' })
         .then(function(r) {
             var clone = r.clone();
             return r.json().catch(function() {
@@ -7716,7 +7716,7 @@ document.addEventListener('DOMContentLoaded', function() {
             var submitBtn = document.getElementById('returnModalSubmitBtn');
             if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>جاري التسجيل...'; }
             var alertEl = document.getElementById('returnModalAlert');
-            fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: formData })
+            fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: formData, credentials: 'same-origin' })
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = '<i class="bi bi-arrow-return-right me-1"></i>تسجيل المرتجع'; }
@@ -7778,7 +7778,7 @@ document.addEventListener('DOMContentLoaded', function() {
             var submitBtn = document.getElementById('returnCardSubmitBtn');
             if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>جاري التسجيل...'; }
             var alertEl = document.getElementById('returnCardAlert');
-            fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: formData })
+            fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: formData, credentials: 'same-origin' })
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     if (submitBtn) { submitBtn.disabled = data.success; submitBtn.innerHTML = '<i class="bi bi-arrow-return-right me-1"></i>تسجيل المرتجع'; }
