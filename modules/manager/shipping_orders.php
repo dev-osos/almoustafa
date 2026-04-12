@@ -5284,9 +5284,9 @@ function copyShippingCollectionResult(btn) {
                         <div class="text-danger small mt-1 d-none" id="returnModalOrderError"></div>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">الإجمالي النهائي للطلب</label>
+                        <label class="form-label">المبلغ الصافي</label>
                         <div class="input-group">
-                            <input type="number" class="form-control bg-light" id="returnModalTotalAmount" step="0.01" readonly placeholder="سيتم جلبه تلقائياً بعد البحث">
+                            <input type="number" class="form-control" id="returnModalTotalAmount" step="0.1" placeholder="أدخل المبلغ الصافي">
                             <span class="input-group-text">ج.م</span>
                         </div>
                     </div>
@@ -5447,7 +5447,7 @@ function copyShippingCollectionResult(btn) {
             <div class="mb-3">
                 <label class="form-label">الإجمالي النهائي للطلب</label>
                 <div class="input-group">
-                    <input type="number" class="form-control bg-light" id="returnCardTotalAmount" step="0.01" readonly placeholder="سيتم جلبه بعد البحث">
+                    <input type="number" class="form-control" id="returnCardTotalAmount" step="0.01" placeholder="أدخل الإجمالي النهائي للطلب">
                     <span class="input-group-text">ج.م</span>
                 </div>
             </div>
@@ -5940,7 +5940,6 @@ function lookupOrderForReturn(context) {
         .then(function(data) {
             if (!data.success) {
                 if (errorEl) { errorEl.textContent = data.error || 'لم يتم العثور على الطلب.'; errorEl.classList.remove('d-none'); }
-                if (totalEl) totalEl.value = '';
                 if (orderIdEl) orderIdEl.value = '';
                 var piEl2 = document.getElementById(prefix + 'PaperInvoiceId');
                 if (piEl2) piEl2.value = '';
@@ -5950,7 +5949,6 @@ function lookupOrderForReturn(context) {
                 updateReturnSummary(context);
                 return;
             }
-            if (totalEl) totalEl.value = parseFloat(data.total_amount || 0).toFixed(2);
             // paper_invoice_id أو order_id
             if (orderIdEl) orderIdEl.value = data.order_id || '';
             var piEl = document.getElementById(prefix + 'PaperInvoiceId');
