@@ -4611,10 +4611,11 @@ function copyShippingCollectionResult(btn) {
                         <th class="text-nowrap">الحالة</th>
                         <th class="text-nowrap text-end">السعر</th>
                         <th class="text-nowrap text-end">الصافي</th>
+                        <th class="text-nowrap text-end">رسوم الارجاع</th>
                     </tr>
                 </thead>
                 <tbody id="tgShipmentsBody">
-                    <tr><td colspan="8" class="text-center text-muted py-4">
+                    <tr><td colspan="9" class="text-center text-muted py-4">
                         <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
                         جاري تحميل الشحنات...
                     </td></tr>
@@ -4719,7 +4720,7 @@ function copyShippingCollectionResult(btn) {
 
     function tgBuildRows(shipments) {
         if (!shipments || !shipments.length) {
-            return '<tr><td colspan="8" class="text-center text-muted py-4"><i class="bi bi-inbox fs-4 d-block mb-2"></i>لا توجد شحنات</td></tr>';
+            return '<tr><td colspan="9" class="text-center text-muted py-4"><i class="bi bi-inbox fs-4 d-block mb-2"></i>لا توجد شحنات</td></tr>';
         }
         return shipments.map(function (s) {
             var sc = (s.status && s.status.code) ? s.status.code : '';
@@ -4733,6 +4734,7 @@ function copyShippingCollectionResult(btn) {
                 '<td class="text-nowrap"><span class="badge ' + tgStatusBadge(sc) + '">' + tgEsc(sn) + '</span></td>' +
                 '<td class="text-end text-nowrap">' + tgFmt(s.price) + '</td>' +
                 '<td class="text-end text-nowrap">' + tgFmt(s.amount) + '</td>' +
+                '<td class="text-end text-nowrap">' + (s.returnFees ? tgFmt(s.returnFees) : '<span class="text-muted">—</span>') + '</td>' +
                 '</tr>';
         }).join('');
     }
@@ -4794,7 +4796,7 @@ function copyShippingCollectionResult(btn) {
             if (wrapper) wrapper.style.opacity = '1';
 
             if (!data.success) {
-                if (body) body.innerHTML = '<tr><td colspan="8" class="text-center text-danger py-3"><i class="bi bi-exclamation-triangle-fill me-1"></i>' + (data.error || 'خطأ') + '</td></tr>';
+                if (body) body.innerHTML = '<tr><td colspan="9" class="text-center text-danger py-3"><i class="bi bi-exclamation-triangle-fill me-1"></i>' + (data.error || 'خطأ') + '</td></tr>';
                 return;
             }
 
@@ -4823,7 +4825,7 @@ function copyShippingCollectionResult(btn) {
         .catch(function () {
             if (loading) loading.classList.add('d-none');
             if (wrapper) wrapper.style.opacity = '1';
-            if (body) body.innerHTML = '<tr><td colspan="8" class="text-center text-danger py-3">حدث خطأ في الاتصال</td></tr>';
+            if (body) body.innerHTML = '<tr><td colspan="9" class="text-center text-danger py-3">حدث خطأ في الاتصال</td></tr>';
         });
     }
 
