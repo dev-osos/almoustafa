@@ -325,13 +325,15 @@ if ($editOfferId > 0) {
 
             <!-- جدول المنتجات -->
             <style>
-            .offer-product-wrapper { position: relative; }
             .offer-search-dropdown {
-                position: absolute; top: 100%; right: 0; left: 0; z-index: 1055;
-                background: #fff; border: 1px solid #ced4da; border-top: none;
-                border-radius: 0 0 .375rem .375rem;
-                max-height: 220px; overflow-y: auto;
-                box-shadow: 0 4px 12px rgba(0,0,0,.12);
+                position: fixed;
+                z-index: 9999;
+                background: #fff;
+                border: 1px solid #ced4da;
+                border-radius: .375rem;
+                max-height: 220px;
+                overflow-y: auto;
+                box-shadow: 0 6px 18px rgba(0,0,0,.15);
                 display: none;
             }
             .offer-search-dropdown .osd-item {
@@ -377,7 +379,6 @@ if ($editOfferId > 0) {
                                                 <?php echo htmlspecialchars($ei['product_name']); ?>
                                             </option>
                                         </select>
-                                        <div class="offer-search-dropdown"></div>
                                     </div>
                                 </td>
                                 <td class="text-muted small">
@@ -557,6 +558,35 @@ if ($editOfferId > 0) {
     const escHtml = v => String(v || '').replace(/[&<>"']/g, c =>
         ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
+    // ——— Dropdown عائم مشترك يُلحق بـ body ———
+    const globalDropdown = document.createElement('div');
+    globalDropdown.className = 'offer-search-dropdown';
+    document.body.appendChild(globalDropdown);
+    let activeInput = null;
+
+    const positionDropdown = (input) => {
+        const rect = input.getBoundingClientRect();
+        globalDropdown.style.top    = (rect.bottom + window.scrollY) + 'px';
+        globalDropdown.style.left   = (rect.left   + window.scrollX) + 'px';
+        globalDropdown.style.width  = rect.width + 'px';
+    };
+
+    const hideDropdown = () => {
+        globalDropdown.style.display = 'none';
+        activeInput = null;
+    };
+
+    // إغلاق عند النقر خارج
+    document.addEventListener('mousedown', (e) => {
+        if (!globalDropdown.contains(e.target) && e.target !== activeInput) {
+            hideDropdown();
+        }
+    });
+
+    // إعادة التموضع عند التمرير أو تغيير الحجم
+    window.addEventListener('scroll', () => { if (activeInput) positionDropdown(activeInput); }, true);
+    window.addEventListener('resize', () => { if (activeInput) positionDropdown(activeInput); });
+
     const recalc = () => {
         let total = 0;
         itemsBody.querySelectorAll('tr').forEach(row => {
@@ -580,93 +610,83 @@ if ($editOfferId > 0) {
     const selectProduct = (row, product) => {
         const searchInput = row.querySelector('.offer-search-input');
         const hiddenSel   = row.querySelector('.offer-product-select');
-        const dropdown    = row.querySelector('.offer-search-dropdown');
         const unitLabel   = row.querySelector('.offer-unit-label');
         const upInput     = row.querySelector('.offer-up-input');
 
-        // تحديث الـ hidden select
         hiddenSel.innerHTML = `<option value="${product.id}" selected
             data-unit="${escHtml(product.unit || 'وحدة')}"
             data-unit-price="${parseFloat(product.unit_price || 0).toFixed(2)}">
             ${escHtml(product.name)}
         </option>`;
 
-        // تحديث نص الـ input
         searchInput.value = (product.category ? product.category + ' - ' : '') + product.name;
         searchInput.classList.add('has-value');
 
-        // تحديث الوحدة وسعر الوحدة
         if (unitLabel) unitLabel.textContent = product.unit || '-';
         if (upInput && (!upInput.value || parseFloat(upInput.value) <= 0)) {
             const defPrice = parseFloat(product.unit_price || 0);
             if (defPrice > 0) upInput.value = defPrice.toFixed(2);
         }
 
-        // إغلاق الـ dropdown
-        dropdown.style.display = 'none';
         recalc();
     };
 
-    const showDropdown = (row, results) => {
-        const dropdown = row.querySelector('.offer-search-dropdown');
+    const showDropdown = (input, row, results) => {
+        activeInput = input;
+        positionDropdown(input);
+
         if (!results.length) {
-            dropdown.innerHTML = '<div class="osd-empty">لا توجد نتائج</div>';
+            globalDropdown.innerHTML = '<div class="osd-empty">لا توجد نتائج</div>';
         } else {
-            dropdown.innerHTML = results.map(p => `
+            globalDropdown.innerHTML = results.map(p => `
                 <div class="osd-item" data-id="${p.id}">
                     ${escHtml(p.name)}
                     ${p.category ? `<span class="osd-cat">${escHtml(p.category)}</span>` : ''}
                 </div>
             `).join('');
-            // ربط أحداث النقر
-            dropdown.querySelectorAll('.osd-item').forEach(item => {
+            globalDropdown.querySelectorAll('.osd-item').forEach(item => {
                 item.addEventListener('mousedown', (e) => {
-                    e.preventDefault(); // منع blur قبل النقر
+                    e.preventDefault();
                     const pid = parseInt(item.dataset.id);
                     const product = allProducts.find(p => p.id === pid);
                     if (product) selectProduct(row, product);
+                    hideDropdown();
                 });
             });
         }
-        dropdown.style.display = 'block';
+        globalDropdown.style.display = 'block';
     };
 
     const attachSearchEvents = (row) => {
         const searchInput = row.querySelector('.offer-search-input');
         const hiddenSel   = row.querySelector('.offer-product-select');
-        const dropdown    = row.querySelector('.offer-search-dropdown');
         const qty         = row.querySelector('.offer-qty-input');
         const up          = row.querySelector('.offer-up-input');
         const del         = row.querySelector('.remove-offer-item');
 
         searchInput?.addEventListener('focus', () => {
-            const q = searchInput.value.trim();
-            // إذا كان النص هو اسم المنتج المختار، ابدأ بالنتائج الكاملة
-            const results = filterProducts(hiddenSel?.value ? '' : q);
-            showDropdown(row, results.slice(0, 60));
+            const results = filterProducts(hiddenSel?.value ? '' : searchInput.value.trim());
+            showDropdown(searchInput, row, results.slice(0, 60));
         });
 
         searchInput?.addEventListener('input', () => {
             const q = searchInput.value.trim();
-            // مسح الاختيار الحالي عند الكتابة
             if (hiddenSel) {
                 hiddenSel.innerHTML = '<option value="" selected></option>';
                 searchInput.classList.remove('has-value');
             }
-            const results = filterProducts(q);
-            showDropdown(row, results.slice(0, 60));
+            showDropdown(searchInput, row, filterProducts(q).slice(0, 60));
         });
 
         searchInput?.addEventListener('blur', () => {
-            // تأخير صغير لإتاحة حدث mousedown على الـ dropdown
             setTimeout(() => {
-                dropdown.style.display = 'none';
-                // إذا مُسح الاختيار ولم يُختر شيء → أعد النص الفارغ
+                if (activeInput !== searchInput) return;
+                hideDropdown();
                 if (!hiddenSel?.value) {
                     searchInput.value = '';
                     searchInput.classList.remove('has-value');
                 }
-            }, 150);
+            }, 200);
         });
 
         qty?.addEventListener('input', recalc);
@@ -692,7 +712,6 @@ if ($editOfferId > 0) {
                             name="items[${idx}][product_id]" required>
                         <option value=""></option>
                     </select>
-                    <div class="offer-search-dropdown"></div>
                 </div>
             </td>
             <td class="text-muted small"><span class="offer-unit-label">-</span></td>

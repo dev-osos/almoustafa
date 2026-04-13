@@ -2172,15 +2172,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $totalAmount = isset($_POST['total_amount']) ? (float)str_replace(',', '.', trim((string)$_POST['total_amount'])) : 0;
         $approveForShipping = (int)($_POST['approve_for_shipping'] ?? 0) === 1;
         $shippingCompanyId = $approveForShipping ? (int)($_POST['shipping_company_id'] ?? 0) : 0;
-        $netParcelPrice = $approveForShipping && isset($_POST['net_parcel_price']) ? (float)str_replace(',', '.', trim((string)$_POST['net_parcel_price'])) : null;
+        $netParcelPrice = $approveForShipping
+            ? (isset($_POST['net_parcel_price']) && $_POST['net_parcel_price'] !== ''
+                ? (float)str_replace(',', '.', trim((string)$_POST['net_parcel_price']))
+                : $totalAmount)
+            : null;
 
         if ($taskId <= 0) {
             $error = 'معرف المهمة غير صحيح.';
         } elseif ($approveForShipping) {
             if ($shippingCompanyId <= 0) {
                 $error = 'يرجى اختيار شركة الشحن.';
-            } elseif ($netParcelPrice === null || $netParcelPrice === '') {
-                $error = 'يرجى إدخال صافي سعر الطرد.';
             } else {
                 try {
                     $task = $db->queryOne("SELECT id, created_at FROM tasks WHERE id = ? LIMIT 1", [$taskId]);
@@ -8322,15 +8324,15 @@ function ensureApproveInvoiceCardExists() {
         '<input type="hidden" name="task_id" id="approveInvoiceCardTaskId">' +
         '<input type="hidden" name="total_amount" id="approveInvoiceCardTotalAmount">' +
         '<input type="hidden" name="approve_for_shipping" id="approveInvoiceCardForShipping" value="0">' +
+        '<input type="hidden" name="net_parcel_price" id="approveInvoiceCardNetParcelPrice">' +
         '<div class="card-body">' +
         '<div id="approveInvoiceCardCustomerBlock" class="approve-invoice-block">' +
         '<p class="text-muted small mb-3">يُضاف الأوردر إلى سجل مشتريات <strong>العميل المكتوب في الأوردر</strong> ويُضاف الإجمالي النهائي إلى رصيده المدين.</p>' +
         '<div class="mb-3"><label class="form-label fw-bold">العميل (من الأوردر)</label><div id="approveInvoiceCardCustomerName" class="form-control bg-light"></div></div>' +
         '</div>' +
         '<div id="approveInvoiceCardShippingBlock" class="approve-invoice-block" style="display:none;">' +
-        '<p class="text-muted small mb-3">يُضاف الأوردر إلى <strong>سجل الفواتير الورقية لشركة الشحن</strong>. المبلغ الذي يُضاف لديون الشركة هو صافي سعر الطرد (أدناه).</p>' +
+        '<p class="text-muted small mb-3">يُضاف الأوردر إلى <strong>سجل الفواتير الورقية لشركة الشحن</strong>. المبلغ المعروض أدناه يُضاف تلقائياً لديون الشركة.</p>' +
         '<div class="mb-3"><label class="form-label fw-bold">شركة الشحن</label><select class="form-select" name="shipping_company_id" id="approveInvoiceCardShippingCompanyId"><option value="">— اختر الشركة —</option>' + opts + '</select></div>' +
-        '<small class="form-text text-muted">هذا المبلغ يُضاف لديون شركة الشحن (سالب = يقلل الديون)</small></div>' +
         '</div>' +
         '<!-- ملخص خصم المخزون -->' +
         '<div id="approveInvoiceInventoryPreview" class="mb-3" style="display:none;">' +
@@ -8520,20 +8522,24 @@ window.openApproveInvoiceCard = function(taskId, customerName, receiptTotal, ord
                     var finalTotal = Math.round((tgExtra.grandTotal - deliveryCost) * 100) / 100;
                     var displayedTotal = Math.round((finalTotal - tgExtra.advance) * 100) / 100;
                     if (totalInput) totalInput.value = String(displayedTotal);
+                    if (netPriceInput) netPriceInput.value = String(displayedTotal);
                     if (totalDisplay) totalDisplay.textContent = displayedTotal.toFixed(2) + ' ج.م';
                 })
                 .catch(function() {
                     // عند الفشل نستخدم الإجمالي المبدئي
                     if (totalInput) totalInput.value = String(receiptTotal);
+                    if (netPriceInput) netPriceInput.value = String(receiptTotal);
                     if (totalDisplay) totalDisplay.textContent = parseFloat(receiptTotal).toFixed(2) + ' ج.م';
                 });
         } else {
             // لا توجد بيانات محافظة/مدينة — استخدم الإجمالي المبدئي
             if (totalInput) totalInput.value = String(receiptTotal);
+            if (netPriceInput) netPriceInput.value = String(receiptTotal);
             if (totalDisplay) totalDisplay.textContent = parseFloat(receiptTotal).toFixed(2) + ' ج.م';
         }
     } else {
         if (totalInput) totalInput.value = (receiptTotal != null) ? String(receiptTotal) : '';
+        if (netPriceInput) netPriceInput.value = (receiptTotal != null) ? String(receiptTotal) : '';
         if (totalDisplay) totalDisplay.textContent = (receiptTotal != null) ? parseFloat(receiptTotal).toFixed(2) + ' ج.م' : '—';
     }
 
