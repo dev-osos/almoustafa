@@ -95,7 +95,7 @@ function buildInventoryPreview($db, $notes)
         $displayUnit = ($unit === 'شرينك') ? 'قطعة' : $unit;
 
         // البحث بالاسم في المخازن بالترتيب
-        $found = findProductInWarehouses($db, $name);
+        $found = findProductInWarehouses($db, $name, $unit);
 
         $rows[] = [
             'name'      => $name,
@@ -132,10 +132,24 @@ function extractRawType(string $name): string
 }
 
 /**
+ * تحويل كمية مخزن الخامات (المخزَّنة بالكيلوجرام) إلى وحدة الأوردر.
+ * إذا كانت وحدة الأوردر 'جرام' → اضرب في 1000.
+ * إذا كانت 'كيلوجرام' أو غيرها → لا تغيير.
+ */
+function convertRawAvailable(float $kgValue, string $orderUnit): float
+{
+    if ($orderUnit === 'جرام' || $orderUnit === 'g' || $orderUnit === 'gram') {
+        return $kgValue * 1000;
+    }
+    return $kgValue;
+}
+
+/**
  * يبحث عن المنتج بالاسم في: products → packaging_materials → honey_stock (بالنوع) → derivatives/nuts
  * يُرجع: ['source'=>..., 'label'=>..., 'available'=>float|null]
+ * $orderUnit: وحدة الكمية في الأوردر — إذا كانت 'جرام' والمخزن بالكيلوجرام نحوّل المتاح (×1000)
  */
-function findProductInWarehouses($db, $name)
+function findProductInWarehouses($db, $name, $orderUnit = '')
 {
     $notFound = ['source' => null, 'label' => 'غير موجود في المخزون', 'available' => null];
 
@@ -240,7 +254,7 @@ function findProductInWarehouses($db, $name)
                     [$variety]
                 );
                 if ($row !== null) {
-                    return ['source' => 'raw', 'label' => 'مخزن الخامات (عسل خام)', 'available' => (float)$row['total']];
+                    return ['source' => 'raw', 'label' => 'مخزن الخامات (عسل خام)', 'available' => convertRawAvailable((float)$row['total'], $orderUnit)];
                 }
             }
             // عسل مصفى
@@ -253,7 +267,7 @@ function findProductInWarehouses($db, $name)
                     [$variety]
                 );
                 if ($row !== null) {
-                    return ['source' => 'raw', 'label' => 'مخزن الخامات (عسل مصفى)', 'available' => (float)$row['total']];
+                    return ['source' => 'raw', 'label' => 'مخزن الخامات (عسل مصفى)', 'available' => convertRawAvailable((float)$row['total'], $orderUnit)];
                 }
             }
             // بحث عام بالنوع المستخرج في كلا العمودين
@@ -262,14 +276,14 @@ function findProductInWarehouses($db, $name)
                 [$rawType]
             );
             if ($row && (float)$row['total'] > 0) {
-                return ['source' => 'raw', 'label' => 'مخزن الخامات (عسل خام)', 'available' => (float)$row['total']];
+                return ['source' => 'raw', 'label' => 'مخزن الخامات (عسل خام)', 'available' => convertRawAvailable((float)$row['total'], $orderUnit)];
             }
             $row = $db->queryOne(
                 "SELECT COALESCE(SUM(filtered_honey_quantity), 0) as total FROM honey_stock WHERE TRIM(honey_variety) = ?",
                 [$rawType]
             );
             if ($row && (float)$row['total'] > 0) {
-                return ['source' => 'raw', 'label' => 'مخزن الخامات (عسل مصفى)', 'available' => (float)$row['total']];
+                return ['source' => 'raw', 'label' => 'مخزن الخامات (عسل مصفى)', 'available' => convertRawAvailable((float)$row['total'], $orderUnit)];
             }
         }
     } catch (Exception $e) { /* skip */ }
@@ -280,7 +294,7 @@ function findProductInWarehouses($db, $name)
         if (!empty($oCheck) && (mb_strpos($name, 'زيت') !== false || mb_strpos($name, 'زيتون') !== false)) {
             $row = $db->queryOne("SELECT COALESCE(SUM(quantity), 0) as total FROM olive_oil_stock");
             if ($row && (float)$row['total'] > 0) {
-                return ['source' => 'raw', 'label' => 'مخزن الخامات (زيت زيتون)', 'available' => (float)$row['total']];
+                return ['source' => 'raw', 'label' => 'مخزن الخامات (زيت زيتون)', 'available' => convertRawAvailable((float)$row['total'], $orderUnit)];
             }
         }
     } catch (Exception $e) { /* skip */ }
@@ -291,7 +305,7 @@ function findProductInWarehouses($db, $name)
         if (!empty($bwCheck) && mb_strpos($name, 'شمع') !== false) {
             $row = $db->queryOne("SELECT COALESCE(SUM(weight), 0) as total FROM beeswax_stock");
             if ($row && (float)$row['total'] > 0) {
-                return ['source' => 'raw', 'label' => 'مخزن الخامات (شمع العسل)', 'available' => (float)$row['total']];
+                return ['source' => 'raw', 'label' => 'مخزن الخامات (شمع العسل)', 'available' => convertRawAvailable((float)$row['total'], $orderUnit)];
             }
         }
     } catch (Exception $e) { /* skip */ }
@@ -313,7 +327,7 @@ function findProductInWarehouses($db, $name)
                 );
             }
             if ($row && (float)$row['total'] > 0) {
-                return ['source' => 'raw', 'label' => 'مخزن الخامات (مكسرات)', 'available' => (float)$row['total']];
+                return ['source' => 'raw', 'label' => 'مخزن الخامات (مكسرات)', 'available' => convertRawAvailable((float)$row['total'], $orderUnit)];
             }
         }
     } catch (Exception $e) { /* skip */ }
@@ -324,7 +338,7 @@ function findProductInWarehouses($db, $name)
         if (!empty($mnCheck) && mb_strpos($name, 'خلطة') !== false) {
             $row = $db->queryOne("SELECT COALESCE(SUM(total_quantity), 0) as total FROM mixed_nuts");
             if ($row && (float)$row['total'] > 0) {
-                return ['source' => 'raw', 'label' => 'مخزن الخامات (خلطة مكسرات)', 'available' => (float)$row['total']];
+                return ['source' => 'raw', 'label' => 'مخزن الخامات (خلطة مكسرات)', 'available' => convertRawAvailable((float)$row['total'], $orderUnit)];
             }
         }
     } catch (Exception $e) { /* skip */ }
@@ -335,7 +349,7 @@ function findProductInWarehouses($db, $name)
         if (!empty($ssCheck) && mb_strpos($name, 'سمسم') !== false) {
             $row = $db->queryOne("SELECT COALESCE(SUM(quantity), 0) as total FROM sesame_stock");
             if ($row && (float)$row['total'] > 0) {
-                return ['source' => 'raw', 'label' => 'مخزن الخامات (سمسم)', 'available' => (float)$row['total']];
+                return ['source' => 'raw', 'label' => 'مخزن الخامات (سمسم)', 'available' => convertRawAvailable((float)$row['total'], $orderUnit)];
             }
         }
     } catch (Exception $e) { /* skip */ }
@@ -346,7 +360,7 @@ function findProductInWarehouses($db, $name)
         if (!empty($thCheck) && mb_strpos($name, 'طحينة') !== false) {
             $row = $db->queryOne("SELECT COALESCE(SUM(quantity), 0) as total FROM tahini_stock");
             if ($row && (float)$row['total'] > 0) {
-                return ['source' => 'raw', 'label' => 'مخزن الخامات (طحينة)', 'available' => (float)$row['total']];
+                return ['source' => 'raw', 'label' => 'مخزن الخامات (طحينة)', 'available' => convertRawAvailable((float)$row['total'], $orderUnit)];
             }
         }
     } catch (Exception $e) { /* skip */ }
@@ -366,7 +380,7 @@ function findProductInWarehouses($db, $name)
                 );
             }
             if ($row && (float)$row['total'] > 0) {
-                return ['source' => 'raw', 'label' => 'مخزن الخامات (بلح)', 'available' => (float)$row['total']];
+                return ['source' => 'raw', 'label' => 'مخزن الخامات (بلح)', 'available' => convertRawAvailable((float)$row['total'], $orderUnit)];
             }
         }
     } catch (Exception $e) { /* skip */ }
@@ -390,7 +404,7 @@ function findProductInWarehouses($db, $name)
                     );
                 }
                 if ($row && (float)$row['total'] > 0) {
-                    return ['source' => 'raw', 'label' => 'مخزن الخامات (تلبينات)', 'available' => (float)$row['total']];
+                    return ['source' => 'raw', 'label' => 'مخزن الخامات (تلبينات)', 'available' => convertRawAvailable((float)$row['total'], $orderUnit)];
                 }
             }
         }
@@ -411,7 +425,7 @@ function findProductInWarehouses($db, $name)
                 );
             }
             if ($row && (float)$row['total'] > 0) {
-                return ['source' => 'raw', 'label' => 'مخزن الخامات (عطارة)', 'available' => (float)$row['total']];
+                return ['source' => 'raw', 'label' => 'مخزن الخامات (عطارة)', 'available' => convertRawAvailable((float)$row['total'], $orderUnit)];
             }
         }
     } catch (Exception $e) { /* skip */ }
@@ -431,7 +445,7 @@ function findProductInWarehouses($db, $name)
                 );
             }
             if ($row && (float)$row['total'] > 0) {
-                return ['source' => 'raw', 'label' => 'مخزن الخامات (مشتقات)', 'available' => (float)$row['total']];
+                return ['source' => 'raw', 'label' => 'مخزن الخامات (مشتقات)', 'available' => convertRawAvailable((float)$row['total'], $orderUnit)];
             }
         }
     } catch (Exception $e) { /* skip */ }

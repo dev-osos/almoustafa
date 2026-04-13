@@ -2183,6 +2183,9 @@ var dashboardWrapper = null;
                         <button type="button" class="btn btn-link local-search-clear" id="localSearchClearBtn" title="مسح البحث" style="display: <?php echo $search !== '' ? 'inline-block' : 'none'; ?>;">
                             <i class="bi bi-x-circle-fill text-muted"></i>
                         </button>
+                        <button type="submit" class="btn btn-primary" id="localSearchBtn" title="بحث">
+                            <i class="bi bi-search"></i>
+                        </button>
                         <span class="local-search-hint small text-muted">اكتب ثم اختر من القائمة أو اضغط Enter للبحث</span>
                         <!-- قائمة منسدلة مثل خانة العميل في صفحة الأسعار المخصصة -->
                         <div id="autocompleteDropdown" class="autocomplete-dropdown search-dropdown" role="listbox" aria-label="نتائج البحث"></div>
