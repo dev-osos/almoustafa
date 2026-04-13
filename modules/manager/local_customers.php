@@ -2164,9 +2164,7 @@ var dashboardWrapper = null;
                 <div class="col-12">
                     <label for="customerSearch" class="form-label small text-muted mb-1">ابحث عن العميل المحلي</label>
                     <div class="local-search-input-wrapper position-relative search-wrap">
-                        <span class="local-search-icon">
-                            <i class="bi bi-search"></i>
-                        </span>
+                        
                         <input
                             type="text"
                             class="form-control form-control-lg local-search-input"
@@ -2183,7 +2181,7 @@ var dashboardWrapper = null;
                         <button type="button" class="btn btn-link local-search-clear" id="localSearchClearBtn" title="مسح البحث" style="display: <?php echo $search !== '' ? 'inline-block' : 'none'; ?>;">
                             <i class="bi bi-x-circle-fill text-muted"></i>
                         </button>
-                        <button type="submit" class="btn btn-primary" id="localSearchBtn" title="بحث">
+                        <button type="button" class="btn btn-primary" id="localSearchBtn" title="بحث" onclick="if(typeof fetchCustomers==='function'){fetchCustomers(1);}">
                             <i class="bi bi-search"></i>
                         </button>
                         <span class="local-search-hint small text-muted">اكتب ثم اختر من القائمة أو اضغط Enter للبحث</span>
