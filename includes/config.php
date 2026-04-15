@@ -330,6 +330,10 @@ define('ASSETS_PATH', dirname(__DIR__) . '/assets/');
 define('APDF_IO_ENDPOINT', 'https://api.apdf.io/v1/pdf/html');
 define('APDF_IO_API_KEY', getenv('APDF_IO_API_KEY') ?: 'UQFfHN7tBIgv0Zjy1nelyZWMJC93m3NMXCWfWe9246a95eed');
 
+// مفتاح الـ API العام لإنشاء الأوردرات بدون جلسة (public_order.php)
+// يمكن تغييره من هنا أو تعيينه كـ environment variable: PUBLIC_ORDER_API_KEY
+define('PUBLIC_ORDER_API_KEY', getenv('PUBLIC_ORDER_API_KEY') ?: 'almostafa-order-2025-XkP9mQrTvZ');
+
 // تحديد ASSETS_URL بناءً على موقع الملف
 // استخدام REQUEST_URI للحصول على المسار الكامل (يعمل بشكل أفضل على الموبايل)
 $requestUri = $_SERVER['REQUEST_URI'] ?? '';
