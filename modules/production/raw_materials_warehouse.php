@@ -1471,6 +1471,19 @@ if (!isset($turbineStockTableReady)) {
 if (!isset($herbalStockTableReady)) {
     $herbalStockTableReady = ensureHerbalStockTable();
 }
+// دمج الأنواع المخصصة من قاعدة البيانات مع الأنواع الثابتة
+if ($herbalStockTableReady) {
+    try {
+        $customHerbalRows = $db->query("SELECT DISTINCT herbal_type FROM herbal_stock WHERE herbal_type IS NOT NULL ORDER BY herbal_type");
+        foreach ($customHerbalRows as $_chr) {
+            if (!in_array($_chr['herbal_type'], $herbalStockTypes, true)) {
+                $herbalStockTypes[] = $_chr['herbal_type'];
+            }
+        }
+    } catch (Exception $e) {
+        error_log("Error loading custom herbal types: " . $e->getMessage());
+    }
+}
 
 // السمسم المتاح للاستخدام في القوالب
 $availableSesameForTemplates = [];
@@ -4553,6 +4566,50 @@ if (!$isApiMode && $_SERVER['REQUEST_METHOD'] === 'POST') {
                         'recorded_by' => $currentUser['id'] ?? null,
                     ]);
                     preventDuplicateSubmission('تم إضافة العطاره بنجاح', ['page' => 'raw_materials_warehouse', 'section' => 'herbal'], null, $dashboardSlug);
+                }
+            }
+        }
+        elseif ($action === 'add_new_herbal_type') {
+            if (!isset($herbalStockTableReady)) {
+                $herbalStockTableReady = ensureHerbalStockTable(true);
+            }
+            if (!$herbalStockTableReady) {
+                $error = 'لا يمكن الوصول إلى جدول مخزون العطاره.';
+            } else {
+                $newTypeName = trim($_POST['new_type_name'] ?? '');
+                $supplierId  = intval($_POST['supplier_id'] ?? 0);
+                $quantity    = floatval($_POST['quantity'] ?? 0);
+                $notes       = trim($_POST['notes'] ?? '');
+                if (empty($newTypeName)) {
+                    $error = 'يجب إدخال اسم النوع الجديد';
+                } elseif (in_array($newTypeName, $herbalStockTypes, true)) {
+                    $error = 'هذا النوع موجود بالفعل في القائمة';
+                } elseif ($supplierId <= 0) {
+                    $error = 'يجب اختيار المورد';
+                } elseif ($quantity <= 0) {
+                    $error = 'يجب إدخال كمية صحيحة';
+                } else {
+                    $existing = $db->queryOne("SELECT * FROM herbal_stock WHERE supplier_id = ? AND herbal_type = ?", [$supplierId, $newTypeName]);
+                    if ($existing) {
+                        $db->execute("UPDATE herbal_stock SET quantity = quantity + ?, notes = ?, updated_at = NOW() WHERE supplier_id = ? AND herbal_type = ?", [$quantity, $notes ?: $existing['notes'], $supplierId, $newTypeName]);
+                    } else {
+                        $db->execute("INSERT INTO herbal_stock (supplier_id, herbal_type, quantity, notes) VALUES (?, ?, ?, ?)", [$supplierId, $newTypeName, $quantity, $notes ?: null]);
+                    }
+                    logAudit($currentUser['id'], 'add_new_herbal_type', 'herbal_stock', $supplierId, null, ['herbal_type' => $newTypeName, 'quantity' => $quantity]);
+                    $supplierRow = $db->queryOne("SELECT name FROM suppliers WHERE id = ? LIMIT 1", [$supplierId]);
+                    recordProductionSupplyLog([
+                        'material_category' => 'herbal',
+                        'material_label'    => 'عطاره',
+                        'stock_source'      => 'herbal_stock',
+                        'stock_id'          => null,
+                        'supplier_id'       => $supplierId,
+                        'supplier_name'     => $supplierRow['name'] ?? null,
+                        'quantity'          => $quantity,
+                        'unit'              => 'كجم',
+                        'details'           => 'إضافة نوع عطاره جديد - ' . $newTypeName,
+                        'recorded_by'       => $currentUser['id'] ?? null,
+                    ]);
+                    preventDuplicateSubmission('تم إضافة النوع الجديد بنجاح: ' . $newTypeName, ['page' => 'raw_materials_warehouse', 'section' => 'herbal'], null, $dashboardSlug);
                 }
             }
         }
@@ -10880,6 +10937,49 @@ $nutsSuppliers = $db->query("SELECT id, name, phone FROM suppliers WHERE status 
                             </div>
                         </div>
                     <?php endforeach; ?>
+                    <!-- إضافة نوع جديد -->
+                    <div class="card border border-warning mb-3">
+                        <div class="card-header py-2 text-dark" style="background: #fff3cd;">
+                            <a href="#" class="text-decoration-none text-dark fw-bold" data-bs-toggle="collapse" data-bs-target="#newHerbalTypeForm">
+                                <i class="bi bi-plus-circle-dotted me-1"></i>إضافة نوع جديد غير موجود في القائمة
+                            </a>
+                        </div>
+                        <div class="collapse" id="newHerbalTypeForm">
+                            <div class="card-body">
+                                <form method="POST">
+                                    <input type="hidden" name="action" value="add_new_herbal_type">
+                                    <div class="row g-2">
+                                        <div class="col-md-3">
+                                            <label class="form-label small">اسم النوع الجديد <span class="text-danger">*</span></label>
+                                            <input type="text" name="new_type_name" class="form-control form-control-sm" required placeholder="مثال: زعتر">
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label small">المورد <span class="text-danger">*</span></label>
+                                            <select name="supplier_id" class="form-select form-select-sm" required>
+                                                <option value="">اختر المورد</option>
+                                                <?php foreach ($herbalSuppliers as $supplier): ?>
+                                                    <option value="<?php echo $supplier['id']; ?>"><?php echo htmlspecialchars($supplier['name']); ?></option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-2">
+                                            <label class="form-label small">الكمية (كجم) <span class="text-danger">*</span></label>
+                                            <input type="number" step="0.001" min="0.001" name="quantity" class="form-control form-control-sm" required placeholder="0.000">
+                                        </div>
+                                        <div class="col-md-2">
+                                            <label class="form-label small">ملاحظات</label>
+                                            <input type="text" name="notes" class="form-control form-control-sm" placeholder="اختياري">
+                                        </div>
+                                        <div class="col-md-2 d-flex align-items-end">
+                                            <button type="submit" class="btn btn-sm w-100 btn-warning text-dark" <?php echo $herbalActionsDisabledAttr; ?>>
+                                                <i class="bi bi-plus-lg me-1"></i>إضافة
+                                            </button>
+                                        </div>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إغلاق</button>
@@ -10922,6 +11022,41 @@ $nutsSuppliers = $db->query("SELECT id, name, phone FROM suppliers WHERE status 
                     </form>
                 </div>
             <?php endforeach; ?>
+            <!-- إضافة نوع جديد - موبايل -->
+            <div class="border border-warning rounded p-3 mb-3" style="background: #fffbf0;">
+                <button class="btn btn-link p-0 text-dark fw-bold text-decoration-none mb-2" type="button" onclick="this.nextElementSibling.classList.toggle('d-none')">
+                    <i class="bi bi-plus-circle-dotted me-1"></i>إضافة نوع جديد غير موجود
+                </button>
+                <div class="d-none">
+                    <form method="POST">
+                        <input type="hidden" name="action" value="add_new_herbal_type">
+                        <div class="mb-2">
+                            <label class="form-label small">اسم النوع الجديد <span class="text-danger">*</span></label>
+                            <input type="text" name="new_type_name" class="form-control form-control-sm" required placeholder="مثال: زعتر">
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small">المورد <span class="text-danger">*</span></label>
+                            <select name="supplier_id" class="form-select form-select-sm" required>
+                                <option value="">اختر المورد</option>
+                                <?php foreach ($herbalSuppliers as $supplier): ?>
+                                    <option value="<?php echo $supplier['id']; ?>"><?php echo htmlspecialchars($supplier['name']); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small">الكمية (كجم) <span class="text-danger">*</span></label>
+                            <input type="number" step="0.001" min="0.001" name="quantity" class="form-control form-control-sm" required>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small">ملاحظات</label>
+                            <input type="text" name="notes" class="form-control form-control-sm">
+                        </div>
+                        <button type="submit" class="btn btn-sm w-100 btn-warning text-dark" <?php echo $herbalActionsDisabledAttr; ?>>
+                            <i class="bi bi-plus-lg me-1"></i>إضافة النوع الجديد
+                        </button>
+                    </form>
+                </div>
+            </div>
             <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('addHerbalCard').style.display='none'">إغلاق</button>
         </div>
     </div>
