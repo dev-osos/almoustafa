@@ -2489,9 +2489,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             }
                         }
 
-                // حذف المهمة بدلاً من تغيير الحالة إلى cancelled
+                // تغيير حالة المهمة إلى cancelled بدلاً من حذفها
                 $db->execute(
-                    "DELETE FROM tasks WHERE id = ?",
+                    "UPDATE tasks SET status = 'cancelled', completed_at = NOW() WHERE id = ?",
                     [$taskId]
                 );
 
@@ -2511,9 +2511,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 );
 
                 $db->commit();
-                
+
                 // استخدام preventDuplicateSubmission لإعادة التوجيه مع cache-busting
-                $successMessage = 'تم حذف المهمة بنجاح.';
+                $successMessage = 'تم إلغاء المهمة بنجاح.';
                 // تحديد role بناءً على المستخدم الحالي
                 $userRole = in_array($currentUser['role'] ?? '', ['accountant', 'sales', 'telegraph'], true) ? ($currentUser['role'] ?? 'manager') : 'manager';
                 preventDuplicateSubmission($successMessage, ['page' => 'production_tasks'], null, $userRole);

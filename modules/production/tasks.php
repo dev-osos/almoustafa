@@ -3286,12 +3286,9 @@ function tasksHtml(string $value): string
         });
     }
 
-    function buildAjaxUrl(targetPage, extraParams) {
+    function buildAjaxUrl(targetPage) {
         var fd = new FormData(form);
         fd.set('p', String(targetPage || 1));
-        if (extraParams) {
-            Object.keys(extraParams).forEach(function(k) { fd.set(k, extraParams[k]); });
-        }
         var params = [];
         fd.forEach(function(value, key) {
             if (value !== '' && value !== '0') {
@@ -3299,6 +3296,11 @@ function tasksHtml(string $value): string
             }
         });
         return '?' + params.join('&');
+    }
+
+    // بناء URL بحث برقم الأوردر فقط — بدون أي فلاتر أخرى
+    function buildTaskIdOnlyUrl(taskIdVal) {
+        return '?page=tasks&task_id=' + encodeURIComponent(taskIdVal) + '&p=1';
     }
 
     function applyResponseHtml(html) {
@@ -3325,10 +3327,41 @@ function tasksHtml(string $value): string
         }
     }
 
+    function finishAjax(url) {
+        var lc = getListContent();
+        if (lc) { lc.style.opacity = ''; lc.style.pointerEvents = ''; }
+        applyTasksFilter();
+        updateStatusCards(statusInputEl ? statusInputEl.value : '');
+        window.dispatchEvent(new Event('tasks-table-updated'));
+        history.replaceState({ url: url }, '', url);
+    }
+
+    // بحث عالمي برقم الأوردر فقط (يتجاوز كل الفلاتر والصفحات)
+    function searchByTaskIdGlobal(taskIdVal) {
+        var url = buildTaskIdOnlyUrl(taskIdVal);
+        var listContent = getListContent();
+        if (listContent) { listContent.style.opacity = '0.5'; listContent.style.pointerEvents = 'none'; }
+
+        // إعادة تعيين فلاتر الحالة حتى لا يخفي applyTasksFilter النتيجة
+        if (statusInputEl) statusInputEl.value = '';
+        updateStatusCards('');
+
+        fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' })
+            .then(function(r) { return r.text(); })
+            .then(function(html) {
+                applyResponseHtml(html);
+                finishAjax(url);
+            })
+            .catch(function() {
+                var lc = getListContent();
+                if (lc) { lc.style.opacity = ''; lc.style.pointerEvents = ''; }
+                window.location.href = url;
+            });
+    }
+
     function doAjaxTasksPage(targetPage) {
         var url = buildAjaxUrl(targetPage);
         var listContent = getListContent();
-        var taskIdVal = taskIdEl ? taskIdEl.value.trim() : '';
 
         if (listContent) {
             listContent.style.opacity = '0.5';
@@ -3341,58 +3374,8 @@ function tasksHtml(string $value): string
         })
             .then(function(r) { return r.text(); })
             .then(function(html) {
-                // إذا كان البحث برقم أوردر، تحقق من النتيجة
-                if (taskIdVal !== '') {
-                    var parser = new DOMParser();
-                    var doc = parser.parseFromString(html, 'text/html');
-                    var newListContent = doc.getElementById('tasksListContent');
-                    var newTbody = doc.getElementById('tasksTableBody');
-                    var hasRows = false;
-                    if (newListContent) {
-                        hasRows = newListContent.querySelectorAll('tr[data-task-id]').length > 0;
-                    } else if (newTbody) {
-                        hasRows = newTbody.querySelectorAll('tr[data-task-id]').length > 0;
-                    }
-
-                    if (!hasRows) {
-                        // الأوردر غير موجود في الفلاتر الحالية — ابحث بدون فلاتر أخرى
-                        var globalUrl = buildAjaxUrl(1, { status: '', priority: '', assigned: '', overdue: '' });
-                        // نضمن أن task_id موجود في الطلب
-                        if (globalUrl.indexOf('task_id=') === -1) {
-                            globalUrl += '&task_id=' + encodeURIComponent(taskIdVal);
-                        }
-                        return fetch(globalUrl, {
-                            headers: { 'X-Requested-With': 'XMLHttpRequest' },
-                            credentials: 'same-origin'
-                        })
-                        .then(function(r2) { return r2.text(); })
-                        .then(function(html2) {
-                            applyResponseHtml(html2);
-                            var lc = getListContent();
-                            if (lc) { lc.style.opacity = ''; lc.style.pointerEvents = ''; }
-                            applyTasksFilter();
-                            updateStatusCards(statusInputEl ? statusInputEl.value : '');
-                            window.dispatchEvent(new Event('tasks-table-updated'));
-                            history.replaceState({ url: globalUrl }, '', globalUrl);
-                        })
-                        .catch(function() {
-                            var lc = getListContent();
-                            if (lc) { lc.style.opacity = ''; lc.style.pointerEvents = ''; }
-                        });
-                    }
-                }
-
                 applyResponseHtml(html);
-                var refreshedListContent = getListContent();
-                if (refreshedListContent) {
-                    refreshedListContent.style.opacity = '';
-                    refreshedListContent.style.pointerEvents = '';
-                }
-
-                applyTasksFilter();
-                updateStatusCards(statusInputEl ? statusInputEl.value : '');
-                window.dispatchEvent(new Event('tasks-table-updated'));
-                history.replaceState({ url: url }, '', url);
+                finishAjax(url);
             })
             .catch(function() {
                 var refreshedListContent = getListContent();
@@ -3404,7 +3387,7 @@ function tasksHtml(string $value): string
             });
     }
 
-    // حقل رقم الأوردر: أرقام فقط
+    // حقل رقم الأوردر: أرقام فقط + بحث عند Enter
     if (taskIdEl) {
         taskIdEl.addEventListener('keypress', function(e) {
             if (e.key && !/^\d$/.test(e.key) && !['Backspace','Delete','ArrowLeft','ArrowRight','Tab','Enter'].includes(e.key)) {
@@ -3417,8 +3400,9 @@ function tasksHtml(string $value): string
         taskIdEl.addEventListener('keydown', function(e) {
             if (e.key === 'Enter') {
                 e.preventDefault();
-                if (this.value.trim() !== '') {
-                    doAjaxTasksPage(1);
+                var val = this.value.trim();
+                if (val !== '') {
+                    searchByTaskIdGlobal(val);
                 }
             }
         });
@@ -3442,8 +3426,13 @@ function tasksHtml(string $value): string
     form.addEventListener('submit', function(e) {
         e.preventDefault();
         var taskIdVal = taskIdEl ? taskIdEl.value.trim() : '';
-        // إذا كان حقل رقم الأوردر هو الوحيد المُعبأ وكان فارغاً، لا تبحث
-        var otherFiltersActive = (searchTextEl && searchTextEl.value.trim() !== '') ||
+        if (taskIdVal !== '') {
+            // البحث برقم الأوردر: تجاوز كل الفلاتر وابحث في كل الصفحات
+            searchByTaskIdGlobal(taskIdVal);
+            return;
+        }
+        // إذا كانت كل الفلاتر فارغة لا تبحث
+        var anyFilter = (searchTextEl && searchTextEl.value.trim() !== '') ||
             (customerEl && customerEl.value.trim() !== '') ||
             (taskTypeEl && taskTypeEl.value !== '') ||
             (dueFromEl && dueFromEl.value !== '') ||
@@ -3452,9 +3441,7 @@ function tasksHtml(string $value): string
             (orderToEl && orderToEl.value !== '') ||
             (assignedEl && assignedEl.value !== '0' && assignedEl.value !== '') ||
             (statusInputEl && statusInputEl.value !== '');
-        if (taskIdVal === '' && !otherFiltersActive) {
-            return;
-        }
+        if (!anyFilter) return;
         doAjaxTasksPage(1);
     });
 
