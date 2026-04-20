@@ -5456,7 +5456,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                 if (wrapper) wrapper.style.opacity = '';
                 applyRecentTasksFilter();
                 initRecentTasksDropdowns();
-                history.replaceState(null, '', url);
+                history.replaceState({ url: url }, '', url);
             })
             .catch(function() {
                 if (wrapper) wrapper.style.opacity = '';
@@ -5585,7 +5585,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                     });
                 }
 
-                history.replaceState(null, '', url);
+                history.replaceState({ url: url }, '', url);
             })
             .catch(function() {
                 if (wrapper) wrapper.style.opacity = '';

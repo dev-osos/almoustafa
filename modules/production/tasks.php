@@ -2086,12 +2086,7 @@ function tasksHtml(string $value): string
 </div>
 
 <?php
-// طباعة تلقائية عند البحث برقم أوردر محدد
-if ($filterTaskId !== '' && !empty($tasks) && count($tasks) === 1) {
-    $firstTask = $tasks[0];
-    $printUrl = getRelativeUrl('print_task_receipt.php?id=' . (int)$firstTask['id']);
-    echo '<script>window.addEventListener("load", function() { window.open("' . addslashes($printUrl) . '", "_blank", "noopener,noreferrer"); });</script>';
-}
+// تمت إزالة الطباعة التلقائية عند البحث برقم الأوردر — كانت تسبب فتح تاب غير متوقع وظهور 404
 ?>
 
 <?php if ($isManager): ?>
@@ -3366,7 +3361,7 @@ if ($filterTaskId !== '' && !empty($tasks) && count($tasks) === 1) {
                 applyTasksFilter();
                 updateStatusCards(statusInputEl ? statusInputEl.value : '');
                 window.dispatchEvent(new Event('tasks-table-updated'));
-                history.replaceState(null, '', url);
+                history.replaceState({ url: url }, '', url);
             })
             .catch(function() {
                 var refreshedListContent = getListContent();
