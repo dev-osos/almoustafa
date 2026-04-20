@@ -43,7 +43,7 @@
         cacheEnabled: true,
         cacheMaxSize: isMobileData ? 15 : 10, // زيادة حجم cache على الهاتف لتسريع التنقل
         // Loading indicator
-        showLoading: true
+        showLoading: false
     };
 
     // صفحات لا تُخزَّن في الكاش أبداً (بيانات حية من قاعدة البيانات)
@@ -259,8 +259,14 @@
             document.title = data.title;
         }
 
-        // تحديث المحتوى
+        // تحديث المحتوى مع تأثير بصري سريع
+        mainElement.classList.add('ajax-content-updating');
         mainElement.innerHTML = data.content;
+        
+        // إزالة الكلاس بعد انتهاء التأثير
+        setTimeout(() => {
+            mainElement.classList.remove('ajax-content-updating');
+        }, 200);
 
         // إعادة تهيئة الشريط العلوي فوراً بعد تحديث المحتوى - مهم جداً
         // استخدام setTimeout(0) لضمان تنفيذها بعد اكتمال تحديث DOM

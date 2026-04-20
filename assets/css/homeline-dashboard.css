@@ -523,3 +523,19 @@ body.dark-mode .btn-back:hover {
     }
 }
 
+/* ===== Dynamic AJAX Transitions ===== */
+.ajax-content-updating {
+    animation: fadeInContent 150ms ease-in-out;
+}
+
+@keyframes fadeInContent {
+    from {
+        opacity: 0.8;
+        transform: translateY(2px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
