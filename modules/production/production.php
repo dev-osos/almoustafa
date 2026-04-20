@@ -9008,33 +9008,17 @@ function renderTemplateSuppliers(details) {
         window.templateDetailsCache[cacheKey] = details;
     }
     
-    // تحديد النسخة: موبايل أم ديسكتوب
+    // تحديد النسخة: موبايل أم ديسكتوب — استخدم getTemplateElementIds() مباشرة لتجنب
+    // استخدام عناصر الموديال المخفي CSS على الموبايل رغم وجودها في DOM
     const isMobileView = isMobile && isMobile();
-    console.log('renderTemplateSuppliers: isMobileView =', isMobileView);
-    
-    // محاولة الحصول على عناصر الديسكتوب أولاً
-    let wrapper = document.getElementById('templateSuppliersWrapper');
-    let container = document.getElementById('templateSuppliersContainer');
-    let modeInput = document.getElementById('template_mode');
-    let hintText = document.getElementById('templateSuppliersHint');
-    let summaryWrapper = document.getElementById('templateComponentsSummary');
-    let summaryGrid = document.getElementById('templateComponentsSummaryGrid');
-    let materialsInfoBox = document.getElementById('templateMaterialsInfo');
-    
-    console.log('renderTemplateSuppliers: Desktop elements - wrapper:', !!wrapper, ', container:', !!container);
-    
-    // إذا لم توجد عناصر الديسكتوب، جرب عناصر الموبايل
-    if (!wrapper || !container) {
-        console.log('renderTemplateSuppliers: Switching to mobile elements');
-        wrapper = document.getElementById('templateSuppliersWrapperCard');
-        container = document.getElementById('templateSuppliersContainerCard');
-        modeInput = document.getElementById('template_mode_card');
-        hintText = document.getElementById('templateSuppliersHintCard');
-        summaryWrapper = document.getElementById('templateComponentsSummaryCard') || summaryWrapper;
-        summaryGrid = document.getElementById('templateComponentsSummaryGridCard') || summaryGrid;
-        materialsInfoBox = document.getElementById('templateMaterialsInfoCard') || materialsInfoBox;
-        console.log('renderTemplateSuppliers: Mobile elements - wrapper:', !!wrapper, ', container:', !!container);
-    }
+    const _ids = getTemplateElementIds();
+    let wrapper = document.getElementById(_ids.wrapper);
+    let container = document.getElementById(_ids.container);
+    let modeInput = document.getElementById(_ids.mode);
+    let hintText = document.getElementById(_ids.hint);
+    let summaryWrapper = document.getElementById(_ids.summary);
+    let summaryGrid = document.getElementById(_ids.summaryGrid);
+    let materialsInfoBox = document.getElementById(_ids.materialsInfo);
 
     if (!container || !wrapper || !modeInput) {
         return;
