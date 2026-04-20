@@ -832,7 +832,8 @@ function deductTaskProductsFromStock($db, $notes)
         $rawNameClean = preg_replace('/\s*#\d+\s*$/u', '', $rawNameClean); // أزل رقم #
         $rawNameClean = trim($rawNameClean);
         $rawTypeParts = explode(' - ', $rawNameClean, 2);
-        $rawType = trim(end($rawTypeParts)); // الجزء الأخير بعد " - "
+        $rawType = trim(end($rawTypeParts));      // الجزء الأخير بعد " - " (قد يكون اسم المورد)
+        $rawTypeFirst = trim($rawTypeParts[0]);   // الجزء الأول قبل " - " (النوع الفعلي للخامة)
 
         // عسل خام
         try {
@@ -902,7 +903,7 @@ function deductTaskProductsFromStock($db, $notes)
             error_log('deductTaskProductsFromStock beeswax error (' . $name . '): ' . $e->getMessage());
         }
 
-        // مكسرات (مطابقة بالاسم الكامل ثم بالنوع المستخرج)
+        // مكسرات (مطابقة بالاسم الكامل ثم النوع المستخرج ثم الجزء الأول من الاسم المركب)
         try {
             $nCheck = $db->queryOne("SHOW TABLES LIKE 'nuts_stock'");
             if (!empty($nCheck)) {
@@ -910,9 +911,13 @@ function deductTaskProductsFromStock($db, $notes)
                 if (!$tot || (float)$tot['t'] == 0) {
                     $tot = $db->queryOne("SELECT COALESCE(SUM(quantity),0) as t FROM nuts_stock WHERE TRIM(nut_type) = ?", [$rawType]);
                 }
+                if (!$tot || (float)$tot['t'] == 0) {
+                    $tot = $db->queryOne("SELECT COALESCE(SUM(quantity),0) as t FROM nuts_stock WHERE TRIM(nut_type) = ?", [$rawTypeFirst]);
+                }
                 if ($tot && (float)$tot['t'] > 0) {
-                    $searchType = (float)$db->queryOne("SELECT COALESCE(SUM(quantity),0) as t FROM nuts_stock WHERE TRIM(nut_type) = ?", [$name])['t'] > 0 ? $name : $rawType;
-                    _deductFromRowsWaterfall($db, "SELECT id, quantity as qty FROM nuts_stock WHERE TRIM(nut_type) = ? AND quantity > 0 ORDER BY quantity DESC", [$searchType], "UPDATE nuts_stock SET quantity = quantity - ? WHERE id = ?", $effectiveQty);
+                    $nutSearch = (float)($db->queryOne("SELECT COALESCE(SUM(quantity),0) as t FROM nuts_stock WHERE TRIM(nut_type) = ?", [$name])['t'] ?? 0) > 0 ? $name
+                               : ((float)($db->queryOne("SELECT COALESCE(SUM(quantity),0) as t FROM nuts_stock WHERE TRIM(nut_type) = ?", [$rawType])['t'] ?? 0) > 0 ? $rawType : $rawTypeFirst);
+                    _deductFromRowsWaterfall($db, "SELECT id, quantity as qty FROM nuts_stock WHERE TRIM(nut_type) = ? AND quantity > 0 ORDER BY quantity DESC", [$nutSearch], "UPDATE nuts_stock SET quantity = quantity - ? WHERE id = ?", $effectiveQty);
                     continue;
                 }
             }
@@ -970,8 +975,12 @@ function deductTaskProductsFromStock($db, $notes)
                 if (!$tot || (float)$tot['t'] == 0) {
                     $tot = $db->queryOne("SELECT COALESCE(SUM(quantity),0) as t FROM date_stock WHERE TRIM(date_type) = ?", [$rawType]);
                 }
+                if (!$tot || (float)$tot['t'] == 0) {
+                    $tot = $db->queryOne("SELECT COALESCE(SUM(quantity),0) as t FROM date_stock WHERE TRIM(date_type) = ?", [$rawTypeFirst]);
+                }
                 if ($tot && (float)$tot['t'] > 0) {
-                    $dtSearch = (float)$db->queryOne("SELECT COALESCE(SUM(quantity),0) as t FROM date_stock WHERE TRIM(date_type) = ?", [$name])['t'] > 0 ? $name : $rawType;
+                    $dtSearch = (float)($db->queryOne("SELECT COALESCE(SUM(quantity),0) as t FROM date_stock WHERE TRIM(date_type) = ?", [$name])['t'] ?? 0) > 0 ? $name
+                              : ((float)($db->queryOne("SELECT COALESCE(SUM(quantity),0) as t FROM date_stock WHERE TRIM(date_type) = ?", [$rawType])['t'] ?? 0) > 0 ? $rawType : $rawTypeFirst);
                     _deductFromRowsWaterfall($db, "SELECT id, quantity as qty FROM date_stock WHERE TRIM(date_type) = ? AND quantity > 0 ORDER BY quantity DESC", [$dtSearch], "UPDATE date_stock SET quantity = quantity - ? WHERE id = ?", $effectiveQty);
                     continue;
                 }
@@ -992,8 +1001,12 @@ function deductTaskProductsFromStock($db, $notes)
                     if (!$tot || (float)$tot['t'] == 0) {
                         $tot = $db->queryOne("SELECT COALESCE(SUM(quantity),0) as t FROM `{$turbTable}` WHERE TRIM(`{$typeCol}`) = ?", [$rawType]);
                     }
+                    if (!$tot || (float)$tot['t'] == 0) {
+                        $tot = $db->queryOne("SELECT COALESCE(SUM(quantity),0) as t FROM `{$turbTable}` WHERE TRIM(`{$typeCol}`) = ?", [$rawTypeFirst]);
+                    }
                     if ($tot && (float)$tot['t'] > 0) {
-                        $tSearch = (float)$db->queryOne("SELECT COALESCE(SUM(quantity),0) as t FROM `{$turbTable}` WHERE TRIM(`{$typeCol}`) = ?", [$name])['t'] > 0 ? $name : $rawType;
+                        $tSearch = (float)($db->queryOne("SELECT COALESCE(SUM(quantity),0) as t FROM `{$turbTable}` WHERE TRIM(`{$typeCol}`) = ?", [$name])['t'] ?? 0) > 0 ? $name
+                                 : ((float)($db->queryOne("SELECT COALESCE(SUM(quantity),0) as t FROM `{$turbTable}` WHERE TRIM(`{$typeCol}`) = ?", [$rawType])['t'] ?? 0) > 0 ? $rawType : $rawTypeFirst);
                         _deductFromRowsWaterfall($db, "SELECT id, quantity as qty FROM `{$turbTable}` WHERE TRIM(`{$typeCol}`) = ? AND quantity > 0 ORDER BY quantity DESC", [$tSearch], "UPDATE `{$turbTable}` SET quantity = quantity - ? WHERE id = ?", $effectiveQty);
                         continue;
                     }
@@ -1011,8 +1024,12 @@ function deductTaskProductsFromStock($db, $notes)
                 if (!$tot || (float)$tot['t'] == 0) {
                     $tot = $db->queryOne("SELECT COALESCE(SUM(quantity),0) as t FROM herbal_stock WHERE TRIM(herbal_type) = ?", [$rawType]);
                 }
+                if (!$tot || (float)$tot['t'] == 0) {
+                    $tot = $db->queryOne("SELECT COALESCE(SUM(quantity),0) as t FROM herbal_stock WHERE TRIM(herbal_type) = ?", [$rawTypeFirst]);
+                }
                 if ($tot && (float)$tot['t'] > 0) {
-                    $hbSearch = (float)$db->queryOne("SELECT COALESCE(SUM(quantity),0) as t FROM herbal_stock WHERE TRIM(herbal_type) = ?", [$name])['t'] > 0 ? $name : $rawType;
+                    $hbSearch = (float)($db->queryOne("SELECT COALESCE(SUM(quantity),0) as t FROM herbal_stock WHERE TRIM(herbal_type) = ?", [$name])['t'] ?? 0) > 0 ? $name
+                              : ((float)($db->queryOne("SELECT COALESCE(SUM(quantity),0) as t FROM herbal_stock WHERE TRIM(herbal_type) = ?", [$rawType])['t'] ?? 0) > 0 ? $rawType : $rawTypeFirst);
                     _deductFromRowsWaterfall($db, "SELECT id, quantity as qty FROM herbal_stock WHERE TRIM(herbal_type) = ? AND quantity > 0 ORDER BY quantity DESC", [$hbSearch], "UPDATE herbal_stock SET quantity = quantity - ? WHERE id = ?", $effectiveQty);
                     continue;
                 }
@@ -1029,8 +1046,12 @@ function deductTaskProductsFromStock($db, $notes)
                 if (!$tot || (float)$tot['t'] == 0) {
                     $tot = $db->queryOne("SELECT COALESCE(SUM(weight),0) as t FROM derivatives_stock WHERE TRIM(derivative_type) = ?", [$rawType]);
                 }
+                if (!$tot || (float)$tot['t'] == 0) {
+                    $tot = $db->queryOne("SELECT COALESCE(SUM(weight),0) as t FROM derivatives_stock WHERE TRIM(derivative_type) = ?", [$rawTypeFirst]);
+                }
                 if ($tot && (float)$tot['t'] > 0) {
-                    $dvSearch = (float)$db->queryOne("SELECT COALESCE(SUM(weight),0) as t FROM derivatives_stock WHERE TRIM(derivative_type) = ?", [$name])['t'] > 0 ? $name : $rawType;
+                    $dvSearch = (float)($db->queryOne("SELECT COALESCE(SUM(weight),0) as t FROM derivatives_stock WHERE TRIM(derivative_type) = ?", [$name])['t'] ?? 0) > 0 ? $name
+                              : ((float)($db->queryOne("SELECT COALESCE(SUM(weight),0) as t FROM derivatives_stock WHERE TRIM(derivative_type) = ?", [$rawType])['t'] ?? 0) > 0 ? $rawType : $rawTypeFirst);
                     _deductFromRowsWaterfall($db, "SELECT id, weight as qty FROM derivatives_stock WHERE TRIM(derivative_type) = ? AND weight > 0 ORDER BY weight DESC", [$dvSearch], "UPDATE derivatives_stock SET weight = weight - ? WHERE id = ?", $effectiveQty);
                     continue;
                 }
@@ -3250,6 +3271,7 @@ $filterDueTo = isset($_GET['due_date_to']) ? trim((string)$_GET['due_date_to']) 
 $filterOrderDateFrom = isset($_GET['order_date_from']) ? trim((string)$_GET['order_date_from']) : '';
 $filterOrderDateTo = isset($_GET['order_date_to']) ? trim((string)$_GET['order_date_to']) : '';
 $filterSearchText = isset($_GET['search_text']) ? trim((string)$_GET['search_text']) : '';
+$filterApproval = isset($_GET['approval_status']) ? trim((string)$_GET['approval_status']) : '';
 
 $searchConditions = '';
 $searchParams = [];
@@ -3302,6 +3324,11 @@ if ($filterSearchText !== '') {
     $searchParams[] = $textLike;
     $searchParams[] = $textLike;
     $searchParams[] = $textLike;
+}
+if ($filterApproval === 'approved') {
+    $searchConditions .= " AND (EXISTS (SELECT 1 FROM customer_task_purchases ctp WHERE ctp.task_id = t.id) OR EXISTS (SELECT 1 FROM shipping_company_paper_invoices scpi WHERE scpi.task_id = t.id))";
+} elseif ($filterApproval === 'not_approved') {
+    $searchConditions .= " AND NOT EXISTS (SELECT 1 FROM customer_task_purchases ctp WHERE ctp.task_id = t.id) AND NOT EXISTS (SELECT 1 FROM shipping_company_paper_invoices scpi WHERE scpi.task_id = t.id)";
 }
 
 try {
@@ -3941,6 +3968,7 @@ if ($filterDueTo !== '') $recentTasksQueryParams['due_date_to'] = $filterDueTo;
 if ($filterOrderDateFrom !== '') $recentTasksQueryParams['order_date_from'] = $filterOrderDateFrom;
 if ($filterOrderDateTo !== '') $recentTasksQueryParams['order_date_to'] = $filterOrderDateTo;
 if ($filterSearchText !== '') $recentTasksQueryParams['search_text'] = $filterSearchText;
+if ($filterApproval !== '') $recentTasksQueryParams['approval_status'] = $filterApproval;
 $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP_QUERY_RFC3986);
 
 ?>
@@ -4852,6 +4880,14 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             <label class="form-label small mb-0">تاريخ الطلب إلى</label>
                             <input type="date" name="order_date_to" id="recentTasksFilterOrderDateTo" class="form-control form-control-sm recent-tasks-dynamic-filter" value="<?php echo htmlspecialchars($filterOrderDateTo, ENT_QUOTES, 'UTF-8'); ?>">
                         </div>
+                        <div class="col-6 col-md-4 col-lg-2">
+                            <label class="form-label small mb-0">حالة الاعتماد</label>
+                            <select name="approval_status" id="recentTasksFilterApproval" class="form-select form-select-sm recent-tasks-dynamic-filter">
+                                <option value="" <?php echo $filterApproval === '' ? 'selected' : ''; ?>>— الكل —</option>
+                                <option value="approved" <?php echo $filterApproval === 'approved' ? 'selected' : ''; ?>>معتمدة</option>
+                                <option value="not_approved" <?php echo $filterApproval === 'not_approved' ? 'selected' : ''; ?>>غير معتمدة</option>
+                            </select>
+                        </div>
                         <div class="col-auto align-self-end">
                             <a href="?<?php echo $statusFilter !== '' ? 'page=production_tasks&status=' . rawurlencode($statusFilter) : 'page=production_tasks'; ?>" class="btn btn-outline-danger btn-sm">إزالة الفلتر</a>
                         </div>
@@ -4927,8 +4963,9 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                 $rowDueDate = !empty($task['due_date']) ? date('Y-m-d', strtotime((string)$task['due_date'])) : '';
                                 $rowOrderDate = !empty($task['created_at']) ? date('Y-m-d', strtotime((string)$task['created_at'])) : '';
                                 $rowCustomer = trim(($task['customer_name'] ?? '') . ' ' . ($task['customer_phone'] ?? ''));
+                                $rowApproved = in_array((int)$task['id'], $approvedTaskIds, true) ? '1' : '0';
                                 ?>
-                                <tr class="recent-tasks-filter-row" data-task-id="<?php echo (int)$task['id']; ?>" data-search="<?php echo htmlspecialchars($rowSearchText, ENT_QUOTES, 'UTF-8'); ?>" data-customer="<?php echo htmlspecialchars($rowCustomer, ENT_QUOTES, 'UTF-8'); ?>" data-task-type="<?php echo htmlspecialchars($displayType, ENT_QUOTES, 'UTF-8'); ?>" data-due-date="<?php echo htmlspecialchars($rowDueDate, ENT_QUOTES, 'UTF-8'); ?>" data-order-date="<?php echo htmlspecialchars($rowOrderDate, ENT_QUOTES, 'UTF-8'); ?>">
+                                <tr class="recent-tasks-filter-row" data-task-id="<?php echo (int)$task['id']; ?>" data-search="<?php echo htmlspecialchars($rowSearchText, ENT_QUOTES, 'UTF-8'); ?>" data-customer="<?php echo htmlspecialchars($rowCustomer, ENT_QUOTES, 'UTF-8'); ?>" data-task-type="<?php echo htmlspecialchars($displayType, ENT_QUOTES, 'UTF-8'); ?>" data-due-date="<?php echo htmlspecialchars($rowDueDate, ENT_QUOTES, 'UTF-8'); ?>" data-order-date="<?php echo htmlspecialchars($rowOrderDate, ENT_QUOTES, 'UTF-8'); ?>" data-approved="<?php echo $rowApproved; ?>">
                                     <?php if ($canPrintTasks): ?>
                                     <td>
                                         <?php
@@ -5265,6 +5302,8 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
         return s.replace(/\s+/g, ' ').trim().toLowerCase();
     }
 
+    var approvalFilterKey = 'pt_approval_filter';
+
     function applyRecentTasksFilter() {
         var searchText = document.getElementById('recentTasksSearchText');
         var taskId = document.getElementById('recentTasksFilterTaskId');
@@ -5274,6 +5313,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
         var dueTo = document.getElementById('recentTasksFilterDueTo');
         var orderFrom = document.getElementById('recentTasksFilterOrderDateFrom');
         var orderTo = document.getElementById('recentTasksFilterOrderDateTo');
+        var approvalEl = document.getElementById('recentTasksFilterApproval');
 
         var searchVal = searchText ? normalize(searchText.value) : '';
         var taskIdVal = taskId ? String((taskId.value || '').trim()) : '';
@@ -5283,6 +5323,14 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
         var dueToVal = dueTo ? (dueTo.value || '').trim() : '';
         var orderFromVal = orderFrom ? (orderFrom.value || '').trim() : '';
         var orderToVal = orderTo ? (orderTo.value || '').trim() : '';
+        var approvalVal = approvalEl ? (approvalEl.value || '').trim() : '';
+
+        // حفظ تفضيل الاعتماد في localStorage
+        if (approvalVal) {
+            localStorage.setItem(approvalFilterKey, approvalVal);
+        } else {
+            localStorage.removeItem(approvalFilterKey);
+        }
 
         rows.forEach(function(tr) {
             var show = true;
@@ -5292,6 +5340,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
             var rowTaskType = (tr.getAttribute('data-task-type') || '').trim();
             var rowDueDate = (tr.getAttribute('data-due-date') || '').trim();
             var rowOrderDate = (tr.getAttribute('data-order-date') || '').trim();
+            var rowApproved = (tr.getAttribute('data-approved') || '').trim();
 
             if (searchVal && rowSearch.indexOf(searchVal) === -1) show = false;
             if (taskIdVal && rowTaskId.indexOf(taskIdVal) === -1) show = false;
@@ -5301,10 +5350,25 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
             if (dueToVal && rowDueDate && rowDueDate > dueToVal) show = false;
             if (orderFromVal && rowOrderDate && rowOrderDate < orderFromVal) show = false;
             if (orderToVal && rowOrderDate && rowOrderDate > orderToVal) show = false;
+            if (approvalVal === 'approved' && rowApproved !== '1') show = false;
+            if (approvalVal === 'not_approved' && rowApproved !== '0') show = false;
 
             tr.style.display = show ? '' : 'none';
         });
     }
+
+    // استعادة تفضيل الاعتماد من localStorage إذا لم يكن محدداً في URL
+    (function() {
+        var approvalEl = document.getElementById('recentTasksFilterApproval');
+        if (!approvalEl) return;
+        var urlApproval = <?php echo json_encode($filterApproval); ?>;
+        if (urlApproval === '') {
+            var saved = localStorage.getItem(approvalFilterKey);
+            if (saved && (saved === 'approved' || saved === 'not_approved')) {
+                approvalEl.value = saved;
+            }
+        }
+    })();
 
     var debounceTimer;
     function scheduleFilter() {
@@ -5321,6 +5385,14 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
         }
     });
     form.addEventListener('submit', function(e) { e.preventDefault(); applyRecentTasksFilter(); });
+
+    // مسح localStorage عند الضغط على "إزالة الفلتر"
+    var clearFilterBtn = form.querySelector('a.btn-outline-danger');
+    if (clearFilterBtn) {
+        clearFilterBtn.addEventListener('click', function() {
+            localStorage.removeItem(approvalFilterKey);
+        });
+    }
 
     applyRecentTasksFilter();
 
