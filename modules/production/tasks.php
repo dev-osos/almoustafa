@@ -1755,7 +1755,7 @@ function tasksHtml(string $value): string
                         </div>
                         <div class="col-5 col-md-3 col-lg-2">
                             <label class="form-label small mb-0">رقم الاوردر</label>
-                            <input type="text" name="task_id" class="form-control form-control-sm" id="tasksFilterTaskId" placeholder="#" value="<?php echo tasksHtml($filterTaskId); ?>">
+                            <input type="text" inputmode="numeric" pattern="[0-9]*" name="task_id" class="form-control form-control-sm" id="tasksFilterTaskId" placeholder="#" value="<?php echo tasksHtml($filterTaskId); ?>">
                         </div>
                         <div class="col-1 col-md-1 col-lg-1 align-self-end">
                             <button type="submit" class="btn btn-primary btn-sm w-100" id="tasksSearchBtn" title="بحث">
@@ -3286,9 +3286,12 @@ function tasksHtml(string $value): string
         });
     }
 
-    function buildAjaxUrl(targetPage) {
+    function buildAjaxUrl(targetPage, extraParams) {
         var fd = new FormData(form);
         fd.set('p', String(targetPage || 1));
+        if (extraParams) {
+            Object.keys(extraParams).forEach(function(k) { fd.set(k, extraParams[k]); });
+        }
         var params = [];
         fd.forEach(function(value, key) {
             if (value !== '' && value !== '0') {
@@ -3298,9 +3301,34 @@ function tasksHtml(string $value): string
         return '?' + params.join('&');
     }
 
+    function applyResponseHtml(html) {
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(html, 'text/html');
+        var currentListContent = getListContent();
+        var newListContent = doc.getElementById('tasksListContent');
+
+        if (currentListContent && newListContent) {
+            currentListContent.innerHTML = newListContent.innerHTML;
+        } else {
+            var currentTbody = getTbody();
+            var newTbody = doc.getElementById('tasksTableBody');
+            if (currentTbody && newTbody) {
+                currentTbody.innerHTML = newTbody.innerHTML;
+            }
+            var paginationNav = document.getElementById('tasksPagination');
+            var newPagination = doc.getElementById('tasksPagination');
+            if (paginationNav && newPagination) {
+                paginationNav.innerHTML = newPagination.innerHTML;
+            } else if (paginationNav && !newPagination) {
+                paginationNav.innerHTML = '';
+            }
+        }
+    }
+
     function doAjaxTasksPage(targetPage) {
         var url = buildAjaxUrl(targetPage);
         var listContent = getListContent();
+        var taskIdVal = taskIdEl ? taskIdEl.value.trim() : '';
 
         if (listContent) {
             listContent.style.opacity = '0.5';
@@ -3313,29 +3341,48 @@ function tasksHtml(string $value): string
         })
             .then(function(r) { return r.text(); })
             .then(function(html) {
-                var parser = new DOMParser();
-                var doc = parser.parseFromString(html, 'text/html');
-                var currentListContent = getListContent();
-                var newListContent = doc.getElementById('tasksListContent');
-
-                if (currentListContent && newListContent) {
-                    currentListContent.innerHTML = newListContent.innerHTML;
-                } else {
-                    var currentTbody = getTbody();
+                // إذا كان البحث برقم أوردر، تحقق من النتيجة
+                if (taskIdVal !== '') {
+                    var parser = new DOMParser();
+                    var doc = parser.parseFromString(html, 'text/html');
+                    var newListContent = doc.getElementById('tasksListContent');
                     var newTbody = doc.getElementById('tasksTableBody');
-                    if (currentTbody && newTbody) {
-                        currentTbody.innerHTML = newTbody.innerHTML;
+                    var hasRows = false;
+                    if (newListContent) {
+                        hasRows = newListContent.querySelectorAll('tr[data-task-id]').length > 0;
+                    } else if (newTbody) {
+                        hasRows = newTbody.querySelectorAll('tr[data-task-id]').length > 0;
                     }
 
-                    var paginationNav = document.getElementById('tasksPagination');
-                    var newPagination = doc.getElementById('tasksPagination');
-                    if (paginationNav && newPagination) {
-                        paginationNav.innerHTML = newPagination.innerHTML;
-                    } else if (paginationNav && !newPagination) {
-                        paginationNav.innerHTML = '';
+                    if (!hasRows) {
+                        // الأوردر غير موجود في الفلاتر الحالية — ابحث بدون فلاتر أخرى
+                        var globalUrl = buildAjaxUrl(1, { status: '', priority: '', assigned: '', overdue: '' });
+                        // نضمن أن task_id موجود في الطلب
+                        if (globalUrl.indexOf('task_id=') === -1) {
+                            globalUrl += '&task_id=' + encodeURIComponent(taskIdVal);
+                        }
+                        return fetch(globalUrl, {
+                            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                            credentials: 'same-origin'
+                        })
+                        .then(function(r2) { return r2.text(); })
+                        .then(function(html2) {
+                            applyResponseHtml(html2);
+                            var lc = getListContent();
+                            if (lc) { lc.style.opacity = ''; lc.style.pointerEvents = ''; }
+                            applyTasksFilter();
+                            updateStatusCards(statusInputEl ? statusInputEl.value : '');
+                            window.dispatchEvent(new Event('tasks-table-updated'));
+                            history.replaceState({ url: globalUrl }, '', globalUrl);
+                        })
+                        .catch(function() {
+                            var lc = getListContent();
+                            if (lc) { lc.style.opacity = ''; lc.style.pointerEvents = ''; }
+                        });
                     }
                 }
 
+                applyResponseHtml(html);
                 var refreshedListContent = getListContent();
                 if (refreshedListContent) {
                     refreshedListContent.style.opacity = '';
@@ -3357,6 +3404,26 @@ function tasksHtml(string $value): string
             });
     }
 
+    // حقل رقم الأوردر: أرقام فقط
+    if (taskIdEl) {
+        taskIdEl.addEventListener('keypress', function(e) {
+            if (e.key && !/^\d$/.test(e.key) && !['Backspace','Delete','ArrowLeft','ArrowRight','Tab','Enter'].includes(e.key)) {
+                e.preventDefault();
+            }
+        });
+        taskIdEl.addEventListener('input', function() {
+            this.value = this.value.replace(/\D/g, '');
+        });
+        taskIdEl.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                if (this.value.trim() !== '') {
+                    doAjaxTasksPage(1);
+                }
+            }
+        });
+    }
+
     var debounceTimer;
     function scheduleFilter() {
         clearTimeout(debounceTimer);
@@ -3374,6 +3441,20 @@ function tasksHtml(string $value): string
 
     form.addEventListener('submit', function(e) {
         e.preventDefault();
+        var taskIdVal = taskIdEl ? taskIdEl.value.trim() : '';
+        // إذا كان حقل رقم الأوردر هو الوحيد المُعبأ وكان فارغاً، لا تبحث
+        var otherFiltersActive = (searchTextEl && searchTextEl.value.trim() !== '') ||
+            (customerEl && customerEl.value.trim() !== '') ||
+            (taskTypeEl && taskTypeEl.value !== '') ||
+            (dueFromEl && dueFromEl.value !== '') ||
+            (dueToEl && dueToEl.value !== '') ||
+            (orderFromEl && orderFromEl.value !== '') ||
+            (orderToEl && orderToEl.value !== '') ||
+            (assignedEl && assignedEl.value !== '0' && assignedEl.value !== '') ||
+            (statusInputEl && statusInputEl.value !== '');
+        if (taskIdVal === '' && !otherFiltersActive) {
+            return;
+        }
         doAjaxTasksPage(1);
     });
 
