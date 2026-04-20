@@ -8831,10 +8831,9 @@ window.openBulkApproveCard = function() {
 
 // ===== بطاقة تغيير حالة الأوردرات المحددة (جماعي) =====
 var statusLabels = {
-    'pending': 'قيد الانتظار', 'in_progress': 'قيد التنفيذ', 'completed': 'مكتمل',
-    'with_delegate': 'مع المندوب', 'with_driver': 'مع السائق',
+    'pending': 'معلقة', 'completed': 'مكتملة', 'with_delegate': 'مع المندوب',
     'with_shipping_company': 'مع شركة الشحن', 'delivered': 'تم التوصيل',
-    'returned': 'مُرتجع', 'cancelled': 'ملغي'
+    'returned': 'تم الارجاع', 'cancelled': 'ملغاة'
 };
 
 function ensureBulkChangeStatusCardExists() {
