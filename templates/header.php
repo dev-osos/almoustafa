@@ -3542,7 +3542,8 @@ if (ob_get_level() > 0) {
         <?php echo isset($lang['skip_to_main']) ? $lang['skip_to_main'] : 'تخطي إلى المحتوى الرئيسي'; ?>
     </a>
 
-    <!-- شاشة التحميل الديناميكية التفاعلية (تظهر عند الإرسال وتختفي بعد تحديث البيانات) -->
+    <!-- تم تعطيل شاشة التحميل لضمان تجربة SPA حقيقية بدون انقطاع -->
+    <!--
     <div id="global-loading-overlay" class="global-loading-overlay" aria-hidden="true" aria-live="polite" role="status">
         <div class="global-loading-backdrop"></div>
         <div class="global-loading-content">
@@ -3551,9 +3552,10 @@ if (ob_get_level() > 0) {
             <p class="global-loading-hint small text-muted mt-2"><?php echo isset($lang['please_wait']) ? $lang['please_wait'] : 'يرجى الانتظار حتى يتم حفظ وعرض البيانات'; ?></p>
         </div>
     </div>
+    -->
     <style>
-    .global-loading-overlay { position: fixed; inset: 0; z-index: 99999; display: flex; align-items: center; justify-content: center; opacity: 0; visibility: hidden; transition: opacity 0.25s ease, visibility 0.25s ease; pointer-events: none; }
-    .global-loading-overlay.is-active { opacity: 1; visibility: visible; pointer-events: auto; }
+    .global-loading-overlay { display: none !important; position: fixed; inset: 0; z-index: 99999; align-items: center; justify-content: center; opacity: 0; visibility: hidden; transition: opacity 0.25s ease, visibility 0.25s ease; pointer-events: none; }
+    .global-loading-overlay.is-active { display: none !important; opacity: 1; visibility: visible; pointer-events: auto; }
     .global-loading-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.45); backdrop-filter: blur(4px); }
     .global-loading-content { position: relative; z-index: 1; text-align: center; padding: 2rem; background: var(--bs-body-bg, #fff); border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.2); min-width: 220px; max-width: 90vw; }
     .global-loading-spinner { width: 48px; height: 48px; margin: 0 auto 1rem; border: 4px solid var(--bs-border-color, #dee2e6); border-top-color: var(--bs-primary, #0d6efd); border-radius: 50%; animation: global-loading-spin 0.8s linear infinite; }

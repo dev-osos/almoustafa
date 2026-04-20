@@ -144,16 +144,14 @@
      * إعادة تحميل الصفحة
      */
     function refreshPage() {
-        // إظهار التنبيه
+        // تم تعطيل إعادة التحميل لضمان تجربة SPA سلسة
+        /*
         showRefreshNotification();
-        
-        // تعيين علامة في sessionStorage لتتبع أننا أجرينا إعادة تحميل
         sessionStorage.setItem(REFRESH_FLAG_KEY, 'true');
-        
-        // إعادة التحميل بعد تأخير بسيط لإظهار التنبيه
         setTimeout(() => {
             window.location.reload();
         }, 500);
+        */
     }
     
     /**
@@ -175,15 +173,8 @@
         }
         
         if (isSidebarNavigation === 'true' && wasRefreshed !== 'true') {
-            // هذا تحميل جديد للصفحة من الشريط الجانبي - نحتاج لإعادة التحميل
-            // إظهار التنبيه أولاً
-            showRefreshNotification();
-            
-            // ثم إعادة التحميل بعد تأخير قصير
-            setTimeout(() => {
-                sessionStorage.setItem(REFRESH_FLAG_KEY, 'true');
-                window.location.reload();
-            }, 800);
+            // تم تعطيل الـ Auto-Refresh لضمان تجربة SPA حقيقية بدون شاشات تحميل
+            sessionStorage.removeItem('sidebar_navigation');
             return;
         }
         
