@@ -2454,6 +2454,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             preventDuplicateSubmission($msg, ['page' => 'production_tasks'], null, $userRole);
             exit;
         }
+    } elseif ($action === 'bulk_change_task_status' && ($isAccountant || $isManager)) {
+        $taskIdsRaw = $_POST['task_ids'] ?? [];
+        if (!is_array($taskIdsRaw)) $taskIdsRaw = explode(',', (string)$taskIdsRaw);
+        $taskIds = array_values(array_filter(array_map('intval', $taskIdsRaw)));
+        $newStatus = trim($_POST['status'] ?? '');
+        $allowedStatuses = ['pending', 'in_progress', 'completed', 'with_delegate', 'with_driver', 'with_shipping_company', 'delivered', 'returned', 'cancelled'];
+        if (empty($taskIds)) {
+            $error = 'لم يتم تحديد أي أوردرات.';
+        } elseif (!in_array($newStatus, $allowedStatuses, true)) {
+            $error = 'حالة غير صحيحة.';
+        } else {
+            $ph = implode(',', array_fill(0, count($taskIds), '?'));
+            $tasks = $db->query("SELECT id, title, status FROM tasks WHERE id IN ($ph)", $taskIds);
+            $successCount = 0;
+            $errors = [];
+            foreach (($tasks ?: []) as $bulkTask) {
+                $tid = (int)$bulkTask['id'];
+                try {
+                    $updateFields = ['status = ?'];
+                    $updateValues = [$newStatus];
+                    if (in_array($newStatus, ['completed', 'with_delegate', 'with_shipping_company', 'delivered', 'returned'], true)) {
+                        $updateFields[] = 'completed_at = NOW()';
+                    } elseif ($newStatus === 'in_progress') {
+                        $updateFields[] = 'started_at = NOW()';
+                    } elseif ($newStatus === 'received') {
+                        $updateFields[] = 'received_at = NOW()';
+                    }
+                    $updateFields[] = 'updated_at = NOW()';
+                    if ($hasStatusChangedBy) {
+                        $updateFields[] = 'status_changed_by = ?';
+                        $updateValues[] = $currentUser['id'];
+                    }
+                    $updateValues[] = $tid;
+                    $db->execute("UPDATE tasks SET " . implode(', ', $updateFields) . " WHERE id = ?", $updateValues);
+                    logAudit($currentUser['id'], 'update_task_status', 'tasks', $tid, ['old_status' => $bulkTask['status']], ['new_status' => $newStatus]);
+                    $successCount++;
+                } catch (Exception $e) {
+                    $errors[] = "أوردر #$tid: " . $e->getMessage();
+                }
+            }
+            $msg = "تم تغيير حالة {$successCount} أوردر بنجاح.";
+            if (!empty($errors)) $msg .= ' ملاحظات: ' . implode(' | ', $errors);
+            $userRole = in_array($currentUser['role'] ?? '', ['accountant', 'sales', 'telegraph'], true) ? ($currentUser['role'] ?? 'manager') : 'manager';
+            preventDuplicateSubmission($msg, ['page' => 'production_tasks'], null, $userRole);
+            exit;
+        }
     } elseif ($action === 'cancel_task') {
         $taskId = intval($_POST['task_id'] ?? 0);
 
@@ -4810,6 +4856,9 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                 <button type="button" class="btn btn-outline-success btn-sm" id="approveSelectedBtn" title="اعتماد الفواتير المحددة" disabled onclick="openBulkApproveCard()">
                     <i class="bi bi-check2-circle me-1"></i>اعتماد المحدد (<span id="approveSelectedCount">0</span>)
                 </button>
+                <button type="button" class="btn btn-outline-warning btn-sm" id="bulkChangeStatusBtn" title="تغيير حالة الأوردرات المحددة" disabled onclick="openBulkChangeStatusCard()">
+                    <i class="bi bi-arrow-repeat me-1"></i>تغيير الحالة (<span id="bulkChangeStatusCount">0</span>)
+                </button>
                 <?php endif; ?>
 
                 <button type="button" class="btn btn-outline-info btn-sm" id="exportSelectedExcelBtn" title="تصدير CSV حسب الفترة">
@@ -4992,7 +5041,8 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                             data-approved="<?php echo $cbApproved; ?>"
                                             data-products-json="<?php echo htmlspecialchars($cbProductsJson, ENT_QUOTES, 'UTF-8'); ?>"
                                             data-shipping-fees="<?php echo $cbShipping; ?>"
-                                            data-discount="<?php echo $cbDiscount; ?>">
+                                            data-discount="<?php echo $cbDiscount; ?>"
+                                            data-status="<?php echo htmlspecialchars($task['status'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
                                     </td>
                                     <?php endif; ?>
                                     <td>
@@ -8778,6 +8828,120 @@ window.openBulkApproveCard = function() {
     }
 };
 
+// ===== بطاقة تغيير حالة الأوردرات المحددة (جماعي) =====
+var statusLabels = {
+    'pending': 'قيد الانتظار', 'in_progress': 'قيد التنفيذ', 'completed': 'مكتمل',
+    'with_delegate': 'مع المندوب', 'with_driver': 'مع السائق',
+    'with_shipping_company': 'مع شركة الشحن', 'delivered': 'تم التوصيل',
+    'returned': 'مُرتجع', 'cancelled': 'ملغي'
+};
+
+function ensureBulkChangeStatusCardExists() {
+    if (document.getElementById('bulkChangeStatusCardCollapse')) return true;
+    var host = document.querySelector('main') || document.getElementById('main-content') || document.body;
+    if (!host) return false;
+    var statusOptions = Object.keys(statusLabels).map(function(k) {
+        return '<option value="' + k + '">' + statusLabels[k] + '</option>';
+    }).join('');
+    var wrapper = document.createElement('div');
+    wrapper.className = 'container-fluid px-0';
+    wrapper.id = 'bulkChangeStatusCardWrapper';
+    wrapper.innerHTML =
+        '<div class="collapse" id="bulkChangeStatusCardCollapse">' +
+        '<div class="card shadow-sm border-warning mb-3">' +
+        '<div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">' +
+        '<h5 class="mb-0"><i class="bi bi-arrow-repeat me-2"></i><span id="bulkChangeStatusCardTitle">تغيير حالة الأوردرات المحددة</span></h5>' +
+        '<button type="button" class="btn btn-sm btn-light" onclick="closeBulkChangeStatusCard()" aria-label="إغلاق"><i class="bi bi-x-lg"></i></button>' +
+        '</div>' +
+        '<div class="card-body">' +
+        '<div id="bulkChangeStatusOrdersContainer"></div>' +
+        '<form method="POST" id="bulkChangeStatusCardForm" action="?page=production_tasks" class="mt-3">' +
+        '<input type="hidden" name="action" value="bulk_change_task_status">' +
+        '<div id="bulkChangeStatusTaskIdsContainer"></div>' +
+        '<div class="mb-3">' +
+        '<label class="form-label fw-semibold">الحالة الجديدة</label>' +
+        '<select name="status" id="bulkChangeStatusSelect" class="form-select">' +
+        statusOptions +
+        '</select>' +
+        '</div>' +
+        '<div class="d-flex gap-2 mt-3">' +
+        '<button type="button" class="btn btn-secondary w-50" onclick="closeBulkChangeStatusCard()"><i class="bi bi-x-circle me-1"></i>إلغاء</button>' +
+        '<button type="submit" class="btn btn-warning w-50" id="bulkChangeStatusSubmitBtn"><i class="bi bi-arrow-repeat me-1"></i>تغيير الحالة</button>' +
+        '</div>' +
+        '</form>' +
+        '</div>' +
+        '</div>' +
+        '</div>';
+    host.appendChild(wrapper);
+    return !!document.getElementById('bulkChangeStatusCardCollapse');
+}
+
+function closeBulkChangeStatusCard() {
+    var collapse = document.getElementById('bulkChangeStatusCardCollapse');
+    if (collapse && typeof bootstrap !== 'undefined') {
+        var c = bootstrap.Collapse.getInstance(collapse);
+        if (c) c.hide();
+    }
+}
+
+window.openBulkChangeStatusCard = function() {
+    var checked = document.querySelectorAll('.task-print-checkbox:checked');
+    if (!checked.length) return;
+    if (!ensureBulkChangeStatusCardExists()) return;
+
+    var ids = [];
+    var rows = [];
+    var orderTypeLabels = { 'shop_order': 'محل', 'cash_customer': 'عميل نقدي', 'telegraph': 'تليجراف', 'shipping_company': 'شركة شحن' };
+
+    checked.forEach(function(cb) {
+        var id = parseInt(cb.value, 10);
+        ids.push(id);
+        rows.push({
+            id: id,
+            customerName: cb.getAttribute('data-customer-name') || '—',
+            orderType: cb.getAttribute('data-order-type') || '',
+            currentStatus: cb.getAttribute('data-status') || ''
+        });
+    });
+
+    var titleEl = document.getElementById('bulkChangeStatusCardTitle');
+    if (titleEl) titleEl.textContent = 'تغيير حالة الأوردرات المحددة (' + ids.length + ' أوردر)';
+
+    var idsContainer = document.getElementById('bulkChangeStatusTaskIdsContainer');
+    if (idsContainer) {
+        idsContainer.innerHTML = ids.map(function(id) {
+            return '<input type="hidden" name="task_ids[]" value="' + id + '">';
+        }).join('');
+    }
+
+    var container = document.getElementById('bulkChangeStatusOrdersContainer');
+    if (container) {
+        var html = '<div class="table-responsive"><table class="table table-sm table-bordered align-middle mb-0">' +
+            '<thead class="table-light"><tr><th>رقم الأوردر</th><th>العميل</th><th>النوع</th><th>الحالة الحالية</th></tr></thead><tbody>';
+        rows.forEach(function(o) {
+            var typeLabel = orderTypeLabels[o.orderType] || o.orderType;
+            var statusLabel = statusLabels[o.currentStatus] || o.currentStatus;
+            html += '<tr>' +
+                '<td><strong>#' + o.id + '</strong></td>' +
+                '<td>' + (o.customerName).replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</td>' +
+                '<td><span class="badge bg-light text-dark border">' + typeLabel.replace(/</g, '&lt;') + '</span></td>' +
+                '<td><span class="badge bg-secondary">' + statusLabel.replace(/</g, '&lt;') + '</span></td>' +
+                '</tr>';
+        });
+        html += '</tbody></table></div>';
+        container.innerHTML = html;
+    }
+
+    var collapse = document.getElementById('bulkChangeStatusCardCollapse');
+    if (collapse && typeof bootstrap !== 'undefined') {
+        var c = bootstrap.Collapse.getOrCreateInstance(collapse, { toggle: false });
+        c.show();
+        setTimeout(function() {
+            if (collapse.scrollIntoView) collapse.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }, 150);
+    }
+};
+
 // دالة لفتح modal تغيير الحالة - يجب أن تكون في النطاق العام
 window.openChangeStatusModal = function(taskId, currentStatus) {
     function ensureChangeStatusCardExists() {
@@ -9017,6 +9181,8 @@ window.closeChangeStatusCard = function() {
     var selectedCountEl = document.getElementById('selectedCount');
     var approveBtn = document.getElementById('approveSelectedBtn');
     var approveCountEl = document.getElementById('approveSelectedCount');
+    var bulkChangeStatusBtn = document.getElementById('bulkChangeStatusBtn');
+    var bulkChangeStatusCountEl = document.getElementById('bulkChangeStatusCount');
     var exportBtn = document.getElementById('exportSelectedExcelBtn');
     var exportCountEl = document.getElementById('exportSelectedCount');
     // even if there are no checkboxes (no recent tasks), allow period export
@@ -9037,6 +9203,8 @@ window.closeChangeStatusCard = function() {
         });
         if (approveCountEl) approveCountEl.textContent = approvable;
         if (approveBtn) approveBtn.disabled = approvable === 0;
+        if (bulkChangeStatusCountEl) bulkChangeStatusCountEl.textContent = n;
+        if (bulkChangeStatusBtn) bulkChangeStatusBtn.disabled = n === 0;
         if (selectAll) {
             selectAll.checked = checkboxes.length > 0 && checked.length === checkboxes.length;
             selectAll.indeterminate = checked.length > 0 && checked.length < checkboxes.length;
