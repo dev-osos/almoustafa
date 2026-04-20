@@ -58,7 +58,7 @@
                 return;
             }
 
-            showPageLoading();
+            // showPageLoading();
         }, 0);
     }
 

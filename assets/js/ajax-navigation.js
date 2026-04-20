@@ -43,7 +43,7 @@
         cacheEnabled: true,
         cacheMaxSize: isMobileData ? 15 : 10, // زيادة حجم cache على الهاتف لتسريع التنقل
         // Loading indicator
-        showLoading: true
+        showLoading: false
     };
 
     // صفحات لا تُخزَّن في الكاش أبداً (بيانات حية من قاعدة البيانات)
@@ -259,8 +259,14 @@
             document.title = data.title;
         }
 
-        // تحديث المحتوى
+        // تحديث المحتوى مع تأثير بصري سريع
+        mainElement.classList.add('ajax-content-updating');
         mainElement.innerHTML = data.content;
+        
+        // إزالة الكلاس بعد انتهاء التأثير
+        setTimeout(() => {
+            mainElement.classList.remove('ajax-content-updating');
+        }, 200);
 
         // إعادة تهيئة الشريط العلوي فوراً بعد تحديث المحتوى - مهم جداً
         // استخدام setTimeout(0) لضمان تنفيذها بعد اكتمال تحديث DOM
@@ -1090,14 +1096,14 @@
 
         // التحقق من Cache المحلي أولاً (الأسرع) - مع استثناء الصفحات التي يجب أن تكون دائماً محدثة
         if (CONFIG.cacheEnabled && !isNoCachePage(url) && pageCache.has(url)) {
-            if (typeof window.showPageLoading === 'function') window.showPageLoading();
+            /* window.showPageLoading(); */
             const cachedData = pageCache.get(url);
             currentUrl = url;
             updatePageContent(cachedData);
             updateHistory(url);
             requestAnimationFrame(function() {
                 requestAnimationFrame(function() {
-                    if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
+                    /* window.hidePageLoading(); */
                 });
             });
             return true;
@@ -1177,7 +1183,7 @@
 
         isLoading = true;
         showLoading();
-        if (typeof window.showPageLoading === 'function') window.showPageLoading();
+        /* window.showPageLoading(); */
 
         let timeoutId = null;
         try {
@@ -1285,7 +1291,7 @@
             // إذا تم redirect إلى صفحة تسجيل الدخول وكان المحتوى يؤكد ذلك، نعيد التوجيه الكامل
             if (response.redirected && isLoginPageUrl && isLoginPageContent) {
                 hideLoading();
-                if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
+                /* window.hidePageLoading(); */
                 isLoading = false;
                 window.location.href = responseUrl;
                 return false;
@@ -1294,7 +1300,7 @@
             // إذا كان المحتوى يشير إلى صفحة تسجيل دخول (حتى بدون redirect)، نعيد التوجيه
             if (isLoginPageContent && isLoginPageUrl && !hasMainContent) {
                 hideLoading();
-                if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
+                /* window.hidePageLoading(); */
                 isLoading = false;
                 window.location.href = responseUrl;
                 return false;
@@ -1312,14 +1318,14 @@
             if (!data) {
                 if (response.redirected && isLoginPageUrl && isLoginPageContent) {
                     hideLoading();
-                    if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
+                    /* window.hidePageLoading(); */
                     isLoading = false;
                     window.location.href = responseUrl;
                     return false;
                 }
                 if (!hasMainContent && isLoginPageUrl) {
                     hideLoading();
-                    if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
+                    /* window.hidePageLoading(); */
                     isLoading = false;
                     window.location.href = responseUrl;
                     return false;
@@ -1346,7 +1352,7 @@
             // إخفاء شاشة التحميل العامة بعد رسم المحتوى المحدث
             requestAnimationFrame(function() {
                 requestAnimationFrame(function() {
-                    if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
+                    /* window.hidePageLoading(); */
                 });
             });
 
@@ -1358,7 +1364,7 @@
             console.error('AJAX navigation error:', error);
 
             hideLoading();
-            if (typeof window.hidePageLoading === 'function') window.hidePageLoading();
+            /* window.hidePageLoading(); */
             
             // إذا كان timeout، أظهر رسالة خطأ قبل fallback
             if (error.name === 'AbortError' || error.message.includes('timeout')) {

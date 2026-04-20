@@ -4803,6 +4803,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
             <h5 class="mb-0 text-warning"><i class="bi bi-floppy me-2"></i>المسودات (<span id="draftsCount"><?php echo count($taskDrafts); ?></span>)</h5>
         </div>
         <div class="card-body p-0">
+            
             <ul class="list-group list-group-flush" id="draftsList">
                 <?php foreach ($taskDrafts as $draft): ?>
                 <li class="list-group-item task-draft-item" id="draft-item-<?php echo (int)$draft['id']; ?>">
