@@ -5976,59 +5976,64 @@ function openBeeswaxDamageModal(id, supplier, quantity) {
     </div>
 <?php endif; ?>
 
-<!-- Tabs للأقسام الأربعة -->
-<div class="section-tabs">
+<!-- Tabs للأقسام -->
+<div class="section-tabs" id="rawMaterialsTabs">
     <ul class="nav nav-pills justify-content-center row g-2">
         <li class="nav-item col-4 col-md-auto">
-            <a class="nav-link text-center <?php echo $section === 'turbines' ? 'active' : ''; ?>" 
-               href="?page=raw_materials_warehouse&section=turbines">
+            <a class="nav-link text-center <?php echo $section === 'turbines' ? 'active' : ''; ?>"
+               href="?page=raw_materials_warehouse&section=turbines" data-section="turbines">
                 <i class="bi bi-cup-hot-fill"></i>التلبينات
             </a>
         </li>
         <li class="nav-item col-4 col-md-auto">
-            <a class="nav-link text-center <?php echo $section === 'herbal' ? 'active' : ''; ?>" 
-               href="?page=raw_materials_warehouse&section=herbal">
+            <a class="nav-link text-center <?php echo $section === 'herbal' ? 'active' : ''; ?>"
+               href="?page=raw_materials_warehouse&section=herbal" data-section="herbal">
                 <i class="bi bi-flower2"></i>العطاره
             </a>
         </li>
         <li class="nav-item col-4 col-md-auto">
-            <a class="nav-link text-center <?php echo $section === 'honey' ? 'active' : ''; ?>" 
-               href="?page=raw_materials_warehouse&section=honey">
+            <a class="nav-link text-center <?php echo $section === 'honey' ? 'active' : ''; ?>"
+               href="?page=raw_materials_warehouse&section=honey" data-section="honey">
                 <i class="bi bi-droplet-fill"></i>العسل
             </a>
         </li>
         <li class="nav-item col-4 col-md-auto">
-            <a class="nav-link text-center <?php echo $section === 'olive_oil' ? 'active' : ''; ?>" 
-               href="?page=raw_materials_warehouse&section=olive_oil">
+            <a class="nav-link text-center <?php echo $section === 'olive_oil' ? 'active' : ''; ?>"
+               href="?page=raw_materials_warehouse&section=olive_oil" data-section="olive_oil">
                 <i class="bi bi-cup-straw"></i>زيت الزيتون
             </a>
         </li>
         <li class="nav-item col-4 col-md-auto">
-            <a class="nav-link text-center <?php echo $section === 'beeswax' ? 'active' : ''; ?>" 
-               href="?page=raw_materials_warehouse&section=beeswax">
+            <a class="nav-link text-center <?php echo $section === 'beeswax' ? 'active' : ''; ?>"
+               href="?page=raw_materials_warehouse&section=beeswax" data-section="beeswax">
                 <i class="bi bi-hexagon-fill"></i>شمع العسل
             </a>
         </li>
         <li class="nav-item col-4 col-md-auto">
-            <a class="nav-link text-center <?php echo $section === 'nuts' ? 'active' : ''; ?>" 
-               href="?page=raw_materials_warehouse&section=nuts">
+            <a class="nav-link text-center <?php echo $section === 'nuts' ? 'active' : ''; ?>"
+               href="?page=raw_materials_warehouse&section=nuts" data-section="nuts">
                 <i class="bi bi-nut-fill"></i>المكسرات
             </a>
         </li>
         <li class="nav-item col-4 col-md-auto">
-            <a class="nav-link text-center <?php echo $section === 'sesame' ? 'active' : ''; ?>" 
-               href="?page=raw_materials_warehouse&section=sesame">
+            <a class="nav-link text-center <?php echo $section === 'sesame' ? 'active' : ''; ?>"
+               href="?page=raw_materials_warehouse&section=sesame" data-section="sesame">
                 <i class="bi bi-circle-fill"></i>السمسم
             </a>
         </li>
         <li class="nav-item col-4 col-md-auto">
-            <a class="nav-link text-center <?php echo $section === 'date' ? 'active' : ''; ?>" 
-               href="?page=raw_materials_warehouse&section=date">
+            <a class="nav-link text-center <?php echo $section === 'date' ? 'active' : ''; ?>"
+               href="?page=raw_materials_warehouse&section=date" data-section="date">
                 <i class="bi bi-tree-fill"></i>البلح
             </a>
         </li>
     </ul>
 </div>
+
+<div id="rawSectionLoadingBar" style="display:none;height:3px;background:linear-gradient(90deg,#0d6efd 0%,#6ea8fe 50%,#0d6efd 100%);background-size:200% 100%;animation:rawLoadingAnim 1s linear infinite;margin-bottom:8px;border-radius:2px;"></div>
+<style>@keyframes rawLoadingAnim{0%{background-position:200% 0}100%{background-position:-200% 0}}</style>
+
+<div id="rawSectionContent">
 
 <?php
 // عرض محتوى القسم المختار
@@ -11623,3 +11628,74 @@ observer.observe(document.body, {
 })();
 </script>
 
+</div><!-- #rawSectionContent -->
+
+<script>
+(function () {
+    const tabs = document.getElementById('rawMaterialsTabs');
+    const content = document.getElementById('rawSectionContent');
+    const loadingBar = document.getElementById('rawSectionLoadingBar');
+    if (!tabs || !content) return;
+
+    function rerunScripts(container) {
+        container.querySelectorAll('script').forEach(function (oldScript) {
+            const newScript = document.createElement('script');
+            Array.from(oldScript.attributes).forEach(function (attr) {
+                newScript.setAttribute(attr.name, attr.value);
+            });
+            newScript.textContent = oldScript.textContent;
+            oldScript.parentNode.replaceChild(newScript, oldScript);
+        });
+    }
+
+    tabs.addEventListener('click', function (e) {
+        const link = e.target.closest('a[data-section]');
+        if (!link) return;
+        e.preventDefault();
+
+        const section = link.dataset.section;
+        const url = link.href;
+
+        // Update active tab immediately
+        tabs.querySelectorAll('a[data-section]').forEach(function (a) {
+            a.classList.remove('active');
+        });
+        link.classList.add('active');
+
+        // Show loading bar
+        loadingBar.style.display = 'block';
+        content.style.opacity = '0.4';
+        content.style.pointerEvents = 'none';
+
+        fetch(url, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (res) { return res.text(); })
+            .then(function (html) {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                const newContent = doc.getElementById('rawSectionContent');
+                if (newContent) {
+                    content.innerHTML = newContent.innerHTML;
+                    rerunScripts(content);
+                }
+                if (window.history && window.history.pushState) {
+                    window.history.pushState({ section: section }, '', url);
+                }
+            })
+            .catch(function () {
+                window.location.href = url;
+            })
+            .finally(function () {
+                loadingBar.style.display = 'none';
+                content.style.opacity = '';
+                content.style.pointerEvents = '';
+            });
+    });
+
+    window.addEventListener('popstate', function (e) {
+        if (e.state && e.state.section) {
+            const link = tabs.querySelector('a[data-section="' + e.state.section + '"]');
+            if (link) link.click();
+        }
+    });
+})();
+</script>

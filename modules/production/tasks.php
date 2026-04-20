@@ -2116,23 +2116,7 @@ function tasksHtml(string $value): string
                             <label class="form-label">الوصف</label>
                             <textarea class="form-control" name="description" rows="3" placeholder="تفاصيل المهمة"></textarea>
                         </div>
-                        <div class="col-md-6">
-                            <label class="form-label">المخصص إلى</label>
-                            <select class="form-select" name="assigned_to">
-                                <option value="0">غير محدد</option>
-                                <?php foreach ($users as $user): ?>
-                                    <option value="<?php echo (int) $user['id']; ?>"><?php echo tasksHtml($user['full_name']); ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">الأولوية</label>
-                            <select class="form-select" name="priority">
-                                <option value="normal" selected>عادية</option>
-                                <option value="low">منخفضة</option>
-                                <option value="urgent">عاجلة</option>
-                            </select>
-                        </div>
+                        
                         <div class="col-md-6">
                             <label class="form-label">تاريخ التسليم</label>
                             <input type="date" class="form-control" name="due_date">
