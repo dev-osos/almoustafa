@@ -357,9 +357,11 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
                 const items = data && data.success && Array.isArray(data.items) ? data.items : [];
                 
                 items.forEach(x => {
-                    const o = createOption(String(x.id), x.name + ' (' + (x.current_quantity || 0) + ' ' + (x.unit || '') + ')');
+                    const compositeValue = String(x.id) + '_' + (x.quantity_field || '');
+                    const o = createOption(compositeValue, x.name + ' (' + (x.current_quantity || 0) + ' ' + (x.unit || '') + ')');
                     o.dataset.table = x.table || '';
                     o.dataset.field = x.quantity_field || '';
+                    o.dataset.itemId = String(x.id);
                     o.dataset.name = x.name || '';
                     o.dataset.unit = x.unit || '';
                     o.dataset.searchText = x.name.toLowerCase();
@@ -517,7 +519,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
         function applySelection(item) {
             if (!item) return false;
             input.value = item.name || '';
-            select.value = String(item.id || '');
+            select.value = String(item.id || '') + '_' + (item.quantity_field || '');
             dropdown.style.display = 'none';
             selectedIndex = -1;
             if (onSelect) onSelect(item);
@@ -654,7 +656,7 @@ $apiUrl = getRelativeUrl('api/inbound_supplies.php');
 
             return {
                 department: dep,
-                item_id: parseInt((itemSel && itemSel.value) || '0', 10) || null,
+                item_id: parseInt((itemOpt && itemOpt.dataset.itemId) || (itemSel && itemSel.value) || '0', 10) || null,
                 table: itemOpt ? (itemOpt.dataset.table || '') : '',
                 quantity_field: itemOpt ? (itemOpt.dataset.field || '') : '',
                 item_name: itemName,
