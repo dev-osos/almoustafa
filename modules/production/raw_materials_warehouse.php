@@ -5976,59 +5976,97 @@ function openBeeswaxDamageModal(id, supplier, quantity) {
     </div>
 <?php endif; ?>
 
-<!-- Tabs للأقسام -->
-<div class="section-tabs" id="rawMaterialsTabs">
-    <ul class="nav nav-pills justify-content-center row g-2">
-        <li class="nav-item col-4 col-md-auto">
-            <a class="nav-link text-center <?php echo $section === 'turbines' ? 'active' : ''; ?>"
-               href="?page=raw_materials_warehouse&section=turbines" data-section="turbines">
-                <i class="bi bi-cup-hot-fill"></i>التلبينات
+<!-- Tabs للأقسام بتصميم حديث -->
+<div class="section-tabs-container mb-4" id="rawMaterialsTabs">
+    <div class="glass-tabs d-flex justify-content-center flex-wrap gap-2 p-2">
+        <?php foreach ($canonicalSectionsOrder as $secKey): ?>
+            <a class="tab-item <?php echo $section === $secKey ? 'active' : ''; ?>"
+               href="?page=raw_materials_warehouse&section=<?php echo $secKey; ?>" 
+               data-section="<?php echo $secKey; ?>">
+                <span class="tab-icon">
+                    <?php 
+                    $icon = 'bi-box';
+                    switch($secKey) {
+                        case 'turbines': $icon = 'bi-cup-hot-fill'; break;
+                        case 'herbal': $icon = 'bi-flower2'; break;
+                        case 'honey': $icon = 'bi-droplet-fill'; break;
+                        case 'olive_oil': $icon = 'bi-cup-straw'; break;
+                        case 'beeswax': $icon = 'bi-hexagon-fill'; break;
+                        case 'nuts': $icon = 'bi-nut-fill'; break;
+                        case 'sesame': $icon = 'bi-circle-fill'; break;
+                        case 'date': $icon = 'bi-tree-fill'; break;
+                    }
+                    ?>
+                    <i class="bi <?php echo $icon; ?>"></i>
+                </span>
+                <span class="tab-label"><?php echo $sectionTitles[$secKey] ?? $secKey; ?></span>
             </a>
-        </li>
-        <li class="nav-item col-4 col-md-auto">
-            <a class="nav-link text-center <?php echo $section === 'herbal' ? 'active' : ''; ?>"
-               href="?page=raw_materials_warehouse&section=herbal" data-section="herbal">
-                <i class="bi bi-flower2"></i>العطاره
-            </a>
-        </li>
-        <li class="nav-item col-4 col-md-auto">
-            <a class="nav-link text-center <?php echo $section === 'honey' ? 'active' : ''; ?>"
-               href="?page=raw_materials_warehouse&section=honey" data-section="honey">
-                <i class="bi bi-droplet-fill"></i>العسل
-            </a>
-        </li>
-        <li class="nav-item col-4 col-md-auto">
-            <a class="nav-link text-center <?php echo $section === 'olive_oil' ? 'active' : ''; ?>"
-               href="?page=raw_materials_warehouse&section=olive_oil" data-section="olive_oil">
-                <i class="bi bi-cup-straw"></i>زيت الزيتون
-            </a>
-        </li>
-        <li class="nav-item col-4 col-md-auto">
-            <a class="nav-link text-center <?php echo $section === 'beeswax' ? 'active' : ''; ?>"
-               href="?page=raw_materials_warehouse&section=beeswax" data-section="beeswax">
-                <i class="bi bi-hexagon-fill"></i>شمع العسل
-            </a>
-        </li>
-        <li class="nav-item col-4 col-md-auto">
-            <a class="nav-link text-center <?php echo $section === 'nuts' ? 'active' : ''; ?>"
-               href="?page=raw_materials_warehouse&section=nuts" data-section="nuts">
-                <i class="bi bi-nut-fill"></i>المكسرات
-            </a>
-        </li>
-        <li class="nav-item col-4 col-md-auto">
-            <a class="nav-link text-center <?php echo $section === 'sesame' ? 'active' : ''; ?>"
-               href="?page=raw_materials_warehouse&section=sesame" data-section="sesame">
-                <i class="bi bi-circle-fill"></i>السمسم
-            </a>
-        </li>
-        <li class="nav-item col-4 col-md-auto">
-            <a class="nav-link text-center <?php echo $section === 'date' ? 'active' : ''; ?>"
-               href="?page=raw_materials_warehouse&section=date" data-section="date">
-                <i class="bi bi-tree-fill"></i>البلح
-            </a>
-        </li>
-    </ul>
+        <?php endforeach; ?>
+    </div>
 </div>
+
+<style>
+.glass-tabs {
+    background: rgba(255, 255, 255, 0.6);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 16px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+}
+
+.tab-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    border-radius: 12px;
+    color: #4b5563;
+    text-decoration: none !important;
+    font-weight: 600;
+    font-size: 14px;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    border: 1px solid transparent;
+}
+
+.tab-item:hover {
+    background: rgba(30, 58, 95, 0.05);
+    color: #1e3a5f;
+    transform: translateY(-1px);
+}
+
+.tab-item.active {
+    background: #1e3a5f;
+    color: #ffffff;
+    box-shadow: 0 4px 12px rgba(30, 58, 95, 0.3);
+}
+
+.tab-icon {
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#rawSectionContent {
+    animation: slideUpFade 0.4s ease-out;
+}
+
+@keyframes slideUpFade {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.tab-loading {
+    pointer-events: none;
+    opacity: 0.7;
+}
+</style>
 
 <div id="rawSectionLoadingBar" style="display:none;height:3px;background:linear-gradient(90deg,#0d6efd 0%,#6ea8fe 50%,#0d6efd 100%);background-size:200% 100%;animation:rawLoadingAnim 1s linear infinite;margin-bottom:8px;border-radius:2px;"></div>
 <style>@keyframes rawLoadingAnim{0%{background-position:200% 0}100%{background-position:-200% 0}}</style>
@@ -11662,11 +11700,6 @@ observer.observe(document.body, {
         });
         link.classList.add('active');
 
-        // Show loading bar
-        loadingBar.style.display = 'block';
-        content.style.opacity = '0.4';
-        content.style.pointerEvents = 'none';
-
         fetch(url, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
             .then(function (res) { return res.text(); })
             .then(function (html) {
@@ -11684,10 +11717,6 @@ observer.observe(document.body, {
             .catch(function () {
                 window.location.href = url;
             })
-            .finally(function () {
-                loadingBar.style.display = 'none';
-                content.style.opacity = '';
-                content.style.pointerEvents = '';
             });
     });
 
