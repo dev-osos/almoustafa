@@ -4374,7 +4374,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-3 d-none" id="createGovWrap">
+                        <div class="col-6 col-md-3 d-none" id="createGovWrap">
                             <label class="form-label">المحافظة</label>
                             <div class="gov-autocomplete-wrap position-relative">
                                 <input type="text" class="form-control gov-search-input" id="createGovSearch" placeholder="ابحث عن محافظة..." autocomplete="off">
@@ -4383,7 +4383,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                 <div class="gov-dropdown d-none"></div>
                             </div>
                         </div>
-                        <div class="col-md-3 d-none" id="createCityWrap">
+                        <div class="col-6 col-md-3 d-none" id="createCityWrap">
                             <label class="form-label">المدينة</label>
                             <div class="city-autocomplete-wrap position-relative">
                                 <input type="text" class="form-control city-search-input" id="createCitySearch" placeholder="ابحث عن مدينة..." autocomplete="off">
@@ -4474,7 +4474,6 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                             <label class="form-label small">الإجمالي</label>
                                             <div class="input-group input-group-sm">
                                                 <input type="number" class="form-control product-line-total-input" name="products[0][line_total]" step="0.01" min="0" placeholder="0.00" id="product-line-total-0" title="الإجمالي = الكمية × السعر حسب الوحدة">
-                                                <span class="input-group-text">ج.م</span>
                                             </div>
                                         </div>
                                         <div class="col-6 col-md-1 d-flex align-items-end">
@@ -4493,7 +4492,6 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                 <div class="col-6 col-md-3">
                                     <label class="form-label">عدد القطع</label>
                                     <input type="number" class="form-control" name="tg_pieces_count" id="createTgPiecesCount" step="1" min="1" placeholder="1" value="1">
-                                    <small class="text-muted">يُحسب تلقائياً ويمكن تعديله يدوياً</small>
                                 </div>
                                 <div class="col-6 col-md-3">
                                     <label class="form-label">الوزن (كجم)</label>
@@ -4523,7 +4521,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             </div>
                         </div>
                         <div class="col-4 col-md-6 col-lg-4 mt-2">
-                            <label class="form-label">المدفوع مقدماً</label>
+                            <label class="form-label">المدفوع </label>
                             <div class="input-group">
                                 <input type="number" class="form-control" name="advance_payment" id="createTaskAdvancePayment" step="0.01" min="0" placeholder="0.00" value="0">
                             </div>
