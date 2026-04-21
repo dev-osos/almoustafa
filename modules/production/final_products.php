@@ -2960,10 +2960,16 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
     >
         <h5 style="margin: 0; font-weight: 600; display: flex; align-items: center; gap: 0.75rem; font-size: 1.15rem;">
             <i class="bi bi-diagram-3"></i>
-            منتجات المصنع
-            <i class="bi bi-chevron-down" id="factoryProductsToggleIcon" style="transition: transform 0.3s ease;"></i>
-        </h5>
-        <span style="background: rgba(255, 255, 255, 0.25); color: white; padding: 0.45rem 0.9rem; border-radius: 25px; font-size: 0.875rem; font-weight: 600;"><?php echo $totalProductTemplates; ?>  أصناف</span>
+             منتجات المصنع
+             <i class="bi bi-chevron-down" id="factoryProductsToggleIcon" style="transition: transform 0.3s ease;"></i>
+         </h5>
+         <div class="d-flex align-items-center gap-2">
+            <button type="button" class="btn-print-custom" onclick="printFactoryInventory()" style="font-size: 0.85rem; padding: 6px 12px; background: linear-gradient(135deg, #059669 0%, #10b981 100%);">
+                <i class="bi bi-printer"></i>
+                طباعة جرد القسم
+            </button>
+            <span style="background: rgba(255, 255, 255, 0.25); color: white; padding: 0.45rem 0.9rem; border-radius: 25px; font-size: 0.875rem; font-weight: 600;"><?php echo $totalProductTemplates; ?>  أصناف</span>
+         </div>
     </div>
     
     <div id="factoryProductsCollapse" style="background: white; border-radius: 0 0 16px 16px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08); overflow: hidden; padding: 2rem; transition: all 0.3s ease;">

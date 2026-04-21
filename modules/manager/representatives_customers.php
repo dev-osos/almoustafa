@@ -11,6 +11,37 @@ require_once __DIR__ . '/../../includes/db.php';
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/audit_log.php';
 require_once __DIR__ . '/../../includes/path_helper.php';
+
+// Premium Print Button Style
+?>
+<style>
+.btn-print-custom {
+    background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    cursor: pointer;
+}
+
+.btn-print-custom:hover {
+    background: linear-gradient(135deg, #047857 0%, #059669 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    color: white;
+}
+
+.btn-print-custom:active {
+    transform: translateY(0);
+}
+</style>
+<?php
 require_once __DIR__ . '/../../includes/invoices.php';
 require_once __DIR__ . '/../../includes/notifications.php';
 require_once __DIR__ . '/../../includes/components/customers/section_header.php';
@@ -989,7 +1020,19 @@ if ($error): ?>
     </div>
 <?php endif; ?>
 
-<div class="row g-3 mb-4">
+<div class="card shadow-sm mb-4">
+    <div 
+        class="card-header bg-dark text-white d-flex justify-content-between align-items-center" 
+        style="cursor: pointer;" 
+        onclick="toggleSection('statsCollapse', 'statsToggleIcon')"
+    >
+        <h5 class="mb-0">
+            <i class="bi bi-graph-up me-2"></i>إحصائيات المندوبين
+            <i class="bi bi-chevron-down ms-2" id="statsToggleIcon" style="transition: transform 0.3s ease;"></i>
+        </h5>
+    </div>
+    <div id="statsCollapse" class="card-body" style="transition: all 0.3s ease;">
+        <div class="row g-3">
     <div class="col-6 col-md-3">
         <div class="card shadow-sm border-0 h-100">
             <div class="card-body">
@@ -1077,6 +1120,8 @@ if ($error): ?>
             </div>
         </div>
     </div>
+</div>
+</div>
 </div>
 
 <?php
@@ -1225,9 +1270,15 @@ try {
     <div class="card-header bg-primary text-white">
         <div class="d-flex justify-content-between align-items-center">
             <h5 class="mb-0">جميع عملاء المندوبين (<span id="repCustomersTotalCount"><?php echo $allCustomersTotal; ?></span>)</h5>
-            <button class="btn btn-light btn-sm" id="openCustomerExportBtn" onclick="openCustomerExport()">
-                <i class="bi bi-download me-2"></i>تصدير عملاء محددين
-            </button>
+            <div class="d-flex gap-2">
+                <button class="btn-print-custom" onclick="printRepCustomersList()">
+                    <i class="bi bi-printer"></i>
+                    طباعة تقرير العملاء
+                </button>
+                <button class="btn btn-light btn-sm" id="openCustomerExportBtn" onclick="openCustomerExport()">
+                    <i class="bi bi-download me-2"></i>تصدير عملاء محددين
+                </button>
+            </div>
         </div>
     </div>
     <div class="card-body">
@@ -7559,6 +7610,129 @@ function closeEditRepCustomerCard() {
     window.loadRepCustomers = loadRepCustomers;
 })();
 
+/**
+ * دالة طباعة تقرير عملاء المندوبين بناءً على الفلترة الحالية
+ */
+function printRepCustomersList() {
+    const tableBody = document.getElementById('repCustomersTableBody');
+    if (!tableBody) return;
+
+    const rows = tableBody.querySelectorAll('tr');
+    if (rows.length === 0 || (rows.length === 1 && rows[0].querySelector('td[colspan]'))) {
+        alert('لا توجد بيانات للطباعة');
+        return;
+    }
+
+    let reportHtml = `
+        <!DOCTYPE html>
+        <html dir="rtl">
+        <head>
+            <meta charset="UTF-8">
+            <title>تقرير عملاء المندوبين - نظام المصطفى</title>
+            <style>
+                body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; color: #333; }
+                .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #eee; padding-bottom: 20px; }
+                .header h1 { margin: 0; color: #0d2f66; }
+                .header p { margin: 5px 0; color: #666; }
+                table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                th, td { border: 1px solid #ddd; padding: 12px 8px; text-align: right; }
+                th { background-color: #f8f9fa; color: #333; font-weight: bold; }
+                tr:nth-child(even) { background-color: #fafafa; }
+                .balance { font-weight: bold; }
+                .debtor { color: #dc3545; }
+                .clear { color: #198754; }
+                .footer { margin-top: 30px; text-align: center; font-size: 12px; color: #888; border-top: 1px solid #eee; padding-top: 10px; }
+                @media print {
+                    .no-print { display: none; }
+                    body { padding: 0; }
+                    table { page-break-inside: auto; }
+                    tr { page-break-inside: avoid; page-break-after: auto; }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>شركة المصطفى للتجارة والتوزيع</h1>
+                <h2>تقرير عملاء المندوبين</h2>
+                <p>تاريخ التقرير: ${new Date().toLocaleString('ar-EG')}</p>
+                <div style="margin-top: 10px; font-size: 14px;">
+                    <span>إجمالي العملاء في القائمة: ${rows.length}</span>
+                </div>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 50px;">#</th>
+                        <th>اسم العميل</th>
+                        <th>المندوب</th>
+                        <th>رقم الهاتف</th>
+                        <th>المنطقة</th>
+                        <th>العنوان</th>
+                        <th style="text-align: left;">الرصيد</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+
+    rows.forEach((row, index) => {
+        // استخراج البيانات من الخلايا
+        // ملاحظة: قد تختلف ترتيب الأعمدة حسب كود توليد PHP، لذا نتأكد من الترتيب
+        // الترتيب الحالي في الـ API: [اسم العميل، المندوب، الهاتف، المنطقة، العنوان، الرصيد، العمليات]
+        const cells = row.querySelectorAll('td');
+        if (cells.length < 6) return;
+
+        const name = cells[0].innerText.trim();
+        const repName = cells[1].innerText.trim();
+        const phone = cells[2].innerText.trim();
+        const region = cells[3].innerText.trim();
+        const address = cells[4].innerText.trim();
+        const balanceText = cells[5].innerText.trim();
+        
+        // محاولة تحديد ما إذا كان مدين أم لا بناءً على اللون أو النص
+        const balanceSpan = cells[5].querySelector('span');
+        let balanceClass = 'clear';
+        if (balanceSpan && balanceSpan.classList.contains('text-danger')) {
+            balanceClass = 'debtor';
+        }
+
+        reportHtml += `
+            <tr>
+                <td>${index + 1}</td>
+                <td style="font-weight: 500;">${name}</td>
+                <td>${repName}</td>
+                <td>${phone}</td>
+                <td>${region}</td>
+                <td style="font-size: 12px;">${address}</td>
+                <td style="text-align: left;" class="balance ${balanceClass}">${balanceText}</td>
+            </tr>
+        `;
+    });
+
+    reportHtml += `
+                </tbody>
+            </table>
+
+            <div class="footer">
+                <p>طبع بواسطة: <?php echo htmlspecialchars($currentUser['full_name'] ?? $currentUser['username'] ?? 'مدير'); ?></p>
+                <p>نظام إدارة شركة المصطفى © ${new Date().getFullYear()}</p>
+            </div>
+
+            <script>
+                window.onload = function() {
+                    window.print();
+                    setTimeout(function() { window.close(); }, 500);
+                };
+            </script>
+        </body>
+        </html>
+    `;
+
+    const printWindow = window.open('', '_blank', 'height=600,width=900');
+    printWindow.document.write(reportHtml);
+    printWindow.document.close();
+}
+
 // إلحاق قوائم الـ dropdown بـ body لتجاوز overflow في الجدول
 document.addEventListener('show.bs.dropdown', function(e) {
     const toggle = e.target;
@@ -7604,6 +7778,47 @@ document.addEventListener('hide.bs.dropdown', function(e) {
         delete menu._originalParent;
         delete menu._ddToggle;
     }
+});
+
+/**
+ * تبديل حالة ظهور القسم وحفظ التفضيل
+ */
+function toggleSection(collapseId, iconId) {
+    const section = document.getElementById(collapseId);
+    const icon = document.getElementById(iconId);
+    if (!section) return;
+
+    const isCollapsed = section.style.display === 'none';
+    
+    if (isCollapsed) {
+        section.style.display = '';
+        if (icon) icon.style.transform = 'rotate(0deg)';
+        localStorage.setItem('rep_section_' + collapseId, 'expanded');
+    } else {
+        section.style.display = 'none';
+        if (icon) icon.style.transform = 'rotate(-90deg)';
+        localStorage.setItem('rep_section_' + collapseId, 'collapsed');
+    }
+}
+
+/**
+ * تطبيق التفضيلات المحفوظة عند تحميل الصفحة
+ */
+document.addEventListener('DOMContentLoaded', function() {
+    const sections = [
+        { id: 'statsCollapse', icon: 'statsToggleIcon' }
+    ];
+
+    sections.forEach(function(sec) {
+        const collapseEl = document.getElementById(sec.id);
+        const iconEl = document.getElementById(sec.icon);
+        const savedState = localStorage.getItem('rep_section_' + sec.id);
+
+        if (savedState === 'collapsed' && collapseEl) {
+            collapseEl.style.display = 'none';
+            if (iconEl) iconEl.style.transform = 'rotate(-90deg)';
+        }
+    });
 });
 </script>
 
