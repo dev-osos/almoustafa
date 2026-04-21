@@ -4435,16 +4435,17 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                                 <option value="raw_material">خامات</option>
                                                 <option value="packaging">أدوات تعبئة</option>
                                             </select>
+                                            <label class="form-label small">الكمية</label>
+                                            <input type="number" class="form-control product-quantity-input" name="products[0][quantity]" step="1" min="0" placeholder="0" id="product-quantity-0" required>
+                                            <small class="product-effective-qty-hint text-muted d-none" id="product-effective-qty-hint-0"></small>
+                                        </div>
+                                        <div class="col-6 col-md-2">
+                                            <label class="form-label small">اسم المنتج</label>
                                             <div class="product-name-wrap position-relative">
                                                 <input type="text" class="form-control product-name-input" name="products[0][name]" placeholder="اختر من القائمة" autocomplete="off" required>
                                                 <div class="product-template-dropdown d-none"></div>
                                             </div>
                                             <div class="template-picker d-none mt-2"></div>
-                                        </div>
-                                        <div class="col-6 col-md-2">
-                                            <label class="form-label small">الكمية</label>
-                                            <input type="number" class="form-control product-quantity-input" name="products[0][quantity]" step="1" min="0" placeholder="0" id="product-quantity-0" required>
-                                            <small class="product-effective-qty-hint text-muted d-none" id="product-effective-qty-hint-0"></small>
                                         </div>
                                         <div class="col-6 col-md-2">
                                             <div class="category-wrap d-none">
@@ -4515,21 +4516,18 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             <label class="form-label">الشحن</label>
                             <div class="input-group">
                                 <input type="number" class="form-control" name="shipping_fees" id="createTaskShippingFees" step="0.01" min="0" placeholder="0.00" value="0">
-                                <span class="input-group-text">ج.م</span>
                             </div>
                         </div>
                         <div class="col-4 col-md-6 col-lg-4 mt-2">
                             <label class="form-label">خصم</label>
                             <div class="input-group">
                                 <input type="number" class="form-control" name="discount" id="createTaskDiscount" step="0.01" min="0" placeholder="0.00" value="0">
-                                <span class="input-group-text">ج.م</span>
                             </div>
                         </div>
                         <div class="col-4 col-md-6 col-lg-4 mt-2">
                             <label class="form-label">المدفوع مقدماً</label>
                             <div class="input-group">
                                 <input type="number" class="form-control" name="advance_payment" id="createTaskAdvancePayment" step="0.01" min="0" placeholder="0.00" value="0">
-                                <span class="input-group-text">ج.م</span>
                             </div>
                         </div>
                         <div class="col-12 mt-3">
