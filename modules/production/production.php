@@ -6753,7 +6753,7 @@ $lang = isset($translations) ? $translations : [];
         if ($tName === '') $tName = 'منتج غير مسمى';
         $tType = $template['template_type'] ?? 'legacy';
         $tTypeLabels = [
-            'unified' => 'متعدد المواد', 'honey' => 'عسل',
+            'unified' => 'متعدد المواد', 'honey' => 'إختر للإنتاح',
             'olive_oil' => 'زيت زيتون', 'beeswax' => 'شمع عسل',
             'derivatives' => 'مشتقات'
         ];
