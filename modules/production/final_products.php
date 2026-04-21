@@ -3051,20 +3051,7 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
                                         <span><i class="bi bi-list-stars me-1"></i>عرض المكونات</span>
                                         <i class="bi bi-chevron-down template-components-toggle-icon"></i>
                                     </button>
-                                    <?php if ($canProduceFromTemplates): ?>
-                                        <button
-                                            type="button"
-                                            class="btn btn-sm btn-success js-open-template-production-modal"
-                                            data-bs-toggle="modal"
-                                            data-bs-target="#templateProductionModal"
-                                            data-template-id="<?php echo intval($templateId); ?>"
-                                            data-template-name="<?php echo htmlspecialchars($template['product_name'] ?? 'غير محدد', ENT_QUOTES, 'UTF-8'); ?>"
-                                            onclick="window.openTemplateProductionModal && window.openTemplateProductionModal(this)"
-                                            style="border-radius: 10px; white-space: nowrap;"
-                                        >
-                                            <i class="bi bi-gear-wide-connected me-1"></i>إنتاج
-                                        </button>
-                                    <?php endif; ?>
+                                    
                                 </div>
 
                                 <div class="collapse mt-3" id="<?php echo htmlspecialchars($templateDetailsCollapseId, ENT_QUOTES, 'UTF-8'); ?>">
