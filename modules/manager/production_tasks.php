@@ -353,10 +353,10 @@ try {
         $_SESSION['_pt_migrated_local_customers'] = 1;
     }
     try {
-        $rows = $db->query("SELECT id, name, address, tg_governorate, tg_gov_id, tg_city, tg_city_id, phone FROM local_customers WHERE status = 'active' ORDER BY name ASC");
+        $rows = $db->query("SELECT id, name, address, tg_governorate, tg_gov_id, tg_city, tg_city_id, phone, COALESCE(balance, 0) AS balance FROM local_customers WHERE status = 'active' ORDER BY name ASC");
     } catch (Exception $e) {
         // phone column might not exist
-        $rows = $db->query("SELECT id, name, address, tg_governorate, tg_gov_id, tg_city, tg_city_id FROM local_customers WHERE status = 'active' ORDER BY name ASC");
+        $rows = $db->query("SELECT id, name, address, tg_governorate, tg_gov_id, tg_city, tg_city_id, COALESCE(balance, 0) AS balance FROM local_customers WHERE status = 'active' ORDER BY name ASC");
     }
     if (!empty($rows)) {
         foreach ($rows as $r) {
@@ -370,6 +370,7 @@ try {
                 'tg_gov_id'      => $r['tg_gov_id'] ? (int)$r['tg_gov_id'] : null,
                 'tg_city'        => trim((string)($r['tg_city'] ?? '')),
                 'tg_city_id'     => $r['tg_city_id'] ? (int)$r['tg_city_id'] : null,
+                'balance'        => (float)($r['balance'] ?? 0),
             ];
         }
     }
@@ -4359,6 +4360,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                     <input type="hidden" id="local_customer_id_task" name="local_customer_id" value="">
                                     <div id="local_customer_dropdown_task" class="search-dropdown-task d-none"></div>
                                 </div>
+                                <div id="local_customer_balance_task" style="display:none;" class="mt-1"></div>
                             </div>
                             <div id="customer_select_rep_task" class="customer-select-block mb-2 d-none">
                                 <div class="search-wrap position-relative">
@@ -4643,6 +4645,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                     <input type="hidden" id="local_customer_id_edit" name="local_customer_id" value="">
                                     <div id="local_customer_dropdown_edit" class="search-dropdown-task d-none"></div>
                                 </div>
+                                <div id="local_customer_balance_edit" style="display:none;" class="mt-1"></div>
                             </div>
                             <div id="customer_select_rep_edit" class="customer-select-block mb-2 d-none">
                                 <div class="search-wrap position-relative">
@@ -4803,7 +4806,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
             <h5 class="mb-0 text-warning"><i class="bi bi-floppy me-2"></i>المسودات (<span id="draftsCount"><?php echo count($taskDrafts); ?></span>)</h5>
         </div>
         <div class="card-body p-0">
-            
+
             <ul class="list-group list-group-flush" id="draftsList">
                 <?php foreach ($taskDrafts as $draft): ?>
                 <li class="list-group-item task-draft-item" id="draft-item-<?php echo (int)$draft['id']; ?>">
@@ -5982,6 +5985,28 @@ var __shippingCompaniesForTask = <?php echo json_encode($shippingCompaniesForDro
 var __quCategories = <?php echo json_encode($quCategoriesForTask, JSON_UNESCAPED_UNICODE); ?>;
 var __quData = <?php echo json_encode($quDataForTask, JSON_UNESCAPED_UNICODE); ?>;
 
+function showLocalCustomerBalance(customerId, balanceElId) {
+    var el = document.getElementById(balanceElId);
+    if (!el) return;
+    if (!customerId) { el.style.display = 'none'; el.innerHTML = ''; return; }
+    var customers = (typeof __localCustomersForTask !== 'undefined') ? __localCustomersForTask : [];
+    var c = customers.find(function(x) { return x.id == customerId; });
+    if (!c) { el.style.display = 'none'; return; }
+    var bal = parseFloat(c.balance) || 0;
+    var absVal = Math.abs(bal).toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    var label, cls, icon;
+    if (bal > 0) {
+        label = 'مديون بـ'; cls = 'text-danger'; icon = 'bi-exclamation-circle-fill';
+    } else if (bal < 0) {
+        label = 'رصيد دائن'; cls = 'text-success'; icon = 'bi-check-circle-fill';
+    } else {
+        label = 'الرصيد صفر'; cls = 'text-secondary'; icon = 'bi-dash-circle';
+    }
+    el.style.display = '';
+    el.innerHTML = '<span class="badge rounded-pill px-2 py-1 ' + cls + '" style="background:transparent;border:1px solid currentColor;font-size:.8rem;">'
+        + '<i class="bi ' + icon + ' me-1"></i>' + label + ' ' + absVal + ' ج.م</span>';
+}
+
 function makeIdBadge(id) {
     if (!id && id !== 0) return '';
     return '<span class="almostafa-id-badge">' + String(id) + '</span> ';
@@ -6198,12 +6223,16 @@ window.openEditTaskModal = function(taskId) {
                 var editLocalSearch = document.getElementById('local_customer_search_edit');
                 if (editLocalSearch) editLocalSearch.value = t.customer_name || '';
                 var editLocalId = document.getElementById('local_customer_id_edit');
-                if (editLocalId) editLocalId.value = '';
+                if (editLocalId) editLocalId.value = t.local_customer_id || '';
                 var editSubPhone = document.getElementById('edit_submit_customer_phone');
                 if (editSubPhone) editSubPhone.value = t.customer_phone || '';
                 // إعادة تعيين راديو العميل إلى محلي
                 var localRadio = document.getElementById('ct_edit_local');
                 if (localRadio) { localRadio.checked = true; localRadio.dispatchEvent(new Event('change')); }
+                // عرض رصيد العميل المحلي إن وُجد
+                if (typeof showLocalCustomerBalance === 'function') {
+                    showLocalCustomerBalance(t.local_customer_id || null, 'local_customer_balance_edit');
+                }
                 // تعطيل زر السجل حتى يتم اختيار عميل مسجل
                 var editHistBtn = document.getElementById('editViewCustomerHistoryBtn');
                 if (editHistBtn) { editHistBtn.disabled = true; editHistBtn.title = 'اختر عميلاً أولاً'; }
@@ -6378,10 +6407,16 @@ document.addEventListener('DOMContentLoaded', function() {
         initEditSearch(localSearch, localId, localDrop, localCustomers, function(c) { return c.id + ' - ' + c.name + (c.phone ? ' — ' + c.phone : ''); }, matchLocal);
         initEditSearch(repSearch, null, repDrop, repCustomers, function(c) { return c.id + ' - ' + (c.rep_name ? c.name + ' (' + c.rep_name + ')' : c.name); }, matchRep);
 
-        // تفعيل زر السجل عند اختيار عميل مسجل
+        // تفعيل زر السجل وعرض الرصيد عند اختيار عميل مسجل
         if (localId) {
             localId.addEventListener('edit-customer-selected', function() {
                 if (histBtn) { histBtn.disabled = false; histBtn.removeAttribute('title'); }
+                showLocalCustomerBalance(localId.value, 'local_customer_balance_edit');
+            });
+        }
+        if (localSearch) {
+            localSearch.addEventListener('input', function() {
+                if (!localSearch.value.trim()) showLocalCustomerBalance(null, 'local_customer_balance_edit');
             });
         }
 
@@ -6726,6 +6761,13 @@ document.addEventListener('DOMContentLoaded', function () {
 
         initCustomerSearch(localSearch, localId, localDrop, localCustomers, function(c) { return c.id + ' - ' + c.name + (c.phone ? ' — ' + c.phone : ''); }, matchLocalCustomer);
         initCustomerSearch(repSearch, repId, repDrop, repCustomers, function(c) { return c.id + ' - ' + (c.rep_name ? c.name + ' (' + c.rep_name + ')' : c.name); }, matchRepCustomer);
+
+        if (localId) localId.addEventListener('customer-selected', function() {
+            showLocalCustomerBalance(localId.value, 'local_customer_balance_task');
+        });
+        if (localSearch) localSearch.addEventListener('input', function() {
+            if (!localSearch.value.trim()) showLocalCustomerBalance(null, 'local_customer_balance_task');
+        });
 
         var submitBtn = document.getElementById('createTaskSubmitBtn');
         function updateCreateSubmitBtnState() {
