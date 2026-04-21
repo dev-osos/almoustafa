@@ -9200,31 +9200,10 @@ function renderTemplateSuppliers(details) {
             const quantityLabel = formatComponentQuantity(component);
             const description = component.description || component.details || '';
             const name = component.name || component.label || `مكوّن رقم ${index + 1}`;
-            return `
-                <div class="materials-info-item">
-                    <div class="materials-info-header">
-                        <span class="materials-info-name">${name}</span>
-                        <span class="materials-info-type badge bg-light text-primary border">
-                            ${typeLabel}
-                        </span>
-                    </div>
-                    <div class="materials-info-meta text-muted">
-                        <i class="bi bi-basket me-1"></i>
-                        <span>الكمية لكل تشغيلة: ${quantityLabel}</span>
-                    </div>
-                    ${description ? `<div class="materials-info-note text-muted">${description}</div>` : ''}
-                </div>
-            `;
+            return ``;
         }).join('');
 
-        materialsInfoBox.innerHTML = `
-            <div class="materials-info-summary text-muted mb-2">
-                تم تحميل ${components.length} من المواد والمكوّنات الخاصة بالقالب المحدد.
-            </div>
-            <div class="materials-info-list">
-                ${infoItemsHtml}
-            </div>
-        `;
+        materialsInfoBox.innerHTML = ``;
     }
 
     const stats = {
