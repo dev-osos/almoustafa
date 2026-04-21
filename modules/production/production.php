@@ -6716,7 +6716,7 @@ $lang = isset($translations) ? $translations : [];
 <!-- قسم قوالب المنتجات -->
 <div class="card shadow-sm mb-4">
     <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
-        <h5 class="mb-0"><i class="bi bi-file-earmark-text me-2"></i>قوالب المنتجات - إنشاء إنتاج من قالب</h5>
+        <h5 class="mb-0"><i class="bi bi-file-earmark-text me-2"></i>تسجيل الانتاج</h5>
         
     </div>
     
@@ -6746,133 +6746,149 @@ $lang = isset($translations) ? $translations : [];
         'ماء' => 'bi-droplet'
     ];
     ?>
+    <?php
+    $templateDropdownData = [];
+    foreach ($templates as $template) {
+        $tName = trim((string)($template['product_name'] ?? ''));
+        if ($tName === '') $tName = 'منتج غير مسمى';
+        $tType = $template['template_type'] ?? 'legacy';
+        $tTypeLabels = [
+            'unified' => 'متعدد المواد', 'honey' => 'عسل',
+            'olive_oil' => 'زيت زيتون', 'beeswax' => 'شمع عسل',
+            'derivatives' => 'مشتقات'
+        ];
+        $tTypeLabel = $tTypeLabels[$tType] ?? 'غير محدد';
+        $tSupplier = trim((string)($template['main_supplier_name'] ?? ''));
+        $templateDropdownData[] = [
+            'id'         => (int)$template['id'],
+            'name'       => $tName,
+            'type'       => $tType,
+            'type_label' => $tTypeLabel,
+            'supplier'   => $tSupplier,
+        ];
+    }
+    ?>
     <div class="card-body">
-        <div class="template-cards-search-wrap mb-4">
-            <div class="template-cards-search-inner">
-                <i class="bi bi-search template-cards-search-icon" aria-hidden="true"></i>
+        <div class="template-product-search-wrap mb-3" style="max-width:520px; margin:0 auto;">
+            <label class="form-label fw-semibold mb-1" for="templateProductSearchInput">
+                <i class="bi bi-search me-1"></i>ابحث عن منتج لبدء التشغيلة
+            </label>
+            <div class="position-relative">
                 <input type="text"
-                       class="form-control template-cards-search"
-                       placeholder="بحث في القوالب (الاسم، النوع، المورد)..."
-                       aria-label="بحث في قوالب المنتجات"
-                       autocomplete="off">
+                       id="templateProductSearchInput"
+                       class="form-control"
+                       placeholder="اكتب اسم المنتج..."
+                       autocomplete="off"
+                       aria-label="بحث في المنتجات"
+                       aria-autocomplete="list"
+                       aria-controls="templateProductDropdown"
+                       aria-expanded="false">
+                <ul id="templateProductDropdown"
+                    class="list-unstyled position-absolute w-100 bg-white border rounded shadow-sm mb-0 py-1"
+                    style="display:none; z-index:1050; max-height:280px; overflow-y:auto; top:100%; right:0;"
+                    role="listbox">
+                </ul>
+            </div>
+            <div id="templateProductNoResults" class="text-muted small mt-1" style="display:none;">
+                لا توجد نتائج مطابقة
             </div>
         </div>
-        <div class="template-grid">
-        <?php foreach ($templates as $template): ?>
-            <?php 
-            $templateTypeLabels = [
-                'unified' => 'متعدد المواد',
-                'honey' => 'عسل',
-                'olive_oil' => 'زيت زيتون',
-                'beeswax' => 'شمع عسل',
-                'derivatives' => 'مشتقات'
-            ];
-            $typeIconMap = [
-                'unified' => 'bi-diagram-3',
-                'honey' => 'bi-droplet-fill',
-                'olive_oil' => 'bi-bucket-fill',
-                'beeswax' => 'bi-hexagon-fill',
-                'derivatives' => 'bi-bezier'
-            ];
-            $typeLabel = $templateTypeLabels[$template['template_type']] ?? 'غير محدد';
-            $typeIcon = $typeIconMap[$template['template_type']] ?? 'bi-box-seam';
-            $typeAccents = [
-                'unified' => ['#0f172a', '#0f172a22'],
-                'honey' => ['#f59e0b', '#f59e0b22'],
-                'olive_oil' => ['#16a34a', '#16a34a22'],
-                'beeswax' => ['#2563eb', '#2563eb22'],
-                'derivatives' => ['#7c3aed', '#7c3aed22']
-            ];
-            $accentPair = $typeAccents[$template['template_type']] ?? ['#334155', '#33415522'];
-            $materialDetails = is_array($template['material_details'] ?? null) ? $template['material_details'] : [];
-            $materialsCount = (int)($template['materials_count'] ?? count($materialDetails));
-            if ($materialsCount === 0 && !empty($materialDetails)) {
-                $materialsCount = count($materialDetails);
-            }
-            $materialsPreview = array_slice($materialDetails, 0, 3);
-            $hasMoreMaterials = $materialsCount > count($materialsPreview);
-            $packagingDetails = is_array($template['packaging_details'] ?? null) ? $template['packaging_details'] : [];
-            $packagingCount = (int)($template['packaging_count'] ?? count($packagingDetails));
-            if ($packagingCount === 0 && !empty($packagingDetails)) {
-                $packagingCount = count($packagingDetails);
-            }
-            $packagingPreview = array_slice($packagingDetails, 0, 2);
-            $hasMorePackaging = $packagingCount > count($packagingPreview);
-            $productsCount = (int)($template['products_count'] ?? 0);
-            if ($productsCount <= 0) {
-                $productsCount = $packagingCount > 0 ? $packagingCount : 1;
-            }
-            $mainSupplierName = trim((string)($template['main_supplier_name'] ?? ''));
-            $mainSupplierPhone = trim((string)($template['main_supplier_phone'] ?? ''));
-            $creatorName = trim((string)($template['creator_name'] ?? ''));
-            $templateName = trim((string)($template['product_name'] ?? ''));
-            if ($templateName === '') {
-                $templateName = 'منتج غير مسمى';
-            }
-            $templateNotes = trim((string)($template['notes'] ?? ''));
-            $updatedAtRaw = $template['updated_at'] ?? $template['created_at'] ?? null;
-            $updatedAtDisplay = '—';
-            $updatedAtIso = '';
-            if (!empty($updatedAtRaw)) {
-                $updatedTimestamp = strtotime((string)$updatedAtRaw);
-                if ($updatedTimestamp !== false) {
-                    $updatedAtDisplay = date('Y/m/d', $updatedTimestamp);
-                    $updatedAtIso = date(DATE_ATOM, $updatedTimestamp);
-                }
-            }
-            $cardAttributes = '';
-            if ($updatedAtIso !== '') {
-                $cardAttributes .= ' data-template-updated="' . htmlspecialchars($updatedAtIso, ENT_QUOTES, 'UTF-8') . '"';
-            }
-            if ($mainSupplierName !== '') {
-                $cardAttributes .= ' data-template-supplier="' . htmlspecialchars($mainSupplierName, ENT_QUOTES, 'UTF-8') . '"';
-            }
-            $materialsCountLabel = $materialsCount;
-            ?>
-            <div class="template-card-modern"
-                 style="--template-accent: <?php echo $accentPair[0]; ?>; --template-accent-light: <?php echo $accentPair[1]; ?>;"
-                 data-template-id="<?php echo $template['id']; ?>"
-                 data-template-name="<?php echo htmlspecialchars($templateName, ENT_QUOTES, 'UTF-8'); ?>"
-                 data-template-type="<?php echo htmlspecialchars($template['template_type'] ?? 'legacy', ENT_QUOTES, 'UTF-8'); ?>"
-                 data-template-type-label="<?php echo htmlspecialchars($typeLabel, ENT_QUOTES, 'UTF-8'); ?>"
-                 <?php echo $cardAttributes; ?>
-                 onclick="openCreateFromTemplateModal(this)">
 
-                <div class="template-card-icon" aria-hidden="true">
-                    <i class="bi <?php echo htmlspecialchars($typeIcon, ENT_QUOTES, 'UTF-8'); ?>"></i>
-                </div>
-
-                <span class="visually-hidden"><?php echo htmlspecialchars($typeLabel, ENT_QUOTES, 'UTF-8'); ?></span>
-
-                <h6 class="template-title mb-0 text-center"<?php echo $templateNotes !== '' ? ' title="' . htmlspecialchars($templateNotes, ENT_QUOTES, 'UTF-8') . '"' : ''; ?>>
-                    <?php echo htmlspecialchars($templateName, ENT_QUOTES, 'UTF-8'); ?>
-                </h6>
-
-                <div class="template-card-cta text-center">
-                    <span class="template-action-badge">
-                        <i class="bi bi-lightning-charge me-2"></i>ابدأ الإنتاج الآن
-                    </span>
-                </div>
-            </div>
-        <?php endforeach; ?>
+        <!-- بيانات القوالب مخفية للاستخدام في JS -->
+        <div id="templateDropdownDataStore" style="display:none;"
+             data-templates="<?php echo htmlspecialchars(json_encode($templateDropdownData, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8'); ?>">
         </div>
     </div>
     <script>
     (function() {
-        var searchEl = document.querySelector('.template-cards-search');
-        var gridEl = document.querySelector('.template-grid');
-        if (!searchEl || !gridEl) return;
-        searchEl.addEventListener('input', function() {
-            var q = (this.value || '').trim();
-            var cards = gridEl.querySelectorAll('.template-card-modern');
-            cards.forEach(function(card) {
-                var name = (card.getAttribute('data-template-name') || '');
-                var typeLabel = (card.getAttribute('data-template-type-label') || '');
-                var supplier = (card.getAttribute('data-template-supplier') || '');
-                var text = name + ' ' + typeLabel + ' ' + supplier;
-                var show = !q || text.indexOf(q) !== -1;
-                card.style.display = show ? '' : 'none';
+        var store = document.getElementById('templateDropdownDataStore');
+        if (!store) return;
+        var templates = JSON.parse(store.getAttribute('data-templates') || '[]');
+        var input = document.getElementById('templateProductSearchInput');
+        var dropdown = document.getElementById('templateProductDropdown');
+        var noResults = document.getElementById('templateProductNoResults');
+
+        function closeDropdown() {
+            dropdown.style.display = 'none';
+            input.setAttribute('aria-expanded', 'false');
+            noResults.style.display = 'none';
+        }
+
+        function renderDropdown(results) {
+            dropdown.innerHTML = '';
+            if (results.length === 0) {
+                closeDropdown();
+                noResults.style.display = '';
+                return;
+            }
+            noResults.style.display = 'none';
+            results.forEach(function(tpl) {
+                var li = document.createElement('li');
+                li.setAttribute('role', 'option');
+                li.setAttribute('tabindex', '0');
+                li.style.cssText = 'padding:8px 14px; cursor:pointer; display:flex; align-items:center; gap:8px;';
+                li.innerHTML =
+                    '<span style="font-weight:600; flex:1;">' + tpl.name + '</span>' +
+                    '<span class="badge bg-light text-secondary border" style="font-size:0.75em;">' + tpl.type_label + '</span>';
+
+                function selectTemplate() {
+                    input.value = tpl.name;
+                    closeDropdown();
+                    // بناء عنصر وهمي يحاكي بنية template-card-modern
+                    var fakeEl = document.createElement('div');
+                    fakeEl.setAttribute('data-template-id', tpl.id);
+                    fakeEl.setAttribute('data-template-name', tpl.name);
+                    fakeEl.setAttribute('data-template-type', tpl.type);
+                    fakeEl.setAttribute('data-template-type-label', tpl.type_label);
+                    if (tpl.supplier) fakeEl.setAttribute('data-template-supplier', tpl.supplier);
+                    if (typeof openCreateFromTemplateModal === 'function') {
+                        openCreateFromTemplateModal(fakeEl);
+                    }
+                }
+
+                li.addEventListener('mousedown', function(e) { e.preventDefault(); selectTemplate(); });
+                li.addEventListener('keydown', function(e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectTemplate(); } });
+
+                li.addEventListener('mouseenter', function() { this.style.backgroundColor = '#f0f4ff'; });
+                li.addEventListener('mouseleave', function() { this.style.backgroundColor = ''; });
+
+                dropdown.appendChild(li);
             });
+            dropdown.style.display = 'block';
+            input.setAttribute('aria-expanded', 'true');
+        }
+
+        input.addEventListener('input', function() {
+            var q = this.value.trim();
+            if (q === '') { closeDropdown(); return; }
+            var filtered = templates.filter(function(tpl) {
+                return (tpl.name + ' ' + tpl.type_label + ' ' + tpl.supplier).indexOf(q) !== -1;
+            });
+            renderDropdown(filtered);
+        });
+
+        input.addEventListener('focus', function() {
+            if (this.value.trim()) input.dispatchEvent(new Event('input'));
+        });
+
+        document.addEventListener('click', function(e) {
+            if (!input.contains(e.target) && !dropdown.contains(e.target)) closeDropdown();
+        });
+
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closeDropdown();
+            if (e.key === 'ArrowDown') {
+                var items = dropdown.querySelectorAll('li');
+                if (items.length) { e.preventDefault(); items[0].focus(); }
+            }
+        });
+
+        dropdown.addEventListener('keydown', function(e) {
+            var items = Array.from(dropdown.querySelectorAll('li'));
+            var idx = items.indexOf(document.activeElement);
+            if (e.key === 'ArrowDown' && idx < items.length - 1) { e.preventDefault(); items[idx + 1].focus(); }
+            if (e.key === 'ArrowUp') { e.preventDefault(); idx > 0 ? items[idx - 1].focus() : input.focus(); }
+            if (e.key === 'Escape') { closeDropdown(); input.focus(); }
         });
     })();
     </script>
