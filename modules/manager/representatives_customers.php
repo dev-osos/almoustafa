@@ -8050,18 +8050,20 @@ document.addEventListener('DOMContentLoaded', function() {
                         document.getElementById('perfWalletBalance').textContent = formatCurrency(data.overall.wallet_balance);
 
                         // تحديث زر العرض
-                        const currentUrl = new URL(window.location.href);
-                        currentUrl.searchParams.set('rep_filter', repId);
-                        currentUrl.searchParams.set('cds', 'all');
-                        currentUrl.searchParams.delete('cs');
-                        viewRepBtn.href = currentUrl.toString();
+                        if (viewRepBtn) {
+                            const currentUrl = new URL(window.location.href);
+                            currentUrl.searchParams.set('rep_filter', repId);
+                            currentUrl.searchParams.set('cds', 'all');
+                            currentUrl.searchParams.delete('cs');
+                            viewRepBtn.href = currentUrl.toString();
+                        }
                     } else {
                         alert(data.message || 'حدث خطأ في جلب البيانات');
                     }
                 })
                 .catch(err => {
-                    console.error(err);
-                    alert('فشل الاتصال بالخادم');
+                    console.error('Performance Stats Error:', err);
+                    alert('تعذر جلب البيانات. تأكد من اتصالك أو وجود خطأ في الكود.');
                 })
                 .finally(() => {
                     loadingOverlay.classList.add('d-none');
