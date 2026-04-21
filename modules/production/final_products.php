@@ -3719,7 +3719,7 @@ window.openTemplateProductionModal = function(trigger) {
     padding: 0.5rem;
     white-space: normal;
 }
-
+</style>
 
 <script>
 /**
