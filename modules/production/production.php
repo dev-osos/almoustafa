@@ -7711,23 +7711,20 @@ $lang = isset($translations) ? $translations : [];
                             );
                         }
                         ?>
+                        <div class="border rounded p-2 bg-light">
                         <?php if (!empty($presentWorkersToday)): ?>
-                            <div class="alert alert-success">
-                                <i class="bi bi-check-circle me-2"></i>
-                                <strong>عمال الإنتاج الحاضرون حاليا:</strong>
-                                <ul class="mb-0 mt-2">
-                                    <?php foreach ($presentWorkersToday as $worker): ?>
-                                        <li><?php echo htmlspecialchars($worker['full_name'] ?? $worker['username']); ?></li>
-                                    <?php endforeach; ?>
-                                </ul>
+                            <div class="d-flex flex-wrap gap-2">
+                                <?php foreach ($presentWorkersToday as $worker): ?>
+                                    <span class="badge bg-success fs-6 fw-normal">
+                                        <i class="bi bi-person-check me-1"></i><?php echo htmlspecialchars($worker['full_name'] ?? $worker['username']); ?>
+                                    </span>
+                                <?php endforeach; ?>
                             </div>
-                            <small class="text-muted">سيتم ربط التشغيلة تلقائياً بجميع عمال الإنتاج الحاضرين حالياً.</small>
+                            <small class="text-muted d-block mt-1">سيتم الربط التلقائي بجميع الحاضرين.</small>
                         <?php else: ?>
-                            <div class="alert alert-warning">
-                                <i class="bi bi-exclamation-triangle me-2"></i>
-                                لا يوجد عمال إنتاج حاضرون حالياً. سيتم ربط التشغيلة بالعامل الحالي فقط.
-                            </div>
+                            <span class="text-warning small"><i class="bi bi-exclamation-triangle me-1"></i>لا يوجد عمال حاضرون — سيُربط بالعامل الحالي فقط.</span>
                         <?php endif; ?>
+                        </div>
                     </div>
                     
                     <?php if ($currentUser['role'] !== 'production' && $userIdColumn): ?>
@@ -7944,7 +7941,7 @@ $lang = isset($translations) ? $translations : [];
 <!-- ===== Cards للموبايل ===== -->
 
 <!-- Card إنشاء إنتاج من قالب للموبايل -->
-<div class="card shadow-sm mb-4 d-md-none" id="createFromTemplateCard">
+<div class="card shadow-sm mb-4 d-md-none" id="createFromTemplateCard" style="display:none !important">
     <div class="card-header bg-success text-white">
         <h5 class="mb-0">
             <i class="bi bi-file-earmark-text me-2"></i>إنشاء تشغيلة إنتاج
@@ -8003,25 +8000,22 @@ $lang = isset($translations) ? $translations : [];
                     );
                 }
                 ?>
+                <div class="border rounded p-2 bg-light">
                 <?php if (!empty($presentWorkersToday)): ?>
-                    <div class="alert alert-success">
-                        <i class="bi bi-check-circle me-2"></i>
-                        <strong>عمال الإنتاج الحاضرون حاليا:</strong>
-                        <ul class="mb-0 mt-2">
-                            <?php foreach ($presentWorkersToday as $worker): ?>
-                                <li><?php echo htmlspecialchars($worker['full_name'] ?? $worker['username']); ?></li>
-                            <?php endforeach; ?>
-                        </ul>
+                    <div class="d-flex flex-wrap gap-2">
+                        <?php foreach ($presentWorkersToday as $worker): ?>
+                            <span class="badge bg-success fs-6 fw-normal">
+                                <i class="bi bi-person-check me-1"></i><?php echo htmlspecialchars($worker['full_name'] ?? $worker['username']); ?>
+                            </span>
+                        <?php endforeach; ?>
                     </div>
-                    <small class="text-muted">سيتم ربط التشغيلة تلقائياً بجميع عمال الإنتاج الحاضرين حالياً.</small>
+                    <small class="text-muted d-block mt-1">سيتم الربط التلقائي بجميع الحاضرين.</small>
                 <?php else: ?>
-                    <div class="alert alert-warning">
-                        <i class="bi bi-exclamation-triangle me-2"></i>
-                        لا يوجد عمال إنتاج حاضرون حالياً. سيتم ربط التشغيلة بالعامل الحالي فقط.
-                    </div>
+                    <span class="text-warning small"><i class="bi bi-exclamation-triangle me-1"></i>لا يوجد عمال حاضرون — سيُربط بالعامل الحالي فقط.</span>
                 <?php endif; ?>
+                </div>
             </div>
-            
+
             <?php if ($currentUser['role'] !== 'production' && $userIdColumn): ?>
                 <input type="hidden" name="user_id" value="<?php echo $currentUser['id']; ?>">
             <?php else: ?>
@@ -10034,9 +10028,7 @@ function openCreateFromTemplateModal(element) {
         // لا تحاول فتح المودال على الموبايل
         const card = document.getElementById('createFromTemplateCard');
         if (card) {
-            console.log('openCreateFromTemplateModal: Showing card on mobile. Card display before:', card.style.display);
-            card.style.display = 'block';
-            console.log('openCreateFromTemplateModal: Card display after:', card.style.display);
+            card.style.setProperty('display', 'block', 'important');
         } else {
             console.error('openCreateFromTemplateModal: Card element not found!');
         }
@@ -11005,7 +10997,7 @@ function closeAllForms() {
 function closeCreateFromTemplateCard() {
     const card = document.getElementById('createFromTemplateCard');
     if (card) {
-        card.style.display = 'none';
+        card.style.setProperty('display', 'none', 'important');
         const form = card.querySelector('form');
         if (form) form.reset();
     }
