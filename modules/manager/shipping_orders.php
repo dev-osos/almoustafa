@@ -4104,7 +4104,7 @@ $tgError = '';
 <!-- بطاقة إحصائية الشحن الشهري -->
 <div class="card shadow-sm mb-4">
     <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-        <h5 class="mb-0">إحصائيات الدين الشهري</h5>
+        <h5 class="mb-0">إحصائيات المبيعات الشهري</h5>
         <div class="d-flex flex-wrap align-items-center gap-2">
             <form method="get" class="d-flex align-items-center gap-2 mb-0" role="search">
                 <input type="hidden" name="page" value="shipping_orders" />
