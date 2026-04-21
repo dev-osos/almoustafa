@@ -44,13 +44,13 @@ if (!function_exists('renderRepresentativeCards')) {
                     $statusLabel = $status === 'active' ? 'نشط' : 'غير نشط';
                     $statusBadge = $status === 'active' ? 'bg-success-subtle text-success' : 'bg-secondary-subtle text-secondary';
                     ?>
-                    <div class="col-6 col-md-6 col-xl-6">
+                    <div class="col-6 col-md-4 col-xl-3">
                         <div 
                             class="card representative-card h-100 shadow-sm"
                             data-rep-id="<?php echo $repId; ?>"
                             data-rep-name="<?php echo htmlspecialchars($repName); ?>"
                         >
-                                <div class="card-body d-flex flex-column gap-3">
+                                <div class="card-body d-flex flex-column gap-2 p-3">
                                     <div class="d-flex align-items-center gap-3">
                                         <div class="rep-avatar">
                                             <?php if ($avatar): ?>

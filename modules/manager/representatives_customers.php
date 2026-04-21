@@ -1630,9 +1630,32 @@ try {
     cursor: pointer;
 }
 .representative-card {
-    border-radius: 18px;
+    border-radius: 12px;
     transition: transform 0.2s ease, box-shadow 0.2s ease;
     cursor: pointer;
+}
+.rep-avatar {
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+.rep-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.rep-avatar-placeholder {
+    width: 45px;
+    height: 45px;
+    background: #f1f5f9;
+    color: #64748b;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    border-radius: 50%;
 }
 .representative-card:hover {
     transform: translateY(-4px);
@@ -1640,8 +1663,8 @@ try {
 }
 .rep-stat-card {
     border: 1px solid rgba(226, 232, 240, 0.8);
-    border-radius: 12px;
-    padding: 0.75rem;
+    border-radius: 10px;
+    padding: 0.5rem;
     background: #fff;
 }
 .rep-stat-card.border-success {
@@ -1653,8 +1676,15 @@ try {
     background: rgba(13, 202, 240, 0.05);
 }
 .rep-stat-value {
-    font-size: 1.1rem;
+    font-size: 0.9rem;
     font-weight: 600;
+}
+.representative-card h5 {
+    font-size: 0.95rem;
+    font-weight: 700;
+}
+.rep-stat-label {
+    font-size: 0.7rem !important;
 }
 
 /* ضمان ظهور زر الطباعة على الهاتف */
