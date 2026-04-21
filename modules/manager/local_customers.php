@@ -1982,7 +1982,7 @@ var dashboardWrapper = null;
 }
 </style>
 
-<!-- بطاقة الإجراءات -->
+<!-- بطاقة الإجراءات --> 
 <div class="lc-collapsible-card" id="lcActionsCard">
     <div class="lc-collapsible-header" id="lcActionsToggleBtn"
          role="button" tabindex="0"
