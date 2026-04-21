@@ -4363,18 +4363,16 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                     </div>
                                     <div id="customer_select_rep_task" class="customer-select-block d-none">
                                         <div class="search-wrap position-relative">
-                                            <input type="text" id="rep_customer_search_task" class="form-control form-control-sm" placeholder="اكتب للبحث أو أدخل اسم عميل جديد..." autocomplete="off">
+                                            <input type="text" id="rep_customer_search_task" class="form-control form-control-sm" placeholder="اسم العميل ..." autocomplete="off">
                                             <input type="hidden" id="rep_customer_id_task" value="">
                                             <div id="rep_customer_dropdown_task" class="search-dropdown-task d-none"></div>
                                         </div>
                                     </div>
                                 </div>
                                 <div class="col-5">
-                                    <label class="form-label small">رقم العميل</label>
-                                    <input type="text" name="customer_phone" id="submit_customer_phone" class="form-control form-control-sm" placeholder="رقم الهاتف" dir="ltr" value="">
+                                    <input type="text" name="customer_phone" id="submit_customer_phone" class="form-control form-control-sm" placeholder="رقم الهاتف " dir="ltr" value="">
                                 </div>
                             </div>
-                            <small class="form-text text-muted d-block">اختر عميلاً مسجلاً أو اكتب اسماً جديداً—يُحفظ تلقائياً كعميل جديد إن لم يكن مسجلاً</small>
                         </div>
                         <div class="col-md-3 d-none" id="createGovWrap">
                             <label class="form-label">المحافظة</label>
