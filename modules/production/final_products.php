@@ -2952,17 +2952,21 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
     </div>
 <?php endif; ?>
 
-<!-- قسم قوالب المنتجات -->
+<!-- قسم منتجات المصنع -->
 <div style="margin: 25px;">
-    <div style="background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%); color: white; padding: 1.5rem 1.75rem; border-radius: 16px 16px 0 0; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 12px rgba(29, 78, 216, 0.15); margin-bottom: 0;">
+    <div 
+        style="background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%); color: white; padding: 1.5rem 1.75rem; border-radius: 16px 16px 0 0; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 12px rgba(29, 78, 216, 0.15); margin-bottom: 0; cursor: pointer;"
+        onclick="toggleSection('factoryProductsCollapse', 'factoryProductsToggleIcon')"
+    >
         <h5 style="margin: 0; font-weight: 600; display: flex; align-items: center; gap: 0.75rem; font-size: 1.15rem;">
             <i class="bi bi-diagram-3"></i>
-            قوالب المنتجات
+            منتجات المصنع
+            <i class="bi bi-chevron-down" id="factoryProductsToggleIcon" style="transition: transform 0.3s ease;"></i>
         </h5>
-        <span style="background: rgba(255, 255, 255, 0.25); color: white; padding: 0.45rem 0.9rem; border-radius: 25px; font-size: 0.875rem; font-weight: 600;"><?php echo $totalProductTemplates; ?> قالب</span>
+        <span style="background: rgba(255, 255, 255, 0.25); color: white; padding: 0.45rem 0.9rem; border-radius: 25px; font-size: 0.875rem; font-weight: 600;"><?php echo $totalProductTemplates; ?>  أصناف</span>
     </div>
     
-    <div style="background: white; border-radius: 0 0 16px 16px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08); overflow: hidden; padding: 2rem;">
+    <div id="factoryProductsCollapse" style="background: white; border-radius: 0 0 16px 16px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08); overflow: hidden; padding: 2rem; transition: all 0.3s ease;">
         <!-- شريط البحث والفلترة -->
         <div style="margin-bottom: 1.5rem; padding: 1rem; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 12px;">
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
@@ -2970,14 +2974,14 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
                     <label style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem; color: #666;">
                         <i class="bi bi-search me-1"></i>البحث
                     </label>
-                    <input type="text" class="form-control form-control-sm" id="templateSearchInput" placeholder="اسم القالب..." autocomplete="off" style="border-radius: 8px;">
+                    <input type="text" class="form-control form-control-sm" id="templateSearchInput" placeholder="اسم المنتج..." autocomplete="off" style="border-radius: 8px;">
                 </div>
                 <div>
                     <label style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem; color: #666;">
                         <i class="bi bi-funnel me-1"></i>فلترة الكمية
                     </label>
                     <select class="form-control form-control-sm" id="templateQuantityFilter" style="border-radius: 8px;">
-                        <option value="all">جميع القوالب</option>
+                        <option value="all">جميع المنتجات</option>
                         <option value="available">متاحة (كمية > 0)</option>
                         <option value="unavailable">غير متاحة (كمية = 0)</option>
                     </select>
@@ -3716,7 +3720,54 @@ window.openTemplateProductionModal = function(trigger) {
     white-space: normal;
 }
 
-/* إصلاح ظهور الأزرار السفلية للمودال على الهاتف */
+
+<script>
+/**
+ * تبديل حالة ظهور القسم وحفظ التفضيل
+ */
+function toggleSection(collapseId, iconId) {
+    const section = document.getElementById(collapseId);
+    const icon = document.getElementById(iconId);
+    if (!section) return;
+
+    const isCollapsed = section.style.display === 'none';
+    
+    if (isCollapsed) {
+        section.style.display = '';
+        if (icon) icon.style.transform = 'rotate(0deg)';
+        localStorage.setItem('section_' + collapseId, 'expanded');
+    } else {
+        section.style.display = 'none';
+        if (icon) icon.style.transform = 'rotate(-90deg)';
+        localStorage.setItem('section_' + collapseId, 'collapsed');
+    }
+}
+
+/**
+ * تطبيق التفضيلات المحفوظة عند تحميل الصفحة
+ */
+document.addEventListener('DOMContentLoaded', function() {
+    const sections = [
+        { id: 'factoryProductsCollapse', icon: 'factoryProductsToggleIcon' },
+        { id: 'externalProductsManagerCollapse', icon: 'externalProductsManagerToggleIcon' },
+        { id: 'externalProductsProductionCollapse', icon: 'externalProductsProductionToggleIcon' }
+    ];
+
+    sections.forEach(function(sec) {
+        const collapseEl = document.getElementById(sec.id);
+        const iconEl = document.getElementById(sec.icon);
+        const savedState = localStorage.getItem('section_' + sec.id);
+
+        if (savedState === 'collapsed' && collapseEl) {
+            collapseEl.style.display = 'none';
+            if (iconEl) iconEl.style.transform = 'rotate(-90deg)';
+        }
+    });
+});
+</script>
+
+<style>
+/* تحسين عرض الأزرار السفلية للمودال على الهاتف */
 @media (max-width: 991.98px) {
     /* Modal طلب نقل منتجات من المخزن الرئيسي */
     #requestTransferModal .modal-dialog {
@@ -4180,11 +4231,19 @@ window.openTemplateProductionModal = function(trigger) {
 
 <?php if ($isManager): ?>
 <div class="card shadow-sm mt-4">
-    <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
-        <h5 class="mb-0"><i class="bi bi-cart4 me-2"></i>المنتجات الخارجية (لا تؤثر على مخزون الشركة)</h5>
+    <div 
+        class="card-header bg-success text-white d-flex justify-content-between align-items-center"
+        style="cursor: pointer;"
+        onclick="toggleSection('externalProductsManagerCollapse', 'externalProductsManagerToggleIcon')"
+    >
+        <h5 class="mb-0">
+            <i class="bi bi-cart4 me-2"></i>
+            المنتجات الخارجية (لا تؤثر على مخزون الشركة)
+            <i class="bi bi-chevron-down ms-2" id="externalProductsManagerToggleIcon" style="transition: transform 0.3s ease;"></i>
+        </h5>
         <span class="badge bg-light text-dark"><?php echo number_format(is_countable($externalProducts) ? count($externalProducts) : 0); ?> منتج</span>
     </div>
-    <div class="card-body">
+    <div id="externalProductsManagerCollapse" class="card-body" style="transition: all 0.3s ease;">
         <?php if (!empty($externalProducts)): ?>
         <div class="table-responsive dashboard-table-wrapper">
             <table class="table dashboard-table align-middle mb-0">
@@ -4275,11 +4334,19 @@ window.openTemplateProductionModal = function(trigger) {
 <?php if ($isProductionRole && !empty($externalProductsForProduction)): ?>
 <!-- قسم المنتجات الخارجية لعمال الإنتاج -->
 <div class="card shadow-sm mt-4">
-    <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
-        <h5 class="mb-0"><i class="bi bi-box-seam me-2"></i>المنتجات الخارجية</h5>
+    <div 
+        class="card-header bg-info text-white d-flex justify-content-between align-items-center"
+        style="cursor: pointer;"
+        onclick="toggleSection('externalProductsProductionCollapse', 'externalProductsProductionToggleIcon')"
+    >
+        <h5 class="mb-0">
+            <i class="bi bi-box-seam me-2"></i>
+            المنتجات الخارجية
+            <i class="bi bi-chevron-down ms-2" id="externalProductsProductionToggleIcon" style="transition: transform 0.3s ease;"></i>
+        </h5>
         <span class="badge bg-light text-dark"><?php echo number_format(count($externalProductsForProduction)); ?> منتج</span>
     </div>
-    <div class="card-body">
+    <div id="externalProductsProductionCollapse" class="card-body" style="transition: all 0.3s ease;">
         <div class="row g-3 align-items-end mb-3">
             <div class="col-md-6">
                 <label for="externalProductsSearchInput" class="form-label">بحث باسم المنتج</label>
