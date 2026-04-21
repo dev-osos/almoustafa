@@ -1865,7 +1865,7 @@ foreach ($factoryProducts as $product) {
                             $templateId = $template['id'] ?? 0;
                             $availableQuantity = floatval($template['available_quantity'] ?? 0);
                         ?>
-                        <div class="product-card">
+                        <div class="product-card" data-quantity="<?php echo $availableQuantity; ?>">
                             <div class="product-status">
                                 <i class="bi bi-diagram-3 me-1"></i>قالب
                             </div>
@@ -4468,8 +4468,7 @@ function initEditExternalButtons() {
         // فلترة البطاقات
         const filteredCards = cards.filter(card => {
             const productName = card.querySelector('.product-name')?.textContent.toLowerCase() || '';
-            const quantityText = card.querySelector('.product-detail-row span:last-child')?.textContent || '';
-            const quantity = parseFloat(quantityText.replace(/[^\d.]/g, '')) || 0;
+            const quantity = parseFloat(card.dataset.quantity ?? '') || 0;
             
             // فحص البحث
             const matchesSearch = productName.includes(searchText);
@@ -4490,8 +4489,8 @@ function initEditExternalButtons() {
             const nameA = a.querySelector('.product-name')?.textContent.toLowerCase() || '';
             const nameB = b.querySelector('.product-name')?.textContent.toLowerCase() || '';
             
-            const quantityA = parseFloat(a.querySelector('.product-detail-row span:last-child')?.textContent.replace(/[^\d.]/g, '') || '0');
-            const quantityB = parseFloat(b.querySelector('.product-detail-row span:last-child')?.textContent.replace(/[^\d.]/g, '') || '0');
+            const quantityA = parseFloat(a.dataset.quantity ?? '0') || 0;
+            const quantityB = parseFloat(b.dataset.quantity ?? '0') || 0;
             
             const priceA = parseFloat(a.querySelector('.product-detail-row span:last-child')?.previousElementSibling?.textContent.replace(/[^\d.]/g, '') || '0');
             const priceB = parseFloat(b.querySelector('.product-detail-row span:last-child')?.previousElementSibling?.textContent.replace(/[^\d.]/g, '') || '0');
