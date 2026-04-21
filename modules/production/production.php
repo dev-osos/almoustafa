@@ -8477,6 +8477,37 @@ function getSuppliersForComponent(component) {
         return filterByTypes(['sesame']);
     }
 
+    // للعطارة / الأعشاب
+    if (type === 'herbal' || key.startsWith('herbal') || name.includes('عطار') || name.includes('أعشاب') || name.includes('عشب') || name.includes('herbal')) {
+        return filterByTypes(['herbal']);
+    }
+
+    // للتمر
+    if (type === 'date' || key.startsWith('date_') || name.includes('تمر') || name.includes('date')) {
+        return filterByTypes(['date']);
+    }
+
+    // للصابون
+    if (type === 'soap' || key.startsWith('soap') || name.includes('صابون') || name.includes('soap')) {
+        return filterByTypes(['soap']);
+    }
+
+    // للتوربينات / المعدات
+    if (type === 'turbines' || key.startsWith('turbine') || name.includes('توربين') || name.includes('turbine')) {
+        return filterByTypes(['turbines']);
+    }
+
+    // للسمسم
+    if (type === 'sesame' || key.startsWith('sesame') || name.includes('سمسم') || name.includes('sesame')) {
+        return filterByTypes(['sesame']);
+    }
+
+    // إذا كان النوع raw_general أو generic، أعد جميع الموردين غير المصنفين (كل الأنواع)
+    // لتغطية الخامات التي لا تنتمي لنوع محدد
+    if (type === 'raw_general' || type === 'generic' || type === 'ingredient' || type === '') {
+        return suppliers;
+    }
+
     // إذا لم يتم العثور على نوع محدد، إرجاع قائمة فارغة بدلاً من جميع الموردين
     // لتجنب عرض موردين غير مناسبين
     return [];
@@ -9107,6 +9138,11 @@ function renderTemplateSuppliers(details) {
         if (key.startsWith('olive')) return 'olive_oil';
         if (key.startsWith('derivative')) return 'derivatives';
         if (key.startsWith('nuts')) return 'nuts';
+        if (key.startsWith('herbal') || name.includes('عطار') || name.includes('أعشاب') || name.includes('عشب')) return 'herbal';
+        if (key.startsWith('date_') || name.includes('تمر')) return 'date';
+        if (key.startsWith('soap') || name.includes('صابون')) return 'soap';
+        if (key.startsWith('sesame') || name.includes('سمسم')) return 'sesame';
+        if (key.startsWith('turbine') || name.includes('توربين')) return 'turbines';
         
         // فحص العسل من الاسم أيضاً - فقط إذا لم يكن شمع
         if (key.startsWith('honey_') || name.includes('عسل')) {
@@ -9133,6 +9169,11 @@ function renderTemplateSuppliers(details) {
         derivatives: '#6366f1',
         nuts: '#d97706',
         raw_general: '#3b82f6',
+        herbal: '#16a34a',
+        date: '#b45309',
+        soap: '#0891b2',
+        turbines: '#475569',
+        sesame: '#ca8a04',
         generic: '#2563eb',
         default: '#2563eb'
     };
@@ -9149,6 +9190,11 @@ function renderTemplateSuppliers(details) {
         nuts: 'مكسرات',
         tahini: 'السمسم',
         raw_general: 'مادة خام',
+        herbal: 'عطارة / أعشاب',
+        date: 'تمر',
+        soap: 'صابون',
+        turbines: 'توربينات',
+        sesame: 'سمسم',
         generic: 'مكوّن'
     };
 
@@ -9163,6 +9209,11 @@ function renderTemplateSuppliers(details) {
         derivatives: 'bi-intersect',
         nuts: 'bi-record-circle',
         raw_general: 'bi-diagram-3',
+        herbal: 'bi-flower1',
+        date: 'bi-tree',
+        soap: 'bi-droplet-fill',
+        turbines: 'bi-gear',
+        sesame: 'bi-asterisk',
         generic: 'bi-diagram-2'
     };
 
@@ -9250,17 +9301,7 @@ function renderTemplateSuppliers(details) {
             { key: 'special', label: 'مكوّنات خاصة', value: stats.special, icon: 'bi-puzzle' }
         ].filter(item => item.value > 0 || item.key === 'total');
 
-        summaryGrid.innerHTML = summaryItems.map(item => `
-            <div class="template-summary-item">
-                <span class="template-summary-icon">
-                    <i class="bi ${item.icon}"></i>
-                </span>
-                <div class="template-summary-content">
-                    <span class="template-summary-value">${item.value}</span>
-                    <span class="template-summary-label">${item.label}</span>
-                </div>
-            </div>
-        `).join('');
+        summaryGrid.innerHTML = summaryItems.map(item => ``).join('');
 
         summaryWrapper.classList.remove('d-none');
     }
