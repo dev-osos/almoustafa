@@ -3023,9 +3023,7 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
                             $templateDetailsCollapseId = 'templateComponentsCollapse' . $templateId;
                         ?>
                         <div class="product-card" style="position: relative; background: white; padding: 20px; border: 1px solid #e2e6f3; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); transition: all 0.3s ease;">
-                            <div style="position: absolute; top: 15px; left: 15px; background: #2e89ff; padding: 6px 14px; border-radius: 20px; color: white; font-size: 12px; font-weight: bold;">
-                                <i class="bi bi-diagram-3 me-1"></i>قالب
-                            </div>
+                            
                             
                             <div class="product-name" style="font-size: 16px; font-weight: bold; color: #0d2f66; margin-bottom: 6px; margin-top: 10px;"><?php echo $templateName; ?></div>
                             <div style="color: #94a3b8; font-size: 13px; margin-bottom: 10px;">الكود: <?php echo $templateId; ?></div>
