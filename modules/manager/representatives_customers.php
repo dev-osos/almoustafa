@@ -1262,11 +1262,7 @@ if ($error): ?>
                         </div>
                     </div>
                     
-                    <div class="mt-4 d-grid">
-                        <a href="#" id="viewRepCustomersBtn" class="btn btn-outline-primary">
-                            <i class="bi bi-eye me-2"></i>عرض قائمة عملاء المندوب
-                        </a>
-                    </div>
+                    
                 </div>
             </div>
         </div>
