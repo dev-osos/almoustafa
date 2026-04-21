@@ -4355,7 +4355,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                 <div class="col-7">
                                     <div id="customer_select_local_task" class="customer-select-block">
                                         <div class="search-wrap position-relative">
-                                            <input type="text" id="local_customer_search_task" class="form-control form-control-sm" placeholder="اكتب للبحث أو أدخل اسم عميل جديد..." autocomplete="off">
+                                            <input type="text" id="local_customer_search_task" class="form-control form-control-sm" placeholder="اسم العميل ..." autocomplete="off">
                                             <input type="hidden" id="local_customer_id_task" name="local_customer_id" value="">
                                             <div id="local_customer_dropdown_task" class="search-dropdown-task d-none"></div>
                                         </div>
@@ -4394,7 +4394,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                         </div>
                         <div class="col-md-5">
                             <label class="form-label">العنوان</label>
-                            <input type="text" class="form-control" name="order_title" id="createOrderTitle" placeholder="عنوان التوصيل أو عنوان مميز يظهر في الإيصال">
+                            <input type="text" class="form-control" name="order_title" id="createOrderTitle" placeholder="عنوان التوصيل ">
                         </div>
 
                         <div class="col-12">
@@ -4636,7 +4636,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             <input type="hidden" name="customer_name" id="edit_submit_customer_name" value="">
                             <div id="customer_select_local_edit" class="customer-select-block mb-2">
                                 <div class="search-wrap position-relative">
-                                    <input type="text" id="local_customer_search_edit" class="form-control form-control-sm" placeholder="اكتب للبحث أو أدخل اسم عميل جديد..." autocomplete="off">
+                                    <input type="text" id="local_customer_search_edit" class="form-control form-control-sm" placeholder="اسم العميل" autocomplete="off">
                                     <input type="hidden" id="local_customer_id_edit" name="local_customer_id" value="">
                                     <div id="local_customer_dropdown_edit" class="search-dropdown-task d-none"></div>
                                 </div>
@@ -4644,7 +4644,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             </div>
                             <div id="customer_select_rep_edit" class="customer-select-block mb-2 d-none">
                                 <div class="search-wrap position-relative">
-                                    <input type="text" id="rep_customer_search_edit" class="form-control form-control-sm" placeholder="اكتب للبحث أو أدخل اسم عميل جديد..." autocomplete="off">
+                                    <input type="text" id="rep_customer_search_edit" class="form-control form-control-sm" placeholder="اسم العميل" autocomplete="off">
                                     <input type="hidden" id="rep_customer_id_edit" value="">
                                     <div id="rep_customer_dropdown_edit" class="search-dropdown-task d-none"></div>
                                 </div>
