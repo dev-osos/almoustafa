@@ -40,6 +40,28 @@ require_once __DIR__ . '/../../includes/path_helper.php';
 .btn-print-custom:active {
     transform: translateY(0);
 }
+
+/* Performance Card Styles */
+#repPerformanceCard .card-header {
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%) !important;
+}
+.bg-light-subtle {
+    background-color: #f8fafc !important;
+}
+.border-lg-end {
+    border-inline-end: 1px solid #e2e8f0;
+}
+@media (max-width: 991.98px) {
+    .border-lg-end {
+        border-inline-end: none;
+    }
+}
+.rep-stat-card {
+    transition: transform 0.2s ease;
+}
+.rep-stat-card:hover {
+    transform: translateY(-2px);
+}
 </style>
 <?php
 require_once __DIR__ . '/../../includes/invoices.php';
@@ -1124,14 +1146,139 @@ if ($error): ?>
 </div>
 </div>
 
-<?php
-// بناء الرابط بشكل صحيح
-$baseUrl = getRelativeUrl($dashboardScript);
-$viewBaseUrl = $baseUrl . (strpos($baseUrl, '?') !== false ? '&' : '?') . 'page=rep_customers_view';
-renderRepresentativeCards($representatives, [
-    'view_base_url' => $viewBaseUrl,
-]);
-?>
+<!-- بطاقة أداء المندوبين الموحدة -->
+<div class="card shadow-sm mb-4 border-0 overflow-hidden" id="repPerformanceCard">
+    <div class="card-header bg-dark text-white p-3">
+        <div class="row g-3 align-items-center">
+            <div class="col-12 col-md-4">
+                <h5 class="mb-0 text-white d-flex align-items-center">
+                    <i class="bi bi-person-badge-fill me-2"></i>
+                    أداء ومتابعة المندوبين
+                </h5>
+            </div>
+            <div class="col-12 col-md-8">
+                <div class="row g-2 justify-content-md-end">
+                    <div class="col-7 col-md-5">
+                        <select class="form-select form-select-sm bg-light" id="repPerfSelect" aria-label="اختر المندوب">
+                            <option value="">-- اختر المندوب للمتابعة --</option>
+                            <?php foreach ($representatives as $rep): ?>
+                                <option value="<?php echo (int)$rep['id']; ?>"><?php echo htmlspecialchars($rep['full_name'] ?? $rep['username']); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-5 col-md-4">
+                        <div class="input-group input-group-sm">
+                            <button class="btn btn-outline-light btn-sm" id="prevMonthBtn" title="الشهر السابق"><i class="bi bi-chevron-right"></i></button>
+                            <input type="month" class="form-control form-control-sm text-center" id="repPerfMonth" value="<?php echo date('Y-m'); ?>">
+                            <button class="btn btn-outline-light btn-sm" id="nextMonthBtn" title="الشهر التالي"><i class="bi bi-chevron-left"></i></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="card-body bg-light-subtle p-0" id="repPerfContainer">
+        <div class="p-5 text-center text-muted" id="repPerfPlaceholder">
+            <div class="display-1 mb-3"><i class="bi bi-person-bounding-box opacity-25"></i></div>
+            <h4>يرجى اختيار المندوب لعرض تقارير الأداء</h4>
+            <p class="mb-0">يمكنك متابعة التحصيلات، المرتجعات والعملاء الجدد بشكل تفصيلي.</p>
+        </div>
+        
+        <div id="repPerfContent" style="display: none;">
+            <div class="row g-0">
+                <!-- الجزء الشهري -->
+                <div class="col-12 col-lg-7 p-4 border-bottom border-lg-bottom-0 border-lg-end">
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h6 class="fw-bold mb-0 text-primary">
+                            <i class="bi bi-calendar-check me-2"></i>
+                            أداء شهر <span id="perfMonthName">---</span>
+                        </h6>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-6 col-md-4">
+                            <div class="card border-0 shadow-sm h-100">
+                                <div class="card-body p-3">
+                                    <div class="text-muted small mb-1">التحصيلات</div>
+                                    <div class="fs-4 fw-bold text-success" id="perfMonthlyCollections">0</div>
+                                    <div class="small text-muted" id="perfMonthlyCollectionsCount">0 عملية</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-4">
+                            <div class="card border-0 shadow-sm h-100">
+                                <div class="card-body p-3">
+                                    <div class="text-muted small mb-1">المرتجعات</div>
+                                    <div class="fs-4 fw-bold text-info" id="perfMonthlyReturns">0</div>
+                                    <div class="small text-muted" id="perfMonthlyReturnsCount">0 عملية</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <div class="card border-0 shadow-sm h-100 bg-primary-subtle border-primary border-opacity-10">
+                                <div class="card-body p-3">
+                                    <div class="text-muted small mb-1">عملاء جدد</div>
+                                    <div class="fs-4 fw-bold text-primary" id="perfMonthlyNewCustomers">0</div>
+                                    <div class="small text-muted">تم إضافتهم هذا الشهر</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4">
+                        <canvas id="monthlyPerfChart" height="100"></canvas>
+                    </div>
+                </div>
+                
+                <!-- الجزء الإجمالي -->
+                <div class="col-12 col-lg-5 p-4 bg-white">
+                    <h6 class="fw-bold mb-4 text-dark">
+                        <i class="bi bi-bar-chart-line me-2"></i>
+                        الوضع الحالي الإجمالي
+                    </h6>
+                    <div class="list-group list-group-flush">
+                        <div class="list-group-item d-flex justify-content-between align-items-center px-0 py-3 border-0">
+                            <div>
+                                <i class="bi bi-people me-2 text-muted"></i>إجمالي العملاء
+                            </div>
+                            <span class="fw-bold fs-5" id="perfTotalCustomers">0</span>
+                        </div>
+                        <div class="list-group-item d-flex justify-content-between align-items-center px-0 py-3 border-0 border-top">
+                            <div>
+                                <i class="bi bi-exclamation-circle me-2 text-warning"></i>العملاء المدينون
+                            </div>
+                            <span class="fw-bold text-warning" id="perfDebtorCount">0</span>
+                        </div>
+                        <div class="list-group-item d-flex justify-content-between align-items-center px-0 py-3 border-0 border-top">
+                            <div>
+                                <i class="bi bi-cash-stack me-2 text-danger"></i>إجمالي الديون القائمة
+                            </div>
+                            <span class="fw-bold text-danger fs-5" id="perfTotalDebt">0</span>
+                        </div>
+                        <div class="list-group-item d-flex justify-content-between align-items-center px-0 py-3 border-0 border-top">
+                            <div>
+                                <i class="bi bi-wallet2 me-2 text-secondary"></i>رصيد المحفظة / العهدة
+                            </div>
+                            <span class="fw-bold text-secondary" id="perfWalletBalance">0</span>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4 d-grid">
+                        <a href="#" id="viewRepCustomersBtn" class="btn btn-outline-primary">
+                            <i class="bi bi-eye me-2"></i>عرض قائمة عملاء المندوب
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Loading Overlay -->
+        <div id="repPerfLoading" class="position-absolute top-0 start-0 w-100 h-100 bg-white bg-opacity-75 d-none justify-content-center align-items-center" style="z-index: 10;">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">جاري التحميل...</span>
+            </div>
+        </div>
+    </div>
+</div>
 
 <?php
 // جلب جميع عملاء المندوبين للجدول
@@ -7849,6 +7996,99 @@ document.addEventListener('DOMContentLoaded', function() {
             if (iconEl) iconEl.style.transform = 'rotate(-90deg)';
         }
     });
+
+    // --- منطق بطاقة أداء المندوبين ---
+    (function() {
+        const repSelect = document.getElementById('repPerfSelect');
+        const monthInput = document.getElementById('repPerfMonth');
+        const prevMonthBtn = document.getElementById('prevMonthBtn');
+        const nextMonthBtn = document.getElementById('nextMonthBtn');
+        const loadingOverlay = document.getElementById('repPerfLoading');
+        const placeholder = document.getElementById('repPerfPlaceholder');
+        const content = document.getElementById('repPerfContent');
+        const viewRepBtn = document.getElementById('viewRepCustomersBtn');
+
+        if (!repSelect) return;
+
+        function formatCurrency(val) {
+            return new Intl.NumberFormat('ar-EG', { 
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }).format(val) + ' ج.م';
+        }
+
+        function loadRepStats() {
+            const repId = repSelect.value;
+            const monthVal = monthInput.value;
+            if (!repId) {
+                placeholder.style.display = 'block';
+                content.style.display = 'none';
+                return;
+            }
+
+            const [year, month] = monthVal.split('-');
+            
+            loadingOverlay.classList.remove('d-none');
+            loadingOverlay.classList.add('d-flex');
+
+            fetch(`api/get_representative_stats.php?rep_id=${repId}&year=${year}&month=${month}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        placeholder.style.display = 'none';
+                        content.style.display = 'block';
+
+                        // تحديث البيانات الشهرية
+                        document.getElementById('perfMonthName').textContent = data.monthly.month_name + ' ' + data.monthly.year;
+                        document.getElementById('perfMonthlyCollections').textContent = formatCurrency(data.monthly.collections);
+                        document.getElementById('perfMonthlyCollectionsCount').textContent = data.monthly.collections_count + ' عملية';
+                        document.getElementById('perfMonthlyReturns').textContent = formatCurrency(data.monthly.returns);
+                        document.getElementById('perfMonthlyReturnsCount').textContent = data.monthly.returns_count + ' عملية';
+                        document.getElementById('perfMonthlyNewCustomers').textContent = data.monthly.new_customers;
+
+                        // تحديث البيانات الإجمالية
+                        document.getElementById('perfTotalCustomers').textContent = data.overall.total_customers.toLocaleString('ar-EG');
+                        document.getElementById('perfDebtorCount').textContent = data.overall.debtor_count.toLocaleString('ar-EG');
+                        document.getElementById('perfTotalDebt').textContent = formatCurrency(data.overall.total_debt);
+                        document.getElementById('perfWalletBalance').textContent = formatCurrency(data.overall.wallet_balance);
+
+                        // تحديث زر العرض
+                        const currentUrl = new URL(window.location.href);
+                        currentUrl.searchParams.set('rep_filter', repId);
+                        currentUrl.searchParams.set('cds', 'all');
+                        currentUrl.searchParams.delete('cs');
+                        viewRepBtn.href = currentUrl.toString();
+                    } else {
+                        alert(data.message || 'حدث خطأ في جلب البيانات');
+                    }
+                })
+                .catch(err => {
+                    console.error(err);
+                    alert('فشل الاتصال بالخادم');
+                })
+                .finally(() => {
+                    loadingOverlay.classList.add('d-none');
+                    loadingOverlay.classList.remove('d-flex');
+                });
+        }
+
+        repSelect.addEventListener('change', loadRepStats);
+        monthInput.addEventListener('change', loadRepStats);
+
+        prevMonthBtn.addEventListener('click', () => {
+            const date = new Date(monthInput.value + '-01');
+            date.setMonth(date.getMonth() - 1);
+            monthInput.value = date.toISOString().slice(0, 7);
+            loadRepStats();
+        });
+
+        nextMonthBtn.addEventListener('click', () => {
+            const date = new Date(monthInput.value + '-01');
+            date.setMonth(date.getMonth() + 1);
+            monthInput.value = date.toISOString().slice(0, 7);
+            loadRepStats();
+        });
+    })();
 });
 </script>
 
