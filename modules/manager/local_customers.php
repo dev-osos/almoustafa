@@ -1959,94 +1959,125 @@ var dashboardWrapper = null;
 })();
 </script>
 
-<div class="d-flex justify-content-between align-items-center mb-1">
-    <h2 class="mb-0">
-        <i class="bi bi-people me-2"></i>العملاء المحليين
-    </h2>
-    <button type="button" id="lcActionsToggleBtn"
-            class="btn btn-sm btn-outline-secondary px-2 py-0"
-            aria-controls="lcActionsCollapse"
-            aria-expanded="true"
-            title="إظهار / إخفاء الإجراءات">
-        <i class="bi bi-chevron-up" id="lcActionsToggleIcon"></i>
-    </button>
-</div>
+<style>
+.lc-collapsible-card { border-radius: .75rem; overflow: hidden; margin-bottom: 1rem; box-shadow: 0 1px 6px rgba(0,0,0,.08); border: 1px solid rgba(0,0,0,.08); }
+.lc-collapsible-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: .75rem 1.1rem; cursor: pointer; user-select: none;
+    background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%);
+    color: #fff; transition: filter .15s;
+}
+.lc-collapsible-header:hover { filter: brightness(1.08); }
+.lc-collapsible-header .lc-ch-title { font-size: 1.05rem; font-weight: 600; display: flex; align-items: center; gap: .5rem; }
+.lc-collapsible-header .lc-ch-toggle {
+    width: 28px; height: 28px; border-radius: 50%; border: 2px solid rgba(255,255,255,.4);
+    background: rgba(255,255,255,.15); display: flex; align-items: center; justify-content: center;
+    transition: transform .25s ease, background .15s; flex-shrink: 0;
+}
+.lc-collapsible-header[aria-expanded="false"] .lc-ch-toggle { transform: rotate(-180deg); background: rgba(255,255,255,.25); }
+.lc-collapsible-body { background: #fff; padding: 1rem 1.1rem; }
 
-<div id="lcActionsCollapse" class="mb-3">
-    <div class="d-flex flex-wrap gap-2 mt-2">
-        <button class="btn btn-success" onclick="showImportLocalCustomersModal()">
-            <i class="bi bi-file-earmark-spreadsheet me-2"></i> import CSV
-        </button>
-        <?php if (in_array($currentRole, ['manager', 'developer', 'accountant'], true)): ?>
-        <button type="button" class="btn btn-info" onclick="showCustomerExportModal(event)" data-section="local">
-            <i class="bi bi-download me-2"></i> شيت عملاء
-        </button>
-        <button type="button" class="btn btn-danger" onclick="printDebtorCustomers()">
-            <i class="bi bi-people me-2"></i>العملاء المدينين
-        </button>
-        <?php endif; ?>
-        <button class="btn btn-primary" onclick="showAddLocalCustomerModal()">
-            <i class="bi bi-person-plus me-2"></i>إضافة عميل جديد
-        </button>
-        <?php if (in_array($currentRole, ['manager', 'developer', 'accountant'], true)): ?>
-        <button class="btn btn-primary" onclick="showAddRegionFromLocalCustomerModal()">
-            <i class="bi bi-geo-alt me-2"></i>إضافة منطقه
-        </button>
-        <?php endif; ?>
+.lc-collapsible-card.lc-stats-card .lc-collapsible-header {
+    background: linear-gradient(135deg, #0f4c75 0%, #1b6ca8 100%);
+}
+</style>
+
+<!-- بطاقة الإجراءات -->
+<div class="lc-collapsible-card" id="lcActionsCard">
+    <div class="lc-collapsible-header" id="lcActionsToggleBtn"
+         role="button" tabindex="0"
+         aria-controls="lcActionsCollapse" aria-expanded="true"
+         title="إظهار / إخفاء الإجراءات">
+        <span class="lc-ch-title">
+            <i class="bi bi-people-fill"></i>
+            العملاء المحليين
+        </span>
+        <span class="lc-ch-toggle">
+            <i class="bi bi-chevron-up fs-6" id="lcActionsToggleIcon"></i>
+        </span>
+    </div>
+    <div class="lc-collapsible-body" id="lcActionsCollapse">
+        <div class="d-flex flex-wrap gap-2">
+            <button class="btn btn-success" onclick="showImportLocalCustomersModal()">
+                <i class="bi bi-file-earmark-spreadsheet me-2"></i> import CSV
+            </button>
+            <?php if (in_array($currentRole, ['manager', 'developer', 'accountant'], true)): ?>
+            <button type="button" class="btn btn-info" onclick="showCustomerExportModal(event)" data-section="local">
+                <i class="bi bi-download me-2"></i> شيت عملاء
+            </button>
+            <button type="button" class="btn btn-danger" onclick="printDebtorCustomers()">
+                <i class="bi bi-people me-2"></i>العملاء المدينين
+            </button>
+            <?php endif; ?>
+            <button class="btn btn-primary" onclick="showAddLocalCustomerModal()">
+                <i class="bi bi-person-plus me-2"></i>إضافة عميل جديد
+            </button>
+            <?php if (in_array($currentRole, ['manager', 'developer', 'accountant'], true)): ?>
+            <button class="btn btn-primary" onclick="showAddRegionFromLocalCustomerModal()">
+                <i class="bi bi-geo-alt me-2"></i>إضافة منطقه
+            </button>
+            <?php endif; ?>
+        </div>
     </div>
 </div>
 <script>
 (function () {
-    var PREF_KEY = 'lc_actions_collapsed';
-    var collapse = document.getElementById('lcActionsCollapse');
-    var btn      = document.getElementById('lcActionsToggleBtn');
-    var icon     = document.getElementById('lcActionsToggleIcon');
-    if (!collapse || !btn) return;
+    function makeCollapsible(headerId, bodyId, prefKey) {
+        var header   = document.getElementById(headerId);
+        var body     = document.getElementById(bodyId);
+        if (!header || !body) return;
+        var icon = header.querySelector('[id$="ToggleIcon"], .bi-chevron-up, .bi-chevron-down');
 
-    function applyState(collapsed, animate) {
-        if (collapsed) {
-            if (animate) {
-                collapse.style.overflow = 'hidden';
-                collapse.style.height = collapse.scrollHeight + 'px';
-                requestAnimationFrame(function () {
-                    collapse.style.transition = 'height .25s ease';
-                    collapse.style.height = '0';
-                });
-                collapse.addEventListener('transitionend', function done() {
-                    collapse.style.display = 'none';
-                    collapse.style.height = collapse.style.transition = collapse.style.overflow = '';
-                    collapse.removeEventListener('transitionend', done);
-                });
+        function applyState(collapsed, animate) {
+            if (collapsed) {
+                if (animate) {
+                    body.style.overflow = 'hidden';
+                    body.style.height = body.scrollHeight + 'px';
+                    requestAnimationFrame(function () {
+                        body.style.transition = 'height .28s cubic-bezier(.4,0,.2,1)';
+                        body.style.height = '0';
+                        body.style.paddingTop = '0';
+                        body.style.paddingBottom = '0';
+                    });
+                    body.addEventListener('transitionend', function done() {
+                        body.style.display = 'none';
+                        body.style.height = body.style.transition = body.style.overflow = '';
+                        body.style.paddingTop = body.style.paddingBottom = '';
+                        body.removeEventListener('transitionend', done);
+                    });
+                } else {
+                    body.style.display = 'none';
+                }
+                header.setAttribute('aria-expanded', 'false');
             } else {
-                collapse.style.display = 'none';
+                body.style.display = '';
+                if (animate) {
+                    var target = body.scrollHeight;
+                    body.style.overflow = 'hidden';
+                    body.style.height = '0';
+                    body.style.transition = 'height .28s cubic-bezier(.4,0,.2,1)';
+                    requestAnimationFrame(function () { body.style.height = target + 'px'; });
+                    body.addEventListener('transitionend', function done() {
+                        body.style.height = body.style.transition = body.style.overflow = '';
+                        body.removeEventListener('transitionend', done);
+                    });
+                }
+                header.setAttribute('aria-expanded', 'true');
             }
-            icon.className = 'bi bi-chevron-down';
-            btn.setAttribute('aria-expanded', 'false');
-        } else {
-            collapse.style.display = '';
-            if (animate) {
-                var target = collapse.scrollHeight;
-                collapse.style.overflow = 'hidden';
-                collapse.style.height = '0';
-                collapse.style.transition = 'height .25s ease';
-                requestAnimationFrame(function () { collapse.style.height = target + 'px'; });
-                collapse.addEventListener('transitionend', function done() {
-                    collapse.style.height = collapse.style.transition = collapse.style.overflow = '';
-                    collapse.removeEventListener('transitionend', done);
-                });
-            }
-            icon.className = 'bi bi-chevron-up';
-            btn.setAttribute('aria-expanded', 'true');
         }
+
+        applyState(localStorage.getItem(prefKey) === '1', false);
+
+        function toggle() {
+            var isCollapsed = header.getAttribute('aria-expanded') === 'false';
+            applyState(!isCollapsed, true);
+            localStorage.setItem(prefKey, isCollapsed ? '0' : '1');
+        }
+        header.addEventListener('click', toggle);
+        header.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
     }
 
-    applyState(localStorage.getItem(PREF_KEY) === '1', false);
-
-    btn.addEventListener('click', function () {
-        var nowCollapsed = btn.getAttribute('aria-expanded') === 'false';
-        applyState(!nowCollapsed, true);
-        localStorage.setItem(PREF_KEY, nowCollapsed ? '0' : '1');
-    });
+    makeCollapsible('lcActionsToggleBtn', 'lcActionsCollapse', 'lc_actions_collapsed');
 })();
 </script>
 
@@ -2065,20 +2096,22 @@ var dashboardWrapper = null;
 .gov-dropdown .gov-no-result,.city-dropdown .city-no-result{padding:.45rem .75rem;font-size:.85rem;color:#888;}
 </style>
 
-<!-- شريط رأس الإحصائيات مع زر الطي -->
-<div class="d-flex align-items-center justify-content-between mb-2">
-    <span class="fw-semibold text-secondary small"><i class="bi bi-bar-chart-line me-1"></i>ملخص إحصائيات العملاء</span>
-    <button type="button" id="summaryCardsToggleBtn"
-            class="btn btn-sm btn-outline-secondary px-2 py-0"
-            aria-controls="summaryCardsCollapse"
-            aria-expanded="true"
-            title="إظهار / إخفاء الإحصائيات">
-        <i class="bi bi-chevron-up" id="summaryCardsToggleIcon"></i>
-    </button>
-</div>
-
-<div id="summaryCardsCollapse">
-    <div class="row g-3 mb-4">
+<!-- بطاقة الإحصائيات -->
+<div class="lc-collapsible-card lc-stats-card">
+    <div class="lc-collapsible-header" id="summaryCardsToggleBtn"
+         role="button" tabindex="0"
+         aria-controls="summaryCardsCollapse" aria-expanded="true"
+         title="إظهار / إخفاء الإحصائيات">
+        <span class="lc-ch-title">
+            <i class="bi bi-bar-chart-line-fill"></i>
+            ملخص إحصائيات العملاء
+        </span>
+        <span class="lc-ch-toggle">
+            <i class="bi bi-chevron-up fs-6" id="summaryCardsToggleIcon"></i>
+        </span>
+    </div>
+    <div class="lc-collapsible-body" id="summaryCardsCollapse">
+        <div class="row g-3 mb-2">
         <div class="col-6 col-md-6 col-xl-3">
             <div class="card shadow-sm border-0 h-100">
                 <div class="card-body d-flex align-items-center justify-content-between">
@@ -2160,58 +2193,61 @@ var dashboardWrapper = null;
 </div>
 <script>
 (function () {
-    var PREF_KEY = 'lc_summary_collapsed';
-    var collapse = document.getElementById('summaryCardsCollapse');
-    var btn      = document.getElementById('summaryCardsToggleBtn');
-    var icon     = document.getElementById('summaryCardsToggleIcon');
-    if (!collapse || !btn) return;
+    function makeCollapsible(headerId, bodyId, prefKey) {
+        var header = document.getElementById(headerId);
+        var body   = document.getElementById(bodyId);
+        if (!header || !body) return;
 
-    function applyState(collapsed, animate) {
-        if (collapsed) {
-            if (animate) {
-                collapse.style.overflow = 'hidden';
-                var h = collapse.scrollHeight;
-                collapse.style.height = h + 'px';
-                requestAnimationFrame(function () {
-                    collapse.style.transition = 'height .25s ease';
-                    collapse.style.height = '0';
-                });
-                collapse.addEventListener('transitionend', function done() {
-                    collapse.style.display = 'none';
-                    collapse.style.height = collapse.style.transition = collapse.style.overflow = '';
-                    collapse.removeEventListener('transitionend', done);
-                });
+        function applyState(collapsed, animate) {
+            if (collapsed) {
+                if (animate) {
+                    body.style.overflow = 'hidden';
+                    body.style.height = body.scrollHeight + 'px';
+                    requestAnimationFrame(function () {
+                        body.style.transition = 'height .28s cubic-bezier(.4,0,.2,1)';
+                        body.style.height = '0';
+                        body.style.paddingTop = '0';
+                        body.style.paddingBottom = '0';
+                    });
+                    body.addEventListener('transitionend', function done() {
+                        body.style.display = 'none';
+                        body.style.height = body.style.transition = body.style.overflow = '';
+                        body.style.paddingTop = body.style.paddingBottom = '';
+                        body.removeEventListener('transitionend', done);
+                    });
+                } else {
+                    body.style.display = 'none';
+                }
+                header.setAttribute('aria-expanded', 'false');
             } else {
-                collapse.style.display = 'none';
+                body.style.display = '';
+                if (animate) {
+                    var target = body.scrollHeight;
+                    body.style.overflow = 'hidden';
+                    body.style.height = '0';
+                    body.style.transition = 'height .28s cubic-bezier(.4,0,.2,1)';
+                    requestAnimationFrame(function () { body.style.height = target + 'px'; });
+                    body.addEventListener('transitionend', function done() {
+                        body.style.height = body.style.transition = body.style.overflow = '';
+                        body.removeEventListener('transitionend', done);
+                    });
+                }
+                header.setAttribute('aria-expanded', 'true');
             }
-            icon.className = 'bi bi-chevron-down';
-            btn.setAttribute('aria-expanded', 'false');
-        } else {
-            collapse.style.display = '';
-            if (animate) {
-                var target = collapse.scrollHeight;
-                collapse.style.overflow = 'hidden';
-                collapse.style.height = '0';
-                collapse.style.transition = 'height .25s ease';
-                requestAnimationFrame(function () { collapse.style.height = target + 'px'; });
-                collapse.addEventListener('transitionend', function done() {
-                    collapse.style.height = collapse.style.transition = collapse.style.overflow = '';
-                    collapse.removeEventListener('transitionend', done);
-                });
-            }
-            icon.className = 'bi bi-chevron-up';
-            btn.setAttribute('aria-expanded', 'true');
         }
+
+        applyState(localStorage.getItem(prefKey) === '1', false);
+
+        function toggle() {
+            var isCollapsed = header.getAttribute('aria-expanded') === 'false';
+            applyState(!isCollapsed, true);
+            localStorage.setItem(prefKey, isCollapsed ? '0' : '1');
+        }
+        header.addEventListener('click', toggle);
+        header.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
     }
 
-    var isCollapsed = localStorage.getItem(PREF_KEY) === '1';
-    applyState(isCollapsed, false);
-
-    btn.addEventListener('click', function () {
-        var nowCollapsed = collapse.style.display === 'none' || btn.getAttribute('aria-expanded') === 'false';
-        applyState(!nowCollapsed, true);
-        localStorage.setItem(PREF_KEY, nowCollapsed ? '0' : '1');
-    });
+    makeCollapsible('summaryCardsToggleBtn', 'summaryCardsCollapse', 'lc_summary_collapsed');
 })();
 </script>
 
