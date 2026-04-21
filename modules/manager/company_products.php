@@ -1328,6 +1328,34 @@ foreach ($factoryProducts as $product) {
     font-size: 0.875rem;
 }
 
+.btn-print-custom {
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+    border: none;
+    color: white;
+    padding: 0.6rem 1.25rem;
+    border-radius: 10px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    line-height: 1;
+}
+
+.btn-print-custom:hover {
+    background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4);
+    color: white;
+}
+
+.btn-print-custom.btn-sm {
+    padding: 0.45rem 1rem;
+    font-size: 0.85rem;
+    border-radius: 8px;
+}
+
 /* تحسين الأزرار في الجداول */
 .company-card .btn-group-sm .btn {
     border-radius: 8px;
@@ -1811,8 +1839,8 @@ foreach ($factoryProducts as $product) {
             </h5>
             <div class="d-flex align-items-center gap-2">
                 <span class="badge" id="templateProductsCount"><?php echo $totalProductTemplates; ?> منتج</span>
-                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="event.stopPropagation(); printFactoryInventory()" title="طباعة جرد المنتجات الظاهرة">
-                    <i class="bi bi-printer me-1"></i>طباعة الجرد
+                <button type="button" class="btn btn-print-custom btn-sm" onclick="event.stopPropagation(); printFactoryInventory()" title="طباعة جرد المنتجات الظاهرة">
+                    <i class="bi bi-printer"></i>طباعة جرد القسم
                 </button>
                 <i class="bi bi-chevron-down collapse-arrow"></i>
             </div>
@@ -1893,8 +1921,8 @@ foreach ($factoryProducts as $product) {
             </h5>
             <div class="d-flex gap-2 align-items-center">
                 <span class="badge" id="externalProductsCount"><?php echo $totalExternalProducts; ?> منتج</span>
-                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="event.stopPropagation(); printExternalInventory()" title="طباعة جرد المنتجات الظاهرة">
-                    <i class="bi bi-printer me-1"></i>طباعة الجرد
+                <button type="button" class="btn btn-print-custom btn-sm" onclick="event.stopPropagation(); printExternalInventory()" title="طباعة جرد المنتجات الظاهرة">
+                    <i class="bi bi-printer"></i>طباعة جرد القسم
                 </button>
                 <button type="button" class="btn btn-success-custom btn-sm" onclick="event.stopPropagation(); showAddExternalProductModal()">
                     <i class="bi bi-plus-circle me-1"></i>إضافة منتج خارجي
@@ -2042,8 +2070,8 @@ foreach ($factoryProducts as $product) {
         </h5>
         <div class="d-flex gap-2 align-items-center">
             <span class="badge" id="secondGradeCount"><?php echo $totalSecondGradeProducts; ?> منتج</span>
-            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="event.stopPropagation(); printSecondGradeInventory()" title="طباعة جرد المنتجات الظاهرة">
-                <i class="bi bi-printer me-1"></i>طباعة الجرد
+            <button type="button" class="btn btn-print-custom btn-sm" onclick="event.stopPropagation(); printSecondGradeInventory()" title="طباعة جرد المنتجات الظاهرة">
+                <i class="bi bi-printer"></i>طباعة جرد القسم
             </button>
             <?php if ($currentUser['role'] !== 'accountant' && !$isProductionRole): ?>
             <button type="button" class="btn btn-success-custom btn-sm" onclick="event.stopPropagation(); showAddSecondGradeModal()">
