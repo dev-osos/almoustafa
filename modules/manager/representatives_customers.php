@@ -8031,7 +8031,8 @@ document.addEventListener('DOMContentLoaded', function() {
             loadingOverlay.classList.remove('d-none');
             loadingOverlay.classList.add('d-flex');
 
-            fetch(`api/get_representative_stats.php?rep_id=${repId}&year=${year}&month=${month}`)
+            const apiUrl = '<?php echo getRelativeUrl("api/get_representative_stats.php"); ?>';
+            fetch(`${apiUrl}?rep_id=${repId}&year=${year}&month=${month}`)
                 .then(res => res.json())
                 .then(data => {
                     if (data.success) {
