@@ -102,30 +102,10 @@ function generateBatchNumber(
 
     $templateSegment = str_pad((string) $templateId, 4, '0', STR_PAD_LEFT);
 
-    $buildBatchNumber = static function (string $randomSegment) use ($templateSegment, $supplierSegment, $executionDate, $workerSegment, $productionDateShort) {
-        return sprintf(
-            'TPL%s-SUP%s-EX%s-WRK%s-PD%s-%s',
-            $templateSegment,
-            $supplierSegment,
-            $executionDate,
-            $workerSegment,
-            $productionDateShort,
-            $randomSegment
-        );
-    };
-
-    $attempts = 0;
-    $randomSegment = 'R' . str_pad((string) rand(0, 999), 3, '0', STR_PAD_LEFT);
-    $batchNumber = $buildBatchNumber($randomSegment);
+    $batchNumber = str_pad((string) rand(0, 999999), 6, '0', STR_PAD_LEFT);
 
     while ($db->queryOne("SELECT id FROM batches WHERE batch_number = ?", [$batchNumber])) {
-        $attempts++;
-        if ($attempts > 200) {
-            $randomSegment = 'F' . str_pad((string) rand(100, 999), 3, '0', STR_PAD_LEFT);
-        } else {
-            $randomSegment = 'R' . str_pad((string) rand(0, 999), 3, '0', STR_PAD_LEFT);
-        }
-        $batchNumber = $buildBatchNumber($randomSegment);
+        $batchNumber = str_pad((string) rand(0, 999999), 6, '0', STR_PAD_LEFT);
     }
 
     return $batchNumber;

@@ -639,7 +639,7 @@ function checkMaterialsAvailability($db, $templateId, $productionQuantity, array
         }
 
         // إذا كان النوع محدد ومعروف، استخدمه مباشرة
-        if (in_array($normalizedType, ['honey_raw', 'honey_filtered', 'honey', 'olive_oil', 'beeswax', 'derivatives', 'nuts', 'tahini'], true)) {
+        if (in_array($normalizedType, ['honey_raw', 'honey_filtered', 'honey', 'olive_oil', 'beeswax', 'derivatives', 'nuts', 'tahini', 'herbal', 'date', 'soap', 'turbines', 'sesame', 'raw_general'], true)) {
             return $normalizedType;
         }
 
@@ -1032,13 +1032,54 @@ function checkMaterialsAvailability($db, $templateId, $productionQuantity, array
                     $availableUnit = 'kg';
                 }
                 break;
+            case 'herbal':
+            case 'date':
+            case 'soap':
+            case 'turbines':
+            case 'sesame':
+            case 'raw_general':
+                // البحث في raw_materials بالاسم أولاً، ثم بالمورد، ثم في products
+                $genericStockTableExists = $db->queryOne("SHOW TABLES LIKE 'raw_materials'");
+                if (!empty($genericStockTableExists)) {
+                    // بحث بالاسم (أدق)
+                    $stockRow = $db->queryOne(
+                        "SELECT SUM(quantity) AS total_quantity FROM raw_materials WHERE name = ? AND quantity > 0",
+                        [$materialName]
+                    );
+                    $availableQuantity = (float)($stockRow['total_quantity'] ?? 0);
+                    // بحث بالمورد إذا لم يجد بالاسم
+                    if ($availableQuantity <= 0 && $supplierId) {
+                        $stockRow = $db->queryOne(
+                            "SELECT SUM(quantity) AS total_quantity FROM raw_materials WHERE supplier_id = ? AND quantity > 0",
+                            [$supplierId]
+                        );
+                        $availableQuantity = (float)($stockRow['total_quantity'] ?? 0);
+                    }
+                    if ($availableQuantity > 0) {
+                        $resolved = true;
+                        $availableUnit = $normalizeUnitLabel(null);
+                    }
+                }
+                // بحث في products بالاسم إذا لم يجد في raw_materials
+                if (!$resolved) {
+                    $productRow = $db->queryOne(
+                        "SELECT quantity FROM products WHERE (name = ? OR name LIKE ?) AND status = 'active' ORDER BY quantity DESC LIMIT 1",
+                        [$materialName, '%' . $materialName . '%']
+                    );
+                    if ($productRow) {
+                        $availableQuantity = (float)($productRow['quantity'] ?? 0);
+                        $resolved = true;
+                        $availableUnit = $normalizeUnitLabel(null);
+                    }
+                }
+                break;
             default:
                 if ($supplierId) {
                     $genericStockTableExists = $db->queryOne("SHOW TABLES LIKE 'raw_materials'");
                     if (!empty($genericStockTableExists)) {
                         $stockRow = $db->queryOne(
-                            "SELECT SUM(quantity) AS total_quantity 
-                             FROM raw_materials 
+                            "SELECT SUM(quantity) AS total_quantity
+                             FROM raw_materials
                              WHERE supplier_id = ?",
                             [$supplierId]
                         );
@@ -1058,13 +1099,14 @@ function checkMaterialsAvailability($db, $templateId, $productionQuantity, array
     };
 
     $rawMaterials = $db->query(
-        "SELECT material_name, quantity_per_unit, unit 
-         FROM product_template_raw_materials 
+        "SELECT id, material_name, quantity_per_unit, unit
+         FROM product_template_raw_materials
          WHERE template_id = ?",
         [$templateId]
     );
-    
+
     foreach ($rawMaterials as $raw) {
+        $rawRowId = isset($raw['id']) ? (int)$raw['id'] : 0;
         $materialName = $raw['material_name'];
         $requiredQuantity = floatval($raw['quantity_per_unit']) * $productionQuantity;
         $normalizedName = mb_strtolower(trim((string)$materialName), 'UTF-8');
@@ -1072,7 +1114,15 @@ function checkMaterialsAvailability($db, $templateId, $productionQuantity, array
         $materialTypeMeta = $rawDetail['type'] ?? null;
         $materialSupplierMeta = isset($rawDetail['supplier_id']) ? (int)$rawDetail['supplier_id'] : null;
         $honeyVarietyMeta = $rawDetail['honey_variety'] ?? null;
-        
+
+        // استخدام المورد المختار من النموذج إذا لم يكن محدداً في تفاصيل القالب
+        if ((!$materialSupplierMeta || $materialSupplierMeta <= 0) && $rawRowId > 0) {
+            $formSupplierKey = 'raw_' . $rawRowId;
+            if (isset($materialSuppliers[$formSupplierKey]) && (int)$materialSuppliers[$formSupplierKey] > 0) {
+                $materialSupplierMeta = (int)$materialSuppliers[$formSupplierKey];
+            }
+        }
+
         // إذا كانت المادة عسل وكان مورد العسل محدد في نموذج إنشاء التشغيلة، استخدمه
         $isHoneyMaterialCheck = (mb_stripos($materialName, 'عسل') !== false || stripos($materialName, 'honey') !== false) ||
                                in_array(mb_strtolower($materialTypeMeta ?? '', 'UTF-8'), ['honey_raw', 'honey_filtered', 'honey'], true);
@@ -4290,7 +4340,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $isBeeswaxName = (mb_stripos($rawName, 'شمع') !== false) || (stripos($rawName, 'beeswax') !== false) || (stripos($rawName, 'wax') !== false);
                     $isHoneyName = !$isBeeswaxName && ((mb_stripos($rawName, 'عسل') !== false) || (stripos($rawName, 'honey') !== false));
                     $isTahiniName = (mb_stripos($rawName, 'طحينة') !== false) || (stripos($rawName, 'tahini') !== false);
-                    if (!in_array($materialType, ['honey_raw', 'honey_filtered', 'olive_oil', 'beeswax', 'derivatives', 'nuts', 'tahini'], true)) {
+                    if (!in_array($materialType, ['honey_raw', 'honey_filtered', 'olive_oil', 'beeswax', 'derivatives', 'nuts', 'tahini', 'herbal', 'date', 'soap', 'turbines', 'sesame', 'raw_general'], true)) {
                         if ($isBeeswaxName) {
                             $materialType = 'beeswax';
                         } elseif ($isHoneyName) {
@@ -4305,9 +4355,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             }
                         } elseif ($isTahiniName) {
                             $materialType = 'tahini';
+                        } elseif ($supplierInfo && ($supplierInfo['type'] ?? '') === 'herbal') {
+                            $materialType = 'herbal';
                         } else {
                             $materialType = 'raw_general';
                         }
+                    }
+                    // إذا كان نوع المورد herbal وكان النوع raw_general، صحح النوع
+                    if ($materialType === 'raw_general' && isset($supplierInfo['type']) && $supplierInfo['type'] === 'herbal') {
+                        $materialType = 'herbal';
                     }
 
                     $selectedHoneyVariety = trim((string)($materialHoneyVarieties[$rawKey] ?? ''));
@@ -4838,6 +4894,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                          WHERE supplier_id = ?",
                                         [$deductQuantity, $supplierForDeduction]
                                     );
+                                }
+                                break;
+                            case 'herbal':
+                            case 'date':
+                            case 'soap':
+                            case 'turbines':
+                            case 'sesame':
+                            case 'raw_general':
+                                if ($materialName !== '') {
+                                    // خصم من raw_materials بالاسم أولاً
+                                    $rawMatTableCheck = $db->queryOne("SHOW TABLES LIKE 'raw_materials'");
+                                    if (!empty($rawMatTableCheck)) {
+                                        $rawMatRow = $db->queryOne(
+                                            "SELECT id FROM raw_materials WHERE name = ? AND quantity > 0 LIMIT 1",
+                                            [$materialName]
+                                        );
+                                        if ($rawMatRow) {
+                                            $db->execute(
+                                                "UPDATE raw_materials SET quantity = GREATEST(quantity - ?, 0) WHERE id = ?",
+                                                [$deductQuantity, $rawMatRow['id']]
+                                            );
+                                            break;
+                                        }
+                                    }
+                                    // خصم من products كبديل
+                                    $matchedProduct = $db->queryOne(
+                                        "SELECT id FROM products WHERE name = ? LIMIT 1",
+                                        [$materialName]
+                                    );
+                                    if ($matchedProduct) {
+                                        $db->execute(
+                                            "UPDATE products SET quantity = GREATEST(quantity - ?, 0) WHERE id = ?",
+                                            [$deductQuantity, $matchedProduct['id']]
+                                        );
+                                    }
                                 }
                                 break;
                             case 'legacy':

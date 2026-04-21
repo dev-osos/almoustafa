@@ -1287,16 +1287,13 @@ function batchCreationEnsureTables($pdo): void
 }
 
 /**
- * توليد رقم تشغيلة بالشكل YYMMDD-XXXXXX (ستة أرقام عشوائية).
+ * توليد رقم تشغيلة من ستة أرقام عشوائية فقط.
  */
 function batchCreationGenerateNumber($pdo): string
 {
-    $datePrefix = date('ymd') . '-';
-
     for ($attempt = 0; $attempt < 50; $attempt++) {
-        $randomSegment = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
-        $batchNumber   = $datePrefix . $randomSegment;
-        $batchChecker  = $pdo->prepare('SELECT COUNT(*) FROM batches WHERE batch_number = ? LIMIT 1');
+        $batchNumber  = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        $batchChecker = $pdo->prepare('SELECT COUNT(*) FROM batches WHERE batch_number = ? LIMIT 1');
         $batchChecker->execute([$batchNumber]);
 
         if ((int) $batchChecker->fetchColumn() === 0) {
