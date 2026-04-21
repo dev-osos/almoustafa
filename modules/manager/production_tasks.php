@@ -2570,6 +2570,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $error = 'تعذر إلغاء المهمة: ' . $cancelError->getMessage();
             }
         }
+    } elseif ($action === 'delete_cancelled_task') {
+        if (!($isAccountant || $isManager)) {
+            $error = 'غير مصرح بهذا الإجراء.';
+        } else {
+            $taskId = intval($_POST['task_id'] ?? 0);
+            if ($taskId <= 0) {
+                $error = 'معرف المهمة غير صحيح.';
+            } else {
+                try {
+                    $db->beginTransaction();
+                    $task = $db->queryOne(
+                        "SELECT id, title, status FROM tasks WHERE id = ? LIMIT 1",
+                        [$taskId]
+                    );
+                    if (!$task) {
+                        throw new Exception('المهمة غير موجودة.');
+                    }
+                    if (($task['status'] ?? '') !== 'cancelled') {
+                        throw new Exception('لا يمكن حذف الأوردر نهائياً إلا إذا كانت حالته "ملغاة".');
+                    }
+                    // حذف من customer_task_purchases أولاً
+                    $db->execute("DELETE FROM customer_task_purchases WHERE task_id = ?", [$taskId]);
+                    // حذف المهمة نهائياً
+                    $db->execute("DELETE FROM tasks WHERE id = ? AND status = 'cancelled'", [$taskId]);
+                    logAudit(
+                        $currentUser['id'],
+                        'delete_cancelled_task',
+                        'tasks',
+                        $taskId,
+                        null,
+                        ['title' => $task['title']]
+                    );
+                    $db->commit();
+                    $successMessage = 'تم حذف الأوردر الملغي نهائياً.';
+                    $userRole = in_array($currentUser['role'] ?? '', ['accountant', 'sales', 'telegraph'], true) ? ($currentUser['role'] ?? 'manager') : 'manager';
+                    preventDuplicateSubmission($successMessage, ['page' => 'production_tasks'], null, $userRole);
+                    exit;
+                } catch (Exception $delErr) {
+                    $db->rollBack();
+                    $error = 'تعذر حذف الأوردر: ' . $delErr->getMessage();
+                }
+            }
+        }
     } elseif ($action === 'update_task') {
         $taskId = intval($_POST['task_id'] ?? 0);
         if ($taskId <= 0) {
@@ -4847,6 +4890,14 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
         <div class="card-header bg-light d-flex justify-content-between align-items-center flex-wrap gap-2">
             <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>قائمة الأوردرات</h5>
             <div class="d-flex align-items-center gap-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="taskActionsToggleBtn" title="إجراءات" onclick="toggleTaskActionsPanel()">
+                    <i class="bi bi-three-dots-vertical me-1"></i>إجراءات <i class="bi bi-chevron-down ms-1" id="taskActionsChevron"></i>
+                </button>
+            </div>
+        </div>
+        <!-- بطاقة الإجراءات القابلة للطي -->
+        <div id="taskActionsPanel" class="border-bottom px-3 py-2 bg-light" style="display:none;">
+            <div class="d-flex flex-wrap gap-2">
                 <?php if ($canPrintTasks): ?>
                 <button type="button" class="btn btn-outline-primary btn-sm" id="printSelectedReceiptsBtn" title="طباعة إيصالات الأوردرات المحددة" disabled>
                     <i class="bi bi-printer me-1"></i>طباعة المحدد (<span id="selectedCount">0</span>)
@@ -4859,9 +4910,8 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                     <i class="bi bi-arrow-repeat me-1"></i>تغيير الحالة (<span id="bulkChangeStatusCount">0</span>)
                 </button>
                 <?php endif; ?>
-
                 <button type="button" class="btn btn-outline-info btn-sm" id="exportSelectedExcelBtn" title="تصدير CSV حسب الفترة">
-                    <i class="bi bi-file-earmark-spreadsheet me-1"></i>شيت فواتير 
+                    <i class="bi bi-file-earmark-spreadsheet me-1"></i>شيت فواتير
                 </button>
                 <?php endif; ?>
             </div>
@@ -4970,6 +5020,32 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                     }
                 });
             })();
+            </script>
+            <script>
+            (function() {
+                var panel = document.getElementById('taskActionsPanel');
+                var chevron = document.getElementById('taskActionsChevron');
+                var key = 'pt_actions_open';
+                if (localStorage.getItem(key) === '1') {
+                    panel.style.display = '';
+                    chevron.classList.replace('bi-chevron-down', 'bi-chevron-up');
+                }
+            })();
+            function toggleTaskActionsPanel() {
+                var panel = document.getElementById('taskActionsPanel');
+                var chevron = document.getElementById('taskActionsChevron');
+                var key = 'pt_actions_open';
+                var isOpen = panel.style.display !== 'none';
+                if (isOpen) {
+                    panel.style.display = 'none';
+                    chevron.classList.replace('bi-chevron-up', 'bi-chevron-down');
+                    localStorage.setItem(key, '0');
+                } else {
+                    panel.style.display = '';
+                    chevron.classList.replace('bi-chevron-down', 'bi-chevron-up');
+                    localStorage.setItem(key, '1');
+                }
+            }
             </script>
             <div class="table-responsive dashboard-table-wrapper">
                 <table class="table dashboard-table dashboard-table--no-hover align-middle mb-0">
@@ -5273,6 +5349,17 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                                         <input type="hidden" name="task_id" value="<?php echo (int)$task['id']; ?>">
                                                         <button type="submit" class="dropdown-item text-danger">
                                                             <i class="bi bi-trash me-1"></i>حذف المهمة
+                                                        </button>
+                                                    </form>
+                                                </li>
+                                                <?php endif; ?>
+                                                <?php if (($isAccountant || $isManager) && ($task['status'] ?? '') === 'cancelled'): ?>
+                                                <li>
+                                                    <form method="post" class="d-inline" onsubmit="return confirm('تحذير: سيتم حذف هذا الأوردر الملغي نهائياً من قاعدة البيانات بما في ذلك فاتورته المعتمدة إن وُجدت. هل أنت متأكد؟');">
+                                                        <input type="hidden" name="action" value="delete_cancelled_task">
+                                                        <input type="hidden" name="task_id" value="<?php echo (int)$task['id']; ?>">
+                                                        <button type="submit" class="dropdown-item text-danger fw-semibold">
+                                                            <i class="bi bi-trash3-fill me-1"></i>حذف نهائي (ملغي)
                                                         </button>
                                                     </form>
                                                 </li>
