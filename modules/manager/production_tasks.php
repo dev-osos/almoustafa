@@ -4351,24 +4351,28 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                 <?php endif; ?>
                             </div>
                             <input type="hidden" name="customer_name" id="submit_customer_name" value="">
-                            <div id="customer_select_local_task" class="customer-select-block mb-2">
-                                <div class="search-wrap position-relative">
-                                    <input type="text" id="local_customer_search_task" class="form-control form-control-sm" placeholder="اكتب للبحث أو أدخل اسم عميل جديد..." autocomplete="off">
-                                    <input type="hidden" id="local_customer_id_task" name="local_customer_id" value="">
-                                    <div id="local_customer_dropdown_task" class="search-dropdown-task d-none"></div>
+                            <div class="row g-2">
+                                <div class="col-7">
+                                    <div id="customer_select_local_task" class="customer-select-block">
+                                        <div class="search-wrap position-relative">
+                                            <input type="text" id="local_customer_search_task" class="form-control form-control-sm" placeholder="اكتب للبحث أو أدخل اسم عميل جديد..." autocomplete="off">
+                                            <input type="hidden" id="local_customer_id_task" name="local_customer_id" value="">
+                                            <div id="local_customer_dropdown_task" class="search-dropdown-task d-none"></div>
+                                        </div>
+                                        <div id="local_customer_balance_task" style="display:none;" class="mt-1"></div>
+                                    </div>
+                                    <div id="customer_select_rep_task" class="customer-select-block d-none">
+                                        <div class="search-wrap position-relative">
+                                            <input type="text" id="rep_customer_search_task" class="form-control form-control-sm" placeholder="اكتب للبحث أو أدخل اسم عميل جديد..." autocomplete="off">
+                                            <input type="hidden" id="rep_customer_id_task" value="">
+                                            <div id="rep_customer_dropdown_task" class="search-dropdown-task d-none"></div>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div id="local_customer_balance_task" style="display:none;" class="mt-1"></div>
-                            </div>
-                            <div id="customer_select_rep_task" class="customer-select-block mb-2 d-none">
-                                <div class="search-wrap position-relative">
-                                    <input type="text" id="rep_customer_search_task" class="form-control form-control-sm" placeholder="اكتب للبحث أو أدخل اسم عميل جديد..." autocomplete="off">
-                                    <input type="hidden" id="rep_customer_id_task" value="">
-                                    <div id="rep_customer_dropdown_task" class="search-dropdown-task d-none"></div>
+                                <div class="col-5">
+                                    <label class="form-label small">رقم العميل</label>
+                                    <input type="text" name="customer_phone" id="submit_customer_phone" class="form-control form-control-sm" placeholder="رقم الهاتف" dir="ltr" value="">
                                 </div>
-                            </div>
-                            <div class="mb-2">
-                                <label class="form-label small">رقم العميل</label>
-                                <input type="text" name="customer_phone" id="submit_customer_phone" class="form-control form-control-sm" placeholder="رقم الهاتف" dir="ltr" value="">
                             </div>
                             <small class="form-text text-muted d-block">اختر عميلاً مسجلاً أو اكتب اسماً جديداً—يُحفظ تلقائياً كعميل جديد إن لم يكن مسجلاً</small>
                         </div>
@@ -4421,7 +4425,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             <div id="productsContainer">
                                 <div class="product-row mb-3 p-3 border rounded" data-product-index="0">
                                     <div class="row g-2">
-                                        <div class="col-12 col-md-3">
+                                        <div class="col-6 col-md-3">
                                             <label class="form-label small">النوع</label>
                                             <select class="form-select form-select-sm product-type-selector mb-1" name="products[0][item_type]">
                                                 <option value="">— اختر النوع —</option>
@@ -4487,12 +4491,12 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                 <i class="bi bi-plus-circle me-1"></i>إضافة منتج آخر
                             </button>
                             <div class="row g-2 mt-2 d-none" id="createTgParcelWrap">
-                                <div class="col-md-3">
+                                <div class="col-6 col-md-3">
                                     <label class="form-label">عدد القطع</label>
                                     <input type="number" class="form-control" name="tg_pieces_count" id="createTgPiecesCount" step="1" min="1" placeholder="1" value="1">
                                     <small class="text-muted">يُحسب تلقائياً ويمكن تعديله يدوياً</small>
                                 </div>
-                                <div class="col-md-3">
+                                <div class="col-6 col-md-3">
                                     <label class="form-label">الوزن (كجم)</label>
                                     <input type="number" class="form-control" name="tg_weight" id="createTgWeight" step="0.01" min="0.01" placeholder="0.00">
                                 </div>
@@ -4507,22 +4511,22 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             <label class="form-label"> ملاحظات </label>
                             <textarea class="form-control" name="details" rows="3" placeholder=""></textarea>
                         </div>
-                        <div class="col-12 col-md-6 col-lg-4 mt-2" id="createShippingFeesWrap">
-                            <label class="form-label" for="createTaskShippingFees">الشحن</label>
+                        <div class="col-4 col-md-6 col-lg-4 mt-2" id="createShippingFeesWrap">
+                            <label class="form-label">الشحن</label>
                             <div class="input-group">
                                 <input type="number" class="form-control" name="shipping_fees" id="createTaskShippingFees" step="0.01" min="0" placeholder="0.00" value="0">
                                 <span class="input-group-text">ج.م</span>
                             </div>
                         </div>
-                        <div class="col-12 col-md-6 col-lg-4 mt-2">
-                            <label class="form-label" for="createTaskDiscount">خصم</label>
+                        <div class="col-4 col-md-6 col-lg-4 mt-2">
+                            <label class="form-label">خصم</label>
                             <div class="input-group">
                                 <input type="number" class="form-control" name="discount" id="createTaskDiscount" step="0.01" min="0" placeholder="0.00" value="0">
                                 <span class="input-group-text">ج.م</span>
                             </div>
                         </div>
-                        <div class="col-12 col-md-6 col-lg-4 mt-2">
-                            <label class="form-label" for="createTaskAdvancePayment">المدفوع مقدماً</label>
+                        <div class="col-4 col-md-6 col-lg-4 mt-2">
+                            <label class="form-label">المدفوع مقدماً</label>
                             <div class="input-group">
                                 <input type="number" class="form-control" name="advance_payment" id="createTaskAdvancePayment" step="0.01" min="0" placeholder="0.00" value="0">
                                 <span class="input-group-text">ج.م</span>
