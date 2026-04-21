@@ -1959,17 +1959,27 @@ var dashboardWrapper = null;
 })();
 </script>
 
-<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-3">
-    <h2 class="mb-2 mb-md-0">
+<div class="d-flex justify-content-between align-items-center mb-1">
+    <h2 class="mb-0">
         <i class="bi bi-people me-2"></i>العملاء المحليين
     </h2>
-    <div class="d-flex gap-2">
+    <button type="button" id="lcActionsToggleBtn"
+            class="btn btn-sm btn-outline-secondary px-2 py-0"
+            aria-controls="lcActionsCollapse"
+            aria-expanded="true"
+            title="إظهار / إخفاء الإجراءات">
+        <i class="bi bi-chevron-up" id="lcActionsToggleIcon"></i>
+    </button>
+</div>
+
+<div id="lcActionsCollapse" class="mb-3">
+    <div class="d-flex flex-wrap gap-2 mt-2">
         <button class="btn btn-success" onclick="showImportLocalCustomersModal()">
             <i class="bi bi-file-earmark-spreadsheet me-2"></i> import CSV
         </button>
         <?php if (in_array($currentRole, ['manager', 'developer', 'accountant'], true)): ?>
         <button type="button" class="btn btn-info" onclick="showCustomerExportModal(event)" data-section="local">
-            <i class="bi bi-download me-2"></i> شيت عملاء 
+            <i class="bi bi-download me-2"></i> شيت عملاء
         </button>
         <button type="button" class="btn btn-danger" onclick="printDebtorCustomers()">
             <i class="bi bi-people me-2"></i>العملاء المدينين
@@ -1985,6 +1995,60 @@ var dashboardWrapper = null;
         <?php endif; ?>
     </div>
 </div>
+<script>
+(function () {
+    var PREF_KEY = 'lc_actions_collapsed';
+    var collapse = document.getElementById('lcActionsCollapse');
+    var btn      = document.getElementById('lcActionsToggleBtn');
+    var icon     = document.getElementById('lcActionsToggleIcon');
+    if (!collapse || !btn) return;
+
+    function applyState(collapsed, animate) {
+        if (collapsed) {
+            if (animate) {
+                collapse.style.overflow = 'hidden';
+                collapse.style.height = collapse.scrollHeight + 'px';
+                requestAnimationFrame(function () {
+                    collapse.style.transition = 'height .25s ease';
+                    collapse.style.height = '0';
+                });
+                collapse.addEventListener('transitionend', function done() {
+                    collapse.style.display = 'none';
+                    collapse.style.height = collapse.style.transition = collapse.style.overflow = '';
+                    collapse.removeEventListener('transitionend', done);
+                });
+            } else {
+                collapse.style.display = 'none';
+            }
+            icon.className = 'bi bi-chevron-down';
+            btn.setAttribute('aria-expanded', 'false');
+        } else {
+            collapse.style.display = '';
+            if (animate) {
+                var target = collapse.scrollHeight;
+                collapse.style.overflow = 'hidden';
+                collapse.style.height = '0';
+                collapse.style.transition = 'height .25s ease';
+                requestAnimationFrame(function () { collapse.style.height = target + 'px'; });
+                collapse.addEventListener('transitionend', function done() {
+                    collapse.style.height = collapse.style.transition = collapse.style.overflow = '';
+                    collapse.removeEventListener('transitionend', done);
+                });
+            }
+            icon.className = 'bi bi-chevron-up';
+            btn.setAttribute('aria-expanded', 'true');
+        }
+    }
+
+    applyState(localStorage.getItem(PREF_KEY) === '1', false);
+
+    btn.addEventListener('click', function () {
+        var nowCollapsed = btn.getAttribute('aria-expanded') === 'false';
+        applyState(!nowCollapsed, true);
+        localStorage.setItem(PREF_KEY, nowCollapsed ? '0' : '1');
+    });
+})();
+</script>
 
 <style>
 @media (max-width: 767.98px) {
@@ -2001,86 +2065,155 @@ var dashboardWrapper = null;
 .gov-dropdown .gov-no-result,.city-dropdown .city-no-result{padding:.45rem .75rem;font-size:.85rem;color:#888;}
 </style>
 
-<div class="row g-3 mb-4">
-    <div class="col-6 col-md-6 col-xl-3">
-        <div class="card shadow-sm border-0 h-100">
-            <div class="card-body d-flex align-items-center justify-content-between">
-                <div>
-                    <div class="text-muted small fw-semibold summary-card-label">عدد العملاء المحليين</div>
-                    <div class="fs-4 fw-bold mb-0 summary-card-value"><?php echo number_format((int)$summaryTotalCustomers); ?></div>
+<!-- شريط رأس الإحصائيات مع زر الطي -->
+<div class="d-flex align-items-center justify-content-between mb-2">
+    <span class="fw-semibold text-secondary small"><i class="bi bi-bar-chart-line me-1"></i>ملخص إحصائيات العملاء</span>
+    <button type="button" id="summaryCardsToggleBtn"
+            class="btn btn-sm btn-outline-secondary px-2 py-0"
+            aria-controls="summaryCardsCollapse"
+            aria-expanded="true"
+            title="إظهار / إخفاء الإحصائيات">
+        <i class="bi bi-chevron-up" id="summaryCardsToggleIcon"></i>
+    </button>
+</div>
+
+<div id="summaryCardsCollapse">
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-6 col-xl-3">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="text-muted small fw-semibold summary-card-label">عدد العملاء المحليين</div>
+                        <div class="fs-4 fw-bold mb-0 summary-card-value"><?php echo number_format((int)$summaryTotalCustomers); ?></div>
+                    </div>
+                    <span class="text-primary display-6 d-md-block d-none"><i class="bi bi-people-fill"></i></span>
+                    <span class="text-primary fs-4 d-md-none"><i class="bi bi-people-fill"></i></span>
                 </div>
-                <span class="text-primary display-6 d-md-block d-none"><i class="bi bi-people-fill"></i></span>
-                <span class="text-primary fs-4 d-md-none"><i class="bi bi-people-fill"></i></span>
             </div>
         </div>
-    </div>
-    <div class="col-6 col-md-6 col-xl-3">
-        <div class="card shadow-sm border-0 h-100">
-            <div class="card-body d-flex align-items-center justify-content-between">
-                <div>
-                    <div class="text-muted small fw-semibold summary-card-label">العملاء المدينون</div>
-                    <div class="fs-4 fw-bold mb-0 summary-card-value"><?php echo number_format((int)$summaryDebtorCount); ?></div>
+        <div class="col-6 col-md-6 col-xl-3">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="text-muted small fw-semibold summary-card-label">العملاء المدينون</div>
+                        <div class="fs-4 fw-bold mb-0 summary-card-value"><?php echo number_format((int)$summaryDebtorCount); ?></div>
+                    </div>
+                    <span class="text-danger display-6 d-md-block d-none"><i class="bi bi-exclamation-circle-fill"></i></span>
+                    <span class="text-danger fs-4 d-md-none"><i class="bi bi-exclamation-circle-fill"></i></span>
                 </div>
-                <span class="text-danger display-6 d-md-block d-none"><i class="bi bi-exclamation-circle-fill"></i></span>
-                <span class="text-danger fs-4 d-md-none"><i class="bi bi-exclamation-circle-fill"></i></span>
             </div>
         </div>
-    </div>
-    <div class="col-6 col-md-6 col-xl-3">
-        <div class="card shadow-sm border-0 h-100">
-            <div class="card-body d-flex align-items-center justify-content-between">
-                <div>
-                    <div class="text-muted small fw-semibold summary-card-label">إجمالي الديون</div>
-                    <div class="fs-5 fw-bold mb-0 summary-card-value"><?php 
-                        // استخدام number_format مباشرة لتجنب مشكلة cleanFinancialValue التي تقيد القيمة بـ 1000000
-                        $formattedDebt = number_format((float)$summaryTotalDebt, 2, '.', ',') . ' ' . getCurrencySymbol();
-                        echo $formattedDebt;
-                    ?></div>
+        <div class="col-6 col-md-6 col-xl-3">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="text-muted small fw-semibold summary-card-label">إجمالي الديون</div>
+                        <div class="fs-5 fw-bold mb-0 summary-card-value"><?php
+                            $formattedDebt = number_format((float)$summaryTotalDebt, 2, '.', ',') . ' ' . getCurrencySymbol();
+                            echo $formattedDebt;
+                        ?></div>
+                    </div>
+                    <span class="text-warning display-6 d-md-block d-none"><i class="bi bi-cash-stack"></i></span>
+                    <span class="text-warning fs-4 d-md-none"><i class="bi bi-cash-stack"></i></span>
                 </div>
-                <span class="text-warning display-6 d-md-block d-none"><i class="bi bi-cash-stack"></i></span>
-                <span class="text-warning fs-4 d-md-none"><i class="bi bi-cash-stack"></i></span>
             </div>
         </div>
-    </div>
-    <div class="col-6 col-md-6 col-xl-3">
-        <div class="card shadow-sm border-0 h-100">
-            <div class="card-body d-flex align-items-center justify-content-between">
-                <div>
-                    <div class="text-muted small fw-semibold summary-card-label">إجمالي التحصيلات</div>
-                    <div class="fs-5 fw-bold mb-0 summary-card-value"><?php echo formatCurrency($totalCollectionsAmount); ?></div>
+        <div class="col-6 col-md-6 col-xl-3">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="text-muted small fw-semibold summary-card-label">إجمالي التحصيلات</div>
+                        <div class="fs-5 fw-bold mb-0 summary-card-value"><?php echo formatCurrency($totalCollectionsAmount); ?></div>
+                    </div>
+                    <span class="text-success display-6 d-md-block d-none"><i class="bi bi-cash-coin"></i></span>
+                    <span class="text-success fs-4 d-md-none"><i class="bi bi-cash-coin"></i></span>
                 </div>
-                <span class="text-success display-6 d-md-block d-none"><i class="bi bi-cash-coin"></i></span>
-                <span class="text-success fs-4 d-md-none"><i class="bi bi-cash-coin"></i></span>
             </div>
         </div>
-    </div>
-    <div class="col-12 col-md-6 col-xl-3">
-        <div class="card shadow-sm border-0 h-100 border-start border-3 border-info">
-            <div class="card-body p-3">
-                <div class="d-flex align-items-center justify-content-between mb-1">
-                    <div class="text-muted small fw-semibold summary-card-label">مبيعات الشهر</div>
-                    <span class="text-info d-none d-md-block"><i class="bi bi-bar-chart-fill fs-4"></i></span>
-                </div>
-                <div class="fw-bold mb-1 summary-card-value" style="font-size:0.95rem;"><?php echo htmlspecialchars($_monthLabel); ?></div>
-                <div class="fs-5 fw-bold text-info mb-2 summary-card-value"><?php echo number_format($monthlySalesAmount, 2, '.', ',') . ' ' . getCurrencySymbol(); ?></div>
-                <div class="d-flex gap-2">
-                    <a href="<?php echo htmlspecialchars($_prevUrl); ?>" class="btn btn-outline-secondary btn-sm px-2 py-1" title="الشهر السابق">
-                        <i class="bi bi-chevron-right"></i>
-                    </a>
-                    <?php if (!$_isCurrentMonth): ?>
-                    <a href="<?php echo htmlspecialchars($_nextUrl); ?>" class="btn btn-outline-secondary btn-sm px-2 py-1" title="الشهر التالي">
-                        <i class="bi bi-chevron-left"></i>
-                    </a>
-                    <?php else: ?>
-                    <button class="btn btn-outline-secondary btn-sm px-2 py-1" disabled title="الشهر الحالي">
-                        <i class="bi bi-chevron-left"></i>
-                    </button>
-                    <?php endif; ?>
+        <div class="col-12 col-md-6 col-xl-3">
+            <div class="card shadow-sm border-0 h-100 border-start border-3 border-info">
+                <div class="card-body p-3">
+                    <div class="d-flex align-items-center justify-content-between mb-1">
+                        <div class="text-muted small fw-semibold summary-card-label">مبيعات الشهر</div>
+                        <span class="text-info d-none d-md-block"><i class="bi bi-bar-chart-fill fs-4"></i></span>
+                    </div>
+                    <div class="fw-bold mb-1 summary-card-value" style="font-size:0.95rem;"><?php echo htmlspecialchars($_monthLabel); ?></div>
+                    <div class="fs-5 fw-bold text-info mb-2 summary-card-value"><?php echo number_format($monthlySalesAmount, 2, '.', ',') . ' ' . getCurrencySymbol(); ?></div>
+                    <div class="d-flex gap-2">
+                        <a href="<?php echo htmlspecialchars($_prevUrl); ?>" class="btn btn-outline-secondary btn-sm px-2 py-1" title="الشهر السابق">
+                            <i class="bi bi-chevron-right"></i>
+                        </a>
+                        <?php if (!$_isCurrentMonth): ?>
+                        <a href="<?php echo htmlspecialchars($_nextUrl); ?>" class="btn btn-outline-secondary btn-sm px-2 py-1" title="الشهر التالي">
+                            <i class="bi bi-chevron-left"></i>
+                        </a>
+                        <?php else: ?>
+                        <button class="btn btn-outline-secondary btn-sm px-2 py-1" disabled title="الشهر الحالي">
+                            <i class="bi bi-chevron-left"></i>
+                        </button>
+                        <?php endif; ?>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
+<script>
+(function () {
+    var PREF_KEY = 'lc_summary_collapsed';
+    var collapse = document.getElementById('summaryCardsCollapse');
+    var btn      = document.getElementById('summaryCardsToggleBtn');
+    var icon     = document.getElementById('summaryCardsToggleIcon');
+    if (!collapse || !btn) return;
+
+    function applyState(collapsed, animate) {
+        if (collapsed) {
+            if (animate) {
+                collapse.style.overflow = 'hidden';
+                var h = collapse.scrollHeight;
+                collapse.style.height = h + 'px';
+                requestAnimationFrame(function () {
+                    collapse.style.transition = 'height .25s ease';
+                    collapse.style.height = '0';
+                });
+                collapse.addEventListener('transitionend', function done() {
+                    collapse.style.display = 'none';
+                    collapse.style.height = collapse.style.transition = collapse.style.overflow = '';
+                    collapse.removeEventListener('transitionend', done);
+                });
+            } else {
+                collapse.style.display = 'none';
+            }
+            icon.className = 'bi bi-chevron-down';
+            btn.setAttribute('aria-expanded', 'false');
+        } else {
+            collapse.style.display = '';
+            if (animate) {
+                var target = collapse.scrollHeight;
+                collapse.style.overflow = 'hidden';
+                collapse.style.height = '0';
+                collapse.style.transition = 'height .25s ease';
+                requestAnimationFrame(function () { collapse.style.height = target + 'px'; });
+                collapse.addEventListener('transitionend', function done() {
+                    collapse.style.height = collapse.style.transition = collapse.style.overflow = '';
+                    collapse.removeEventListener('transitionend', done);
+                });
+            }
+            icon.className = 'bi bi-chevron-up';
+            btn.setAttribute('aria-expanded', 'true');
+        }
+    }
+
+    var isCollapsed = localStorage.getItem(PREF_KEY) === '1';
+    applyState(isCollapsed, false);
+
+    btn.addEventListener('click', function () {
+        var nowCollapsed = collapse.style.display === 'none' || btn.getAttribute('aria-expanded') === 'false';
+        applyState(!nowCollapsed, true);
+        localStorage.setItem(PREF_KEY, nowCollapsed ? '0' : '1');
+    });
+})();
+</script>
 
 <?php if ($error): ?>
     <div class="alert alert-danger alert-dismissible fade show" id="errorAlert" data-auto-refresh="true">

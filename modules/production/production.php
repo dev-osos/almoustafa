@@ -6753,9 +6753,9 @@ $lang = isset($translations) ? $translations : [];
         if ($tName === '') $tName = 'منتج غير مسمى';
         $tType = $template['template_type'] ?? 'legacy';
         $tTypeLabels = [
-            'unified' => 'متعدد المواد', 'honey' => 'إختر للإنتاح',
-            'olive_oil' => 'زيت زيتون', 'beeswax' => 'شمع عسل',
-            'derivatives' => 'مشتقات'
+            'unified' => 'إختر للإنتاح', 'honey' => 'إختر للإنتاح',
+            'olive_oil' => 'إختر للإنتاح', 'beeswax' => 'إختر للإنتاح',
+            'derivatives' => 'إختر للإنتاح'
         ];
         $tTypeLabel = $tTypeLabels[$tType] ?? 'غير محدد';
         $tSupplier = trim((string)($template['main_supplier_name'] ?? ''));
