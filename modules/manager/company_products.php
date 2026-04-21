@@ -1802,15 +1802,15 @@ foreach ($factoryProducts as $product) {
     <?php endif; ?>
 
 
-    <!-- قسم قوالب المنتجات -->
+    <!-- قسم  منتجات المصنع -->
     <div class="card company-card mb-4" id="productTemplatesSection">
         <div class="section-header" data-section="productTemplates">
             <h5>
                 <i class="bi bi-diagram-3"></i>
-                 قوالب المنتجات
+                  منتجات المصنع
             </h5>
             <div class="d-flex align-items-center gap-2">
-                <span class="badge" id="templateProductsCount"><?php echo $totalProductTemplates; ?> قالب</span>
+                <span class="badge" id="templateProductsCount"><?php echo $totalProductTemplates; ?> منتج</span>
                 <i class="bi bi-chevron-down collapse-arrow"></i>
             </div>
         </div>
@@ -1823,13 +1823,13 @@ foreach ($factoryProducts as $product) {
                         <input type="text" 
                                class="form-control form-control-sm" 
                                id="templateSearchInput" 
-                               placeholder="اسم القالب..." 
+                               placeholder="اسم المنتج..." 
                                autocomplete="off">
                     </div>
                     <div class="col-12 col-md-4">
                         <label class="form-label small mb-1"><i class="bi bi-funnel me-1"></i>فلترة الكمية</label>
                         <select class="form-control form-control-sm" id="templateQuantityFilter">
-                            <option value="all">جميع القوالب</option>
+                            <option value="all">جميع المنتجات</option>
                             <option value="available">متاحة (كمية > 0)</option>
                             <option value="unavailable">غير متاحة (كمية = 0)</option>
                         </select>

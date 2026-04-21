@@ -4309,7 +4309,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                 <form method="post" action="?page=production_tasks" id="createTaskForm">
                     <input type="hidden" name="action" value="create_production_task">
                     <div class="row g-3">
-                        <div class="col-md-4">
+                        <div class="col-6 col-md-4">
                             <label class="form-label">نوع الاوردر</label>
                             <?php if ($isTelegraph): ?>
                             <select class="form-select" name="task_type" id="taskTypeSelect" required disabled>
@@ -4325,7 +4325,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             </select>
                             <?php endif; ?>
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-6 col-md-4">
                             <label class="form-label">الأولوية</label>
                             <select class="form-select" name="priority">
                                 <option value="normal" selected>عادية</option>
