@@ -3384,7 +3384,7 @@ try {
         // مسؤول تليجراف يرى جميع أوردرات تليجراف بغض النظر عن المنشئ
         $countParams = array_merge($statusParams, $searchParams);
         $totalRow = $db->queryOne(
-            "SELECT COUNT(*) AS total FROM tasks t WHERE t.status != 'cancelled' $statusCondition $searchConditions",
+            "SELECT COUNT(*) AS total FROM tasks t WHERE 1=1 $statusCondition $searchConditions",
             $countParams
         );
         $totalRecentTasks = isset($totalRow['total']) ? (int)$totalRow['total'] : 0;
@@ -3394,7 +3394,7 @@ try {
 
             $totalRow = $db->queryOne("
                 SELECT COUNT(*) AS total FROM tasks t
-                WHERE t.created_by IN ($adminPlaceholders) AND t.status != 'cancelled' $statusCondition $searchConditions
+                WHERE t.created_by IN ($adminPlaceholders) $statusCondition $searchConditions
             ", $countParams);
             $totalRecentTasks = isset($totalRow['total']) ? (int)$totalRow['total'] : 0;
         }
@@ -3402,14 +3402,14 @@ try {
         $countParams = array_merge([$currentUser['id']], $statusParams, $searchParams);
         $totalRow = $db->queryOne("
             SELECT COUNT(*) AS total FROM tasks t
-            WHERE (t.created_by = ? OR t.status = 'with_delegate') AND t.status != 'cancelled' $statusCondition $searchConditions
+            WHERE (t.created_by = ? OR t.status = 'with_delegate') $statusCondition $searchConditions
         ", $countParams);
         $totalRecentTasks = isset($totalRow['total']) ? (int)$totalRow['total'] : 0;
     } else {
         $countParams = array_merge([$currentUser['id']], $statusParams, $searchParams);
         $totalRow = $db->queryOne("
             SELECT COUNT(*) AS total FROM tasks t
-            WHERE t.created_by = ? AND t.status != 'cancelled' $statusCondition $searchConditions
+            WHERE t.created_by = ? $statusCondition $searchConditions
         ", $countParams);
         $totalRecentTasks = isset($totalRow['total']) ? (int)$totalRow['total'] : 0;
     }
@@ -3439,7 +3439,7 @@ try {
             SELECT $selectFields
             FROM tasks t
             $joins
-            WHERE t.status != 'cancelled'
+            WHERE 1=1
             $statusCondition
             $searchConditions
             ORDER BY t.created_at DESC, t.id DESC
@@ -3468,7 +3468,6 @@ try {
                 FROM tasks t
                 $joins
                 WHERE t.created_by IN ($adminPlaceholders)
-                AND t.status != 'cancelled'
                 $statusCondition
                 $searchConditions
                 ORDER BY t.created_at DESC, t.id DESC
@@ -3500,7 +3499,6 @@ try {
             FROM tasks t
             $joins
             WHERE (t.created_by = ? OR t.status = 'with_delegate')
-            AND t.status != 'cancelled'
             $statusCondition
             $searchConditions
             ORDER BY t.created_at DESC, t.id DESC
@@ -3526,7 +3524,6 @@ try {
             FROM tasks t
             $joins
             WHERE t.created_by = ?
-            AND t.status != 'cancelled'
             $statusCondition
             $searchConditions
             ORDER BY t.created_at DESC, t.id DESC
