@@ -1866,9 +1866,7 @@ foreach ($factoryProducts as $product) {
                             $availableQuantity = floatval($template['available_quantity'] ?? 0);
                         ?>
                         <div class="product-card" data-quantity="<?php echo $availableQuantity; ?>">
-                            <div class="product-status">
-                                <i class="bi bi-diagram-3 me-1"></i>قالب
-                            </div>
+                            
 
                             <div class="product-name"><?php echo $templateName; ?></div>
                             <div style="color: #94a3b8; font-size: 13px; margin-bottom: 10px;">الكود: <?php echo $templateId; ?></div>

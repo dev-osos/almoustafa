@@ -1099,7 +1099,7 @@ function checkMaterialsAvailability($db, $templateId, $productionQuantity, array
     };
 
     $rawMaterials = $db->query(
-        "SELECT id, material_name, quantity_per_unit, unit
+        "SELECT id, material_name, material_type, quantity_per_unit, unit
          FROM product_template_raw_materials
          WHERE template_id = ?",
         [$templateId]
@@ -1112,6 +1112,10 @@ function checkMaterialsAvailability($db, $templateId, $productionQuantity, array
         $normalizedName = mb_strtolower(trim((string)$materialName), 'UTF-8');
         $rawDetail = $rawMaterialsDetails[$normalizedName] ?? null;
         $materialTypeMeta = $rawDetail['type'] ?? null;
+        // إذا لم يكن النوع موجوداً في details_json، استخدم material_type من قاعدة البيانات
+        if (empty($materialTypeMeta) && !empty($raw['material_type'])) {
+            $materialTypeMeta = trim((string)$raw['material_type']);
+        }
         $materialSupplierMeta = isset($rawDetail['supplier_id']) ? (int)$rawDetail['supplier_id'] : null;
         $honeyVarietyMeta = $rawDetail['honey_variety'] ?? null;
 
