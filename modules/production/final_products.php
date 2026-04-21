@@ -3007,7 +3007,7 @@ $filterProduct = isset($_GET['filter_product']) ? trim($_GET['filter_product']) 
             <?php if (empty($productTemplates)): ?>
                 <div style="padding: 25px; text-align: center; color: #94a3b8;">
                     <i class="bi bi-info-circle me-2"></i>
-                    لا توجد قوالب منتجات حالياً
+                    لا توجد  منتجات حالياً
                 </div>
             <?php else: ?>
                 <div id="templateProductsGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px;">
@@ -3569,8 +3569,8 @@ window.openTemplateProductionModal = function(trigger) {
         // فلترة البطاقات
         const filteredCards = cards.filter(card => {
             const productName = card.querySelector('.product-name')?.textContent.toLowerCase() || '';
-            const quantityText = card.querySelector('div[style*="color: #2563eb"]')?.textContent || '';
-            const quantity = parseFloat(quantityText.replace(/[^\d.]/g, '')) || 0;
+            const quantityText = card.querySelector('span[style*="color: #2563eb"]')?.textContent || '';
+            const quantity = parseFloat(quantityText.replace(/[^\d,.]/g, '').replace(/,/g, '')) || 0;
             
             // فحص البحث
             const matchesSearch = productName.includes(searchText);
@@ -3591,8 +3591,8 @@ window.openTemplateProductionModal = function(trigger) {
             const nameA = a.querySelector('.product-name')?.textContent.toLowerCase() || '';
             const nameB = b.querySelector('.product-name')?.textContent.toLowerCase() || '';
             
-            const quantityA = parseFloat(a.querySelector('div[style*="color: #2563eb"]')?.textContent.replace(/[^\d.]/g, '') || '0');
-            const quantityB = parseFloat(b.querySelector('div[style*="color: #2563eb"]')?.textContent.replace(/[^\d.]/g, '') || '0');
+            const quantityA = parseFloat(a.querySelector('span[style*="color: #2563eb"]')?.textContent.replace(/[^\d,.]/g, '').replace(/,/g, '') || '0');
+            const quantityB = parseFloat(b.querySelector('span[style*="color: #2563eb"]')?.textContent.replace(/[^\d,.]/g, '').replace(/,/g, '') || '0');
             
             const priceA = parseFloat(a.querySelector('span[style*="color: #059669"]')?.textContent.replace(/[^\d.]/g, '') || '0');
             const priceB = parseFloat(b.querySelector('span[style*="color: #059669"]')?.textContent.replace(/[^\d.]/g, '') || '0');
@@ -3630,7 +3630,7 @@ window.openTemplateProductionModal = function(trigger) {
                 const messageDiv = document.createElement('div');
                 messageDiv.className = 'no-results-message';
                 messageDiv.style.cssText = 'grid-column: 1/-1; padding: 25px; text-align: center; color: #94a3b8;';
-                messageDiv.innerHTML = '<i class="bi bi-info-circle me-2"></i>لا توجد قوالب منتجات تطابق معايير البحث والفلترة';
+                messageDiv.innerHTML = '<i class="bi bi-info-circle me-2"></i>لا توجد منتجات تطابق معايير البحث والفلترة';
                 grid.appendChild(messageDiv);
             }
         } else {
