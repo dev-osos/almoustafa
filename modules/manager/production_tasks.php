@@ -6266,6 +6266,10 @@ function addEditProductRow(product) {
         if (rows.length > 1) row.remove();
         updateEditTaskSummary();
     });
+    var newNameInput = row.querySelector('.edit-product-name');
+    if (newNameInput && typeof initProductNameDropdown === 'function') initProductNameDropdown(newNameInput);
+    var newTypeSelector = row.querySelector('.product-type-selector');
+    if (newTypeSelector && typeof initTypeSelector === 'function') initTypeSelector(newTypeSelector);
     editProductIndex++;
     updateEditTaskSummary();
 }
