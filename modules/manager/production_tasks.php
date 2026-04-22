@@ -7823,7 +7823,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     <input type="number" class="form-control product-price-input" name="products[${productIndex}][price]" step="0.01" min="0" placeholder="0.00" id="product-price-${productIndex}">
                 </div>
                 <div class="col-6 col-md-2">
-                    <label class="form-label small">الإجمالي (قابل للتحكم)</label>
+                    <label class="form-label small">الإجمالي</label>
                     <div class="input-group input-group-sm">
                         <input type="number" class="form-control product-line-total-input" name="products[${productIndex}][line_total]" step="0.01" min="0" placeholder="0.00" id="product-line-total-${productIndex}" title="الإجمالي = الكمية × السعر حسب الوحدة">
                     </div>
