@@ -7778,7 +7778,7 @@ document.addEventListener('DOMContentLoaded', function () {
         newRow.setAttribute('data-product-index', productIndex);
         newRow.innerHTML = `
             <div class="row g-2">
-                <div class="col-12 col-md-3">
+                <div class="col-6 col-md-3">
                     <label class="form-label small">النوع</label>
                     <select class="form-select form-select-sm product-type-selector mb-1" name="products[${productIndex}][item_type]">
                         <option value="">— اختر النوع —</option>
@@ -7788,15 +7788,16 @@ document.addEventListener('DOMContentLoaded', function () {
                         <option value="raw_material">⚗️ خامات</option>
                         <option value="packaging">🧴 أدوات تعبئة</option>
                     </select>
+                    <label class="form-label small">الكمية</label>
+                    <input type="number" class="form-control product-quantity-input" name="products[${productIndex}][quantity]" step="1" min="0" placeholder="0" id="product-quantity-${productIndex}">
+                    <small class="product-effective-qty-hint text-muted d-none" id="product-effective-qty-hint-${productIndex}"></small>
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label small">اسم المنتج</label>
                     <div class="product-name-wrap position-relative">
                         <input type="text" class="form-control product-name-input" name="products[${productIndex}][name]" placeholder="اختر من القائمة" autocomplete="off">
                         <div class="product-template-dropdown d-none"></div>
                     </div>
-                </div>
-                <div class="col-6 col-md-2">
-                    <label class="form-label small">الكمية</label>
-                    <input type="number" class="form-control product-quantity-input" name="products[${productIndex}][quantity]" step="1" min="0" placeholder="مثال: 120" id="product-quantity-${productIndex}">
-                    <small class="product-effective-qty-hint text-muted d-none" id="product-effective-qty-hint-${productIndex}"></small>
                 </div>
                 <div class="col-6 col-md-2">
                     <div class="category-wrap d-none">
