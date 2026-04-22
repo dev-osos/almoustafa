@@ -7826,7 +7826,6 @@ document.addEventListener('DOMContentLoaded', function () {
                     <label class="form-label small">الإجمالي (قابل للتحكم)</label>
                     <div class="input-group input-group-sm">
                         <input type="number" class="form-control product-line-total-input" name="products[${productIndex}][line_total]" step="0.01" min="0" placeholder="0.00" id="product-line-total-${productIndex}" title="الإجمالي = الكمية × السعر حسب الوحدة">
-                        <span class="input-group-text">ج.م</span>
                     </div>
                 </div>
                 <div class="col-6 col-md-1 d-flex align-items-end">
