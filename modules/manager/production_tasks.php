@@ -4511,12 +4511,12 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                         </div>
                                         <div class="col-6 col-md-2">
                                             <label class="form-label small">السعر</label>
-                                            <input type="number" class="form-control product-price-input" name="products[0][price]" step="0.001" min="0" placeholder="0.00" id="product-price-0" required>
+                                            <input type="number" class="form-control product-price-input" name="products[0][price]" step="0.1" min="0" placeholder="0.00" id="product-price-0" required>
                                         </div>
                                         <div class="col-6 col-md-2">
                                             <label class="form-label small">الإجمالي</label>
                                             <div class="input-group input-group-sm">
-                                                <input type="number" class="form-control product-line-total-input" name="products[0][line_total]" step="0.01" min="0" placeholder="0.00" id="product-line-total-0" title="الإجمالي = الكمية × السعر حسب الوحدة">
+                                                <input type="number" class="form-control product-line-total-input" name="products[0][line_total]" step="0.1" min="0" placeholder="0.00" id="product-line-total-0" title="الإجمالي = الكمية × السعر حسب الوحدة">
                                             </div>
                                         </div>
                                         <div class="col-6 col-md-1 d-flex align-items-end">
