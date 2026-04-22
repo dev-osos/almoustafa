@@ -4538,7 +4538,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                                 </div>
                                 <div class="col-6 col-md-3">
                                     <label class="form-label">الوزن (كجم)</label>
-                                    <input type="number" class="form-control" name="tg_weight" id="createTgWeight" step="1" min="0" placeholder="0" onkeydown="return event.key!=='.'&&event.key!==','&&event.key!=='-'" oninput="this.value=this.value.replace(/[^0-9]/g,'')">
+                                    <input type="number" class="form-control" name="tg_weight" id="createTgWeight" step="any" min="0" placeholder="0" onkeydown="return event.key!=='.'&&event.key!==','&&event.key!=='-'" oninput="this.value=this.value.replace(/[^0-9]/g,'')">
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label">وصف الطرد</label>
