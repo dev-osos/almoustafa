@@ -4534,11 +4534,11 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             <div class="row g-2 mt-2 d-none" id="createTgParcelWrap">
                                 <div class="col-6 col-md-3">
                                     <label class="form-label">عدد القطع</label>
-                                    <input type="number" class="form-control" name="tg_pieces_count" id="createTgPiecesCount" step="1" min="1" placeholder="1" value="1">
+                                    <input type="number" class="form-control" name="tg_pieces_count" id="createTgPiecesCount" step="1" min="1" placeholder="1">
                                 </div>
                                 <div class="col-6 col-md-3">
                                     <label class="form-label">الوزن (كجم)</label>
-                                    <input type="number" class="form-control" name="tg_weight" id="editTgWeight" step="0.01" min="0" placeholder="0.00" value="1">
+                                    <input type="number" class="form-control" name="tg_weight" id="editTgWeight" step="1" min="0" placeholder="0.00">
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label">وصف الطرد</label>
