@@ -6,7 +6,7 @@ POST /graphql HTTP/1.1
 Accept: */*
 Accept-Encoding: gzip, deflate, br
 Accept-Language: en-GB,en-US;q=0.9,en;q=0.8
-Authorization: Bearer 245467|m90rxf6dkwYyeku570WIGKSuyhkZr1Kt2ehSUQVLf862e568
+Authorization: Bearer Bearer 244917|ZzSXzdfFKcLnxRwsTbEhRlSsv9OjRRIDvknDEKVc86ec3127
 Connection: keep-alive
 Content-Length: 289
 Content-Type: application/json
