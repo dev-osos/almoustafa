@@ -3,7 +3,7 @@
  * API: تسجيل الحضور والانصراف مع الكاميرا
  */
 
- 
+
 // إضافة CORS headers للسماح بالوصول
 header('Access-Control-Allow-Origin: ' . (isset($_SERVER['HTTP_ORIGIN']) ? $_SERVER['HTTP_ORIGIN'] : '*'));
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
@@ -18,7 +18,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 define('ACCESS_ALLOWED', true);
-
 require_once __DIR__ . '/../includes/config.php';
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
