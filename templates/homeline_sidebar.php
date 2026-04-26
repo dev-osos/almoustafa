@@ -136,11 +136,9 @@ switch ($role) {
             [
                 'title' => 'عملاء المتجر',
                 'icon' => 'bi-shop-window',
-                'url' => '#',
-                'active' => false,
-                'badge' => '<span class="badge text-bg-warning-subtle text-warning-emphasis border border-warning-subtle">قريباً</span>',
-                'disabled' => true,
-                'title_attr' => 'قيد التطوير'
+                'url' => $baseUrl . 'manager.php?page=store_customers',
+                'active' => ($currentPage === 'manager.php' && $currentPageParam === 'store_customers'),
+                'badge' => null
             ],
             [
                 'title' => 'الأسعار المخصصة',
@@ -407,11 +405,9 @@ switch ($role) {
             [
                 'title' => 'عملاء المتجر',
                 'icon' => 'bi-shop-window',
-                'url' => '#',
-                'active' => false,
-                'badge' => '<span class="badge bg-warning text-dark">قريباً</span>',
-                'disabled' => true,
-                'title_attr' => 'تبويب عملاء المتجر قيد التطوير وسيتم تفعيله قريباً.'
+                'url' => $baseUrl . 'accountant.php?page=store_customers',
+                'active' => ($currentPage === 'accountant.php' && $currentPageParam === 'store_customers'),
+                'badge' => null
             ],
             [
                 'title' => 'الأسعار المخصصة',
