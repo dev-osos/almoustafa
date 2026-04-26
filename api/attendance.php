@@ -3,6 +3,7 @@
  * API: تسجيل الحضور والانصراف مع الكاميرا
  */
 
+ 
 // إضافة CORS headers للسماح بالوصول
 header('Access-Control-Allow-Origin: ' . (isset($_SERVER['HTTP_ORIGIN']) ? $_SERVER['HTTP_ORIGIN'] : '*'));
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
