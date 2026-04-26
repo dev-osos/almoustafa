@@ -19,6 +19,7 @@ requireRole(['manager', 'accountant', 'developer']);
 $currentUser = getCurrentUser();
 ?>
 
+
 <style>
 #storeCustomersPage .sc-header {
     background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 60%, #1e40af 100%);
