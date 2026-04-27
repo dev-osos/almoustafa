@@ -1892,6 +1892,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             if (isset($tgResponse['data']['saveShipment']['code'])) {
                                 $tgCode = $tgResponse['data']['saveShipment']['code'];
                                 $tgShipmentMsg = ' ✅ تم تسجيل الشحنة في TelegraphEx برقم: ' . $tgCode;
+                                if ($taskId > 0) {
+                                    $db->execute(
+                                        "UPDATE tasks SET notes = CONCAT(COALESCE(notes,''), ?) WHERE id = ?",
+                                        ["\n[TG_CODE]: " . $tgCode, $taskId]
+                                    );
+                                }
                             } else {
                                 $tgErrors = $tgResponse['errors'] ?? [];
                                 $tgErrMsg = !empty($tgErrors) ? ($tgErrors[0]['message'] ?? 'خطأ غير معروف') : 'استجابة غير متوقعة';

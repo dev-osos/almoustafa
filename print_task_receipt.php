@@ -156,6 +156,7 @@ foreach ($taskIds as $taskId) {
         $displayNotes = preg_replace('/\[DISCOUNT\]:\s*[0-9.]+/', '', $displayNotes);
         $displayNotes = preg_replace('/\[ADVANCE_PAYMENT\]:\s*[0-9.]+/', '', $displayNotes);
         $displayNotes = preg_replace('/\[ORDER_TITLE\]:\s*[^\n]+/', '', $displayNotes);
+        $displayNotes = preg_replace('/\[TG_CODE\]:\s*[^\n]+/', '', $displayNotes);
         // صيغة قديمة بعد تعديل الأوردر
         $displayNotes = preg_replace('/رسوم\s*الشحن\s*:\s*[0-9.]+/u', '', $displayNotes);
         $displayNotes = preg_replace('/الخصم\s*:\s*[0-9.]+/u', '', $displayNotes);
@@ -198,6 +199,11 @@ foreach ($taskIds as $taskId) {
         }
     }
 
+    $tgShipmentCode = '';
+    if (!empty($notes) && preg_match('/\[TG_CODE\]:\s*([^\n]+)/', $notes, $m)) {
+        $tgShipmentCode = trim($m[1]);
+    }
+
     $receipts[] = [
         'task' => $task,
         'taskNumber' => $taskId,
@@ -212,6 +218,7 @@ foreach ($taskIds as $taskId) {
         'discount' => $discount,
         'advancePayment' => $advancePayment,
         'orderTitle' => $orderTitle,
+        'tgShipmentCode' => $tgShipmentCode,
     ];
 }
 
@@ -1039,6 +1046,14 @@ $singleReceipt = count($receipts) === 1;
                 <?php endif; ?>
             </div>
         </div>
+        <?php if (!empty($r['tgShipmentCode'])): ?>
+        <div class="section-title">رقم الشحنة (TelegraphEx)</div>
+        <div class="task-details">
+            <div style="font-size: 15px; font-weight: 700; color: #1a5276; padding: 6px 4px; letter-spacing: 1px;">
+                <?php echo htmlspecialchars($r['tgShipmentCode']); ?>
+            </div>
+        </div>
+        <?php endif; ?>
         <div style="text-align: center; margin-top: 12px; padding-top: 10px; border-top: 1px dashed #ccc;">
             <div style="font-size: 18px; color: #555; margin-bottom: 6px; font-weight: bold;">تابعنا على فيسبوك</div>
             <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=https%3A%2F%2Fwww.facebook.com%2Fshare%2F14Xj74teaZW%2F%3Fmibextid%3DwwXIfr" alt="QR فيسبوك" width="100" height="100" style="display:block; margin: 0 auto;" />
