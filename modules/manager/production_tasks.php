@@ -1839,7 +1839,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     'priceTypeCode'      => 'INCLD',
                                     'recipientZoneId'    => $tgGovId,
                                     'recipientSubzoneId' => $tgCityId,
-                                    'recipientPhone'     => '',
+                                    'recipientPhone'     => $customerPhone ?: '',
                                     'recipientMobile'    => $customerPhone ?: '',
                                     'recipientAddress'   => $orderTitle ?: '',
                                     'senderName'         => 'شركة البركة لتجارة المواد الغذائية',
@@ -1901,17 +1901,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             } else {
                                 $tgErrors = $tgResponse['errors'] ?? [];
                                 $tgErrMsg = !empty($tgErrors) ? ($tgErrors[0]['message'] ?? 'خطأ غير معروف') : 'استجابة غير متوقعة';
-                                // محاولة استخراج تفاصيل حقل التحقق من extensions
-                                $tgExtensions = $tgErrors[0]['extensions'] ?? [];
-                                $tgViolations = $tgExtensions['constraintViolations']
-                                    ?? $tgExtensions['validationErrors']
-                                    ?? [];
-                                if (!empty($tgViolations) && is_array($tgViolations)) {
-                                    $tgViolationMsgs = array_map(fn($v) => ($v['field'] ?? '') . ': ' . ($v['message'] ?? ''), $tgViolations);
-                                    $tgErrMsg .= ' [' . implode(' | ', $tgViolationMsgs) . ']';
+                                // استخراج تفاصيل الحقول من أي مكان في extensions
+                                $tgErrDetail = '';
+                                if (!empty($tgErrors[0])) {
+                                    $tgExtAll = $tgErrors[0]['extensions'] ?? [];
+                                    $tgViolations = $tgExtAll['constraintViolations']
+                                        ?? $tgExtAll['validationErrors']
+                                        ?? $tgExtAll['errors']
+                                        ?? [];
+                                    if (!empty($tgViolations) && is_array($tgViolations)) {
+                                        $tgViolationMsgs = array_map(fn($v) => ($v['field'] ?? $v['property'] ?? '') . ': ' . ($v['message'] ?? $v['msg'] ?? ''), $tgViolations);
+                                        $tgErrDetail = ' [' . implode(' | ', $tgViolationMsgs) . ']';
+                                    } elseif (!empty($tgExtAll) && $tgErrDetail === '') {
+                                        $tgErrDetail = ' [' . json_encode($tgExtAll, JSON_UNESCAPED_UNICODE) . ']';
+                                    }
                                 }
-                                error_log('TelegraphEx shipment error: ' . $tgResult);
-                                $tgShipmentMsg = ' ⚠ فشل تسجيل الشحنة في TelegraphEx: ' . $tgErrMsg;
+                                error_log('TelegraphEx shipment error (HTTP ' . $tgHttpCode . '): ' . $tgResult);
+                                $tgShipmentMsg = ' ⚠ فشل تسجيل الشحنة في TelegraphEx: ' . $tgErrMsg . $tgErrDetail;
                             }
                         }
                     } catch (Throwable $tgEx) {
