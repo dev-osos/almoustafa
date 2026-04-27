@@ -5074,7 +5074,6 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             <th>نوع الاوردر</th>
                             <th>الحاله</th>
                             <th>التسليم</th>
-                            
                             <th>إجراءات</th>
                         </tr>
                     </thead>
