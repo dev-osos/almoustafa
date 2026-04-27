@@ -4140,13 +4140,13 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
         $cn = $collectionNotice;
         $rem = (float)($cn['remaining'] ?? 0);
         $copyMsg  = " تم التحصيل بنجاح\n";
-        $copyMsg .= " العميل: " . ($cn['customer_name'] ?? '—');
-        if (!empty($cn['customer_phone'])) $copyMsg .= " | 📞 " . $cn['customer_phone'];
+        $copyMsg .= "\n العميل: " . ($cn['customer_name'] ?? '—');
+        if (!empty($cn['customer_phone'])) $copyMsg .= "\n 📞 " . $cn['customer_phone'];
         $copyMsg .= "\n#️⃣ رقم الأوردر: #" . intval($cn['order_number']);
-        $copyMsg .= " |  الإجمالي: " . number_format((float)($cn['total_amount'] ?? 0), 2) . " ج.م\n";
-        $copyMsg .= " المدفوع مقدماً: " . number_format((float)($cn['advance_paid'] ?? 0), 2) . " ج.م\n";
-        $copyMsg .= " المتبقي: " . number_format($rem, 2) . " ج.م";
-        $copyMsg .= " |  رصيد العميل الكلي: " . number_format((float)($cn['new_balance'] ?? 0), 2) . " ج.م";
+        $copyMsg .= "\n  الإجمالي: " . number_format((float)($cn['total_amount'] ?? 0), 2) . " ج.م\n";
+        $copyMsg .= "\nالمدفوع مقدماً: " . number_format((float)($cn['advance_paid'] ?? 0), 2) . " ج.م\n";
+        $copyMsg .= "\n المتبقي: " . number_format($rem, 2) . " ج.م";
+        $copyMsg .= "\n رصيد العميل الكلي: " . number_format((float)($cn['new_balance'] ?? 0), 2) . " ج.م";
     ?>
     <div class="card border-success mb-3 shadow-sm collection-notice-card" id="collectionNoticeCard">
         <div class="card-header d-flex justify-content-between align-items-center py-2" style="background: linear-gradient(135deg,#16a34a,#22c55e); color:#fff;">

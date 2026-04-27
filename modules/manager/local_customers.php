@@ -8226,7 +8226,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     </div>
                     <div class="row g-2 mb-3">
                         <div class="col-6">
-                            <label class="form-label">المحافظة (تليجراف)</label>
+                            <label class="form-label">المحافظة</label>
                             <div class="gov-autocomplete-wrap position-relative">
                                 <input type="text" class="form-control gov-search-input" id="editLCGovSearch" placeholder="ابحث عن محافظة..." autocomplete="off">
                                 <input type="hidden" name="tg_governorate" id="editLCGov">
@@ -8236,7 +8236,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             <small class="text-muted d-block mt-1" id="editLCGovStored"></small>
                         </div>
                         <div class="col-6">
-                            <label class="form-label">المدينة (تليجراف)</label>
+                            <label class="form-label">المدينة</label>
                             <div class="city-autocomplete-wrap position-relative">
                                 <input type="text" class="form-control city-search-input" id="editLCCitySearch" placeholder="ابحث عن مدينة..." autocomplete="off">
                                 <input type="hidden" name="tg_city" id="editLCCity">
