@@ -185,7 +185,7 @@ $apiBase = getRelativeUrl('api/vehicle_maintenance.php');
                                     <input type="number" class="form-control" name="km_reading" id="kmFuelRefill" required min="0" placeholder="مثال: 50100">
                                 </div>
                                 <div class="mb-3">
-                                    <label class="form-label">مبلغ التفويل (ريال) <span class="text-danger">*</span></label>
+                                    <label class="form-label">مبلغ التفويل (ج.م) <span class="text-danger">*</span></label>
                                     <input type="number" class="form-control" name="fuel_amount" id="fuelAmountRefill" required min="0.01" step="0.01" placeholder="مثال: 150">
                                 </div>
                                 <button type="submit" class="btn btn-info w-100" id="submitFuelBtn" disabled>

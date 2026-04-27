@@ -134,13 +134,6 @@ switch ($role) {
                 'badge' => null
             ],
             [
-                'title' => 'عملاء المتجر',
-                'icon' => 'bi-shop-window',
-                'url' => $baseUrl . 'manager.php?page=store_customers',
-                'active' => ($currentPage === 'manager.php' && $currentPageParam === 'store_customers'),
-                'badge' => null
-            ],
-            [
                 'title' => 'الأسعار المخصصة',
                 'icon' => 'bi-tag',
                 'url' => $baseUrl . 'manager.php?page=custom_prices',
@@ -400,13 +393,6 @@ switch ($role) {
                 'icon' => 'bi-people-fill',
                 'url' => $baseUrl . 'accountant.php?page=representatives_customers',
                 'active' => ($currentPage === 'accountant.php' && $currentPageParam === 'representatives_customers'),
-                'badge' => null
-            ],
-            [
-                'title' => 'عملاء المتجر',
-                'icon' => 'bi-shop-window',
-                'url' => $baseUrl . 'accountant.php?page=store_customers',
-                'active' => ($currentPage === 'accountant.php' && $currentPageParam === 'store_customers'),
                 'badge' => null
             ],
             [
