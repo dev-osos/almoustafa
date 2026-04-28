@@ -1530,43 +1530,19 @@ function tasksHtml(string $value): string
 }
 ?>
 <style>
-/* عمود الإجراءات: ثابت عند التمرير الأفقى وواضح على كل الصفوف */
+/* عمود الإجراءات */
 .task-actions-header,
 .task-actions-cell {
     min-width: 120px;
     width: 120px;
     white-space: nowrap;
-    position: sticky;
-    inset-inline-end: 0;
-    z-index: 2;
-    box-shadow: -4px 0 8px rgba(0,0,0,0.06);
 }
-.task-actions-header {
-    background: var(--global-table-header-bg, #1d4ed8) !important;
-}
-[dir="rtl"] .task-actions-header,
-[dir="rtl"] .task-actions-cell {
-    box-shadow: 4px 0 8px rgba(0,0,0,0.06);
-}
-.dashboard-table tbody tr .task-actions-cell {
-    background: var(--global-table-row-bg, #fff);
-}
-.dashboard-table tbody tr:nth-child(even) .task-actions-cell {
-    background: var(--global-table-row-alt-bg, #f8fafc);
-}
-.dashboard-table tbody tr.table-danger .task-actions-cell {
-    background: rgba(220, 53, 69, 0.08);
-}
-.task-actions-cell .dropdown .btn {
-    background: #fff !important;
-    border: 1px solid #6c757d !important;
-    color: #495057 !important;
-    font-weight: 600;
-}
-.task-actions-cell .dropdown .btn:hover {
-    background: #e9ecef !important;
-    border-color: #6c757d !important;
-    color: #212529 !important;
+@media (max-width: 768px) {
+    .task-actions-header,
+    .task-actions-cell {
+        min-width: 100px;
+        width: 100px;
+    }
 }
 .task-status-filter-card {
     display: block;
@@ -1575,17 +1551,6 @@ function tasksHtml(string $value): string
     border: 0;
     background: transparent;
     text-align: inherit;
-}
-@media (max-width: 768px) {
-    .task-actions-header,
-    .task-actions-cell {
-        min-width: 100px;
-        width: 100px;
-    }
-    .task-actions-cell .btn {
-        padding: 0.25rem 0.5rem;
-        font-size: 0.875rem;
-    }
 }
 /* قائمة إجراءات المهام: قابلة للتمرير ومرئية فوق الجدول على الموبايل */
 .task-actions-dropdown-menu-inbody {
