@@ -10,7 +10,7 @@ on:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 15
     # مطلوب لبعض المستودعات حتى يعمل الـ checkout ويُشغّل الـ workflow
     permissions:
