@@ -5219,10 +5219,9 @@ $mixedNuts = [];
 if ($section === 'nuts') {
     // المكسرات المنفردة
     $nutsStock = $db->query("
-        SELECT ns.*, s.name as supplier_name, s.phone as supplier_phone 
+        SELECT ns.*, s.name as supplier_name, s.phone as supplier_phone
         FROM nuts_stock ns
         INNER JOIN suppliers s ON ns.supplier_id = s.id
-        WHERE ns.quantity > 0
         ORDER BY ns.nut_type, s.name
     ");
     
@@ -9063,10 +9062,9 @@ $nutsSuppliers = $db->query("SELECT id, name, phone FROM suppliers WHERE status 
     if ($tahiniStockTableReady) {
         try {
             $tahiniStock = $db->query("
-                SELECT ts.*, s.name as supplier_name, s.phone as supplier_phone 
+                SELECT ts.*, s.name as supplier_name, s.phone as supplier_phone
                 FROM tahini_stock ts
                 INNER JOIN suppliers s ON ts.supplier_id = s.id
-                WHERE ts.quantity > 0
                 ORDER BY s.name
             ");
         } catch (Exception $e) {
@@ -9091,10 +9089,9 @@ $nutsSuppliers = $db->query("SELECT id, name, phone FROM suppliers WHERE status 
     if (!$sesameSectionTableError) {
         try {
             $sesameStock = $db->query("
-                SELECT ss.*, s.name as supplier_name, s.phone as supplier_phone 
+                SELECT ss.*, s.name as supplier_name, s.phone as supplier_phone
                 FROM sesame_stock ss
                 INNER JOIN suppliers s ON ss.supplier_id = s.id
-                WHERE ss.quantity > 0
                 ORDER BY s.name
             ");
         } catch (Exception $e) {
@@ -9920,10 +9917,9 @@ $nutsSuppliers = $db->query("SELECT id, name, phone FROM suppliers WHERE status 
     if (!$dateSectionTableError) {
         try {
             $dateStock = $db->query("
-                SELECT ds.*, s.name as supplier_name, s.phone as supplier_phone 
+                SELECT ds.*, s.name as supplier_name, s.phone as supplier_phone
                 FROM date_stock ds
                 INNER JOIN suppliers s ON ds.supplier_id = s.id
-                WHERE ds.quantity > 0
                 ORDER BY COALESCE(ds.date_type,'') ASC, s.name
             ");
         } catch (Exception $e) {
@@ -10420,7 +10416,6 @@ $nutsSuppliers = $db->query("SELECT id, name, phone FROM suppliers WHERE status 
                 SELECT ts.*, s.name as supplier_name, s.phone as supplier_phone
                 FROM turbine_stock ts
                 INNER JOIN suppliers s ON ts.supplier_id = s.id
-                WHERE ts.quantity > 0
                 ORDER BY COALESCE(ts.turbine_type,'') ASC, s.name
             ");
             $turbineStats = [
@@ -10787,7 +10782,6 @@ $nutsSuppliers = $db->query("SELECT id, name, phone FROM suppliers WHERE status 
                 SELECT hs.*, s.name as supplier_name, s.phone as supplier_phone
                 FROM herbal_stock hs
                 INNER JOIN suppliers s ON hs.supplier_id = s.id
-                WHERE hs.quantity > 0
                 ORDER BY COALESCE(hs.herbal_type,'') ASC, s.name
             ");
             $herbalStats = [
