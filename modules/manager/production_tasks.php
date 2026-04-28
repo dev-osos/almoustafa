@@ -4414,7 +4414,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                             <label class="form-label">تاريخ التسليم</label>
                             <input type="date" class="form-control" name="due_date" value="">
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-4"> 
                             <label class="form-label">العميل</label>
                             <div class="customer-type-wrap d-flex flex-wrap gap-3 mb-2">
                                 <div class="form-check">
