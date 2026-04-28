@@ -1540,8 +1540,25 @@ function tasksHtml(string $value): string
 @media (max-width: 768px) {
     .task-actions-header,
     .task-actions-cell {
-        min-width: 100px;
-        width: 100px;
+        min-width: 90px;
+        width: 90px;
+    }
+    /* تصغير حجم الجدول على الموبايل */
+    .dashboard-table thead th,
+    .dashboard-table tbody td {
+        padding: 0.4rem 0.5rem !important;
+        font-size: 0.75rem !important;
+    }
+    .dashboard-table {
+        min-width: 480px;
+    }
+    .dashboard-table tbody td .badge {
+        font-size: 0.65rem !important;
+        padding: 0.2rem 0.4rem !important;
+    }
+    .task-actions-cell .btn {
+        padding: 0.2rem 0.4rem !important;
+        font-size: 0.72rem !important;
     }
 }
 .task-status-filter-card {
