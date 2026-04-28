@@ -1822,7 +1822,7 @@ function tasksHtml(string $value): string
                                     <input type="checkbox" class="form-check-input" id="selectAllTasks" title="تحديد الكل">
                                 </th>
                                 <?php endif; ?>
-                                <th style="width: 60px;">#</th>
+                                <th style="width: 30px;">#</th>
                                 <?php if (!$isDriver): ?>
                                 <th>اسم العميل</th>
                                 <?php else: ?>
