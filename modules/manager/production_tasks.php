@@ -353,10 +353,10 @@ try {
         $_SESSION['_pt_migrated_local_customers'] = 1;
     }
     try {
-        $rows = $db->query("SELECT id, name, address, tg_governorate, tg_gov_id, tg_city, tg_city_id, phone, COALESCE(balance, 0) AS balance FROM local_customers WHERE status = 'active' ORDER BY name ASC");
+        $rows = $db->query("SELECT lc.id, lc.name, lc.address, lc.tg_governorate, lc.tg_gov_id, lc.tg_city, lc.tg_city_id, lc.phone, COALESCE(lc.balance, 0) AS balance, r.name AS region_name FROM local_customers lc LEFT JOIN regions r ON r.id = lc.region_id WHERE lc.status = 'active' ORDER BY lc.name ASC");
     } catch (Exception $e) {
         // phone column might not exist
-        $rows = $db->query("SELECT id, name, address, tg_governorate, tg_gov_id, tg_city, tg_city_id, COALESCE(balance, 0) AS balance FROM local_customers WHERE status = 'active' ORDER BY name ASC");
+        $rows = $db->query("SELECT lc.id, lc.name, lc.address, lc.tg_governorate, lc.tg_gov_id, lc.tg_city, lc.tg_city_id, COALESCE(lc.balance, 0) AS balance, r.name AS region_name FROM local_customers lc LEFT JOIN regions r ON r.id = lc.region_id WHERE lc.status = 'active' ORDER BY lc.name ASC");
     }
     if (!empty($rows)) {
         foreach ($rows as $r) {
@@ -366,6 +366,7 @@ try {
                 'phone'          => trim((string)($r['phone'] ?? '')),
                 'phones'         => [],
                 'address'        => trim((string)($r['address'] ?? '')),
+                'region_name'    => trim((string)($r['region_name'] ?? '')),
                 'tg_governorate' => trim((string)($r['tg_governorate'] ?? '')),
                 'tg_gov_id'      => $r['tg_gov_id'] ? (int)$r['tg_gov_id'] : null,
                 'tg_city'        => trim((string)($r['tg_city'] ?? '')),
@@ -6842,6 +6843,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 div.dataset.tgGovId = (c.tg_gov_id || '').toString();
                 div.dataset.tgCity = (c.tg_city || '').toString();
                 div.dataset.tgCityId = (c.tg_city_id || '').toString();
+                div.dataset.regionName = (c.region_name || '').toString();
                 div.addEventListener('click', function() {
                     if (hiddenIdEl) {
                         hiddenIdEl.value = this.dataset.id;
@@ -6858,6 +6860,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         if (addrEl) {
                             var parts = [];
                             if (ds.address) parts.push(ds.address);
+                            if (ds.regionName) parts.push('المنطقة : ' + ds.regionName);
                             if (ds.tgGovernorate) parts.push(ds.tgGovernorate);
                             if (ds.tgCity) parts.push(ds.tgCity);
                             if (parts.length) addrEl.value = parts.join(' - ');
