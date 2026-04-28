@@ -5733,6 +5733,24 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
                 }
 
                 history.replaceState({ url: url }, '', url);
+
+                // مزامنة الحقل المخفي للـ status في نموذج الفلتر حتى يحافظ
+                // التنقل بين الصفحات (doAjaxPage) على الفلتر المختار
+                var filterForm = document.getElementById('recentTasksFilterForm');
+                if (filterForm) {
+                    var statusInput = filterForm.querySelector('input[name="status"]');
+                    if (status === 'all' || status === '') {
+                        if (statusInput) statusInput.parentNode.removeChild(statusInput);
+                    } else {
+                        if (!statusInput) {
+                            statusInput = document.createElement('input');
+                            statusInput.type = 'hidden';
+                            statusInput.name = 'status';
+                            filterForm.insertBefore(statusInput, filterForm.firstChild);
+                        }
+                        statusInput.value = status;
+                    }
+                }
             })
             .catch(function() {
                 if (wrapper) wrapper.style.opacity = '';
