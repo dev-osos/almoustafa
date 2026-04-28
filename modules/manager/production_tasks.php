@@ -6852,6 +6852,17 @@ document.addEventListener('DOMContentLoaded', function () {
                     if (this.dataset.phone) submitPhone.value = this.dataset.phone;
                     dropEl.classList.add('d-none');
                     inputEl.dispatchEvent(new Event('input'));
+                    // ملء العنوان والمنطقة في خانة عنوان التوصيل دائماً عند اختيار أي عميل
+                    (function(ds) {
+                        var addrEl = document.getElementById('createOrderTitle');
+                        if (addrEl) {
+                            var parts = [];
+                            if (ds.address) parts.push(ds.address);
+                            if (ds.tgGovernorate) parts.push(ds.tgGovernorate);
+                            if (ds.tgCity) parts.push(ds.tgCity);
+                            if (parts.length) addrEl.value = parts.join(' - ');
+                        }
+                    })(this.dataset);
                     // ملء بيانات التليجراف تلقائياً إذا كان نوع الأوردر تليجراف
                     var typeEl = document.getElementById('taskTypeSelect');
                     if (typeEl && typeEl.value === 'telegraph') {
