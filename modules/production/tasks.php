@@ -1853,9 +1853,6 @@ function tasksHtml(string $value): string
                                 <th>نوع الاوردر</th>
                                 <th>الحالة</th>
                                 <th>التسليم</th>
-                                <?php if ($isProduction || $isDriver): ?>
-                                <th style="width: 50px;" class="text-center" title="اعتماد الفاتورة"><i class="bi bi-receipt-cutoff"></i></th>
-                                <?php endif; ?>
                                 <th class="task-actions-header">الإجراءات</th>
                             </tr>
                         </thead>
@@ -1863,8 +1860,7 @@ function tasksHtml(string $value): string
                             <?php
                             if (empty($tasks)):
                                 if (defined('TASKS_PARTIAL_TABLE') && TASKS_PARTIAL_TABLE):
-                                    $colspan = ($isManager || $isProduction) ? 8 : 7;
-                                    if ($isProduction || $isDriver) $colspan++;
+                                    $colspan = ($isManager || $isProduction) ? 7 : 6;
                                     echo '<tr><td colspan="' . (int)$colspan . '" class="text-center py-5 text-muted">لا توجد اوردرات</td></tr>';
                                     exit;
                                 endif;
@@ -1942,12 +1938,18 @@ function tasksHtml(string $value): string
                                         <span class="text-muted" style="font-size:.7rem;"><?php echo !empty($task['created_at']) ? date('d/m', strtotime($task['created_at'])) : ''; ?></span>
                                     </td>
                                     
-                                    <td><?php 
+                                    <td>
+                                        <?php
                                         $customerDisplay = isset($task['customer_display']) ? trim((string)$task['customer_display']) : '';
                                         echo $customerDisplay !== '' ? tasksHtml($customerDisplay) : '<span class="text-muted">-</span>';
-                                    ?></td>
-                                    <?php if (!$isDriver): ?>
-                                    <?php endif; ?>
+                                        if ($isProduction || $isDriver):
+                                            $taskInvoiceApproved = in_array((int)$task['id'], $approvedTaskIds, true);
+                                        ?>
+                                        <?php if ($taskInvoiceApproved): ?>
+                                            <i class="bi bi-check2-circle text-success ms-1" title="تم اعتماد الفاتورة" style="font-size:.8rem;"></i>
+                                        <?php endif; ?>
+                                        <?php endif; ?>
+                                    </td>
                                     <td>
                                         <?php
                                         $relatedType = isset($task['related_type']) ? (string)$task['related_type'] : '';
@@ -1964,16 +1966,6 @@ function tasksHtml(string $value): string
                                             <span class="text-muted">-</span>
                                         <?php endif; ?>
                                     </td>
-                                    <?php if ($isProduction || $isDriver): ?>
-                                    <td class="text-center">
-                                        <?php $taskInvoiceApproved = in_array((int)$task['id'], $approvedTaskIds, true); ?>
-                                        <?php if ($taskInvoiceApproved): ?>
-                                        <i class="bi bi-check2-circle text-success" title="تم اعتماد الفاتورة" aria-label="تم اعتماد الفاتورة"></i>
-                                        <?php else: ?>
-                                        <span class="text-muted" title="لم تُعتمد الفاتورة">—</span>
-                                        <?php endif; ?>
-                                    </td>
-                                    <?php endif; ?>
                                     <td class="task-actions-cell">
                                         <?php
                                         $taskAssignedTo = (int) ($task['assigned_to'] ?? 0);
