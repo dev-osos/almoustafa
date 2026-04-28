@@ -951,6 +951,7 @@ if ($isAjaxNavigation) {
                     <?php } ?>
                 </div>
 
+                
             <?php if (in_array($page, ['sales', 'collections'])): ?>
 <script>
 // JavaScript لتهيئة أزرار التقارير في صفحات المبيعات والتحصيلات
