@@ -2202,6 +2202,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     } elseif ($action === 'approve_task_invoice' && ($isAccountant || $isManager)) {
+        $isAjaxApprove = isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
         $taskId = (int)($_POST['task_id'] ?? 0);
         $totalAmount = isset($_POST['total_amount']) ? (float)str_replace(',', '.', trim((string)$_POST['total_amount'])) : 0;
         $approveForShipping = (int)($_POST['approve_for_shipping'] ?? 0) === 1;
@@ -2274,6 +2275,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                         $db->commit();
                                         logAudit($currentUser['id'], 'approve_task_invoice_shipping', 'tasks', $taskId, null, ['shipping_company_id' => $shippingCompanyId, 'net_parcel_price' => $netParcelPrice]);
                                         $userRole = in_array($currentUser['role'] ?? '', ['accountant', 'sales', 'telegraph'], true) ? ($currentUser['role'] ?? 'manager') : 'manager';
+                                        if ($isAjaxApprove) {
+                                            header('Content-Type: application/json; charset=UTF-8');
+                                            echo json_encode(['success' => true, 'task_id' => $taskId, 'message' => 'تم اعتماد الفاتورة: تمت إضافة الأوردر لسجل الفواتير الورقية لشركة الشحن وإضافة صافي سعر الطرد لديونها.'], JSON_UNESCAPED_UNICODE);
+                                            exit;
+                                        }
                                         preventDuplicateSubmission('تم اعتماد الفاتورة: تمت إضافة الأوردر لسجل الفواتير الورقية لشركة الشحن وإضافة صافي سعر الطرد لديونها.', ['page' => 'production_tasks'], null, $userRole);
                                         exit;
                                     }
@@ -2370,6 +2376,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     'new_balance'    => $newBalance,
                                 ], JSON_UNESCAPED_UNICODE);
 
+                                if ($isAjaxApprove) {
+                                    header('Content-Type: application/json; charset=UTF-8');
+                                    echo json_encode([
+                                        'success'         => true,
+                                        'task_id'         => $taskId,
+                                        'message'         => 'تم اعتماد الفاتورة بنجاح.',
+                                        'collection_info' => $collectionInfo,
+                                    ], JSON_UNESCAPED_UNICODE);
+                                    exit;
+                                }
                                 preventDuplicateSubmission(
                                     'تم اعتماد الفاتورة بنجاح.',
                                     ['page' => 'production_tasks', 'collection_info' => urlencode(base64_encode($collectionInfo))],
@@ -2377,6 +2393,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     $userRole
                                 );
                             } else {
+                                if ($isAjaxApprove) {
+                                    header('Content-Type: application/json; charset=UTF-8');
+                                    echo json_encode(['success' => true, 'task_id' => $taskId, 'message' => 'تم اعتماد الفاتورة: تمت إضافة الأوردر لسجل مشتريات العميل وإضافة المبلغ لرصيده المدين.'], JSON_UNESCAPED_UNICODE);
+                                    exit;
+                                }
                                 preventDuplicateSubmission('تم اعتماد الفاتورة: تمت إضافة الأوردر لسجل مشتريات العميل وإضافة المبلغ لرصيده المدين.', ['page' => 'production_tasks'], null, $userRole);
                             }
                             exit;
@@ -2389,6 +2410,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 $error = ($e instanceof InvalidArgumentException) ? $e->getMessage() : 'تعذر اعتماد الفاتورة: ' . $e->getMessage();
             }
+        }
+        // إرجاع JSON للأخطاء إذا كان الطلب AJAX
+        if ($isAjaxApprove && !empty($error)) {
+            header('Content-Type: application/json; charset=UTF-8');
+            echo json_encode(['success' => false, 'error' => $error], JSON_UNESCAPED_UNICODE);
+            exit;
         }
     } elseif ($action === 'bulk_approve_task_invoice' && ($isAccountant || $isManager)) {
         $taskIdsRaw = $_POST['task_ids'] ?? [];
@@ -6006,6 +6033,7 @@ $recentTasksQueryString = http_build_query($recentTasksQueryParams, '', '&', PHP
 </style>
 
 <style>
+@keyframes fadeInDown { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } }
 .search-wrap.position-relative { position: relative; }
 .search-dropdown-task { position: absolute; left: 0; right: 0; top: 100%; z-index: 1050; max-height: 220px; overflow-y: auto; background: #fff; border: 1px solid #dee2e6; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin-top: 2px; }
 .search-dropdown-task .search-dropdown-item-task { padding: 0.5rem 0.75rem; cursor: pointer; border-bottom: 1px solid #f0f0f0; }
@@ -8637,6 +8665,121 @@ function closeApproveInvoiceCard() {
         var c = bootstrap.Collapse.getInstance(collapse);
         if (c) c.hide();
     }
+}
+
+// اعتراض إرسال نموذج اعتماد الفاتورة وإرساله كـ AJAX بدلاً من Redirect
+document.addEventListener('submit', function(e) {
+    var form = e.target;
+    if (!form || form.id !== 'approveInvoiceCardForm') return;
+    e.preventDefault();
+
+    var submitBtn = form.querySelector('button[type="submit"]');
+    var originalHtml = submitBtn ? submitBtn.innerHTML : '';
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>جاري الاعتماد...';
+    }
+
+    // مسح رسالة الخطأ السابقة إن وُجدت
+    var existingAlert = form.querySelector('.approve-ajax-error');
+    if (existingAlert) existingAlert.parentNode.removeChild(existingAlert);
+
+    var fd = new FormData(form);
+    var params = new URLSearchParams(fd).toString();
+    var actionUrl = form.getAttribute('action') || window.location.href;
+
+    fetch(actionUrl, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: params
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = originalHtml; }
+
+        if (data.success) {
+            // أغلق بطاقة الاعتماد
+            closeApproveInvoiceCard();
+
+            var taskId = parseInt(data.task_id, 10);
+
+            // حدّث الصف في الجدول: علّم الأوردر كمعتمد وأخفِ زر الاعتماد
+            var row = document.querySelector('tr.recent-tasks-filter-row[data-task-id="' + taskId + '"]');
+            if (row) {
+                row.setAttribute('data-approved', '1');
+                var approveBtn = row.querySelector('.approve-invoice-btn');
+                if (approveBtn) {
+                    var li = approveBtn.closest('li');
+                    if (li) li.parentNode.removeChild(li);
+                }
+                // أضف شارة "معتمد" في أول عمود إن لم تكن موجودة
+                var firstTd = row.querySelector('td');
+                if (firstTd && !firstTd.querySelector('.badge-approved-inline')) {
+                    var badge = document.createElement('span');
+                    badge.className = 'badge bg-success ms-1 badge-approved-inline';
+                    badge.style.fontSize = '0.7rem';
+                    badge.textContent = 'معتمد';
+                    firstTd.appendChild(badge);
+                }
+                // حدّث حقل data-approved في checkbox التحديد إن وُجد
+                var cb = row.querySelector('.task-print-checkbox');
+                if (cb) cb.setAttribute('data-approved', '1');
+            }
+
+            // اعرض toast نجاح
+            _showApproveToast(data.message || 'تم اعتماد الفاتورة بنجاح.', 'success');
+
+            // إذا كانت هناك معلومات تحصيل (دفعة مقدمة) أعد تحميل الـ collection_info banner
+            if (data.collection_info) {
+                try {
+                    var ci = JSON.parse(data.collection_info);
+                    _showApproveToast(
+                        'دفعة مقدمة: ' + (ci.advance_paid || 0) + ' ج.م — المتبقي: ' + (ci.remaining || 0) + ' ج.م',
+                        'info'
+                    );
+                } catch(ex) {}
+            }
+        } else {
+            // اعرض رسالة الخطأ داخل البطاقة
+            var errDiv = document.createElement('div');
+            errDiv.className = 'alert alert-danger mt-2 py-2 small approve-ajax-error';
+            errDiv.textContent = data.error || 'حدث خطأ غير متوقع.';
+            var cardBody = form.querySelector('.card-body') || form;
+            var btns = form.querySelector('.d-flex.gap-2');
+            if (btns) {
+                btns.parentNode.insertBefore(errDiv, btns);
+            } else {
+                cardBody.appendChild(errDiv);
+            }
+        }
+    })
+    .catch(function() {
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = originalHtml; }
+        _showApproveToast('تعذر الاتصال بالخادم. حاول مرة أخرى.', 'danger');
+    });
+});
+
+function _showApproveToast(msg, type) {
+    var container = document.getElementById('approveToastContainer');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'approveToastContainer';
+        container.style.cssText = 'position:fixed;top:1rem;left:50%;transform:translateX(-50%);z-index:9999;min-width:280px;max-width:90vw;';
+        document.body.appendChild(container);
+    }
+    var toast = document.createElement('div');
+    toast.className = 'alert alert-' + (type || 'success') + ' shadow py-2 px-3 mb-2 text-center';
+    toast.style.cssText = 'animation:fadeInDown .25s ease;font-size:.9rem;';
+    toast.textContent = msg;
+    container.appendChild(toast);
+    setTimeout(function() {
+        toast.style.transition = 'opacity .4s';
+        toast.style.opacity = '0';
+        setTimeout(function() { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 400);
+    }, 3500);
 }
 
 /**
