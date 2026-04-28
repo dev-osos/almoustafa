@@ -10790,7 +10790,7 @@ $nutsSuppliers = $db->query("SELECT id, name, phone FROM suppliers WHERE status 
             ];
         } catch (Exception $e) {
             $herbalSectionTableError = true;
-        }
+        } 
     }
     $herbalActionsDisabledAttr = $herbalSectionTableError ? 'disabled' : '';
     ?>
