@@ -456,7 +456,14 @@ function getCompanyCashTransactionsHtml($db) {
                             <td class="fw-bold <?php echo $trans['type'] === 'income' ? 'text-success' : 'text-danger'; ?>">
                                 <?php echo $trans['type'] === 'income' ? '+' : '-'; ?><?php echo formatCurrency($trans['amount']); ?>
                             </td>
-                            <td><?php echo htmlspecialchars($trans['description'], ENT_QUOTES, 'UTF-8'); ?></td>
+                            <td class="editable-description"
+                                style="cursor:text; min-width:120px;"
+                                contenteditable="true"
+                                data-trans-id="<?php echo (int)$trans['id']; ?>"
+                                data-source-table="<?php echo htmlspecialchars($trans['source_table'], ENT_QUOTES, 'UTF-8'); ?>"
+                                data-original="<?php echo htmlspecialchars($trans['description'], ENT_QUOTES, 'UTF-8'); ?>"
+                                title="انقر لتعديل الوصف"
+                            ><?php echo htmlspecialchars($trans['description'], ENT_QUOTES, 'UTF-8'); ?></td>
                             <td>
                                 <?php if ($trans['reference_number']): ?>
                                     <span class="text-muted small"><?php echo htmlspecialchars($trans['reference_number'], ENT_QUOTES, 'UTF-8'); ?></span>
@@ -1063,6 +1070,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     error_log('Retrieve custody failed: ' . $e->getMessage());
                     $_SESSION['financial_error'] = 'حدث خطأ: ' . $e->getMessage();
                 }
+            }
+        }
+        cacheBustRedirect($_SERVER['REQUEST_URI'] ?? '');
+    }
+
+    if ($action === 'edit_transaction_description') {
+        requireRole(['manager']);
+        $transId     = intval($_POST['trans_id'] ?? 0);
+        $sourceTable = $_POST['source_table'] ?? '';
+        $newDesc     = trim($_POST['new_description'] ?? '');
+
+        if ($transId <= 0 || !in_array($sourceTable, ['financial_transactions', 'accountant_transactions'], true)) {
+            $_SESSION['financial_error'] = 'بيانات غير صحيحة.';
+        } elseif ($newDesc === '') {
+            $_SESSION['financial_error'] = 'الوصف لا يمكن أن يكون فارغاً.';
+        } else {
+            try {
+                $table = ($sourceTable === 'financial_transactions') ? 'financial_transactions' : 'accountant_transactions';
+                $db->execute("UPDATE `$table` SET description = ? WHERE id = ?", [$newDesc, $transId]);
+                logAudit($currentUser['id'], 'edit_description', $table, $transId, null, ['description' => $newDesc]);
+                $_SESSION['financial_success'] = 'تم تعديل الوصف بنجاح.';
+            } catch (Throwable $e) {
+                error_log('Edit description failed: ' . $e->getMessage());
+                $_SESSION['financial_error'] = 'حدث خطأ أثناء التعديل.';
             }
         }
         cacheBustRedirect($_SERVER['REQUEST_URI'] ?? '');
@@ -2104,6 +2135,28 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+
+    // تعديل الوصف inline
+    document.addEventListener('blur', function(e) {
+        var cell = e.target && e.target.closest && e.target.closest('.editable-description');
+        if (!cell) return;
+        var newDesc = cell.textContent.trim();
+        var original = cell.getAttribute('data-original') || '';
+        if (newDesc === original) return;
+        if (newDesc === '') { cell.textContent = original; return; }
+        var transId     = cell.getAttribute('data-trans-id');
+        var sourceTable = cell.getAttribute('data-source-table');
+        var form = document.createElement('form');
+        form.method = 'POST';
+        form.action = window.location.href;
+        [['action','edit_transaction_description'],['trans_id',transId],['source_table',sourceTable],['new_description',newDesc]].forEach(function(p) {
+            var inp = document.createElement('input');
+            inp.type = 'hidden'; inp.name = p[0]; inp.value = p[1];
+            form.appendChild(inp);
+        });
+        document.body.appendChild(form);
+        form.submit();
+    }, true);
 });
 </script>
 
@@ -2600,6 +2653,53 @@ function filterExpenseSuggestions(input) {
     const dd = bootstrap.Dropdown.getOrCreateInstance(input);
     if (dd && input.value.length > 0) dd.show();
 }
+</script>
+<script>
+(function() {
+    var PREF_KEY = 'companyCashCollapsePrefs';
+    var collapseIds = [
+        'safeSummaryCardBody',
+        'quickExpenseCardBody',
+        'collectFromRepCardBody',
+        'externalCollectionCardBody',
+        'custodyCardBody',
+        'generateReportCardBodyCollapse',
+        'custodyListCardBody',
+        'advancedSearchCollapse'
+    ];
+
+    function loadPrefs() {
+        try { return JSON.parse(localStorage.getItem(PREF_KEY) || '{}'); } catch(e) { return {}; }
+    }
+    function savePref(id, open) {
+        var prefs = loadPrefs();
+        prefs[id] = open;
+        try { localStorage.setItem(PREF_KEY, JSON.stringify(prefs)); } catch(e) {}
+    }
+
+    // تطبيق التفضيلات المحفوظة عند تحميل الصفحة
+    document.addEventListener('DOMContentLoaded', function() {
+        var prefs = loadPrefs();
+        collapseIds.forEach(function(id) {
+            var el = document.getElementById(id);
+            if (!el) return;
+            var shouldOpen = prefs[id];
+            if (shouldOpen === true) {
+                el.classList.add('show');
+                // تحديث زر التبديل
+                var btn = document.querySelector('[data-bs-target="#' + id + '"]');
+                if (btn) btn.setAttribute('aria-expanded', 'true');
+            } else if (shouldOpen === false) {
+                el.classList.remove('show');
+                var btn = document.querySelector('[data-bs-target="#' + id + '"]');
+                if (btn) btn.setAttribute('aria-expanded', 'false');
+            }
+            // حفظ عند كل تغيير
+            el.addEventListener('show.bs.collapse', function() { savePref(id, true); });
+            el.addEventListener('hide.bs.collapse', function() { savePref(id, false); });
+        });
+    });
+})();
 </script>
 <?php } catch (Throwable $company_cash_ex) {
     $company_cash_error = $company_cash_ex->getMessage();

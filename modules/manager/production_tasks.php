@@ -2203,6 +2203,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } elseif ($action === 'approve_task_invoice' && ($isAccountant || $isManager)) {
         $isAjaxApprove = isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
+        if (!function_exists('sendApproveJson')) {
+            function sendApproveJson(array $payload): void {
+                while (ob_get_level() > 0) ob_end_clean();
+                header('Content-Type: application/json; charset=UTF-8');
+                echo json_encode($payload, JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+        }
         $taskId = (int)($_POST['task_id'] ?? 0);
         $totalAmount = isset($_POST['total_amount']) ? (float)str_replace(',', '.', trim((string)$_POST['total_amount'])) : 0;
         $approveForShipping = (int)($_POST['approve_for_shipping'] ?? 0) === 1;
@@ -2276,9 +2284,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                         logAudit($currentUser['id'], 'approve_task_invoice_shipping', 'tasks', $taskId, null, ['shipping_company_id' => $shippingCompanyId, 'net_parcel_price' => $netParcelPrice]);
                                         $userRole = in_array($currentUser['role'] ?? '', ['accountant', 'sales', 'telegraph'], true) ? ($currentUser['role'] ?? 'manager') : 'manager';
                                         if ($isAjaxApprove) {
-                                            header('Content-Type: application/json; charset=UTF-8');
-                                            echo json_encode(['success' => true, 'task_id' => $taskId, 'message' => 'تم اعتماد الفاتورة: تمت إضافة الأوردر لسجل الفواتير الورقية لشركة الشحن وإضافة صافي سعر الطرد لديونها.'], JSON_UNESCAPED_UNICODE);
-                                            exit;
+                                            sendApproveJson(['success' => true, 'task_id' => $taskId, 'message' => 'تم اعتماد الفاتورة: تمت إضافة الأوردر لسجل الفواتير الورقية لشركة الشحن وإضافة صافي سعر الطرد لديونها.']);
                                         }
                                         preventDuplicateSubmission('تم اعتماد الفاتورة: تمت إضافة الأوردر لسجل الفواتير الورقية لشركة الشحن وإضافة صافي سعر الطرد لديونها.', ['page' => 'production_tasks'], null, $userRole);
                                         exit;
@@ -2377,14 +2383,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 ], JSON_UNESCAPED_UNICODE);
 
                                 if ($isAjaxApprove) {
-                                    header('Content-Type: application/json; charset=UTF-8');
-                                    echo json_encode([
-                                        'success'         => true,
-                                        'task_id'         => $taskId,
-                                        'message'         => 'تم اعتماد الفاتورة بنجاح.',
-                                        'collection_info' => $collectionInfo,
-                                    ], JSON_UNESCAPED_UNICODE);
-                                    exit;
+                                    sendApproveJson(['success' => true, 'task_id' => $taskId, 'message' => 'تم اعتماد الفاتورة بنجاح.', 'collection_info' => $collectionInfo]);
                                 }
                                 preventDuplicateSubmission(
                                     'تم اعتماد الفاتورة بنجاح.',
@@ -2394,9 +2393,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 );
                             } else {
                                 if ($isAjaxApprove) {
-                                    header('Content-Type: application/json; charset=UTF-8');
-                                    echo json_encode(['success' => true, 'task_id' => $taskId, 'message' => 'تم اعتماد الفاتورة: تمت إضافة الأوردر لسجل مشتريات العميل وإضافة المبلغ لرصيده المدين.'], JSON_UNESCAPED_UNICODE);
-                                    exit;
+                                    sendApproveJson(['success' => true, 'task_id' => $taskId, 'message' => 'تم اعتماد الفاتورة: تمت إضافة الأوردر لسجل مشتريات العميل وإضافة المبلغ لرصيده المدين.']);
                                 }
                                 preventDuplicateSubmission('تم اعتماد الفاتورة: تمت إضافة الأوردر لسجل مشتريات العميل وإضافة المبلغ لرصيده المدين.', ['page' => 'production_tasks'], null, $userRole);
                             }
@@ -2413,9 +2410,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         // إرجاع JSON للأخطاء إذا كان الطلب AJAX
         if ($isAjaxApprove && !empty($error)) {
-            header('Content-Type: application/json; charset=UTF-8');
-            echo json_encode(['success' => false, 'error' => $error], JSON_UNESCAPED_UNICODE);
-            exit;
+            sendApproveJson(['success' => false, 'error' => $error]);
         }
     } elseif ($action === 'bulk_approve_task_invoice' && ($isAccountant || $isManager)) {
         $taskIdsRaw = $_POST['task_ids'] ?? [];
