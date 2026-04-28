@@ -1530,6 +1530,16 @@ function tasksHtml(string $value): string
 }
 ?>
 <style>
+/* عمود رقم الطلب */
+.task-id-col {
+    width: 52px !important;
+    min-width: 52px !important;
+    max-width: 52px !important;
+    padding-inline: 0.35rem !important;
+    text-align: center;
+    white-space: nowrap;
+}
+
 /* عمود الإجراءات */
 .task-actions-header,
 .task-actions-cell {
@@ -1822,7 +1832,7 @@ function tasksHtml(string $value): string
                                     <input type="checkbox" class="form-check-input" id="selectAllTasks" title="تحديد الكل">
                                 </th>
                                 <?php endif; ?>
-                                <th style="width: 30px;">#</th>
+                                <th class="task-id-col">#</th>
                                 <?php if (!$isDriver): ?>
                                 <th>اسم العميل</th>
                                 <?php else: ?>
@@ -1915,7 +1925,7 @@ function tasksHtml(string $value): string
                                         <input type="checkbox" class="form-check-input task-print-checkbox" value="<?php echo (int) $task['id']; ?>" data-print-url="<?php echo htmlspecialchars(getRelativeUrl('print_task_receipt.php?id=' . (int) $task['id']), ENT_QUOTES, 'UTF-8'); ?>">
                                     </td>
                                     <?php endif; ?>
-                                    <td>
+                                    <td class="task-id-col">
                                         <strong><?php echo (int) $task['id']; ?></strong><br>
                                         <span class="text-muted" style="font-size:.7rem;"><?php echo !empty($task['created_at']) ? date('d/m', strtotime($task['created_at'])) : ''; ?></span>
                                     </td>
