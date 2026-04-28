@@ -1570,6 +1570,17 @@ function tasksHtml(string $value): string
         padding: 0.2rem 0.4rem !important;
         font-size: 0.72rem !important;
     }
+    /* تمديد الكارد للحواف على الموبايل */
+    #tasksListContent .card,
+    #tasksListContent > .card,
+    .container-fluid .card {
+        border-radius: 0 !important;
+        border-left: none !important;
+        border-right: none !important;
+    }
+    .dashboard-table-wrapper {
+        border-radius: 0 !important;
+    }
 }
 .task-status-filter-card {
     display: block;
@@ -1597,7 +1608,7 @@ function tasksHtml(string $value): string
     }
 }
 </style>
-<div class="container-fluid">
+<div class="container-fluid px-0 px-md-3">
     <?php foreach ($errorMessages as $message): ?>
         <div class="alert alert-danger alert-dismissible fade show" id="errorAlert" role="alert">
             <i class="bi bi-exclamation-triangle me-2"></i><?php echo tasksHtml($message); ?>
@@ -1637,7 +1648,14 @@ function tasksHtml(string $value): string
     if ($filterOrderDateTo !== '') { $filterBaseUrl .= '&order_date_to=' . rawurlencode($filterOrderDateTo); }
     ?>
     <?php if (!defined('TASKS_PARTIAL_TABLE') || !TASKS_PARTIAL_TABLE): ?>
-    <div class="row g-2 mb-3" id="taskStatusFilterCards">
+    <div class="card mb-3">
+        <div class="card-header bg-transparent py-2 d-flex align-items-center justify-content-between" style="cursor:pointer;" data-bs-toggle="collapse" data-bs-target="#taskStatusCardsCollapse" aria-expanded="true" aria-controls="taskStatusCardsCollapse" id="taskStatusCardsHeader">
+            <span class="fw-semibold small"><i class="bi bi-bar-chart-line me-1"></i>ملخص الحالات</span>
+            <i class="bi bi-chevron-down tasks-status-cards-chevron" style="transition:transform .25s; transform:rotate(180deg);"></i>
+        </div>
+        <div class="collapse show" id="taskStatusCardsCollapse">
+        <div class="card-body p-2">
+    <div class="row g-2" id="taskStatusFilterCards">
         <div class="col-6 col-md-4 col-lg-2">
             <button type="button" class="text-decoration-none task-status-filter-card" data-status="all">
                 <div class="card <?php echo $statusFilter === '' && !$overdueFilter ? 'bg-primary text-white' : 'border-primary'; ?> text-center h-100">
@@ -1719,8 +1737,11 @@ function tasksHtml(string $value): string
                 </div>
             </button>
         </div>
-        
-    </div>
+
+    </div><!-- /row -->
+    </div><!-- /card-body -->
+    </div><!-- /collapse -->
+    </div><!-- /card -->
 
     <?php
     $filterIsActive = ($filterSearchText !== '' || $search !== '' || $filterTaskId !== '' || $filterCustomer !== '' || $filterOrderId !== '' || $filterTaskType !== '' || $filterDueFrom !== '' || $filterDueTo !== '' || $filterOrderDateFrom !== '' || $filterOrderDateTo !== '' || $assignedFilter > 0);
@@ -1749,13 +1770,13 @@ function tasksHtml(string $value): string
                             <label class="form-label small mb-0">رقم الاوردر</label>
                             <input type="text" inputmode="numeric" pattern="[0-9]*" name="task_id" class="form-control form-control-sm" id="tasksFilterTaskId" placeholder="#" value="<?php echo tasksHtml($filterTaskId); ?>">
                         </div>
-                        <div class="col-1 col-md-1 col-lg-1 align-self-end">
-                            <button type="submit" class="btn btn-primary btn-sm w-100" id="tasksSearchBtn" title="بحث">
+                        <div class="col-auto align-self-end">
+                            <button type="submit" class="btn btn-primary btn-sm px-2" id="tasksSearchBtn" title="بحث">
                                 <i class="bi bi-search"></i>
                             </button>
                         </div>
                         <div class="col-6 col-md-4 col-lg-2">
-                            <label class="form-label small mb-0">اسم العميل / هاتف</label>
+                            <label class="form-label small mb-0">اسم العميل / هاتف    </label>
                             <input type="text" name="search_customer" class="form-control form-control-sm tasks-dynamic-filter" id="tasksFilterCustomer" placeholder="اسم أو رقم" value="<?php echo tasksHtml($filterCustomer); ?>">
                         </div>
                         <div class="col-6 col-md-4 col-lg-2">
@@ -1784,19 +1805,6 @@ function tasksHtml(string $value): string
                             <label class="form-label small mb-0">تاريخ الطلب إلى</label>
                             <input type="date" name="order_date_to" class="form-control form-control-sm tasks-dynamic-filter" id="tasksFilterOrderDateTo" value="<?php echo tasksHtml($filterOrderDateTo); ?>">
                         </div>
-                        <?php if ($isManager): ?>
-                        <div class="col-6 col-md-4 col-lg-2">
-                            <label class="form-label small mb-0">المخصص إلى</label>
-                            <select class="form-select form-select-sm tasks-dynamic-filter" name="assigned" id="tasksFilterAssigned">
-                                <option value="0">الكل</option>
-                                <?php foreach ($users as $user): ?>
-                                    <option value="<?php echo (int) $user['id']; ?>" <?php echo $assignedFilter === (int) $user['id'] ? 'selected' : ''; ?>>
-                                        <?php echo tasksHtml($user['full_name']); ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                        <?php endif; ?>
                         <div class="col-auto align-self-end">
                             <a href="?page=tasks<?php echo $statusFilter !== '' ? '&status=' . rawurlencode($statusFilter) : ''; ?><?php echo $priorityFilter !== '' ? '&priority=' . rawurlencode($priorityFilter) : ''; ?><?php echo $overdueFilter ? '&overdue=1' : ''; ?>" class="btn btn-outline-danger btn-sm">إزالة الفلتر</a>
                         </div>
@@ -3149,15 +3157,49 @@ function tasksHtml(string $value): string
 })();
 </script>
 
-<!-- تدوير سهم بطاقة الفلتر عند الفتح والإغلاق -->
+<!-- تدوير سهم بطاقات الفلتر + حفظ تفضيل الفتح/الإغلاق -->
 <script>
 (function() {
-    var collapseEl = document.getElementById('tasksFilterCollapse');
-    var chevron = document.querySelector('.tasks-filter-chevron');
-    if (collapseEl && chevron) {
-        collapseEl.addEventListener('show.bs.collapse', function() { chevron.style.transform = 'rotate(180deg)'; });
-        collapseEl.addEventListener('hide.bs.collapse', function() { chevron.style.transform = 'rotate(0deg)'; });
+    function initCollapsePref(collapseId, chevronSelector, prefKey, defaultOpen, forceOpen) {
+        var el = document.getElementById(collapseId);
+        var chevron = document.querySelector(chevronSelector);
+        var btn = document.querySelector('[data-bs-target="#' + collapseId + '"]');
+        if (!el) return;
+
+        function applyState(open) {
+            if (open) {
+                el.classList.add('show');
+                if (chevron) chevron.style.transform = 'rotate(180deg)';
+                if (btn) btn.setAttribute('aria-expanded', 'true');
+            } else {
+                el.classList.remove('show');
+                if (chevron) chevron.style.transform = 'rotate(0deg)';
+                if (btn) btn.setAttribute('aria-expanded', 'false');
+            }
+        }
+
+        if (!forceOpen) {
+            try {
+                var saved = localStorage.getItem(prefKey);
+                if (saved === 'true') applyState(true);
+                else if (saved === 'false') applyState(false);
+                else applyState(defaultOpen);
+            } catch(e) { applyState(defaultOpen); }
+        }
+
+        el.addEventListener('show.bs.collapse', function() {
+            if (chevron) chevron.style.transform = 'rotate(180deg)';
+            try { localStorage.setItem(prefKey, 'true'); } catch(e) {}
+        });
+        el.addEventListener('hide.bs.collapse', function() {
+            if (chevron) chevron.style.transform = 'rotate(0deg)';
+            try { localStorage.setItem(prefKey, 'false'); } catch(e) {}
+        });
     }
+
+    var filterIsActive = <?php echo $filterIsActive ? 'true' : 'false'; ?>;
+    initCollapsePref('tasksFilterCollapse',    '.tasks-filter-chevron',        'tasksFilterCollapseOpen',  false, filterIsActive);
+    initCollapsePref('taskStatusCardsCollapse','.tasks-status-cards-chevron',  'tasksStatusCardsOpen',     true,  false);
 })();
 </script>
 
