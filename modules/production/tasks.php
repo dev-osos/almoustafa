@@ -1570,15 +1570,19 @@ function tasksHtml(string $value): string
         padding: 0.2rem 0.4rem !important;
         font-size: 0.72rem !important;
     }
-    /* تمديد الكارد للحواف على الموبايل */
-    #tasksListContent .card,
-    #tasksListContent > .card,
-    .container-fluid .card {
+    /* تمديد الصفحة للحواف — تعويض padding الـ dashboard-main (16px) */
+    .tasks-page-container {
+        margin-left: -16px !important;
+        margin-right: -16px !important;
+        width: calc(100% + 32px) !important;
+    }
+    /* إزالة الحواف الدائرية على الكاردات الممتدة للحافة */
+    .tasks-page-container .card {
         border-radius: 0 !important;
         border-left: none !important;
         border-right: none !important;
     }
-    .dashboard-table-wrapper {
+    .tasks-page-container .dashboard-table-wrapper {
         border-radius: 0 !important;
     }
 }
@@ -1608,7 +1612,7 @@ function tasksHtml(string $value): string
     }
 }
 </style>
-<div class="container-fluid px-0 px-md-3">
+<div class="container-fluid px-0 px-md-3 tasks-page-container">
     <?php foreach ($errorMessages as $message): ?>
         <div class="alert alert-danger alert-dismissible fade show" id="errorAlert" role="alert">
             <i class="bi bi-exclamation-triangle me-2"></i><?php echo tasksHtml($message); ?>
